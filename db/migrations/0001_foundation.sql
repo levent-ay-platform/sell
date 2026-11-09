@@ -37,8 +37,6 @@ CREATE TABLE sell.parcels (
  cadastral_reference text,
  subdivision_plot_number text,
  submitted_boundary geometry(MultiPolygon,4326),
- boundary_review_status text NOT NULL DEFAULT 'UNREVIEWED'
- CHECK (boundary_review_status IN ('UNREVIEWED','REVIEWED')),
  CHECK (submitted_boundary IS NULL OR
    (ST_IsValid(submitted_boundary) AND NOT ST_IsEmpty(submitted_boundary)))
 );
@@ -205,6 +203,23 @@ CREATE TRIGGER decisions_immutable BEFORE UPDATE OR DELETE
 ON sell.verification_decisions FOR EACH ROW EXECUTE FUNCTION sell.reject_immutable_change();
 CREATE TRIGGER audit_immutable BEFORE UPDATE OR DELETE
 ON sell.audit_events FOR EACH ROW EXECUTE FUNCTION sell.reject_immutable_change();
+-- Parcel geometry and evidence identifiers are immutable; corrections are new rows/revisions.
+CREATE TRIGGER parcels_immutable BEFORE UPDATE OR DELETE
+ON sell.parcels FOR EACH ROW EXECUTE FUNCTION sell.reject_immutable_change();
+CREATE TRIGGER evidence_files_immutable BEFORE UPDATE OR DELETE
+ON sell.evidence_files FOR EACH ROW EXECUTE FUNCTION sell.reject_immutable_change();
+CREATE TRIGGER case_evidence_immutable BEFORE UPDATE OR DELETE
+ON sell.case_evidence FOR EACH ROW EXECUTE FUNCTION sell.reject_immutable_change();
+CREATE FUNCTION sell.reject_late_case_evidence()
+RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+ IF EXISTS(SELECT 1 FROM sell.verification_decisions WHERE case_id=NEW.case_id) THEN
+   RAISE EXCEPTION 'EVIDENCE_FROZEN: create new verification case';
+ END IF;
+ RETURN NEW;
+END $$;
+CREATE TRIGGER freeze_case_evidence_after_decision BEFORE INSERT
+ON sell.case_evidence FOR EACH ROW EXECUTE FUNCTION sell.reject_late_case_evidence();
 
 -- No approval from a case lacking its one matching reviewer-signed decision.
 CREATE FUNCTION sell.guard_verified_case()

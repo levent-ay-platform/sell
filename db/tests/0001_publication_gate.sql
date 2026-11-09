@@ -2,7 +2,7 @@
 BEGIN;
 DO $test$
 DECLARE
- seller uuid; reviewer uuid; p1 uuid; p2 uuid; prop1 uuid; prop2 uuid;
+ seller uuid; reviewer uuid; p1 uuid; p2 uuid; prop1 uuid; prop2 uuid; parcel_id uuid;
  r1 uuid; r2 uuid; r3 uuid; c1 uuid; c2 uuid; c3 uuid;
  v1 uuid; v2 uuid; v3 uuid; dsha text; listing_key uuid;
  blocked boolean;
@@ -12,6 +12,15 @@ BEGIN
  INSERT INTO sell.properties(kind,country_code) VALUES ('LAND','TN') RETURNING id INTO prop1;
  INSERT INTO sell.property_revisions(property_id,revision_number,snapshot)
  VALUES (prop1,1,'{"land":"synthetic","right":"sole"}') RETURNING id,snapshot_sha256 INTO r1,dsha;
+ INSERT INTO sell.parcels(property_id,registry_reference) VALUES (prop1,'SYNTHETIC_ONLY')
+ RETURNING id INTO parcel_id;
+ blocked:=false;
+ BEGIN
+   UPDATE sell.parcels SET registry_reference='MUTATED' WHERE id=parcel_id;
+ EXCEPTION WHEN OTHERS THEN
+   IF SQLERRM LIKE 'IMMUTABLE_RECORD:%' THEN blocked:=true; ELSE RAISE; END IF;
+ END;
+ IF NOT blocked THEN RAISE EXCEPTION 'FAIL: parcel could be changed silently'; END IF;
  INSERT INTO sell.ownership_claims(property_id,claimant_party_id,declared_capacity)
  VALUES (prop1,seller,'SOLE_OWNER') RETURNING id INTO c1;
  INSERT INTO sell.verification_cases(property_revision_id,ownership_claim_id,assigned_reviewer_user_id,status,expires_at)
@@ -91,7 +100,7 @@ BEGIN
  IF (SELECT item_count FROM sell.public_listing_cards WHERE id=listing_key)<>2 THEN
    RAISE EXCEPTION 'FAIL: multi-item approved listing missing';
  END IF;
- UPDATE sell.verification_cases SET expires_at=now()-interval '1 minute' WHERE id=v3;
+ UPDATE sell.verification_cases SET status='EXPIRED',expires_at=now()-interval '1 minute' WHERE id=v3;
  IF EXISTS (SELECT 1 FROM sell.public_listing_cards WHERE id=listing_key) THEN
    RAISE EXCEPTION 'FAIL: expired case remained public';
  END IF;
