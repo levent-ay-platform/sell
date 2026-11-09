@@ -174,7 +174,7 @@ BEFORE INSERT OR UPDATE ON sell.listings
 FOR EACH ROW EXECUTE FUNCTION sell.guard_listing_publication();
 
 CREATE FUNCTION sell.pause_listing_after_scope_change()
-RETURNS trigger LANGUAGE plpgsql AS $
+RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE target_listing_id uuid;
 BEGIN
  IF TG_OP='DELETE' THEN target_listing_id:=OLD.listing_id;
