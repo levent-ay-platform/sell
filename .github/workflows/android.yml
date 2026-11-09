@@ -59,3 +59,44 @@ jobs:
           path: apps/android/app/build/outputs/apk/debug/app-debug.apk
           retention-days: 3
           if-no-files-found: error
+      - name: Enable KVM for visual QA
+        if: github.event_name == 'pull_request'
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Capture actual Android home at 360dp and 412dp
+        if: github.event_name == 'pull_request'
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          script: |
+            set -e
+            adb install -r apps/android/app/build/outputs/apk/debug/app-debug.apk
+            mkdir -p screenshots
+            adb shell wm size 720x1600
+            adb shell wm density 320
+            adb shell am force-stop tn.malak.app || true
+            adb shell am start -n tn.malak.app/.MainActivity
+            sleep 6
+            adb exec-out screencap -p > screenshots/home-360dp.png
+            adb shell wm size 824x1830
+            adb shell wm density 320
+            adb shell am force-stop tn.malak.app || true
+            adb shell am start -n tn.malak.app/.MainActivity
+            sleep 6
+            adb exec-out screencap -p > screenshots/home-412dp.png
+            test $(wc -c < screenshots/home-360dp.png) -gt 10000
+            test $(wc -c < screenshots/home-412dp.png) -gt 10000
+      - name: Upload Android visual proof (review before acceptance)
+        if: always() && github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: malak-ANDROID-SCREENSHOT-UNREVIEWED-${{ github.sha }}
+          path: screenshots/
+          if-no-files-found: warn
+          retention-days: 7
