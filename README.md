@@ -1,8 +1,10 @@
-# SELL — Verified Real Estate Marketplace for Tunisia
+# ملاك | MALAK — Trusted Property Discovery in Tunisia
 
-> **Status:** foundation planning and technical bootstrap. No production service or verified listings are live.
+> **Status:** verified-marketplace foundation; approved visual reference; Android prototype implementation underway. No production listing or APK release is live.
+>
+> **Public product name:** **ملاك**. The GitHub repository retains the technical slug `sell` to preserve links, database migrations, and GitHub Actions history.
 
-SELL is an owner-to-buyer real-estate marketplace for Tunisia: properties and land plots are published only after a server-side verification decision; buyers browse a globe/map or a fast list and contact authorized sellers directly.
+ملاك is an owner-to-buyer real-estate marketplace for Tunisia: properties and land plots are published only after a server-side verification decision; buyers browse a globe/map or a fast list and contact authorized sellers directly.
 
 ## Core principles
 
