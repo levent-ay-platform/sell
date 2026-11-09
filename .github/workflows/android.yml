@@ -39,10 +39,13 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      - name: Android command-line SDK
-        uses: android-actions/setup-android@v3
-      - name: Install Android 36 platform
-        run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0'
+      - name: Install Android SDK from hosted runner
+        run: |
+          set -euo pipefail
+          : "${ANDROID_HOME:?GitHub hosted Ubuntu Android SDK expected}"
+          command -v sdkmanager
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager 'platforms;android-36' 'build-tools;36.0.0'
       - name: Configure Gradle 8.13
         uses: gradle/actions/setup-gradle@v6
         with:
