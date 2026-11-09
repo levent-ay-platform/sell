@@ -55,7 +55,7 @@ jobs:
       - name: Upload QA APK (no signing keys, no personal data)
         uses: actions/upload-artifact@v4
         with:
-          name: malak-android-debug-${{ github.sha }}
+          name: malak-PROTOTYPE-NOT-VISUALLY-APPROVED-${{ github.sha }}
           path: apps/android/app/build/outputs/apk/debug/app-debug.apk
           retention-days: 3
           if-no-files-found: error
