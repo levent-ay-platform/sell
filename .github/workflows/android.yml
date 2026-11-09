@@ -84,12 +84,21 @@ jobs:
             adb shell am start -n tn.malak.app/.MainActivity
             sleep 6
             adb exec-out screencap -p > screenshots/home-360dp.png
+            # Drag on the map photo, away from cards/tools; this must collapse UI chrome.
+            adb shell input swipe 215 715 395 625 420
+            sleep 2
+            adb exec-out screencap -p > screenshots/map-immersive-360dp.png
             adb shell wm size 824x1830
             adb shell wm density 320
             adb shell am force-stop tn.malak.app || true
             adb shell am start -n tn.malak.app/.MainActivity
             sleep 6
             adb exec-out screencap -p > screenshots/home-412dp.png
+            adb shell input swipe 245 830 460 720 420
+            sleep 2
+            adb exec-out screencap -p > screenshots/map-immersive-412dp.png
+            test $(wc -c < screenshots/map-immersive-360dp.png) -gt 10000
+            test $(wc -c < screenshots/map-immersive-412dp.png) -gt 10000
             test $(wc -c < screenshots/home-360dp.png) -gt 10000
             test $(wc -c < screenshots/home-412dp.png) -gt 10000
       - name: Upload Android visual proof (review before acceptance)
