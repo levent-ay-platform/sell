@@ -14,7 +14,7 @@ CREATE TABLE sell.users (
  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
  phone_e164 text UNIQUE,
  created_at timestamptz NOT NULL DEFAULT now(),
- CHECK (phone_e164 IS NULL OR phone_e164 ~ '^\\+[1-9][0-9]{7,14}$')
+ CHECK (phone_e164 IS NULL OR phone_e164 ~ '^\+[1-9][0-9]{7,14}$')
 );
 CREATE TABLE sell.party_memberships (
  party_id uuid NOT NULL REFERENCES sell.parties(id),
@@ -174,10 +174,13 @@ BEFORE INSERT OR UPDATE ON sell.listings
 FOR EACH ROW EXECUTE FUNCTION sell.guard_listing_publication();
 
 CREATE FUNCTION sell.pause_listing_after_scope_change()
-RETURNS trigger LANGUAGE plpgsql AS $$
+RETURNS trigger LANGUAGE plpgsql AS $
+DECLARE target_listing_id uuid;
 BEGIN
+ IF TG_OP='DELETE' THEN target_listing_id:=OLD.listing_id;
+ ELSE target_listing_id:=NEW.listing_id; END IF;
  UPDATE sell.listings SET status='PAUSED',published_at=NULL
- WHERE id=COALESCE(NEW.listing_id,OLD.listing_id) AND status='PUBLISHED';
+ WHERE id=target_listing_id AND status='PUBLISHED';
  -- An UPDATE moving a listing item across parents must revoke BOTH.
  IF TG_OP='UPDATE' AND NEW.listing_id IS DISTINCT FROM OLD.listing_id THEN
    UPDATE sell.listings SET status='PAUSED',published_at=NULL
