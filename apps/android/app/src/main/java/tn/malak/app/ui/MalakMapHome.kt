@@ -93,8 +93,8 @@ fun MalakMapHome(
         )
 
         BougainvilleaSway(
-            Modifier.align(Alignment.TopEnd).padding(end = 3.dp, top = 1.dp)
-                .size(width = 123.dp, height = 80.dp)
+            Modifier.align(Alignment.TopEnd).padding(end = 1.dp, top = 1.dp)
+                .size(width = 92.dp, height = 57.dp).graphicsLayer { alpha = .82f }
         )
 
         AnimatedVisibility(
@@ -120,7 +120,7 @@ fun MalakMapHome(
 
         // Real screen interaction remains available even in immersive map mode.
         Column(
-            Modifier.align(Alignment.CenterEnd).padding(end = 10.dp),
+            Modifier.align(Alignment.CenterEnd).offset(y = (-76).dp).padding(end = 10.dp),
             verticalArrangement = Arrangement.spacedBy(9.dp)
         ) {
             MapCircle("layers") {
@@ -322,30 +322,36 @@ private fun MapFrenchCategories(selected: String, onSelect: (String) -> Unit) {
         Triple("Commerces", Icons.Outlined.Storefront, "Commerces")
     )
     Row(
-        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
-            .padding(start = 12.dp, end = 12.dp),
-        horizontalArrangement = Arrangement.spacedBy(6.dp)
+        Modifier.fillMaxWidth().padding(horizontal = 10.dp),
+        horizontalArrangement = Arrangement.spacedBy(5.dp)
     ) {
         categories.forEach { (key, icon, label) ->
             val active = selected == key || (selected == "أراضي" && key == "Terrains")
             Surface(
-                modifier = Modifier.clickable { onSelect(key) },
-                color = if (active) Brand.Crimson else Color.White.copy(alpha = .95f),
+                modifier = Modifier.weight(1f).clickable { onSelect(key) },
+                color = if (active) Brand.Crimson else Color.White.copy(alpha = .94f),
                 shape = RoundedCornerShape(15.dp),
-                border = BorderStroke(1.dp, Color.White.copy(alpha = .72f)),
+                border = BorderStroke(1.dp, Color.White.copy(alpha = .75f)),
                 shadowElevation = 2.dp
             ) {
                 Column(
-                    Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                    Modifier.heightIn(min = 65.dp)
+                        .padding(horizontal = 2.dp, vertical = 7.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     Icon(icon, contentDescription = null,
                         tint = if (active) Color.White else Brand.Crimson,
-                        modifier = Modifier.size(21.dp))
-                    Text(label, fontSize = 10.sp,
+                        modifier = Modifier.size(20.dp))
+                    Text(
+                        label,
+                        fontSize = 9.sp,
+                        lineHeight = 11.sp,
+                        textAlign = TextAlign.Center,
+                        maxLines = 2,
                         color = if (active) Color.White else Brand.Ink,
-                        fontWeight = FontWeight.SemiBold)
+                        fontWeight = FontWeight.SemiBold
+                    )
                 }
             }
         }
