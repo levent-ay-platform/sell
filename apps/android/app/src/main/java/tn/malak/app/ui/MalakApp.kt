@@ -136,17 +136,17 @@ private fun HomeScreen(
                 .padding(bottom=93.dp)
         ) {
             BrandHeader(onAccount = { onNavigate("visitor") })
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(3.dp))
             SearchPill(value=search,onValue=onSearch,onAI={onNotice("البحث الذكي سيُربط بالبيانات العقارية الموثقة")})
-            Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(6.dp))
             CategoryChips(selectedCategory,onCategory)
             Box(
-                Modifier.fillMaxWidth().height(255.dp)
+                Modifier.fillMaxWidth().height(190.dp)
             ) {
                 ScenicBackdrop(Modifier.fillMaxSize(), previewZoom=zoom)
                 Column(Modifier.align(Alignment.CenterEnd).padding(end=12.dp), verticalArrangement=Arrangement.spacedBy(9.dp)) {
                     CircleControl("▱") { onNotice("طبقات الخريطة الحقيقية ضمن مرحلة دمج المحرك") }
-                    CircleControl(if(map3d) "3D" else "2D") { onToggleMap() }
+                    CircleControl("3D") { onNotice("العرض الثلاثي الحقيقي غير مفعّل في هذه المعاينة") }
                     CircleControl("+") { zoom = (zoom+1).coerceAtMost(6) }
                     CircleControl("−") { zoom = (zoom-1).coerceAtLeast(1) }
                 }
@@ -184,12 +184,12 @@ private fun HomeScreen(
 @Composable
 private fun BrandHeader(onAccount: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().padding(start=16.dp,end=16.dp,top=10.dp),
+        Modifier.fillMaxWidth().height(56.dp).padding(start=14.dp,end=14.dp,top=2.dp),
         verticalAlignment=Alignment.CenterVertically,
         horizontalArrangement=Arrangement.SpaceBetween
     ) {
         Column {
-            Text(APP_BRAND_ARABIC,color=Brand.Crimson,fontSize=28.sp,fontWeight=FontWeight.Bold)
+            Text(APP_BRAND_ARABIC,color=Brand.Crimson,fontSize=27.sp,lineHeight=30.sp,fontWeight=FontWeight.Bold)
             Text("REAL ESTATE TUNISIA",color=Brand.Crimson,fontSize=8.sp,letterSpacing=1.2.sp)
         }
         Row(verticalAlignment=Alignment.CenterVertically) {
@@ -208,7 +208,7 @@ private fun SearchPill(value:String,onValue:(String)->Unit,onAI:()->Unit) {
         modifier=Modifier.fillMaxWidth().padding(horizontal=12.dp),
         shape=RoundedCornerShape(24.dp),color=Color.White.copy(alpha=.91f),shadowElevation=5.dp
     ) {
-        Row(Modifier.fillMaxWidth().heightIn(min=52.dp).padding(horizontal=10.dp),
+        Row(Modifier.fillMaxWidth().heightIn(min=46.dp).padding(horizontal=10.dp),
             verticalAlignment=Alignment.CenterVertically) {
             Text("⌕",fontSize=28.sp,color=Brand.Crimson,modifier=Modifier.padding(horizontal=7.dp))
             BasicTextField(
@@ -223,7 +223,7 @@ private fun SearchPill(value:String,onValue:(String)->Unit,onAI:()->Unit) {
                     }
                 }
             )
-            Text("🎙",fontSize=17.sp,color=Brand.Crimson,modifier=Modifier.padding(6.dp).clickable(onClick=onAI))
+            Text("♩",fontSize=17.sp,color=Brand.Crimson,modifier=Modifier.padding(6.dp).clickable(onClick=onAI))
             Surface(color=Brand.Crimson,shape=RoundedCornerShape(18.dp),modifier=Modifier.clickable(onClick=onAI)) {
                 Text("✦",Modifier.padding(horizontal=16.dp,vertical=9.dp),fontSize=20.sp,color=Color.White)
             }
@@ -245,9 +245,9 @@ private fun CategoryChips(selected:String,onSelect:(String)->Unit) {
                 color=if(chosen) Brand.Crimson else Color.White.copy(alpha=.91f),
                 shape=RoundedCornerShape(17.dp),shadowElevation=2.dp
             ) {
-                Column(Modifier.padding(horizontal=16.dp,vertical=9.dp),horizontalAlignment=Alignment.CenterHorizontally) {
-                    Text(icon,color=if(chosen)Color.White else Brand.Crimson,fontSize=20.sp)
-                    Text(label,color=if(chosen)Color.White else Brand.Ink,fontSize=12.sp,fontWeight=FontWeight.SemiBold)
+                Column(Modifier.padding(horizontal=12.dp,vertical=5.dp),horizontalAlignment=Alignment.CenterHorizontally) {
+                    Text(icon,color=if(chosen)Color.White else Brand.Crimson,fontSize=18.sp)
+                    Text(label,color=if(chosen)Color.White else Brand.Ink,fontSize=11.sp,fontWeight=FontWeight.SemiBold)
                 }
             }
         }
@@ -275,10 +275,10 @@ private fun PreviewPropertyCard(favorite:Boolean,onFavorite:()->Unit,onOpen:()->
         border=BorderStroke(1.dp,Color.White.copy(alpha=.95f)),
         shadowElevation=11.dp
     ) {
-        Column(Modifier.padding(12.dp),verticalArrangement=Arrangement.spacedBy(9.dp)) {
+        Column(Modifier.padding(10.dp),verticalArrangement=Arrangement.spacedBy(5.dp)) {
             Row(verticalAlignment=Alignment.Top, horizontalArrangement=Arrangement.spacedBy(10.dp)) {
                 Column(Modifier.weight(1f)) {
-                    Box(Modifier.fillMaxWidth().height(126.dp).clip(RoundedCornerShape(15.dp))) {
+                    Box(Modifier.fillMaxWidth().height(102.dp).clip(RoundedCornerShape(15.dp))) {
                         CoastalThumbnail(Modifier.fillMaxSize())
                         Text("معاينة تصميم",
                             Modifier.align(Alignment.BottomStart).padding(5.dp)
@@ -289,23 +289,23 @@ private fun PreviewPropertyCard(favorite:Boolean,onFavorite:()->Unit,onOpen:()->
                     Spacer(Modifier.height(5.dp))
                     Row(horizontalArrangement=Arrangement.spacedBy(4.dp)) {
                         for(index in 0..2){
-                            Box(Modifier.weight(1f).height(35.dp)) {
+                            Box(Modifier.weight(1f).height(27.dp)) {
                                 PreviewGalleryThumbnail(index,Modifier.fillMaxSize())
                             }
                         }
                     }
                 }
                 Column(Modifier.weight(1f),horizontalAlignment=Alignment.End,
-                    verticalArrangement=Arrangement.spacedBy(6.dp)) {
+                    verticalArrangement=Arrangement.spacedBy(3.dp)) {
                     Text("◈  قيد التحقق",color=Brand.Crimson,fontSize=11.sp,
                         fontWeight=FontWeight.SemiBold,modifier=Modifier
                             .background(Brand.Rose,RoundedCornerShape(15.dp))
                             .padding(horizontal=9.dp,vertical=5.dp))
                     Text("#TUN-84527  ·  نموذج",fontSize=9.sp,color=Brand.Muted)
-                    Text(PreviewLand.title,fontWeight=FontWeight.Bold,fontSize=17.sp,
-                        color=Brand.Ink,lineHeight=23.sp,textAlign=TextAlign.Right)
+                    Text(PreviewLand.title,fontWeight=FontWeight.Bold,fontSize=15.sp,
+                        color=Brand.Ink,lineHeight=20.sp,textAlign=TextAlign.Right)
                     Text("⌖  "+PreviewLand.location,fontSize=11.sp,color=Brand.Muted)
-                    Text(PreviewLand.priceTnd+" د.ت",fontSize=20.sp,color=Brand.Crimson,
+                    Text(PreviewLand.priceTnd+" د.ت",fontSize=18.sp,color=Brand.Crimson,
                         fontWeight=FontWeight.Bold)
                 }
             }
@@ -342,7 +342,7 @@ private fun BottomNav(active:String,onNavigate:(String)->Unit,modifier:Modifier=
         border=BorderStroke(1.dp,Color.White),shadowElevation=8.dp
     ) {
         Row(
-            Modifier.fillMaxWidth().height(65.dp).padding(horizontal=13.dp),
+            Modifier.fillMaxWidth().height(59.dp).padding(horizontal=13.dp),
             verticalAlignment=Alignment.CenterVertically,
             horizontalArrangement=Arrangement.SpaceEvenly
         ) {
