@@ -39,13 +39,12 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      - name: Install Android SDK from hosted runner
-        run: |
-          set -euo pipefail
-          : "${ANDROID_HOME:?GitHub hosted Ubuntu Android SDK expected}"
-          command -v sdkmanager
-          yes | sdkmanager --licenses >/dev/null || true
-          sdkmanager 'platforms;android-36' 'build-tools;36.0.0'
+      - name: Set up Android SDK (no removed legacy tools package)
+        uses: android-actions/setup-android@v4
+        with:
+          packages: 'platform-tools'
+      - name: Install Android platform
+        run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0'
       - name: Configure Gradle 8.13
         uses: gradle/actions/setup-gradle@v6
         with:
