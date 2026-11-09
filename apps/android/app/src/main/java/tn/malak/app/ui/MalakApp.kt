@@ -8,6 +8,20 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.Remove
+import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.Mic
+import androidx.compose.material.icons.outlined.Layers
+import androidx.compose.material.icons.outlined.Explore
+import androidx.compose.material.icons.outlined.Place
+import androidx.compose.material.icons.outlined.Landscape
+import androidx.compose.material.icons.outlined.Apartment
+import androidx.compose.material.icons.outlined.Home
+import androidx.compose.material.icons.outlined.Park
+import androidx.compose.material.icons.outlined.Storefront
+
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
@@ -210,7 +224,8 @@ private fun SearchPill(value:String,onValue:(String)->Unit,onAI:()->Unit) {
     ) {
         Row(Modifier.fillMaxWidth().heightIn(min=46.dp).padding(horizontal=10.dp),
             verticalAlignment=Alignment.CenterVertically) {
-            Text("⌕",fontSize=28.sp,color=Brand.Crimson,modifier=Modifier.padding(horizontal=7.dp))
+            Icon(imageVector=Icons.Outlined.Search,contentDescription="بحث",
+                tint=Brand.Crimson,modifier=Modifier.padding(horizontal=8.dp).size(24.dp))
             BasicTextField(
                 value=value,onValueChange=onValue,singleLine=true,
                 modifier=Modifier.weight(1f),
@@ -223,7 +238,8 @@ private fun SearchPill(value:String,onValue:(String)->Unit,onAI:()->Unit) {
                     }
                 }
             )
-            Text("♩",fontSize=17.sp,color=Brand.Crimson,modifier=Modifier.padding(6.dp).clickable(onClick=onAI))
+            Icon(imageVector=Icons.Outlined.Mic,contentDescription="البحث الصوتي",
+                tint=Brand.Crimson,modifier=Modifier.size(30.dp).clickable(onClick=onAI).padding(4.dp))
             Surface(color=Brand.Crimson,shape=RoundedCornerShape(18.dp),modifier=Modifier.clickable(onClick=onAI)) {
                 Text("✦",Modifier.padding(horizontal=16.dp,vertical=9.dp),fontSize=20.sp,color=Color.White)
             }
@@ -233,7 +249,13 @@ private fun SearchPill(value:String,onValue:(String)->Unit,onAI:()->Unit) {
 
 @Composable
 private fun CategoryChips(selected:String,onSelect:(String)->Unit) {
-    val items=listOf("أراضي" to "♧","شقق" to "▥","فيلات" to "⌂","مزارع" to "♧","تجارية" to "▤")
+    val items=listOf(
+        "أراضي" to Icons.Outlined.Landscape,
+        "شقق" to Icons.Outlined.Apartment,
+        "فيلات" to Icons.Outlined.Home,
+        "مزارع" to Icons.Outlined.Park,
+        "تجارية" to Icons.Outlined.Storefront
+    )
     Row(
         Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal=12.dp),
         horizontalArrangement=Arrangement.spacedBy(9.dp)
@@ -246,7 +268,9 @@ private fun CategoryChips(selected:String,onSelect:(String)->Unit) {
                 shape=RoundedCornerShape(17.dp),shadowElevation=2.dp
             ) {
                 Column(Modifier.padding(horizontal=12.dp,vertical=5.dp),horizontalAlignment=Alignment.CenterHorizontally) {
-                    Text(icon,color=if(chosen)Color.White else Brand.Crimson,fontSize=18.sp)
+                    Icon(imageVector=icon,contentDescription=null,
+                        tint=if(chosen)Color.White else Brand.Crimson,
+                        modifier=Modifier.size(21.dp))
                     Text(label,color=if(chosen)Color.White else Brand.Ink,fontSize=11.sp,fontWeight=FontWeight.SemiBold)
                 }
             }
@@ -261,8 +285,12 @@ private fun CircleControl(text:String,onClick:()->Unit) {
         color=Brand.Pearl.copy(alpha=.95f),shadowElevation=3.dp
     ) {
         Box(contentAlignment=Alignment.Center) {
-            Text(text,color=Brand.Crimson,fontSize=if(text=="3D"||text=="2D") 14.sp else 22.sp,
-                fontWeight=FontWeight.SemiBold)
+            when(text) {
+                "+" -> Icon(Icons.Outlined.Add,contentDescription="تكبير",tint=Brand.Crimson)
+                "−" -> Icon(Icons.Outlined.Remove,contentDescription="تصغير",tint=Brand.Crimson)
+                "▱" -> Icon(Icons.Outlined.Layers,contentDescription="طبقات الخريطة",tint=Brand.Crimson)
+                else -> Text(text,color=Brand.Crimson,fontSize=14.sp,fontWeight=FontWeight.SemiBold)
+            }
         }
     }
 }
@@ -365,7 +393,12 @@ private fun BottomNav(active:String,onNavigate:(String)->Unit,modifier:Modifier=
 private fun NavItem(icon:String,label:String,selected:Boolean,onClick:()->Unit) {
     Column(Modifier.clickable(onClick=onClick).padding(horizontal=4.dp),
         horizontalAlignment=Alignment.CenterHorizontally) {
-        Text(icon,fontSize=23.sp,color=if(selected)Brand.Crimson else Brand.Ink)
+        Icon(
+            imageVector=if(icon=="⌖") Icons.Outlined.Explore else Icons.Outlined.Place,
+            contentDescription=null,
+            tint=if(selected)Brand.Crimson else Brand.Ink,
+            modifier=Modifier.size(24.dp)
+        )
         Text(label,fontSize=11.sp,color=if(selected)Brand.Crimson else Brand.Muted,
             fontWeight=if(selected)FontWeight.Bold else FontWeight.Normal)
     }
