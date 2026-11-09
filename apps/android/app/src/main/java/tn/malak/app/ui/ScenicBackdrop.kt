@@ -17,6 +17,12 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -102,9 +108,20 @@ fun BougainvilleaSway(modifier: Modifier = Modifier) {
         contentScale = ContentScale.Crop,
         modifier = modifier
             .graphicsLayer {
+                compositingStrategy = CompositingStrategy.Offscreen
                 rotationZ = rotation
                 transformOrigin = TransformOrigin(1f, 0f)
-                alpha = 0.92f
+            }
+            .drawWithContent {
+                drawContent()
+                drawRect(
+                    brush = Brush.radialGradient(
+                        colors = listOf(Color.White, Color.White, Color.Transparent),
+                        center = Offset(size.width * .45f, size.height * .31f),
+                        radius = size.width * .78f
+                    ),
+                    blendMode = BlendMode.DstIn
+                )
             }
     )
 }
