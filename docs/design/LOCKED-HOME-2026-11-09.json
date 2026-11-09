@@ -1,0 +1,31 @@
+{
+  "id": "MALAK_HOME_STRICT_LOCK_2026_11_09",
+  "approved": "2026-11-09",
+  "status": "LOCKED_BY_USER",
+  "app": "ملاك / Malak",
+  "defaultLocale": "fr-TN",
+  "original": "image(4).png",
+  "originalAttachment": "file_00000000b61081f4a44bc89d1b38f8f1",
+  "sourceSha256": "7cb5ea83bc0831d0d16ac6d0a219bd650c3ab668cbff19bc48e318b857d7bb47",
+  "sourceSize": [
+    543,
+    1176
+  ],
+  "portableArchive": "MALAK-APPROVED-DESIGN-LOCK.zip in originating ChatGPT conversation",
+  "note": "Exact uploaded image is canonical, not a generated copy. PNG bytes are not yet stored in GitHub.",
+  "conditions": [
+    "exact original brand and light Mediterranean sunset background",
+    "red/white search, categories Terrains Villas Appartements Fermes Locaux commerciaux",
+    "glowing plot highlighted in the same on-screen location",
+    "right map tool column and lower-left weather-style chip",
+    "same property sheet with Terrain à Hammamet and 540 000 TND demo contents",
+    "bottom navigation Accueil Carte Favoris Plus",
+    "image-based map hero for V1; real geospatial 3D is deferred",
+    "without signup, French first",
+    "gesture hides secondary overlays after swipe, with explicit restore",
+    "no visual changes without explicit user approval"
+  ],
+  "releaseGate": "Android screenshot comparison at 360dp, 393dp and 412dp against exact image, explicit user signoff.",
+  "fakeDataPolicy": "Verification, price, property, weather and location on the mockup are placeholders until verified live data.",
+  "storedGitHubBinary": false
+}
