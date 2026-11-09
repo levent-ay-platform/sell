@@ -1,0 +1,31 @@
+# Private data, identity and property records
+.env
+.env.*
+!.env.example
+*.pem
+*.p12
+*.pfx
+*.jks
+*.keystore
+*.key
+*.mobileprovision
+id_*
+secrets/
+private/
+evidence/
+production/
+*.sqlite
+*.db
+
+# Builds and OS junk
+node_modules/
+dist/
+build/
+.gradle/
+.idea/
+*.iml
+local.properties
+.DS_Store
+*.log
+coverage/
+.tmp/

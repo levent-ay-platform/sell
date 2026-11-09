@@ -1,0 +1,51 @@
+name: Foundation Gate
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: foundation-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verification-schema:
+    name: Docs, workflow policy and PostGIS publication gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgis/postgis:17-3.7
+        env:
+          POSTGRES_USER: sell_ci
+          POSTGRES_PASSWORD: sell_ci_disposable
+          POSTGRES_DB: sell_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U sell_ci -d sell_ci"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 8
+    steps:
+      - name: Checkout (read-only)
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Validate public repository workflow policy
+        run: python3 scripts/validate_repository.py
+      - name: Install PostgreSQL client
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client
+      - name: Apply schema and exercise verification gate (synthetic fixtures)
+        env:
+          PGPASSWORD: sell_ci_disposable
+        run: |
+          set -euo pipefail
+          psql -h 127.0.0.1 -U sell_ci -d sell_ci -v ON_ERROR_STOP=1 -f db/migrations/0001_foundation.sql
+          psql -h 127.0.0.1 -U sell_ci -d sell_ci -v ON_ERROR_STOP=1 -f db/tests/0001_publication_gate.sql
