@@ -54,7 +54,7 @@ private data class PreviewListing(
 fun MalakApp() {
     var screen by rememberSaveable { mutableStateOf("home") }
     var search by rememberSaveable { mutableStateOf("") }
-    var category by rememberSaveable { mutableStateOf("أراضي") }
+    var category by rememberSaveable { mutableStateOf("Terrains") }
     var favorite by rememberSaveable { mutableStateOf(false) }
     var compare by rememberSaveable { mutableStateOf(false) }
     var map3d by rememberSaveable { mutableStateOf(true) }
@@ -63,7 +63,7 @@ fun MalakApp() {
     MaterialTheme(colorScheme = lightColorScheme(primary = Brand.Crimson, background = Brand.Pearl)) {
         Surface(color = Brand.Pearl, modifier = Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
             when(screen) {
-                "home" -> HomeScreen(
+                "home" -> MalakMapHome(
                     search = search, onSearch = { search = it },
                     selectedCategory = category, onCategory = { category = it },
                     favorite = favorite, onFavorite = { favorite = !favorite },
@@ -109,7 +109,7 @@ fun MalakApp() {
                     InfoRow("الخصوصية", "لا توجد وثائق شخصية في هذا النموذج")
                     MalakAction("إضافة عقار") { screen = "seller" }
                 }
-                else -> HomeScreen(
+                else -> MalakMapHome(
                     search, { search = it }, category, { category = it }, favorite,
                     { favorite = !favorite }, map3d, { map3d = !map3d },
                     { screen = "details" }, { screen = it }, notice, { notice = it }
