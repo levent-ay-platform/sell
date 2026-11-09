@@ -65,14 +65,14 @@ fun MalakApp() {
                 )
                 "favorites" -> SimplePage(
                     title = "المفضلة", onBack = { screen = "home" },
-                    bottom = { BottomNav(screen) { screen = it } }
+                    bottom = { BottomNav(active=screen,onNavigate={ screen = it }) }
                 ) {
                     if (favorite) SmallListingCard(onClick = { screen = "details" })
                     else MessageBlock("عقاراتك المفضّلة", "إضغط على ♡ داخل أي عقار لإضافته هنا. التفضيل حالياً ضمن معاينة التطبيق.")
                 }
                 "compare" -> SimplePage(
                     title = "مقارنة العقارات", onBack = { screen = "home" },
-                    bottom = { BottomNav(screen) { screen = it } }
+                    bottom = { BottomNav(active=screen,onNavigate={ screen = it }) }
                 ) {
                     MessageBlock("قارن بذكاء", "المقارنة الحقيقية ستعتمد فقط على عروض منشورة ومتحققة من الخادم.")
                     if (compare) {
@@ -86,7 +86,7 @@ fun MalakApp() {
                 "seller" -> SellerDraftScreen(onBack = { screen = "home" })
                 "visitor" -> SimplePage(
                     title = "حسابي", onBack = { screen = "home" },
-                    bottom = { BottomNav(screen) { screen = it } }
+                    bottom = { BottomNav(active=screen,onNavigate={ screen = it }) }
                 ) {
                     MessageBlock("أهلاً بك في ملاك", "تقدر تستكشف العقارات بدون حساب. التسجيل مطلوب فقط عند إضافة عقار أو التواصل الحقيقي مع المالك.")
                     InfoRow("اللغة", "العربية / Français")
@@ -309,7 +309,7 @@ private fun DetailFact(label:String,value:String) {
 
 @Composable
 private fun BottomNav(active:String,onNavigate:(String)->Unit,modifier:Modifier=Modifier) {
-    Surface(modifier.fillMaxWidth().padding(horizontal=12.dp,bottom=8.dp),
+    Surface(modifier.fillMaxWidth().padding(horizontal=12.dp).padding(bottom=8.dp),
         color=Color.White.copy(alpha=.96f),shape=RoundedCornerShape(30.dp),shadowElevation=8.dp) {
         Row(
             Modifier.fillMaxWidth().height(66.dp).padding(horizontal=8.dp),
