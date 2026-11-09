@@ -3,8 +3,20 @@ name: Foundation Gate
 on:
   pull_request:
     branches: [main]
+    paths:
+      - 'db/**'
+      - '.github/workflows/foundation.yml'
+      - 'scripts/validate_repository.py'
+      - 'docs/VERIFICATION.md'
+      - 'docs/ARCHITECTURE.md'
   push:
     branches: [main]
+    paths:
+      - 'db/**'
+      - '.github/workflows/foundation.yml'
+      - 'scripts/validate_repository.py'
+      - 'docs/VERIFICATION.md'
+      - 'docs/ARCHITECTURE.md'
   workflow_dispatch:
 
 permissions:

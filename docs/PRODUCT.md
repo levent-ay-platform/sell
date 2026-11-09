@@ -1,7 +1,7 @@
-# SELL product contract — Tunisia first
+# ملاك product contract — Tunisia first
 
 ## Promise
-People discover properties via an optional interactive globe/map or fast list. Only currently approved, in-scope listings are publicly discoverable. Buyer contacts seller or verified authorized representative directly; SELL is not a broker in V1.
+People discover properties via an optional interactive globe/map or fast list. Only currently approved, in-scope listings are publicly discoverable. Buyer contacts seller or verified authorized representative directly; ملاك is not a broker in V1.
 
 ## Roles
 - Anonymous buyer: browse, filter, view public verification summary; no document access.

@@ -1,0 +1,40 @@
+{
+  "brand": "ملاك",
+  "repo": "levent-ay-platform/sell",
+  "approved_on": "2026-11-09",
+  "asset_pack": "malak-design-reference-v1.zip",
+  "location": "Downloaded from the ChatGPT conversation; original binary refs are not committed to this public repository",
+  "legacy_brand_note": "Screenshots have legacy SELL wordmark; production must render ملاك",
+  "screens": [
+    {
+      "file": "01-home-approved-reference.png",
+      "sha256": "711a5a8e309cd4b1616cec338a8b74ba40aa5e929599ea2d1432e8e71b2bdb98",
+      "role": "LOCKED canonical home"
+    },
+    {
+      "file": "02-property-details.png",
+      "sha256": "35ee98ab376339274afcb3f5dfc1e01bca2a08ee55b2928181ae69085d9d04ce",
+      "role": "Property details"
+    },
+    {
+      "file": "03-smart-discovery.png",
+      "sha256": "47c8218ea5bde1ea66a4a3fd957e2a3a21474f0143b1eee615da6fe72ea5d95f",
+      "role": "Search/discovery"
+    },
+    {
+      "file": "04-favorites-compare.png",
+      "sha256": "b3ed3b43505d671e7ebd85c52c34fd9ffcc1049699880f80fe7acf2f4a5b95c8",
+      "role": "Favorites and comparison"
+    },
+    {
+      "file": "05-visitor-settings.png",
+      "sha256": "e928c45f1f626c80b04a938adf3f38435cf0093d3099dc031e0ce7946d16264e",
+      "role": "Guest/profile"
+    },
+    {
+      "file": "06-villa-property-detail.png",
+      "sha256": "b1686a1f6397bdaef2c33b20f16447ed580896818cf3884216888fdb24ed6a41",
+      "role": "Villa details"
+    }
+  ]
+}

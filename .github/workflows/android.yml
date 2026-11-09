@@ -1,0 +1,61 @@
+name: Malak Android (hosted Ubuntu)
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'apps/android/**'
+      - '.github/workflows/android.yml'
+      - 'scripts/check_malak_brand.py'
+  push:
+    branches: [main]
+    paths:
+      - 'apps/android/**'
+      - '.github/workflows/android.yml'
+      - 'scripts/check_malak_brand.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  native-preview:
+    name: Android debug APK — GitHub-hosted Ubuntu
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Checkout (no persisted credentials)
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Check approved brand
+        run: python3 scripts/check_malak_brand.py
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Set up Android SDK (no removed legacy tools package)
+        uses: android-actions/setup-android@v4
+        with:
+          packages: 'platform-tools'
+      - name: Install Android platform
+        run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0'
+      - name: Configure Gradle 8.13
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: '8.13'
+          cache-provider: basic
+      - name: Assemble synthetic QA Android APK
+        run: gradle -p apps/android :app:assembleDebug --no-daemon --stacktrace
+      - name: Upload QA APK (no signing keys, no personal data)
+        uses: actions/upload-artifact@v4
+        with:
+          name: malak-android-debug-${{ github.sha }}
+          path: apps/android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 3
+          if-no-files-found: error

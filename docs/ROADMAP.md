@@ -1,4 +1,4 @@
-# SELL milestone plan
+# ملاك milestone plan
 
 ## F0 — Repo foundation (this PR)
 - [ ] Document product invariants, architecture, Tunisia conventions and trust model.

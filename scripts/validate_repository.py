@@ -35,6 +35,8 @@ for workflow in workflows:
         raise SystemExit(f"{workflow.name}: missing read-only workflow permissions")
     if "actions/checkout@" not in content:
         raise SystemExit(f"{workflow.name}: missing checkout")
+    if re.search(r"(?m)^\\s*runs-on:\\s*(?:(?!ubuntu-latest).)+$", content):
+        raise SystemExit(f"{workflow.name}: unexpected runner label")
 
 migration = (root / "db/migrations/0001_foundation.sql").read_text(encoding="utf-8")
 assert "CREATE VIEW sell.public_listing_cards" in migration

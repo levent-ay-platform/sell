@@ -1,12 +1,12 @@
-# SELL visual identity — Light Tunisia Edition
+# ملاك — Approved Light Tunisia Visual System (LOCKED)
 
 Date: 2026-11-09
-Status: **User-selected visual direction** — the light coastal screenshot with Tunisian crimson, white pearl glass cards, bougainvillea at the upper-right, and an interactive 3D real-estate map is the binding art-direction reference for upcoming screen designs. This is a DESIGN decision, not authorization to deploy.
+Status: **LOCKED by user: exact visual/layout baseline; approved product name ملاك** — the light coastal screenshot with Tunisian crimson, white pearl glass cards, bougainvillea at the upper-right, and an interactive 3D real-estate map is the binding art-direction reference for upcoming screen designs. This is a DESIGN decision, not authorization to deploy.
 
 ## The approved home reference
 - Bright Mediterranean aerial coastline around Kelibia with clear turquoise sea, Tunisian town, real-estate markers and a subtly highlighted parcel.
 - Bright, spacious, premium interface. **Never dark mode as the primary home design.**
-- SELL brand in refined deep red/crimson; tasteful Tunisia flag representation; clear Arabic and French.
+- ملاك brand in refined deep red/crimson; tasteful Tunisia flag representation; clear Arabic and French.
 - Warm ivory / pearl translucent cards, very restrained red / rose highlights and exquisite low-contrast shadows.
 - Floating top search with voice/AI action, property-type pills, right-edge map tools, partial bottom property detail sheet, navigation with centered globe.
 - Beautiful pink-red bougainvillea branches in the **upper-right**; natural, delicate movement.
@@ -53,3 +53,12 @@ These are provisional design tokens; validate contrast/accessibility on real And
 - Screens render one coherent map scene where practical; a full-screen 3D map can fall back to 2D/list on weaker devices.
 - Home image reference is user-supplied in conversation; do NOT imply an image file is stored in the public repository.
 - Avoid touching existing CRM, company servers, production deployments or self-hosted/Mac runners.
+
+## Specific approved implementation requirements
+- **MALAK/Mلاك is the sole consumer-facing brand:** Arabic masthead `ملاك`; never show old `SELL` wordmark in the actual app. No official Romanized brand was selected; do not invent one for public UI.
+- The user's selected home reference is `01-home-approved-reference.png` (hash recorded in manifest); screenshots with old logo only remain archived design inputs.
+- Layout fidelity, not a raster screenshot: edge-to-edge scenic map layer; delicate upper-right bougainvillea; compact branded masthead; floating search; property category pills; slim right controls; price/property card anchored above minimal navigation.
+- Use **real Compose components**. UI controls must have behavior, avoid decorative dead controls; show explicit demo markers until backed by vetted API.
+- All remaining screens use the *same* tokens, radii, shadows, Arab/French typography, icon proportions and spacing; avoid returning to a dark palette.
+- Remove any broad `100% verified`, user ratings, market statistics or third-party amenity assertions not grounded by backend data.
+- **Faithfulness gate:** screen captures on 360dp & 412dp Android, RTL and FR-LTR, small screen overflow, large text, accessibility, reduced motion, low memory; compare to approved design after connecting licensed imagery and native map.
