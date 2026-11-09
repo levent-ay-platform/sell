@@ -1,6 +1,7 @@
 package tn.malak.app.ui
 
 import androidx.compose.foundation.*
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.horizontalScroll
@@ -124,9 +125,11 @@ private fun HomeScreen(
         listOf("قليبية","أرض","بحر","نابل","kelibia","kélibia").any { search.contains(it,ignoreCase = true) }) &&
         (selectedCategory == "أراضي" || selectedCategory == "الكل")
 
-    Box(Modifier.fillMaxSize()) {
-        ScenicBackdrop(Modifier.fillMaxSize())
-        BougainvilleaSway(Modifier.align(Alignment.TopEnd).size(width=155.dp,height=98.dp))
+    Box(Modifier.fillMaxSize().background(
+        Brush.verticalGradient(listOf(Color(0xFFFCE9F0), Color(0xFFCAE8FC), Brand.Pearl))
+    )) {
+        BougainvilleaSway(Modifier.align(Alignment.TopEnd)
+            .padding(end=3.dp,top=2.dp).size(width=118.dp,height=76.dp))
         Column(
             Modifier.fillMaxSize()
                 .verticalScroll(rememberScrollState())
@@ -138,8 +141,9 @@ private fun HomeScreen(
             Spacer(Modifier.height(10.dp))
             CategoryChips(selectedCategory,onCategory)
             Box(
-                Modifier.fillMaxWidth().height(310.dp)
+                Modifier.fillMaxWidth().height(255.dp)
             ) {
+                ScenicBackdrop(Modifier.fillMaxSize(), previewZoom=zoom)
                 Column(Modifier.align(Alignment.CenterEnd).padding(end=12.dp), verticalArrangement=Arrangement.spacedBy(9.dp)) {
                     CircleControl("▱") { onNotice("طبقات الخريطة الحقيقية ضمن مرحلة دمج المحرك") }
                     CircleControl(if(map3d) "3D" else "2D") { onToggleMap() }
@@ -156,10 +160,11 @@ private fun HomeScreen(
                         fontSize=12.sp,color=Brand.Ink)
                 }
                 Surface(
-                    modifier=Modifier.align(Alignment.TopStart).padding(start=12.dp,top=10.dp),
-                    color=Brand.Pearl.copy(alpha=.83f),shape=RoundedCornerShape(12.dp)
+                    modifier=Modifier.align(Alignment.TopStart).padding(start=12.dp,top=8.dp),
+                    color=Brand.Pearl.copy(alpha=.82f),shape=RoundedCornerShape(10.dp)
                 ) {
-                    Text("معاينة خريطة توضيحية",Modifier.padding(horizontal=10.dp,vertical=6.dp),
+                    Text("مشهد مرجعي · خريطة فعلية قريباً",
+                        Modifier.padding(horizontal=8.dp,vertical=5.dp),
                         color=Brand.Crimson,fontSize=10.sp)
                 }
             }
@@ -184,14 +189,15 @@ private fun BrandHeader(onAccount: () -> Unit) {
         horizontalArrangement=Arrangement.SpaceBetween
     ) {
         Column {
-            Text(APP_BRAND_ARABIC,color=Brand.Crimson,fontSize=32.sp,fontWeight=FontWeight.Bold)
-            Text("عقارات تونس .. مباشرة وموثوقة",color=Brand.Ink,fontSize=11.sp)
+            Text(APP_BRAND_ARABIC,color=Brand.Crimson,fontSize=28.sp,fontWeight=FontWeight.Bold)
+            Text("REAL ESTATE TUNISIA",color=Brand.Crimson,fontSize=8.sp,letterSpacing=1.2.sp)
         }
         Row(verticalAlignment=Alignment.CenterVertically) {
-            Text("🇹🇳",fontSize=25.sp)
-            Spacer(Modifier.width(8.dp))
-            Text("◯",Modifier.clip(RoundedCornerShape(20.dp)).clickable(onClick=onAccount)
-                .background(Color.White.copy(alpha=.9f)).padding(10.dp),color=Brand.Crimson)
+            Text("عقارات تونس .. مباشرة وموثوقة", color=Brand.Ink,fontSize=10.sp)
+            Spacer(Modifier.width(7.dp))
+            Text("🇹🇳",Modifier.clip(RoundedCornerShape(14.dp))
+                .background(Brand.Crimson).padding(7.dp).clickable(onClick=onAccount),
+                fontSize=19.sp)
         }
     }
 }
@@ -264,35 +270,56 @@ private fun CircleControl(text:String,onClick:()->Unit) {
 @Composable
 private fun PreviewPropertyCard(favorite:Boolean,onFavorite:()->Unit,onOpen:()->Unit) {
     Surface(
-        modifier=Modifier.fillMaxWidth().padding(horizontal=12.dp,vertical=5.dp),
-        color=Brand.Glass,shape=RoundedCornerShape(26.dp),shadowElevation=9.dp
+        modifier=Modifier.fillMaxWidth().padding(horizontal=10.dp,vertical=2.dp),
+        color=Color(0xF7FFFAFB),shape=RoundedCornerShape(27.dp),
+        border=BorderStroke(1.dp,Color.White.copy(alpha=.95f)),
+        shadowElevation=11.dp
     ) {
-        Column(Modifier.padding(14.dp),verticalArrangement=Arrangement.spacedBy(10.dp)) {
-            Row(verticalAlignment=Alignment.Top, horizontalArrangement=Arrangement.spacedBy(12.dp)) {
-                Box(Modifier.weight(1f).height(148.dp).clip(RoundedCornerShape(18.dp))) {
-                    CoastalThumbnail(Modifier.fillMaxSize())
-                    Text("صورة توضيحية",Modifier.align(Alignment.BottomStart).padding(8.dp)
-                        .background(Color.White.copy(alpha=.78f),RoundedCornerShape(10.dp))
-                        .padding(5.dp),fontSize=10.sp,color=Brand.Ink)
+        Column(Modifier.padding(12.dp),verticalArrangement=Arrangement.spacedBy(9.dp)) {
+            Row(verticalAlignment=Alignment.Top, horizontalArrangement=Arrangement.spacedBy(10.dp)) {
+                Column(Modifier.weight(1f)) {
+                    Box(Modifier.fillMaxWidth().height(126.dp).clip(RoundedCornerShape(15.dp))) {
+                        CoastalThumbnail(Modifier.fillMaxSize())
+                        Text("معاينة تصميم",
+                            Modifier.align(Alignment.BottomStart).padding(5.dp)
+                                .background(Color.White.copy(alpha=.86f),RoundedCornerShape(8.dp))
+                                .padding(horizontal=6.dp,vertical=3.dp),
+                            fontSize=9.sp,color=Brand.Crimson)
+                    }
+                    Spacer(Modifier.height(5.dp))
+                    Row(horizontalArrangement=Arrangement.spacedBy(4.dp)) {
+                        for(index in 0..2){
+                            Box(Modifier.weight(1f).height(35.dp)) {
+                                PreviewGalleryThumbnail(index,Modifier.fillMaxSize())
+                            }
+                        }
+                    }
                 }
-                Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(6.dp)) {
-                    Text("بيانات تجريبية",fontSize=11.sp,color=Brand.Crimson)
-                    Text(PreviewLand.title,fontWeight=FontWeight.Bold,fontSize=16.sp,
-                        color=Brand.Ink,lineHeight=21.sp)
-                    Text(PreviewLand.location,fontSize=12.sp,color=Brand.Muted)
-                    Text(PreviewLand.priceTnd+" د.ت",fontSize=20.sp,color=Brand.Crimson,fontWeight=FontWeight.Bold)
+                Column(Modifier.weight(1f),horizontalAlignment=Alignment.End,
+                    verticalArrangement=Arrangement.spacedBy(6.dp)) {
+                    Text("◈  قيد التحقق",color=Brand.Crimson,fontSize=11.sp,
+                        fontWeight=FontWeight.SemiBold,modifier=Modifier
+                            .background(Brand.Rose,RoundedCornerShape(15.dp))
+                            .padding(horizontal=9.dp,vertical=5.dp))
+                    Text("#TUN-84527  ·  نموذج",fontSize=9.sp,color=Brand.Muted)
+                    Text(PreviewLand.title,fontWeight=FontWeight.Bold,fontSize=17.sp,
+                        color=Brand.Ink,lineHeight=23.sp,textAlign=TextAlign.Right)
+                    Text("⌖  "+PreviewLand.location,fontSize=11.sp,color=Brand.Muted)
+                    Text(PreviewLand.priceTnd+" د.ت",fontSize=20.sp,color=Brand.Crimson,
+                        fontWeight=FontWeight.Bold)
                 }
             }
-            HorizontalDivider(color=Color(0xFFEDE5E5))
-            Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween) {
+            HorizontalDivider(color=Color(0xFFE9D8D9))
+            Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceEvenly) {
                 DetailFact("المساحة",PreviewLand.area)
                 DetailFact("نوع العقار",PreviewLand.type)
-                DetailFact("الملكية","بانتظار التحقق")
+                DetailFact("الملكية","غير معتمدة")
             }
-            Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+            Row(verticalAlignment=Alignment.CenterVertically,
+                horizontalArrangement=Arrangement.spacedBy(8.dp)) {
                 CircleControl(if(favorite) "♥" else "♡",onFavorite)
                 Box(Modifier.weight(1f)) {
-                    MalakAction("عرض التفاصيل   →",onOpen)
+                    MalakAction("عرض التفاصيل    ⟶",onOpen)
                 }
             }
         }
@@ -309,23 +336,27 @@ private fun DetailFact(label:String,value:String) {
 
 @Composable
 private fun BottomNav(active:String,onNavigate:(String)->Unit,modifier:Modifier=Modifier) {
-    Surface(modifier.fillMaxWidth().padding(horizontal=12.dp).padding(bottom=8.dp),
-        color=Color.White.copy(alpha=.96f),shape=RoundedCornerShape(30.dp),shadowElevation=8.dp) {
+    Surface(
+        modifier.fillMaxWidth().padding(horizontal=13.dp).padding(bottom=7.dp),
+        color=Color.White.copy(alpha=.96f),shape=RoundedCornerShape(34.dp),
+        border=BorderStroke(1.dp,Color.White),shadowElevation=8.dp
+    ) {
         Row(
-            Modifier.fillMaxWidth().height(66.dp).padding(horizontal=8.dp),
+            Modifier.fillMaxWidth().height(65.dp).padding(horizontal=13.dp),
             verticalAlignment=Alignment.CenterVertically,
             horizontalArrangement=Arrangement.SpaceEvenly
         ) {
             NavItem("⌖","استكشف",active=="home") { onNavigate("home") }
-            NavItem("♡","المفضلة",active=="favorites") { onNavigate("favorites") }
-            Surface(modifier=Modifier.size(53.dp).clickable { onNavigate("home") },
-                color=Brand.Crimson,shape=RoundedCornerShape(50),shadowElevation=5.dp) {
+            Surface(
+                modifier=Modifier.size(60.dp).clickable { onNavigate("home") },
+                color=Brand.Crimson,shape=RoundedCornerShape(50),
+                border=BorderStroke(3.dp,Color(0xFFFFDDE3)),shadowElevation=7.dp
+            ) {
                 Box(contentAlignment=Alignment.Center) {
-                    Text("◉",fontSize=27.sp,color=Color.White)
+                    Text("🇹🇳",fontSize=29.sp,color=Color.White)
                 }
             }
-            NavItem("⚖","مقارنة",active=="compare") { onNavigate("compare") }
-            NavItem("+","أضف",active=="seller") { onNavigate("seller") }
+            NavItem("◎","الفرص القريبة",active=="favorites") { onNavigate("favorites") }
         }
     }
 }
