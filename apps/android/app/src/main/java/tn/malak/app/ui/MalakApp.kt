@@ -46,7 +46,7 @@ fun MalakApp() {
     var notice by rememberSaveable { mutableStateOf("") }
 
     MaterialTheme(colorScheme = lightColorScheme(primary = Brand.Crimson, background = Brand.Pearl)) {
-        Surface(color = Brand.Pearl, modifier = Modifier.fillMaxSize()) {
+        Surface(color = Brand.Pearl, modifier = Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
             when(screen) {
                 "home" -> HomeScreen(
                     search = search, onSearch = { search = it },
@@ -152,7 +152,7 @@ private fun HomeScreen(
                     shape=RoundedCornerShape(16.dp),
                     shadowElevation=3.dp
                 ) {
-                    Text("☀  28°  قليبية  ·  تكبير $zoom", Modifier.padding(horizontal=12.dp,vertical=10.dp),
+                    Text("قليبية · معاينة غير تفاعلية · $zoom", Modifier.padding(horizontal=12.dp,vertical=10.dp),
                         fontSize=12.sp,color=Brand.Ink)
                 }
                 Surface(

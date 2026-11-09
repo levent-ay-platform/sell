@@ -1,6 +1,8 @@
 # ملاك | MALAK — Trusted Property Discovery in Tunisia
 
-> **Status:** verified-marketplace foundation; approved visual reference; Android prototype implementation underway. No production listing or APK release is live.
+> **VISUAL RELEASE BLOCKER (2026-11-09):** The first Android QA APK did **not** match the approved visual reference. It compiles, but is NOT visually approved and MUST NOT be described as finished. See issue #7 and `docs/design/VISUAL-RELEASE-BLOCKER.md`.
+>
+> **Status:** platform foundation merged; Android prototype remains unapproved. No production listing or release is live.
 >
 > **Public product name:** **ملاك**. The GitHub repository retains the technical slug `sell` to preserve links, database migrations, and GitHub Actions history.
 
