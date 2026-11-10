@@ -31,3 +31,10 @@ No Mac/self-hosted runners, no CRM production changes.
 - Restored the tiny real Tunisian flag detail from the immutable approved image in the static decorative layer.
 - No new artwork, no geospatial/ownership-verified data. UI remains FR by default; image mock map V1 only.
 - Requirement: capture Android initial home + after-drag at one exact HEAD; check layout improvement against same reference; no merge without user approval.
+
+## Screenshot-corrective calibration 2026-11-10 (second-pass visual gate)
+The first polish build `755648e6` was green at [Actions #42766890113](https://github.com/levent-ay-platform/sell/actions/runs/42766890113). Region RGB MAE on stable 543x1176 reference crops (lower is better):
+- Property sheet **36.20 → 33.26** and bottom navigation **33.36 → 30.54**: kept the pearl/translucency/compact demo badge refinements.
+- Brand/logo header **57.15 → 58.83** and search **48.17 → 52.73**: the combined vertical shift overshot. Don't claim visual acceptance.
+- Corrective experiment: header container top offset **11dp → 23dp** (same image/fonts otherwise) to restore reference-aligned vertical placement. Emulator status values normalized to 10:24 and 92% for comparability (QA only).
+- Use ONE exact-head Android screenshot pair to evaluate. Keep PR draft if any meaningful mismatch remains.

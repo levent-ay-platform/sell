@@ -9,6 +9,12 @@ adb shell cmd overlay enable --user 0 com.android.internal.systemui.navbar.gestu
 adb shell cmd overlay list --user 0 | grep -i navbar || true
 # Give Launcher/SystemUI time to settle on hosted Ubuntu before opening app.
 sleep 14
+# Normalize only emulator status-bar values for fair comparison to the locked
+# 10:24 / 92% reference image. This has NO effect on a real app installation.
+adb shell settings put global sysui_demo_allowed 1 || true
+adb shell am broadcast -a com.android.systemui.demo -e command enter >/dev/null || true
+adb shell am broadcast -a com.android.systemui.demo -e command clock -e hhmm 1024 >/dev/null || true
+adb shell am broadcast -a com.android.systemui.demo -e command battery -e level 92 -e plugged false >/dev/null || true
 adb shell am force-stop com.android.launcher3 || true
 adb shell am force-stop tn.malak.app || true
 focus=''

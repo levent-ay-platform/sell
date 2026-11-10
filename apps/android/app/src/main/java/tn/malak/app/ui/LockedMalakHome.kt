@@ -91,7 +91,7 @@ fun LockedMalakHome(
             enter = fadeIn(tween(300)) + slideInVertically(tween(350)) { -it / 5 },
             exit = fadeOut(tween(220)) + slideOutVertically(tween(300)) { -it / 4 }
         ) {
-            Column(Modifier.fillMaxWidth().padding(horizontal = 18.dp).padding(top = 11.dp)) {
+            Column(Modifier.fillMaxWidth().padding(horizontal = 18.dp).padding(top = 23.dp)) {
                 Row(
                     Modifier.fillMaxWidth().height(77.dp),
                     verticalAlignment = Alignment.CenterVertically,
