@@ -27,5 +27,9 @@
   ],
   "releaseGate": "Android screenshot comparison at 360dp, 393dp and 412dp against exact image, explicit user signoff.",
   "fakeDataPolicy": "Verification, price, property, weather and location on the mockup are placeholders until verified live data.",
-  "storedGitHubBinary": false
+  "storedGitHubBinary": true,
+  "referenceInGitHub": "docs/design/reference/MALAK-HOME-APPROVED-EXACT.png",
+  "referenceSourceSha256": "7cb5ea83bc0831d0d16ac6d0a219bd650c3ab668cbff19bc48e318b857d7bb47",
+  "deployedAsset": "apps/android/app/src/main/res/drawable-nodpi/malak_locked_backdrop.webp",
+  "deployedAssetNote": "Decorative photograph reconstructed from exact source's coast and property; actual Compose overlays remain interactive. Not a cadastral map."
 }

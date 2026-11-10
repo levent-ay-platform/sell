@@ -26,6 +26,8 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
@@ -71,49 +73,20 @@ fun LockedMalakHome(
         .any { search.contains(it, ignoreCase = true) }
     val showCard = activeTerrain && matches
 
-    Box(Modifier.fillMaxSize().background(Color(0xFF0D69B8))) {
-        // Stable image-based V1 map scene. No fake geospatial 3D or server data.
-        Box(Modifier.fillMaxSize()) {
-            Box(
-                Modifier.fillMaxSize()
-                    .background(Brush.verticalGradient(
-                        0f to Color(0xFF0064AF),
-                        .27f to Color(0xFF4DA9DA),
-                        .44f to Color(0xFFFDD3A9),
-                        1f to Color(0xFFB8DBE5)
-                    ))
-            )
-            Image(
-                painter = painterResource(R.drawable.malak_coast_preview),
-                contentDescription = "Aperçu photographique de côte, pas une carte géographique",
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxWidth().fillMaxHeight(.73f)
-                    .align(Alignment.BottomCenter)
-                    .graphicsLayer {
-                        scaleX = 1.14f + zoom * .06f
-                        scaleY = 1.14f + zoom * .06f
-                        translationX = panX
-                        translationY = panY
-                    }
-            )
-            // Gesture only on the image layer, while controls on top remain clickable.
-            Box(Modifier.fillMaxSize().pointerInput(Unit) {
-                detectDragGestures(
-                    onDragStart = { immersive = true },
-                    onDrag = { change, drag ->
-                        change.consume()
-                        panX = (panX + drag.x).coerceIn(-82f, 82f)
-                        panY = (panY + drag.y).coerceIn(-92f, 92f)
-                    }
-                )
-            })
-        }
-
-        // Photographic flower decoration comes from the existing approved media
-        // set; it must not intercept map taps.
-        BougainvilleaSway(
-            Modifier.align(Alignment.TopStart).size(width = 150.dp, height = 60.dp)
+    BoxWithConstraints(Modifier.fillMaxSize().background(Color(0xFF0D69B8))) {
+        // The V1 photo-map is derived from the exact user-approved source,
+        // but it is NOT a native geospatial map or ownership evidence.
+        Image(
+            painter = painterResource(R.drawable.malak_locked_backdrop),
+            contentDescription = "Aperçu visuel photographique. Carte 3D indisponible.",
+            contentScale = ContentScale.FillBounds,
+            modifier = Modifier.fillMaxSize()
         )
+        // Gesture state is real. Geographic pan is deferred to native map SDK.
+        Box(Modifier.fillMaxSize().pointerInput(Unit) {
+            detectDragGestures(onDragStart = { immersive = true },
+                onDrag = { change, _ -> change.consume() })
+        })
 
         AnimatedVisibility(
             visible = !immersive,
@@ -121,7 +94,7 @@ fun LockedMalakHome(
             enter = fadeIn(tween(300)) + slideInVertically(tween(350)) { -it / 5 },
             exit = fadeOut(tween(220)) + slideOutVertically(tween(300)) { -it / 4 }
         ) {
-            Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
+            Column(Modifier.fillMaxWidth().padding(horizontal = 18.dp).padding(top = 21.dp)) {
                 Row(
                     Modifier.fillMaxWidth().height(77.dp),
                     verticalAlignment = Alignment.CenterVertically,
@@ -148,7 +121,7 @@ fun LockedMalakHome(
                     }
                 }
                 Surface(
-                    modifier = Modifier.fillMaxWidth().height(53.dp),
+                    modifier = Modifier.fillMaxWidth().height(47.dp),
                     color = Color.White.copy(alpha = .91f),
                     shape = RoundedCornerShape(30.dp),
                     shadowElevation = 7.dp
@@ -176,7 +149,7 @@ fun LockedMalakHome(
                         }
                     }
                 }
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(10.dp))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement=Arrangement.spacedBy(6.dp)) {
                     LockedCategory("Terrains", Icons.Outlined.Layers,selectedCategory, onCategory,
                         Modifier.weight(1f))
@@ -192,54 +165,31 @@ fun LockedMalakHome(
             }
         }
 
+        // Invisible but accessible interaction targets follow the FOUR
+        // screenshot-illustrated map tools; this is temporary photo-map UX.
         Column(
-            modifier=Modifier.align(Alignment.CenterEnd).offset(y=(-32).dp).padding(end=9.dp),
-            verticalArrangement=Arrangement.spacedBy(10.dp)
+            modifier = Modifier.offset(x = maxWidth * .855f, y = maxHeight * .332f),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            LockedRoundIcon(Icons.Outlined.NearMe, "Position", 44) {
-                onNotice("Position non demandée : déplacement libre en mode aperçu")
+            LockedPhotoControl("Me localiser") {
+                onNotice("Position réelle disponible lors de l'intégration de la carte")
             }
-            LockedRoundIcon(Icons.Outlined.Layers, "Couches",44) {
-                onNotice("Couches réelles disponibles après intégration de la carte")
+            LockedPhotoControl("Couches de la carte") {
+                onNotice("Couches cartographiques indisponibles en mode photo")
             }
-            LockedRoundIcon(Icons.Outlined.GpsFixed, "Centrer",44) {
-                panX=0f;panY=0f
+            LockedPhotoControl("Recentrer la carte") {
+                onNotice("Photo de présentation recentrée")
             }
-            Surface(
-                modifier=Modifier.size(44.dp).clickable {
-                    onNotice("La carte 3D sera intégrée dans une prochaine étape")
-                },
-                color=Color.White.copy(alpha=.95f),shape=RoundedCornerShape(16.dp),
-                shadowElevation=3.dp
-            ) { Box(contentAlignment=Alignment.Center) {
-                Text("3D",fontSize=18.sp,fontWeight=FontWeight.Bold,color=red)
-            }}
-        }
-
-        // Small screenshot-style location indicators; never pass as cadastral data.
-        if (!immersive) {
-            Surface(
-                modifier=Modifier.align(Alignment.CenterStart).padding(start=16.dp)
-                    .offset(y=90.dp),
-                color=red.copy(alpha=.91f),shape=RoundedCornerShape(50),
-                border=BorderStroke(2.dp,Color.White),shadowElevation=8.dp
-            ) {
-                Icon(Icons.Outlined.Home,"Terrain démonstration",
-                    Modifier.size(43.dp).clickable(onClick={immersive=false})
-                        .padding(9.dp),tint=Color.White)
-            }
-            Surface(
-                modifier=Modifier.align(Alignment.BottomStart)
-                    .padding(start=15.dp,bottom=278.dp),
-                color=Color(0xE0BC1026),shape=RoundedCornerShape(18.dp),
-                shadowElevation=4.dp
-            ) {
-                Text("☀  28°C\nHammamet",
-                    Modifier.padding(horizontal=13.dp,vertical=8.dp),
-                    fontSize=13.sp,color=Color.White,lineHeight=17.sp,
-                    fontWeight=FontWeight.Bold)
+            LockedPhotoControl("3D") {
+                onNotice("La carte 3D n'est pas encore activée")
             }
         }
+        Box(
+            Modifier.offset(x = maxWidth * .28f, y = maxHeight * .465f)
+                .size(68.dp)
+                .clickable { if (immersive) immersive = false else onOpen() }
+                .semantics { contentDescription = "Terrain de démonstration à Hammamet" }
+        )
 
         AnimatedVisibility(
             visible=!immersive,
@@ -369,7 +319,7 @@ private fun LockedPropertyCard(
             horizontalArrangement=Arrangement.spacedBy(11.dp)
         ) {
             Box(Modifier.weight(.91f).fillMaxHeight().clip(RoundedCornerShape(18.dp))) {
-                Image(painterResource(R.drawable.malak_property_photo),
+                Image(painterResource(R.drawable.malak_locked_property),
                     contentDescription="Photo illustrative non vérifiée",
                     contentScale=ContentScale.Crop,modifier=Modifier.fillMaxSize())
                 Surface(
@@ -457,4 +407,14 @@ private fun LockedNavItem(
         Text(label,fontSize=11.sp,color=if(active)Color(0xFFDE0A2C)
             else Color(0xFF34343B),fontWeight=if(active)FontWeight.Bold else FontWeight.Normal)
     }
+}
+
+
+// Accessible hotzones for the map tools already visible in the V1 photo layer.
+@Composable
+private fun LockedPhotoControl(label:String, onClick:()->Unit) {
+    Box(
+        Modifier.size(44.dp).clickable(onClick=onClick)
+            .semantics { contentDescription = label }
+    )
 }
