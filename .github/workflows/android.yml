@@ -84,21 +84,21 @@ jobs:
               sleep 5
               FOCUS="$(adb shell dumpsys window | grep -m1 'mCurrentFocus=' || true)"
               echo "FOCUS_CHECK_ATTEMPT_${attempt}: ${FOCUS}"
-              if [[ "${FOCUS}" == *"tn.malak.app"* ]]; then break; fi
+              case "${FOCUS}" in *tn.malak.app*) break ;; esac
             done
-            if [[ "${FOCUS}" != *"tn.malak.app"* ]]; then
+            case "${FOCUS}" in *tn.malak.app*) : ;; *)
               echo "MALAK_SCREEN_NOT_VISIBLE: cannot accept screenshot proof"
               adb logcat -d -t 220 | tail -80 || true
               exit 1
-            fi
+            ;; esac
             adb exec-out screencap -p > screenshots/locked-home-393dp.png
             adb shell input swipe 250 650 410 575 400
             sleep 2
             FOCUS="$(adb shell dumpsys window | grep -m1 'mCurrentFocus=' || true)"
-            [[ "${FOCUS}" == *"tn.malak.app"* ]] || {
-              echo "MALAK_SCREEN_LOST_FOCUS_AFTER_SWIPE: ${FOCUS}"
-              exit 1
-            }
+            case "${FOCUS}" in
+              *tn.malak.app*) : ;;
+              *) echo "MALAK_SCREEN_LOST_FOCUS_AFTER_SWIPE: ${FOCUS}"; exit 1 ;;
+            esac
             adb exec-out screencap -p > screenshots/immersive-map-393dp.png
             test $(wc -c < screenshots/locked-home-393dp.png) -gt 100000
             test $(wc -c < screenshots/immersive-map-393dp.png) -gt 100000
