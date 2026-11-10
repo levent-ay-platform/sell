@@ -37,9 +37,18 @@ private val Sea = Color(0xFF087C9A)
 private val SeaLight = Color(0xFFE9F8F9)
 private val Border = Color(0xFFE8E8EB)
 
+/**
+ * Localized strings must NOT replace LocalContext.
+ * The original Activity Context is needed by ActivityResultRegistryOwner when
+ * SellerOcrJourney registers its Android document picker.
+ */
+private val LocalMalakStringsContext = staticCompositionLocalOf<Context> {
+    error("Localized Malak resources are missing")
+}
+
 /** All consumer text is sourced from localized Android resources. */
 @Composable
-internal fun s(id: Int): String = LocalContext.current.getString(id)
+internal fun s(id: Int): String = LocalMalakStringsContext.current.getString(id)
 
 /** Arabic RTL, French LTR; an explicit user language selection drives every Compose layout. */
 @Composable
@@ -62,7 +71,7 @@ fun MalakApp() {
     var query by rememberSaveable { mutableStateOf("") }
     val tabs = setOf("home", "map", "favorites", "more")
 
-    CompositionLocalProvider(LocalContext provides localizedContext, LocalLayoutDirection provides direction) {
+    CompositionLocalProvider(LocalMalakStringsContext provides localizedContext, LocalLayoutDirection provides direction) {
         MaterialTheme(colorScheme = lightColorScheme(
             primary = Brand.Crimson,
             background = Brand.Pearl,
