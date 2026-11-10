@@ -94,18 +94,20 @@ fun LockedMalakHome(
             enter = fadeIn(tween(300)) + slideInVertically(tween(350)) { -it / 5 },
             exit = fadeOut(tween(220)) + slideOutVertically(tween(300)) { -it / 4 }
         ) {
-            Column(Modifier.fillMaxWidth().padding(horizontal = 18.dp).padding(top = 21.dp)) {
+            Column(Modifier.fillMaxWidth().padding(horizontal = 18.dp).padding(top = 25.dp)) {
                 Row(
                     Modifier.fillMaxWidth().height(77.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Outlined.Home, null, tint = red,
-                            modifier = Modifier.size(42.dp))
+                        Image(painter = painterResource(R.drawable.malak_locked_logo),
+                            contentDescription = "Logo Malak",
+                            contentScale = ContentScale.Fit,
+                            modifier = Modifier.size(49.dp))
                         Spacer(Modifier.width(6.dp))
                         Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
-                            Text("Malak / ملاك", fontSize = 24.sp, color = Color.White,
+                            Text("Malak / ملاك", fontSize = 25.sp, color = Color.White,
                                 fontWeight = FontWeight.Bold, maxLines = 1)
                             Text("I M M O B I L I E R   E N   T U N I S I E",
                                 fontSize = 7.sp, color = Color.White, maxLines = 1)
@@ -327,7 +329,7 @@ private fun LockedPropertyCard(
                     color=Color.White.copy(alpha=.94f),
                     shape=RoundedCornerShape(20.dp)
                 ) {
-                    Text("Aperçu · Démo",Modifier.padding(horizontal=8.dp,vertical=5.dp),
+                    Text("Démo",Modifier.padding(horizontal=8.dp,vertical=5.dp),
                         fontSize=10.sp,color=Color(0xFFD90929),
                         fontWeight=FontWeight.Bold)
                 }
@@ -338,11 +340,11 @@ private fun LockedPropertyCard(
             Column(Modifier.weight(1.05f).fillMaxHeight(),
                 verticalArrangement=Arrangement.SpaceBetween) {
                 Row(verticalAlignment=Alignment.Top) {
-                    Text("Terrain à Hammamet",fontSize=16.sp,lineHeight=19.sp,
+                    Text("Terrain à Hammamet",fontSize=14.sp,lineHeight=17.sp,
                         fontWeight=FontWeight.Bold,color=Color(0xFF1B1B23),
-                        modifier=Modifier.weight(1f),maxLines=2)
+                        modifier=Modifier.weight(1f),maxLines=1)
                     Icon(Icons.Outlined.FavoriteBorder,"Ajouter aux favoris",
-                        Modifier.size(28.dp).clickable(onClick=onFavorite)
+                        Modifier.size(24.dp).clickable(onClick=onFavorite)
                             .padding(2.dp),
                         tint=if(favorite)Color.Red else Color(0xFFDD5060))
                 }
@@ -406,6 +408,11 @@ private fun LockedNavItem(
             tint=if(active)Color(0xFFF00B27) else Color(0xFF4C4A51))
         Text(label,fontSize=11.sp,color=if(active)Color(0xFFDE0A2C)
             else Color(0xFF34343B),fontWeight=if(active)FontWeight.Bold else FontWeight.Normal)
+        if(active) {
+            Spacer(Modifier.height(3.dp))
+            Box(Modifier.width(26.dp).height(2.dp)
+                .background(Color(0xFFF00B27), RoundedCornerShape(3.dp)))
+        }
     }
 }
 

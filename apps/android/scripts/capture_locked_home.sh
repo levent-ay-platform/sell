@@ -4,6 +4,9 @@ adb install -r apps/android/app/build/outputs/apk/debug/app-debug.apk
 mkdir -p screenshots
 adb shell wm size 786x1746
 adb shell wm density 320
+# Visual QA uses modern gesture navigation, matching the locked mobile screenshot.
+adb shell cmd overlay enable --user 0 com.android.internal.systemui.navbar.gestural || true
+adb shell cmd overlay list --user 0 | grep -i navbar || true
 # Give Launcher/SystemUI time to settle on hosted Ubuntu before opening app.
 sleep 14
 adb shell am force-stop com.android.launcher3 || true
