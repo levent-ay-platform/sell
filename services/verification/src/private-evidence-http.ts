@@ -62,14 +62,24 @@ function noDuplicate(req:IncomingMessage,name:string):boolean {
 async function limitedBody(req:IncomingMessage,size:number):Promise<Uint8Array> {
   const chunks:Buffer[]=[];
   let length=0;
-  for await (const piece of req) {
-    if(!(piece instanceof Buffer))throw Error('BAD_BODY');
-    length+=piece.length;
-    if(length>MAX_BYTES||length>size)throw Error('BODY_TOO_LARGE');
-    chunks.push(piece);
+  try {
+    for await (const piece of req) {
+      if(!(piece instanceof Buffer))throw Error('BAD_BODY');
+      length+=piece.length;
+      if(length>MAX_BYTES||length>size) {
+        // A hostile oversized chunk must also be cleared before fail-closed.
+        piece.fill(0);
+        throw Error('BODY_TOO_LARGE');
+      }
+      chunks.push(piece);
+    }
+    if(length!==size)throw Error('BODY_LENGTH_MISMATCH');
+    return Buffer.concat(chunks,length);
+  } finally {
+    // Node's input chunks are separate buffers from Buffer.concat's copy.
+    // Zeroize them on both success and malformed/aborted uploads.
+    for(const chunk of chunks)chunk.fill(0);
   }
-  if(length!==size)throw Error('BODY_LENGTH_MISMATCH');
-  return Buffer.concat(chunks,length);
 }
 function reasonFromUpload(result:EvidenceUploadResult):{code:number;reason:DenialReason} {
   if(result.ok)return {code:200,reason:'BAD_REQUEST'};
@@ -113,7 +123,8 @@ export function createPrivateEvidenceHttpHandler(deps:PrivateEvidenceHttpDeps) {
       catch {await reject(503,'UPSTREAM_UNAVAILABLE');return;}
       if(allow!==true){await reject(429,'RATE_LIMITED');return;}
       if(req.method!=='POST'||route==='UNKNOWN') {await reject(404,'BAD_ROUTE');return;}
-      if(req.headers.cookie||req.headers.origin||req.headers['x-forwarded-proto']||
+      if(req.headers.cookie!==undefined||req.headers.origin!==undefined||
+         req.headers['x-forwarded-proto']!==undefined||
          !noDuplicate(req,'authorization')||!noDuplicate(req,'content-type')||
          !noDuplicate(req,'content-length')||!noDuplicate(req,'x-idempotency-key')||
          !noDuplicate(req,'x-evidence-kind')||!noDuplicate(req,'x-page-number')||
