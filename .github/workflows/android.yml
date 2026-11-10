@@ -52,6 +52,44 @@ jobs:
           cache-provider: basic
       - name: Assemble synthetic QA Android APK
         run: gradle -p apps/android :app:assembleDebug --no-daemon --stacktrace
+      - name: Enable KVM for visual QA
+        if: github.event_name == 'pull_request'
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Capture approved-home candidate on actual Android emulator
+        if: github.event_name == 'pull_request'
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          script: |
+            set -e
+            adb install -r apps/android/app/build/outputs/apk/debug/app-debug.apk
+            mkdir -p screenshots
+            adb shell wm size 786x1746
+            adb shell wm density 320
+            adb shell am force-stop tn.malak.app || true
+            adb shell am start -n tn.malak.app/.MainActivity
+            sleep 5
+            adb exec-out screencap -p > screenshots/locked-home-393dp.png
+            adb shell input swipe 250 650 410 575 400
+            sleep 1
+            adb exec-out screencap -p > screenshots/immersive-map-393dp.png
+            test $(wc -c < screenshots/locked-home-393dp.png) -gt 10000
+            test $(wc -c < screenshots/immersive-map-393dp.png) -gt 10000
+      - name: Upload screenshot proof (requires human visual approval)
+        if: always() && github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: malak-VISUAL-PROOF-NOT-APPROVED-${{ github.sha }}
+          path: screenshots/
+          retention-days: 7
+          if-no-files-found: warn
       - name: Upload QA APK (no signing keys, no personal data)
         uses: actions/upload-artifact@v4
         with:
