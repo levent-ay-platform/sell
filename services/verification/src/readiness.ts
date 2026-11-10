@@ -17,14 +17,16 @@ export type ReadinessReason =
   | 'SHARE_UNCONFIRMED'
   | 'HISTORIC_DATE_IS_NOT_CERTIFICATE_ISSUE_DATE'
   | 'PERSON_IDENTITY_NOT_YET_CORROBORATED'
-  | 'CURRENT_CPF_STATUS_NOT_YET_CORROBORATED';
+  | 'CURRENT_CPF_STATUS_NOT_YET_CORROBORATED'
+  | 'IMAGE_QUALITY_REVIEW_REQUIRED';
 export type UserFollowUp =
   | 'SEND_FULL_DOCUMENT'
   | 'RETAKE_PAGE_FOOTER'
   | 'RETAKE_REGISTRY_REFERENCE'
   | 'RETAKE_AREA'
   | 'PROVIDE_RECENT_CPF_PROOF'
-  | 'AUTHORIZED_REVIEW_REQUIRED';
+  | 'AUTHORIZED_REVIEW_REQUIRED'
+  | 'RETAKE_LOW_QUALITY_PAGE';
 export interface ReadingReadiness {
   /** Never use OCR quality as document authenticity or legal rights verification. */
   ownershipVerified: false;
@@ -47,6 +49,7 @@ export function planNextVerificationSteps(read:ReadDocumentResult):ReadingReadin
   const request=(r:UserFollowUp)=>{if(!followUps.includes(r))followUps.push(r);};
   const fields=extraction.fields;
   if(extraction.documentKind==='UNKNOWN')add('DOCUMENT_TYPE_UNRECOGNIZED');
+  if(read.qualityReviewPages?.length){add('IMAGE_QUALITY_REVIEW_REQUIRED');request('RETAKE_LOW_QUALITY_PAGE');}
   const badPageCount=extraction.issues.includes('UNREADABLE_PAGE_COUNT');
   if(badPageCount){add('PAGE_NUMBER_UNREADABLE');request('RETAKE_PAGE_FOOTER');}
   if(extraction.issues.includes('INCONSISTENT_PAGE_COUNT')){
@@ -69,7 +72,7 @@ export function planNextVerificationSteps(read:ReadDocumentResult):ReadingReadin
   request('AUTHORIZED_REVIEW_REQUIRED');
   return {
     ownershipVerified:false, mayPublish:false, requiresIndependentReview:true,
-    needsAdditionalImages:followUps.some(x=>x==='SEND_FULL_DOCUMENT'||x==='RETAKE_PAGE_FOOTER'||x==='RETAKE_REGISTRY_REFERENCE'||x==='RETAKE_AREA'),
+    needsAdditionalImages:followUps.some(x=>x==='SEND_FULL_DOCUMENT'||x==='RETAKE_PAGE_FOOTER'||x==='RETAKE_REGISTRY_REFERENCE'||x==='RETAKE_AREA'||x==='RETAKE_LOW_QUALITY_PAGE'),
     reasons,followUps,
     criticalFields:{
       registryReference:fields.registryReference.status,

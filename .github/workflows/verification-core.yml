@@ -45,4 +45,4 @@ jobs:
           /tmp/malak-ocr-venv/bin/python -m pip install --quiet --only-binary=:all: Pillow==11.3.0
       - name: Test image-only scans and native-PDF fast path (NO real documents)
         run: |
-          /tmp/malak-ocr-venv/bin/python -m unittest discover -v -s services/verification/test -p test_ingest.py
+          /tmp/malak-ocr-venv/bin/python -m unittest discover -v -s services/verification/test -p 'test_*.py'

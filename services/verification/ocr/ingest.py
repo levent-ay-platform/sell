@@ -14,6 +14,8 @@ import subprocess
 import sys
 import tempfile
 
+from quality import inspect_photo_quality
+
 MAX_BYTES = 12 * 1024 * 1024
 MAX_PAGES = 8
 MAX_TEXT_CHARS = 100_000
@@ -207,7 +209,9 @@ def extract_document(path: str, *, mode: str = 'auto') -> dict:
         raise InvalidDocument('INVALID_MODE')
     result={'format':kind, 'pages':[], 'ocrEngine':'tesseract', 'mayApproveOwnership':False}
     if kind=='image':
-        result['pages'].append({'page':1,'method':'ocr','lines':_ocr_page(file,1)})
+        result['pages'].append({'page':1,'method':'ocr',
+                                'qualityWarnings':inspect_photo_quality(file)['flags'],
+                                'lines':_ocr_page(file,1)})
     else:
         count=_pdf_page_count(file)
         text=b''
@@ -229,6 +233,7 @@ def extract_document(path: str, *, mode: str = 'auto') -> dict:
                 _cmd(['pdftoppm','-f',str(index),'-l',str(index),'-r','160',
                      '-singlefile','-png',str(file),str(work/f'page-{index}')],timeout=30)
                 result['pages'].append({'page':index,'method':'ocr',
+                                        'qualityWarnings':inspect_photo_quality(image)['flags'],
                                         'lines':_ocr_page(image,index)})
     if sum(len(ln['text']) for pg in result['pages'] for ln in pg['lines'])>MAX_TEXT_CHARS:
         raise InvalidDocument('EXTRACTED_TEXT_TOO_LARGE')
