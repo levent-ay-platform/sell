@@ -91,23 +91,24 @@ fun LockedMalakHome(
             enter = fadeIn(tween(300)) + slideInVertically(tween(350)) { -it / 5 },
             exit = fadeOut(tween(220)) + slideOutVertically(tween(300)) { -it / 4 }
         ) {
-            Column(Modifier.fillMaxWidth().padding(horizontal = 18.dp).padding(top = 17.dp)) {
+            Column(Modifier.fillMaxWidth().padding(horizontal = 18.dp).padding(top = 11.dp)) {
                 Row(
                     Modifier.fillMaxWidth().height(77.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Row(Modifier.padding(start = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Row(Modifier.padding(start = 16.dp), verticalAlignment = Alignment.CenterVertically) {
                         Image(painter = painterResource(R.drawable.malak_locked_logo),
                             contentDescription = "Logo Malak",
                             contentScale = ContentScale.Fit,
-                            modifier = Modifier.size(56.dp).offset(y = (-6).dp))
+                            modifier = Modifier.size(53.dp).offset(y = (-6).dp))
                         Spacer(Modifier.width(6.dp))
                         Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
                             Text("Malak / ملاك", fontSize = 25.sp, lineHeight = 25.sp, color = Color.White,
                                 fontWeight = FontWeight.Bold, maxLines = 1)
                             Text("I M M O B I L I E R   E N   T U N I S I E",
-                                fontSize = 7.sp, color = Color.White, maxLines = 1)
+                                fontSize = 7.sp, color = Color.White, maxLines = 1,
+                                modifier = Modifier.offset(y = (-15).dp))
                         }
                     }
                     Row(Modifier.offset(y = (-12).dp),horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -120,7 +121,7 @@ fun LockedMalakHome(
                     }
                 }
                 Surface(
-                    modifier = Modifier.fillMaxWidth().height(47.dp),
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp).height(47.dp),
                     color = Color.White.copy(alpha = .91f),
                     shape = RoundedCornerShape(30.dp),
                     shadowElevation = 7.dp
@@ -149,7 +150,7 @@ fun LockedMalakHome(
                     }
                 }
                 Spacer(Modifier.height(10.dp))
-                Row(Modifier.fillMaxWidth(), horizontalArrangement=Arrangement.spacedBy(6.dp)) {
+                Row(Modifier.fillMaxWidth().padding(horizontal=5.dp), horizontalArrangement=Arrangement.spacedBy(6.dp)) {
                     LockedCategory("Terrains", Icons.Outlined.Layers,selectedCategory, onCategory,
                         Modifier.weight(1f))
                     LockedCategory("Villas", Icons.Outlined.Home,selectedCategory,onCategory,
@@ -342,7 +343,7 @@ private fun LockedPropertyCard(
 ) {
     Surface(
         modifier=Modifier.fillMaxWidth(),
-        color=Color(0xF8FFF8FC),
+        color=Color(0xEDFFF8FC),
         shape=RoundedCornerShape(27.dp),
         border=BorderStroke(1.dp,Color.White),
         shadowElevation=10.dp
@@ -359,7 +360,7 @@ private fun LockedPropertyCard(
                     contentDescription="Photo illustrative non vérifiée",
                     contentScale=ContentScale.Crop,modifier=Modifier.fillMaxSize())
                 Surface(
-                    Modifier.align(Alignment.TopStart).padding(7.dp).width(79.dp),
+                    Modifier.align(Alignment.TopStart).padding(7.dp).width(64.dp),
                     color=Color.White.copy(alpha=.99f),
                     shape=RoundedCornerShape(20.dp)
                 ) {
@@ -392,7 +393,7 @@ private fun LockedPropertyCard(
                     color=Color(0xFFF01127),shape=RoundedCornerShape(25.dp),
                     shadowElevation=4.dp
                 ) {
-                    Text("Voir les détails  →",Modifier.padding(vertical=10.dp),
+                    Text("Voir les détails  →",Modifier.padding(vertical=7.dp),
                         textAlign=TextAlign.Center,fontSize=12.sp,
                         fontWeight=FontWeight.Bold,color=Color.White,
                         maxLines=1)
@@ -418,7 +419,7 @@ private fun LockedBottomNav(
 ) {
     Surface(
         Modifier.fillMaxWidth().height(69.dp),
-        color=Color(0xF4FFFAFC),
+        color=Color(0xE8FFFAFC),
         shape=RoundedCornerShape(34.dp),
         shadowElevation=7.dp
     ) {

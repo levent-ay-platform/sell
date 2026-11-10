@@ -71,7 +71,10 @@ fun LockedPhotoDecorations(modifier: Modifier = Modifier) {
                     softRect(x,y,476,120,510,164),
                     softRect(x,y,441,131,477,159)
                 )
-                val opacity = (maxOf(flower,villa)*255f).toInt().coerceIn(0,255)
+                // The tiny real Tunisian flag under the wordmark is an art
+                // detail from the approved screenshot, never a text/emoji copy.
+                val flag = if (x in 223..245 && y in 138..153) 1f else 0f
+                val opacity = (maxOf(flower,villa,flag)*255f).toInt().coerceIn(0,255)
                 if(opacity!=0) {
                     output.setPixel(x,y,AndroidColor.argb(opacity,r,g,b))
                 }

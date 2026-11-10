@@ -22,3 +22,12 @@
 4. Separate next milestone: actual georeferenced satellite map in Tunisia (vendor/asset rights, attribution, low-RAM fallback) while keeping locked overlays.
 
 No Mac/self-hosted runners, no CRM production changes.
+
+## Current bounded screenshot-driven polish
+- Preserved the full-bleed sharp immersive-photo fix from exact-head `465664e3` (Android GitHub Actions #42764515161: PASS).
+- Aligned header container 6dp upward, shifted/reduced brand mark, and moved the subtitle towards the exact reference.
+- Search field inset adjusted independently; category row receives a narrower inset without changing French copy/order.
+- Property card and bottom rail have more translucent pearl treatments; the demo badge is compact and the CTA is shorter.
+- Restored the tiny real Tunisian flag detail from the immutable approved image in the static decorative layer.
+- No new artwork, no geospatial/ownership-verified data. UI remains FR by default; image mock map V1 only.
+- Requirement: capture Android initial home + after-drag at one exact HEAD; check layout improvement against same reference; no merge without user approval.
