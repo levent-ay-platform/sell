@@ -46,7 +46,11 @@ fun MalakApp() {
     var notice by rememberSaveable { mutableStateOf("") }
 
     MaterialTheme(colorScheme = lightColorScheme(primary = Brand.Crimson, background = Brand.Pearl)) {
-        Surface(color = Brand.Pearl, modifier = Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
+        Box(Modifier.fillMaxSize().background(Brush.verticalGradient(
+            listOf(Color(0xFF075DA9), Color(0xFF075DA9), Brand.Pearl)
+        ))) {
+            Surface(color = Color.Transparent,
+                modifier = Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
             when(screen) {
                 "home" -> LockedMalakHome(
                     search = search, onSearch = { search = it },
@@ -99,6 +103,7 @@ fun MalakApp() {
                     { favorite = !favorite }, map3d, { map3d = !map3d },
                     { screen = "details" }, { screen = it }, notice, { notice = it }
                 )
+            }
             }
         }
     }
