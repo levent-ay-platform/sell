@@ -6,6 +6,7 @@ The first phase is **individuals only** and supports both legacy paper CPF owner
 
 ## Modules
 
+- `parseCpfOcrText`: conservative Arabic/Arabic-Indic digit parsing of **already extracted OCR text** (it does not run OCR on PDF/image). Extracts page numbering, title reference, area and ownership share units separately, leaves missing/ambiguous fields unknown, and never converts the `التجزئة` line to an authoritative ownership denominator. Never process real claimant data in CI or repository logs.
 - `triageIndividualClaim`: consumes extracted metadata from a future OCR/document pipeline (not a raw PDF) and routes to missing-page collection, official-source comparison or specialist legal review. Never mistakes `ownershipShareUnits` (أجزاء) for `areaSquareMetres`, nor historical registry-update date for issuance date. Missing QR is not evidence of forgery.
 - `verifyTunTrustCev`: server-side HTTPS POST of `{"value":"DC..."}` to TunTrust's observed responsive `validateDoc` service. No PDF upload; fixed endpoint; timeouts; exact trusted CPF issuer allowlist (unknown, so defaults fail-closed); malformed responses cannot approve. Even a genuine signature yields `SIGNATURE_VALID_CONTENT_NOT_YET_MATCHED` until document-field comparison. This adapter is not wired to real users.
 
