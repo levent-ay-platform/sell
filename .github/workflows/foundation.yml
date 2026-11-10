@@ -72,3 +72,10 @@ jobs:
           mkdir -p "$RUNNER_TEMP/malak-pg"
           npm --prefix "$RUNNER_TEMP/malak-pg" install --no-save --no-package-lock --ignore-scripts --no-audit --no-fund pg@8.16.3
           node --experimental-strip-types --test services/verification/ci/postgres-live.integration.ts
+      - name: Verify real PostgreSQL reviewer-only evidence access and immutable audit
+        env:
+          PGPASSWORD: sell_ci_disposable
+          MALAK_DISPOSABLE_PG: 'yes'
+        run: |
+          set -euo pipefail
+          node --experimental-strip-types --test services/verification/ci/reviewer-live.integration.ts
