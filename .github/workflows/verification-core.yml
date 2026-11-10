@@ -1,4 +1,5 @@
 name: Malak F1 individual verification core
+
 on:
   pull_request:
     branches: [main]
@@ -6,8 +7,10 @@ on:
       - 'services/verification/**'
       - '.github/workflows/verification-core.yml'
   workflow_dispatch:
+
 permissions:
   contents: read
+
 jobs:
   targeted-contracts:
     runs-on: ubuntu-latest
@@ -21,3 +24,5 @@ jobs:
           node-version: '22'
       - name: Run synthetic no-dependency property + CEV tests
         run: node --experimental-strip-types --test services/verification/test/*.test.ts
+      - name: Benchmark deterministic post-OCR extraction (not image OCR)
+        run: node --experimental-strip-types services/verification/scripts/bench-smart-fields.mjs
