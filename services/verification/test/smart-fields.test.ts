@@ -69,3 +69,17 @@ test('physical page index mismatch is noticed independently of paper page count'
  const d=extractCpfSmartFields(lines(['صفحة 1 من 2'], 'ocr-ar',0.99,2));
  assert.ok(d.issues.includes('INCONSISTENT_PAGE_COUNT'));
 });
+
+test('a distorted document heading is only a low-confidence candidate when CPF header is visible',()=>{
+ const result=extractCpfSmartFields(lines(['إدارة الملكية العقارية شهعادة ملكية','المساحة: 735م م'], 'ocr-ar',0.95));
+ assert.equal(result.documentKind,'CPF_OWNERSHIP_CERTIFICATE');
+ assert.ok(result.issues.includes('LOW_CONFIDENCE'));
+ assert.equal(result.fields.areaSquareMetres.value,735);
+ assert.equal(result.mayUseForAutomaticApproval,false);
+});
+
+test('a malformed first-pass area is never repaired by guessing digits',()=>{
+ const result=extractCpfSmartFields(lines(['اسم العقار : مثال المساحة: 10كم م التجزئة: 10كجزء']));
+ assert.equal(result.fields.areaSquareMetres.value,null);
+ assert.equal(result.mayUseForAutomaticApproval,false);
+});

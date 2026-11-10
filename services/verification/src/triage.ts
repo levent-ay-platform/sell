@@ -18,6 +18,7 @@ export interface UntrustedDocumentExtraction {
   declaredPageCount: number | null;
   receivedPageNumbers: readonly number[];
   hasCev: boolean;
+  extractionWarnings?: readonly ('UNREADABLE_PAGE_COUNT' | 'INCONSISTENT_PAGE_COUNT' | 'LOW_CONFIDENCE' | 'CONFLICTING_FIELDS')[];
   /** Non-authoritative OCR fields, never forwarded to the public listing API. */
   extracted?: Readonly<{
     registryReference?: string;

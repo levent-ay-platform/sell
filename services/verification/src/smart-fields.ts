@@ -89,7 +89,7 @@ function extractLineFields(text:string): Array<[FieldName,string|number]> {
 export function extractCpfSmartFields(lines:readonly RecognizedLine[]):SmartExtraction {
   if(lines.length>2000 || lines.reduce((n,x)=>n+x.text.length,0)>150000)throw new RangeError('OCR input too large');
   const buckets=new Map<FieldName,FieldEvidence[]>(FIELDS.map(k=>[k,[]]));
-  let certificate=false,coownership=false;
+  let certificate=false,coownership=false,issuerHeader=false,noisyTitle=false;
   for(let i=0;i<lines.length;i++){
     const l=lines[i];
     if(!Number.isInteger(l.page)||l.page<1||l.page>100 ||
@@ -97,11 +97,17 @@ export function extractCpfSmartFields(lines:readonly RecognizedLine[]):SmartExtr
       throw new TypeError('Invalid OCR line metadata');
     const normalized=normalize(l.text);
     if(/شهاده\s*(?:اشتراك\s*في\s*)?ملكيه|شهادة\s*(?:اشتراك\s*في\s*)?ملكية|certificat\s*de\s*(?:co)?propri[eé]t[eé]/iu.test(normalized))certificate=true;
+    if(/ادار[ةه]\s+الملكي[ةه]\s+العقاري[ةه]/u.test(normalized))issuerHeader=true;
+    if(/شهعاد[ةه]\s+ملكي[ةه]/u.test(normalized))noisyTitle=true;
     if(/اشتراك\s*في\s*الملكيه|copropri[eé]t[eé]/iu.test(normalized))coownership=true;
     for(const [key,value] of extractLineFields(normalized)){
       buckets.get(key)!.push({value,page:l.page,lineIndex:i,confidence:l.confidence,source:l.source});
     }
   }
+  // OCR can distort a paper heading; recognize as a non-authoritative candidate
+  // only if the CPF administration heading was independently read too.
+  const guessedHeading=!certificate && issuerHeader && noisyTitle;
+  if(guessedHeading)certificate=true;
   const fields={} as Record<FieldName,ExtractedField>;
   let low=false,conflict=false;
   for(const field of FIELDS){
@@ -131,7 +137,7 @@ export function extractCpfSmartFields(lines:readonly RecognizedLine[]):SmartExtr
   const issues:SmartExtraction['issues'][number][]=[];
   if(pageCount===null || !Number.isSafeInteger(pageCount) || pageCount<1 || pageCount>100)issues.push('UNREADABLE_PAGE_COUNT');
   if(inconsistent)issues.push('INCONSISTENT_PAGE_COUNT');
-  if(low)issues.push('LOW_CONFIDENCE');
+  if(low || guessedHeading)issues.push('LOW_CONFIDENCE');
   if(conflict)issues.push('CONFLICTING_FIELDS');
   return {fields,documentKind:!certificate?'UNKNOWN':coownership?'CPF_COOWNERSHIP_CERTIFICATE':'CPF_OWNERSHIP_CERTIFICATE',missingPages,issues,
     mayUseForAutomaticApproval:false};

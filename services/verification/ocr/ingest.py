@@ -100,7 +100,7 @@ def _png_size(path: Path) -> tuple[int,int]:
 
 
 def _tesseract_lines(path: Path, page: int, *, lang: str = 'ara+fra',
-                     psm: str = '3') -> list[dict]:
+                     psm: str = '3', with_area_anchors: bool = False):
     _png_size(path)
     # OCR data is never sent to the shell; subprocess receives argv only.
     raw = _cmd(['tesseract',str(path),'stdout','--psm',psm,'-l',lang,'tsv'],timeout=30)
@@ -109,10 +109,11 @@ def _tesseract_lines(path: Path, page: int, *, lang: str = 'ara+fra',
         return []
     header=rows[0].split('\t')
     try:
-        indexes={k:header.index(k) for k in ('level','page_num','block_num','par_num','line_num','text','conf')}
+        indexes={k:header.index(k) for k in ('level','page_num','block_num','par_num','line_num','text','conf','left','top')}
     except ValueError as exc:
         raise InvalidDocument('UNEXPECTED_OCR_FORMAT') from exc
     groups: dict[tuple[int,int,int],list[tuple[str,float]]] = {}
+    area_anchors: list[tuple[int,int]] = []
     for row in rows[1:]:
         cols=row.split('\t')
         if len(cols)<=max(indexes.values()):
@@ -128,6 +129,11 @@ def _tesseract_lines(path: Path, page: int, *, lang: str = 'ara+fra',
             continue
         if confidence < 0 or confidence > 100:
             continue
+        if re.search(r'(المساح[ةه]|superficie)', word, re.I) and len(area_anchors) < 2:
+            try:
+                area_anchors.append((int(cols[indexes['left']]),int(cols[indexes['top']])))
+            except ValueError:
+                pass
         key=tuple(int(cols[indexes[k]]) for k in ('block_num','par_num','line_num'))
         groups.setdefault(key,[]).append((word,confidence))
     lines=[]
@@ -139,19 +145,50 @@ def _tesseract_lines(path: Path, page: int, *, lang: str = 'ara+fra',
                               source='ocr-ar' if 'ara' in lang else 'ocr-fr'))
         if len(lines)>=MAX_LINES_PER_PAGE:
             break
-    return lines
+    return (lines, area_anchors) if with_area_anchors else lines
+
+
+def _focused_area_lines(path: Path, page: int, anchors: list[tuple[int,int]]) -> list[dict]:
+    """Re-read only the labeled-area region; never infer missing digits.
+    ROI is located by OCR word coordinates, NOT hard-coded to a sample document.
+    """
+    if not anchors:
+        return []
+    from PIL import Image, ImageEnhance
+    result=[]
+    with Image.open(path) as source:
+        image=source.convert('RGB')
+        width,height=image.size
+        with tempfile.TemporaryDirectory(prefix='malak_ocr_roi_') as folder:
+            for n,(x,y) in enumerate(anchors[:2]):
+                rect=(max(0,x-int(width*.25)),max(0,y-int(height*.02)),
+                      min(width,x+int(width*.19)),min(height,y+int(height*.035)))
+                if rect[2]-rect[0]<40 or rect[3]-rect[1]<15:
+                    continue
+                crop=image.crop(rect)
+                crop=crop.resize((crop.width*3,crop.height*3),Image.Resampling.LANCZOS)
+                crop=ImageEnhance.Contrast(crop).enhance(2.0)
+                destination=Path(folder)/f'roi-{n}.png'
+                crop.save(destination)
+                # Keep OCR evidence as a second candidate; discrepancies must
+                # raise field CONFLICT, not silently overwrite the first read.
+                for line in _tesseract_lines(destination,page,psm='6'):
+                    if re.search(r'(المساح[ةه]|superficie)',line['text'],re.I):
+                        result.append(line)
+    return result
 
 
 def _ocr_page(path: Path, page: int) -> list[dict]:
-    first=_tesseract_lines(path,page,psm='3')
-    # Sparse-layout mode can recover the Arabic document heading suppressed by
-    # standard page segmentation. Run ONLY when the first pass is incomplete.
-    if any('شهاد' in line['text'] for line in first) and len(first)>=5:
-        return first
-    second=_tesseract_lines(path,page,psm='11')
+    first, anchors=_tesseract_lines(path,page,psm='3',with_area_anchors=True)
+    focused=_focused_area_lines(path,page,anchors)
+    # Sparse layout is a fallback only. Common Tesseract typo شهعادة is
+    # incomplete legal evidence but enough to avoid re-OCR of entire page.
+    has_heading=any(re.search(r'(شهاد|شهعاد|certificat)',line['text'],re.I)
+                    for line in first)
+    second=[] if has_heading and len(first)>=5 else _tesseract_lines(path,page,psm='11')
     seen=set()
     combined=[]
-    for line in [*first,*second]:
+    for line in [*first,*focused,*second]:
         key=' '.join(line['text'].split())
         if key not in seen:
             seen.add(key)
