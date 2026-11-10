@@ -32,7 +32,7 @@ internal fun CleanImmersivePhoto(modifier: Modifier = Modifier) {
         )
         val startY = (source.height * 0.12f).toInt()
         // This photograph's blurred sheet starts at approximately 70% height.
-        val endY = (source.height * 0.698f).toInt()
+        val endY = (source.height * 0.668f).toInt()
         val clean = Bitmap.createBitmap(
             source.width, endY - startY, Bitmap.Config.ARGB_8888
         )

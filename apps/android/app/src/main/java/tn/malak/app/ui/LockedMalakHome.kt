@@ -60,9 +60,10 @@ fun LockedMalakHome(
     onOpen: () -> Unit,
     onNavigate: (String) -> Unit,
     notice: String,
-    onNotice: (String) -> Unit
+    onNotice: (String) -> Unit,
+    immersive: Boolean,
+    onImmersiveChange: (Boolean) -> Unit
 ) {
-    var immersive by rememberSaveable { mutableStateOf(false) }
     var zoom by rememberSaveable { mutableIntStateOf(0) }
     var panX by remember { mutableFloatStateOf(0f) }
     var panY by remember { mutableFloatStateOf(0f) }
@@ -74,22 +75,13 @@ fun LockedMalakHome(
     val showCard = activeTerrain && matches
 
     BoxWithConstraints(Modifier.fillMaxSize()) {
-        // The unmodified approved opening frame is still painted at the app root.
-        // Only while exploring, cover the old baked-in blurred bottom sheet with
-        // the sharp coast from that SAME reference photograph.
-        AnimatedVisibility(
-            visible = immersive,
-            modifier = Modifier.fillMaxSize(),
-            enter = fadeIn(tween(360)),
-            exit = fadeOut(tween(240))
-        ) {
-            CleanImmersivePhoto(Modifier.fillMaxSize())
-        }
+        // The full-bleed photo is painted in MalakApp (including system bars).
+        // The initial approved frame is untouched until an actual map drag.
         // Full-bleed image is rendered once at the root, behind Android system bars.
         // This scene is illustrative, not a live geospatial map.
         // Gesture state is real. Geographic pan is deferred to native map SDK.
         Box(Modifier.fillMaxSize().pointerInput(Unit) {
-            detectDragGestures(onDragStart = { immersive = true },
+            detectDragGestures(onDragStart = { onImmersiveChange(true) },
                 onDrag = { change, _ -> change.consume() })
         })
 
@@ -172,29 +164,63 @@ fun LockedMalakHome(
             }
         }
 
-        // Invisible but accessible interaction targets follow the FOUR
-        // screenshot-illustrated map tools; this is temporary photo-map UX.
-        Column(
-            modifier = Modifier.offset(x = maxWidth * .855f, y = maxHeight * .332f),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
+        // The first-view design already contains controls in the static photo.
+        // On the expanded map, create *real* controls at the correct locations.
+        if (!immersive) {
+            Column(
+                modifier = Modifier.offset(x = maxWidth * .855f, y = maxHeight * .332f),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                LockedPhotoControl("Me localiser") {
+                    onNotice("Position réelle disponible avec la future carte GPS")
+                }
+                LockedPhotoControl("Couches de la carte") {
+                    onNotice("Couches cartographiques indisponibles en mode photo")
+                }
+                LockedPhotoControl("Recentrer la carte") {
+                    onNotice("Carte photographique : cadrage fixe pour cette version")
+                }
+                LockedPhotoControl("3D") {
+                    onNotice("La carte 3D sera intégrée ultérieurement")
+                }
+            }
+        }
+        AnimatedVisibility(
+            visible = immersive,
+            modifier = Modifier.align(Alignment.CenterEnd)
+                .offset(y = (-24).dp).padding(end = 12.dp),
+            enter = fadeIn(tween(250)),
+            exit = fadeOut(tween(150))
         ) {
-            LockedPhotoControl("Me localiser") {
-                onNotice("Position réelle disponible lors de l'intégration de la carte")
-            }
-            LockedPhotoControl("Couches de la carte") {
-                onNotice("Couches cartographiques indisponibles en mode photo")
-            }
-            LockedPhotoControl("Recentrer la carte") {
-                onNotice("Photo de présentation recentrée")
-            }
-            LockedPhotoControl("3D") {
-                onNotice("La carte 3D n'est pas encore activée")
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                LockedRoundIcon(Icons.Outlined.NearMe, "Me localiser", 44) {
+                    onNotice("Géolocalisation sur carte disponible dans une prochaine étape")
+                }
+                LockedRoundIcon(Icons.Outlined.Layers, "Couches", 44) {
+                    onNotice("Couches cartographiques non intégrées en aperçu photo")
+                }
+                LockedRoundIcon(Icons.Outlined.GpsFixed, "Recentrer", 44) {
+                    onNotice("Navigation sur carte réelle à venir")
+                }
+                Surface(
+                    modifier = Modifier.size(44.dp).clickable {
+                        onNotice("La carte 3D n'est pas encore disponible")
+                    },
+                    color = Color.White.copy(alpha = .94f),
+                    shape = RoundedCornerShape(18.dp),
+                    shadowElevation = 4.dp
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Text("3D", color = red, fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold)
+                    }
+                }
             }
         }
         Box(
             Modifier.offset(x = maxWidth * .28f, y = maxHeight * .465f)
                 .size(68.dp)
-                .clickable { if (immersive) immersive = false else onOpen() }
+                .clickable { if (immersive) onImmersiveChange(false) else onOpen() }
                 .semantics { contentDescription = "Terrain de démonstration à Hammamet" }
         )
 
@@ -214,7 +240,7 @@ fun LockedMalakHome(
                     Text("Aucun autre bien dans cet aperçu.",
                         Modifier.padding(14.dp),color=Color(0xFF5B5360),fontSize=12.sp)
                 }
-                LockedBottomNav(onNavigate,{immersive=true})
+                LockedBottomNav(onNavigate,{onImmersiveChange(true)})
             }
         }
 
@@ -224,7 +250,7 @@ fun LockedMalakHome(
             enter=fadeIn(tween(280)),exit=fadeOut(tween(150))
         ) {
             Surface(
-                Modifier.clickable { immersive=false },
+                Modifier.clickable { onImmersiveChange(false) },
                 shape=RoundedCornerShape(25.dp),color=Color.White.copy(alpha=.94f),
                 shadowElevation=5.dp
             ) {
@@ -242,7 +268,7 @@ fun LockedMalakHome(
             enter=fadeIn(tween(290)),exit=fadeOut(tween(180))
         ) {
             Surface(
-                Modifier.clickable { immersive=false },
+                Modifier.clickable { onImmersiveChange(false) },
                 shape=RoundedCornerShape(26.dp),color=Color.White.copy(alpha=.94f),
                 shadowElevation=5.dp
             ) {

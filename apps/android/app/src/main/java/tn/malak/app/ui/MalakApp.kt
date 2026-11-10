@@ -1,6 +1,10 @@
 package tn.malak.app.ui
 
 import androidx.compose.foundation.*
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.horizontalScroll
@@ -48,6 +52,7 @@ fun MalakApp() {
     var compare by rememberSaveable { mutableStateOf(false) }
     var map3d by rememberSaveable { mutableStateOf(true) }
     var notice by rememberSaveable { mutableStateOf("") }
+    var immersiveMap by rememberSaveable { mutableStateOf(false) }
 
     MaterialTheme(colorScheme = lightColorScheme(primary = Brand.Crimson, background = Brand.Pearl)) {
         Box(Modifier.fillMaxSize().background(Brand.Pearl)) {
@@ -58,7 +63,19 @@ fun MalakApp() {
                     contentScale = ContentScale.FillBounds,
                     modifier = Modifier.fillMaxSize()
                 )
-                LockedPhotoDecorations(Modifier.fillMaxSize())
+                if (!immersiveMap) {
+                    LockedPhotoDecorations(Modifier.fillMaxSize())
+                }
+                AnimatedVisibility(
+                    visible = immersiveMap,
+                    modifier = Modifier.fillMaxSize(),
+                    enter = fadeIn(tween(360)),
+                    exit = fadeOut(tween(240))
+                ) {
+                    // Include Android system bars: don't expose the photo's old
+                    // baked blurred card behind the bottom gesture handle.
+                    CleanImmersivePhoto(Modifier.fillMaxSize())
+                }
             }
             Surface(color = Color.Transparent,
                 modifier = Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
@@ -70,7 +87,9 @@ fun MalakApp() {
                     map3d = map3d, onToggleMap = { map3d = !map3d },
                     onOpen = { screen = "details" },
                     onNavigate = { screen = it }, notice = notice,
-                    onNotice = { notice = it }
+                    onNotice = { notice = it },
+                    immersive = immersiveMap,
+                    onImmersiveChange = { immersiveMap = it }
                 )
                 "details" -> DetailScreen(
                     favorite = favorite, onFavorite = { favorite = !favorite },
@@ -112,7 +131,8 @@ fun MalakApp() {
                 else -> LockedMalakHome(
                     search, { search = it }, category, { category = it }, favorite,
                     { favorite = !favorite }, map3d, { map3d = !map3d },
-                    { screen = "details" }, { screen = it }, notice, { notice = it }
+                    { screen = "details" }, { screen = it }, notice, { notice = it },
+                    immersiveMap, { immersiveMap = it }
                 )
             }
             }
