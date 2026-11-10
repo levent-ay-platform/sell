@@ -1,6 +1,9 @@
 package tn.malak.app.ui
 
 import android.net.Uri
+import android.content.pm.ApplicationInfo
+import java.util.UUID
+import kotlinx.coroutines.launch
 import android.provider.OpenableColumns
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -23,7 +26,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 private const val MAX_DOCUMENT_BYTES = 12L * 1024L * 1024L
-private data class PickedEvidence(val uri: Uri, val label: String, val size: Long?)
+private data class PickedEvidence(
+    val uri: Uri, val label: String, val size: Long, val mime: String,
+    val requestKey: String = UUID.randomUUID().toString().replace("-", "")
+)
 private data class DemoReadField(
     val label: String, val value: String, val source: String,
     val state: String, val confidence: String? = null
@@ -45,6 +51,15 @@ private val SyntheticOcrPreview = listOf(
 @Composable
 fun SellerOcrJourney(onBack: () -> Unit) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val debugQa = (context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
+    // QA inputs are intentionally memory-only; no token or document is persisted.
+    var pilotUrl by remember { mutableStateOf("") }
+    var pilotCase by remember { mutableStateOf("") }
+    var pilotToken by remember { mutableStateOf("") }
+    var readingInProgress by remember { mutableStateOf(false) }
+    val actualReadings = remember { mutableStateListOf<Pair<String, ReadOcrResult>>() }
+    var readingNotice by remember { mutableStateOf("") }
     var step by rememberSaveable { mutableIntStateOf(0) }
     var propertyTitle by rememberSaveable { mutableStateOf("") }
     var region by rememberSaveable { mutableStateOf("") }
@@ -77,11 +92,13 @@ fun SellerOcrJourney(onBack: () -> Unit) {
                 if (type !in setOf("application/pdf", "image/jpeg", "image/png", "image/tiff")) {
                     rejected++; continue
                 }
-                files.add(PickedEvidence(uri, name, size))
+                files.add(PickedEvidence(uri, name, size ?: continue, type ?: continue))
             } catch (_: Exception) { rejected++ }
         }
         documentNotice = if (rejected > 0) "$rejected ملف لم يُقبل (نوع أو حجم غير مدعوم، أو أكثر من 8 صفحات)." else "تم اختيار الملفات محلياً. لم تُرفع أو تُقرأ بعد."
         showSyntheticDemo = false
+        actualReadings.clear()
+        readingNotice = ""
     }
 
     Column(
@@ -149,14 +166,69 @@ fun SellerOcrJourney(onBack: () -> Unit) {
                         .padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                         Text("${index + 1}. ${file.label}", Modifier.weight(1f),
                             fontSize = 12.sp, color = Brand.Ink, maxLines = 2)
-                        Text("إزالة", Modifier.clickable { files.remove(file); showSyntheticDemo = false },
+                        Text("إزالة", Modifier.clickable { if (!readingInProgress) { files.remove(file); showSyntheticDemo = false; actualReadings.clear() } },
                             color = Brand.Crimson, fontSize = 12.sp)
                     }
                 }
                 if (documentNotice.isNotBlank()) JourneyNote(documentNotice)
-                JourneyNote("خصوصيتك: اختيار الملف لا يعني رفعه. هذه النسخة لا ترسل مستندات إلى خادم حتى تجهز المصادقة والتخزين الخاص.")
+                JourneyNote("اختيار المستند محلي فقط. إرسال بياناته يتطلب موافقتك الصريحة وجلسة خادم خاصة؛ لا يوجد تحقق ملكية آلي.")
+                if (debugQa) {
+                    Surface(color = Brand.Rose, shape = RoundedCornerShape(18.dp)) {
+                        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                            Text("اختبار تقني خاص — مستندات اصطناعية فقط", fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp, color = Brand.Crimson)
+                            Text("تُستخدم جلسة اختبار قصيرة العمر من خادم مستقل. لا تُدخل بطاقة هويتك أو شهادة ملكية حقيقية قبل اعتماد البيئة.",
+                                color = Brand.Ink, fontSize = 12.sp)
+                            OutlinedTextField(pilotUrl, { pilotUrl = it.take(180) },
+                                label = { Text("عنوان API الآمن (https://)") }, singleLine = true,
+                                modifier = Modifier.fillMaxWidth())
+                            OutlinedTextField(pilotCase, { pilotCase = it.take(36) },
+                                label = { Text("رمز طلب الاختبار UUID") }, singleLine = true,
+                                modifier = Modifier.fillMaxWidth())
+                            OutlinedTextField(pilotToken, { pilotToken = it.take(4096) },
+                                label = { Text("جلسة اختبار مؤقتة") }, singleLine = true,
+                                visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                                modifier = Modifier.fillMaxWidth())
+                            Button(
+                                enabled = !readingInProgress && files.isNotEmpty() &&
+                                    pilotUrl.startsWith("https://") && pilotCase.length == 36 && pilotToken.length >= 20,
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = ButtonDefaults.buttonColors(containerColor = Brand.Crimson),
+                                onClick = {
+                                    val snapshot = files.toList()
+                                    val session = QaOcrSession(pilotUrl.trim(), pilotCase, pilotToken)
+                                    val areaSnapshot = declaredArea
+                                    actualReadings.clear()
+                                    readingNotice = ""
+                                    readingInProgress = true
+                                    scope.launch {
+                                        try {
+                                            for ((index, file) in snapshot.withIndex()) {
+                                                readingNotice = "قراءة الوثيقة ${index + 1} من ${snapshot.size}..."
+                                                val report = readOcrForOwner(context, file.uri, file.size, file.mime,
+                                                    if (file.mime == "application/pdf") null else index + 1,
+                                                    file.requestKey, areaSnapshot, session)
+                                                actualReadings.add(file.label to report)
+                                            }
+                                            readingNotice = "اكتملت قراءة ${actualReadings.size} وثيقة. راجع القيم بنفسك."
+                                            showSyntheticDemo = false
+                                        } catch (error: PrivateOcrClientException) {
+                                            readingNotice = "تعذّرت القراءة (رمز ${error.statusCode}). لا تعِد رفع الوثيقة إلا بعد التحقق من حالة الطلب."
+                                        } catch (_: Exception) {
+                                            readingNotice = "تعذّر الاتصال الآمن بخدمة القراءة. لم تُؤكَّد النتيجة."
+                                        } finally { readingInProgress = false }
+                                    }
+                                }
+                            ) { Text(if (readingInProgress) "تجري القراءة..." else "قراءة OCR من الخادم الخاص") }
+                        }
+                    }
+                } else {
+                    JourneyNote("رفع وقراءة وثائقك الحقيقية متاحان فقط بعد تفعيل تسجيل الدخول الآمن. لا ترسل بيانات حساسة عبر معاينة غير معتمدة.")
+                }
+                if (readingNotice.isNotBlank()) JourneyNote(readingNotice)
+                if (readingInProgress) LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
                 OutlinedButton(onClick = { showSyntheticDemo = true }, modifier = Modifier.fillMaxWidth()) {
-                    Text("شاهد مثالاً توضيحياً لقراءة OCR")
+                    Text("مثال اصطناعي — بدون قراءة مستندك")
                 }
             }
             else -> {
@@ -165,7 +237,40 @@ fun SellerOcrJourney(onBack: () -> Unit) {
                 JourneyFact("الموقع", region.ifBlank { "غير مُدخل" })
                 JourneyFact("المساحة المُصرّح بها", if (declaredArea.isBlank()) "غير مُدخلة" else "$declaredArea م²")
                 JourneyFact("صفة مقدّم الطلب", legalCapacity)
-                if (showSyntheticDemo) {
+                if (actualReadings.isNotEmpty()) {
+                    JourneyNote("نتائج OCR مقروءة آلياً من خادم الاختبار الخاص. القيم أولية وتحتاج تأكيدك، ولا تمثل تحققاً قانونياً.")
+                    actualReadings.forEach { (filename, reading) ->
+                        JourneyFact("المستند", filename)
+                        if (reading.status != "READY") {
+                            JourneyNote("الملف محفوظ لكن القراءة غير متاحة حالياً. لا توجد نتيجة OCR مؤكدة لهذا المستند.")
+                        } else {
+                            reading.facts.forEach { fact ->
+                                Surface(color = Color.White, shape = RoundedCornerShape(18.dp)) {
+                                    Column(Modifier.padding(15.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                            Text(fact.label, color = Brand.Muted, fontSize = 12.sp)
+                                            Text(ocrStatusArabic(fact.state), color = Brand.Crimson, fontSize = 11.sp)
+                                        }
+                                        Text(fact.value ?: "—", color = Brand.Ink, fontSize = 19.sp,
+                                            fontWeight = FontWeight.Bold)
+                                        Text("${fact.page?.let { "صفحة $it · " } ?: ""}${fact.source?.let { ocrSourceArabic(it) } ?: "مصدر غير معروف"}${fact.confidence?.let { " · ثقة القراءة $it%" } ?: ""}",
+                                            color = Brand.Muted, fontSize = 11.sp)
+                                    }
+                                }
+                            }
+                            if(reading.missingPages.isNotEmpty())
+                                JourneyNote("صفحات يُحتمل نقصها: ${reading.missingPages.joinToString("، ")}")
+                            if(reading.qualityPages.isNotEmpty())
+                                JourneyNote("تحسين التصوير مطلوب للصفحات: ${reading.qualityPages.joinToString("، ")}")
+                            val comparison = when(reading.areaComparison) {
+                                "SAME_NUMBER_UNVERIFIED" -> "المساحتان متساويتان عددياً — لم يُتحقق منهما قانونياً"
+                                "DIFFERENT_NUMBER_REVIEW" -> "توجد قيمة مساحة مختلفة — راجع شهادة الملكية"
+                                else -> "المساحة غير قابلة للمقارنة بثقة"
+                            }
+                            JourneyFact("مقارنة المساحة الأولية", comparison)
+                        }
+                    }
+                } else if (showSyntheticDemo) {
                     JourneyNote("مثال اصطناعي للعرض فقط. القيم التالية لم تُقرأ من ملفك، ولا تُعد بيانات عقار حقيقي.")
                     SyntheticOcrPreview.forEach { field -> OcrPreviewFact(field) }
                     val area = declaredArea.toDoubleOrNull()
@@ -177,7 +282,7 @@ fun SellerOcrJourney(onBack: () -> Unit) {
                     }
                     JourneyFact("مقارنة أولية للمساحة", comparison)
                 } else {
-                    JourneyNote("لم تصدر نتيجة OCR بعد. ${files.size} ملف/ملفات محددة محلياً، لكن لا يوجد رفع أو استخراج حقيقي في هذا الإصدار.")
+                    JourneyNote("لم تصدر نتيجة OCR حقيقية بعد. ${files.size} ملف/ملفات مختارة محلياً، ولا توجد موافقة ملكية أو نشر.")
                 }
                 Surface(color = Brand.Rose, shape = RoundedCornerShape(18.dp)) {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
@@ -251,4 +356,17 @@ private fun OcrPreviewFact(field: DemoReadField) {
             }
         }
     }
+}
+
+private fun ocrStatusArabic(status: String): String = when(status) {
+    "CANDIDATE" -> "قراءة أولية"
+    "LOW_CONFIDENCE" -> "ثقة منخفضة"
+    "CONFLICT" -> "تعارض يستلزم مراجعة"
+    else -> "غير مقروء"
+}
+private fun ocrSourceArabic(source: String): String = when(source) {
+    "pdf-text" -> "نص PDF"
+    "ocr-ar" -> "OCR عربي"
+    "ocr-fr" -> "OCR فرنسي"
+    else -> "OCR"
 }

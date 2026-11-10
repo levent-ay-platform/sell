@@ -46,3 +46,11 @@ jobs:
       - name: Test image-only scans and native-PDF fast path (NO real documents)
         run: |
           /tmp/malak-ocr-venv/bin/python -m unittest discover -v -s services/verification/test -p 'test_*.py'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Real synthetic HTTP to sealed private evidence to Python OCR and seller field cards
+        env:
+          MALAK_SYNTHETIC_OCR: 'yes'
+          MALAK_OCR_PYTHON: /tmp/malak-ocr-venv/bin/python
+        run: node --experimental-strip-types --test services/verification/ci/seller-ocr-http.integration.ts

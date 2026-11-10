@@ -20,3 +20,7 @@
 - Device acceptance: Android install, readable 360/412dp layouts in Arabic/French, screenshots, low-memory UX, approved reference design and real map/satellite provider or honest low-bandwidth list fallback.
 
 **Developer policy:** next batch must connect a user-visible step end-to-end; avoid another series of disconnected infrastructure adapters. Use AI Agent CTR for authorized device operations, GitHub-hosted Ubuntu for CI, no self-hosted runner/production merge or deploy without owner approval. No real CIN/CPF samples in public repo or Actions.
+
+## 2026-11-10 integration update (not production)
+
+The **source** now includes a real Android HTTPS upload client (QA session/case only, debug build), a private owner-only OCR HTTP response, native Python OCR subprocess adapter, and an isolated synthetic HTTP→AES-GCM private file→Python OCR→AR/FR fields integration test. A live +216 session issuer, actual private API/worker deployment and phone-to-service real-network acceptance **do not yet exist**. Keep the current home visual blocker open and never call APK a finished MVP until a genuine installed Android flow is witnessed, authenticated and reviewed. Stage-2 official identity/title comparison remains NOT_STARTED.

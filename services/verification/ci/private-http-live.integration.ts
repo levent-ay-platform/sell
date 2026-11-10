@@ -24,8 +24,9 @@ test('LIVE disposable Postgres: HMAC rate window atomic under concurrency and de
      assert.equal(outcomes.filter(x=>!x).length,9);
      assert.equal(await limiter.consume({route:'UPLOAD',remote}),false);
      assert.equal(await limiter.consume({route:'INSPECT',remote}),true);
+     assert.equal(await limiter.consume({route:'OCR',remote}),true);
      const buckets=await db.query('SELECT bucket_hash,route,hits FROM sell.private_evidence_rate_limits');
-     assert.equal(buckets.rows.length,2);
+     assert.equal(buckets.rows.length,3);
      assert.ok(buckets.rows.every((r:any)=>/^[a-f0-9]{64}$/.test(r.bucket_hash)));
      assert.ok(!JSON.stringify(buckets.rows).includes(remote));
      const audit=new PostgresPrivateEvidenceDenialAudit(pool);

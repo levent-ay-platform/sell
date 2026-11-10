@@ -3,12 +3,16 @@
  * It MUST only be bound behind separately reviewed TLS, identity/session,
  * firewall and per-instance/routed rate limit controls; never mount on a public
  * port until deployment authorization. No document, token or personal data logging.
- * It deliberately exposes no download, OCR text or document-content route.
+ * It exposes an OWNER-ONLY extracted field presentation (not raw OCR) on the
+ * OCR route when configured. The service must NOT be mounted publicly until
+ * genuine identity/session, consent and TLS isolation have been approved.
  */
 import type {IncomingMessage, ServerResponse} from 'node:http';
 import {randomUUID} from 'node:crypto';
 import type {Authenticator, EvidenceKind, EvidenceUploadRequest, EvidenceUploadResult} from './evidence-upload.ts';
 import type {ReviewRequest, ReviewInspectionResult} from './evidence-review.ts';
+import type {PrivateOcrPresentation} from './ocr-presentation.ts';
+import {PrivateOcrAccessDenied} from './seller-ocr-service.ts';
 
 const MAX_BYTES=12*1024*1024;
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -16,9 +20,10 @@ const KEY=/^[A-Za-z0-9_-]{16,100}$/;
 const TOKEN=/^Bearer ([A-Za-z0-9._~+\/-]{20,4096})$/;
 const KINDS=new Set<EvidenceKind>(['IDENTITY','OWNERSHIP_CERTIFICATE','TITLE_EXTRACT','OTHER_LEGAL_PROOF']);
 const UPLOAD=/^\/internal\/v1\/evidence\/([0-9a-f-]{36})\/upload$/i;
+const OCR_UPLOAD=/^\/internal\/v1\/evidence\/([0-9a-f-]{36})\/upload-ocr$/i;
 const REVIEW=/^\/internal\/v1\/review\/([0-9a-f-]{36})\/([0-9a-f-]{36})\/inspect$/i;
 const MIME=new Set(['application/pdf','image/png','image/jpeg','image/tiff']);
-export type PrivateRoute='UPLOAD'|'INSPECT';
+export type PrivateRoute='UPLOAD'|'INSPECT'|'OCR';
 export type DenialReason='BAD_ROUTE'|'BAD_REQUEST'|'UNAUTHENTICATED'|'FORBIDDEN'|'RATE_LIMITED'|'FILE_REJECTED'|'REPLAY_CONFLICT'|'UPSTREAM_UNAVAILABLE';
 export interface DenialAuditRecord {route:PrivateRoute|'UNKNOWN';reason:DenialReason;actorUserId:string|null;requestId:string;}
 export interface PrivateEvidenceHttpDeps {
@@ -30,6 +35,8 @@ export interface PrivateEvidenceHttpDeps {
   upload:(request:EvidenceUploadRequest)=>Promise<EvidenceUploadResult>;
   /** Private, server-only inspection. Must return status only; no plaintext. */
   inspect:(request:ReviewRequest)=>Promise<ReviewInspectionResult>;
+  /** Private owner-only field DTO. Called AFTER a successful, scanned and sealed upload. */
+  analyzeOwnerUpload?:(request:{bearerToken:string;caseId:string;evidenceId:string;bytes:Uint8Array;mime:'application/pdf'|'image/png'|'image/jpeg'|'image/tiff';declaredArea:string|null})=>Promise<PrivateOcrPresentation>;
 }
 
 function json(res:ServerResponse,status:number,body:{ok:boolean;[key:string]:unknown}):void {
@@ -81,6 +88,7 @@ async function limitedBody(req:IncomingMessage,size:number):Promise<Uint8Array> 
     for(const chunk of chunks)chunk.fill(0);
   }
 }
+
 function reasonFromUpload(result:EvidenceUploadResult):{code:number;reason:DenialReason} {
   if(result.ok)return {code:200,reason:'BAD_REQUEST'};
   switch(result.code) {
@@ -106,8 +114,8 @@ export function createPrivateEvidenceHttpHandler(deps:PrivateEvidenceHttpDeps) {
   return async (req:IncomingMessage,res:ServerResponse):Promise<void>=>{
     const requestId=randomUUID();let actor:string|null=null;
     const url=req.url??'';
-    const upload=UPLOAD.exec(url),review=REVIEW.exec(url);
-    const route:PrivateRoute|'UNKNOWN'=upload?'UPLOAD':review?'INSPECT':'UNKNOWN';
+    const upload=UPLOAD.exec(url),ocrUpload=OCR_UPLOAD.exec(url),review=REVIEW.exec(url);
+    const route:PrivateRoute|'UNKNOWN'=ocrUpload?'OCR':upload?'UPLOAD':review?'INSPECT':'UNKNOWN';
     // Do not log/return raw URL, bearer token, file name or document identifiers.
     const reject=async(status:number,reason:DenialReason)=>{
       try {await deps.audit.recordDenied({route,reason,actorUserId:actor,requestId});}
@@ -129,6 +137,7 @@ export function createPrivateEvidenceHttpHandler(deps:PrivateEvidenceHttpDeps) {
          !noDuplicate(req,'content-length')||!noDuplicate(req,'x-idempotency-key')||
          !noDuplicate(req,'x-evidence-kind')||!noDuplicate(req,'x-page-number')||
          !noDuplicate(req,'x-claimed-mime')||
+         !noDuplicate(req,'x-declared-area-m2')||
          req.headers['transfer-encoding']){await reject(400,'BAD_REQUEST');return;}
       const authorization=single(req,'authorization')??'';
       const match=TOKEN.exec(authorization);
@@ -141,7 +150,7 @@ export function createPrivateEvidenceHttpHandler(deps:PrivateEvidenceHttpDeps) {
       }catch {await reject(503,'UPSTREAM_UNAVAILABLE');return;}
       if(route==='INSPECT') {
         if(![null,'0'].includes(single(req,'content-length')) || single(req,'content-type')!==null ||
-           req.headers['x-evidence-kind']||req.headers['x-page-number']||req.headers['x-idempotency-key']||req.headers['x-claimed-mime']) {
+           req.headers['x-evidence-kind']||req.headers['x-page-number']||req.headers['x-idempotency-key']||req.headers['x-claimed-mime']||req.headers['x-declared-area-m2']) {
           await reject(400,'BAD_REQUEST');return;
         }
         const caseId=review![1]!,evidenceId=review![2]!;
@@ -154,7 +163,12 @@ export function createPrivateEvidenceHttpHandler(deps:PrivateEvidenceHttpDeps) {
         json(res,200,{ok:true,inspected:true,mayPublish:false,ownershipVerified:false});
         return;
       }
-      const caseId=upload![1]!;
+      const caseId=(ocrUpload??upload)![1]!;
+      if(route==='OCR'&&!deps.analyzeOwnerUpload){await reject(503,'UPSTREAM_UNAVAILABLE');return;}
+      const declared=single(req,'x-declared-area-m2');
+      if(declared!==null && !/^[0-9]{1,10}(?:\.[0-9]{1,3})?$/.test(declared)){
+        await reject(400,'BAD_REQUEST');return;
+      }
       const headerSize=single(req,'content-length'),kind=single(req,'x-evidence-kind');
       const idempotencyKey=single(req,'x-idempotency-key');
       const mime=single(req,'x-claimed-mime');
@@ -170,14 +184,34 @@ export function createPrivateEvidenceHttpHandler(deps:PrivateEvidenceHttpDeps) {
       let bytes:Uint8Array;
       try {bytes=await limitedBody(req,len);}
       catch {await reject(400,'FILE_REJECTED');return;}
-      let result:EvidenceUploadResult;
-      try {result=await deps.upload({bearerToken,caseId,idempotencyKey,bytes,
-        evidenceKind:kind as EvidenceKind,pageNumber:page==='null'?null:Number(page),claimedMime:mime});}
-      catch {await reject(503,'UPSTREAM_UNAVAILABLE');return;}
-      finally {bytes.fill(0);}
-      if(!result.ok){const response=reasonFromUpload(result);await reject(response.code,response.reason);return;}
-      json(res,200,{ok:true,evidenceId:result.evidenceId,uploaded:result.uploaded,
-        mayPublish:false,ownershipVerified:false});
+      try {
+        let result:EvidenceUploadResult;
+        try {result=await deps.upload({bearerToken,caseId,idempotencyKey,bytes,
+          evidenceKind:kind as EvidenceKind,pageNumber:page==='null'?null:Number(page),claimedMime:mime});}
+        catch {await reject(503,'UPSTREAM_UNAVAILABLE');return;}
+        if(!result.ok){const response=reasonFromUpload(result);await reject(response.code,response.reason);return;}
+        if(route==='OCR') {
+          // The caller already owns the newly uploaded evidence. The analyzer
+          // MUST additionally check current owner membership and consent after
+          // OCR, so revoked consent cannot release extracted personal fields.
+          try {
+            const reading=await deps.analyzeOwnerUpload!({bearerToken,caseId,
+              evidenceId:result.evidenceId,bytes,mime:mime as
+              'application/pdf'|'image/png'|'image/jpeg'|'image/tiff',declaredArea:declared});
+            json(res,200,{ok:true,evidenceId:result.evidenceId,uploaded:result.uploaded,
+              ocrStatus:'READY',reading,mayPublish:false,ownershipVerified:false});
+          } catch (err) {
+            if(err instanceof PrivateOcrAccessDenied){await reject(403,'FORBIDDEN');return;}
+            // Document IS stored; OCR can be retried with same idempotency key.
+            // Do not accidentally tell the customer their upload was lost.
+            json(res,202,{ok:true,evidenceId:result.evidenceId,uploaded:result.uploaded,
+              ocrStatus:'UNAVAILABLE',mayPublish:false,ownershipVerified:false});
+          }
+          return;
+        }
+        json(res,200,{ok:true,evidenceId:result.evidenceId,uploaded:result.uploaded,
+          mayPublish:false,ownershipVerified:false});
+      } finally {bytes.fill(0); }
     } catch {
       await reject(503,'UPSTREAM_UNAVAILABLE');
     }
