@@ -94,20 +94,20 @@ fun LockedMalakHome(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(Modifier.padding(start = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                         Image(painter = painterResource(R.drawable.malak_locked_logo),
                             contentDescription = "Logo Malak",
                             contentScale = ContentScale.Fit,
-                            modifier = Modifier.size(49.dp))
+                            modifier = Modifier.size(56.dp).offset(y = (-6).dp))
                         Spacer(Modifier.width(6.dp))
                         Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
-                            Text("Malak / ملاك", fontSize = 25.sp, color = Color.White,
+                            Text("Malak / ملاك", fontSize = 25.sp, lineHeight = 25.sp, color = Color.White,
                                 fontWeight = FontWeight.Bold, maxLines = 1)
                             Text("I M M O B I L I E R   E N   T U N I S I E",
                                 fontSize = 7.sp, color = Color.White, maxLines = 1)
                         }
                     }
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Row(Modifier.offset(y = (-12).dp),horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         LockedRoundIcon(Icons.Outlined.Notifications, "Notifications", 40) {
                             onNotice("Notifications disponibles après connexion")
                         }
