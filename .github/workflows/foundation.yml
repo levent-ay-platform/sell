@@ -63,3 +63,12 @@ jobs:
           psql -h 127.0.0.1 -U sell_ci -d sell_ci -v ON_ERROR_STOP=1 -f db/tests/0001_publication_gate.sql
           psql -h 127.0.0.1 -U sell_ci -d sell_ci -v ON_ERROR_STOP=1 -f db/migrations/0002_individual_evidence.sql
           psql -h 127.0.0.1 -U sell_ci -d sell_ci -v ON_ERROR_STOP=1 -f db/tests/0002_individual_evidence.test.sql
+      - name: Test actual Node evidence repository against disposable PostgreSQL
+        env:
+          PGPASSWORD: sell_ci_disposable
+          MALAK_DISPOSABLE_PG: 'yes'
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/malak-pg"
+          npm --prefix "$RUNNER_TEMP/malak-pg" install --no-save --no-package-lock --ignore-scripts --no-audit --no-fund pg@8.16.3
+          node --experimental-strip-types --test services/verification/ci/postgres-live.integration.ts

@@ -155,3 +155,30 @@ test('record store faults fail closed and never publish',async()=>{
  const r=await uploadIndividualEvidence(defaults,h.deps);
  assert.deepEqual(r,{ok:false,code:'STORAGE_UNAVAILABLE',mayPublish:false,ownershipVerified:false});
 });
+
+test('second scanned ownership certificate page is accepted as an explicitly numbered image',async()=>{
+ const h=harness();
+ const pageTwo=Uint8Array.from(Buffer.concat([
+   Buffer.from([137,80,78,71,13,10,26,10]),
+   Buffer.from('SYNTHETIC PNG MAGIC ONLY - PAGE TWO')
+ ]));
+ const a=await uploadIndividualEvidence({...defaults,idempotencyKey:'synthetic_page_two_01',
+   bytes:pageTwo,claimedMime:'image/png',pageNumber:2},h.deps);
+ assert.equal(a.ok,true);
+ assert.equal(h.rows.length,1);
+ assert.equal(h.rows[0].pageNumber,2);
+ assert.equal(h.rows[0].mime,'image/png');
+ assert.equal(a.ownershipVerified,false);
+});
+test('scanned images require an explicit 1 to 8 page number',async()=>{
+ const h=harness();
+ const sample=Uint8Array.from(Buffer.concat([
+   Buffer.from([137,80,78,71,13,10,26,10]),
+   Buffer.from('SYNTHETIC IMAGE ONLY')
+ ]));
+ const noNumber=await uploadIndividualEvidence({...defaults,idempotencyKey:'synthetic_missing_page_01',
+   bytes:sample,claimedMime:'image/png',pageNumber:null},h.deps);
+ assert.equal(noNumber.ok,false);
+ assert.equal(h.calls.scanner,0);
+ assert.equal(h.objects.size,0);
+});

@@ -130,7 +130,7 @@ export async function uploadIndividualEvidence(input:EvidenceUploadRequest,deps:
     (input.pageNumber!==null&&(!Number.isInteger(input.pageNumber)||input.pageNumber<1||input.pageNumber>8)))return deny('FILE_REJECTED');
   const mime=detectMedia(input.bytes);
   if(!mime || (input.claimedMime && input.claimedMime!==mime) ||
-    (mime!=='application/pdf'&&input.pageNumber!==1))return deny('FILE_REJECTED');
+    (mime!=='application/pdf'&&input.pageNumber===null))return deny('FILE_REJECTED');
   let access=await deps.cases.getUploadCase(input.caseId,identity.userId);
   if(!allowed(access) || access?.id!==input.caseId)return deny('CASE_UNAVAILABLE');
   if(!consentValid(access,identity.userId))return deny('CONSENT_REQUIRED');
