@@ -194,7 +194,7 @@ fun LockedMalakHome(
             exit=fadeOut(tween(200))+slideOutVertically(tween(320)){it}
         ) {
             Column(Modifier.fillMaxWidth().padding(horizontal=9.dp)
-                .padding(bottom=16.dp),verticalArrangement=Arrangement.spacedBy(10.dp)) {
+                .padding(bottom=8.dp),verticalArrangement=Arrangement.spacedBy(10.dp)) {
                 if(showCard) LockedPropertyCard(favorite,onFavorite,onOpen)
                 else Surface(
                     Modifier.fillMaxWidth(),color=Color.White.copy(alpha=.92f),
@@ -311,7 +311,7 @@ private fun LockedPropertyCard(
         shadowElevation=10.dp
     ) {
         Row(
-            Modifier.fillMaxWidth().padding(11.dp).height(126.dp),
+            Modifier.fillMaxWidth().padding(11.dp).height(140.dp),
             horizontalArrangement=Arrangement.spacedBy(11.dp)
         ) {
             Box(Modifier.weight(.91f).fillMaxHeight().clip(RoundedCornerShape(18.dp))) {
