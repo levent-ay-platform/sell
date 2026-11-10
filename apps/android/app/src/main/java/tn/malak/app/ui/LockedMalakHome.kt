@@ -74,6 +74,17 @@ fun LockedMalakHome(
     val showCard = activeTerrain && matches
 
     BoxWithConstraints(Modifier.fillMaxSize()) {
+        // The unmodified approved opening frame is still painted at the app root.
+        // Only while exploring, cover the old baked-in blurred bottom sheet with
+        // the sharp coast from that SAME reference photograph.
+        AnimatedVisibility(
+            visible = immersive,
+            modifier = Modifier.fillMaxSize(),
+            enter = fadeIn(tween(360)),
+            exit = fadeOut(tween(240))
+        ) {
+            CleanImmersivePhoto(Modifier.fillMaxSize())
+        }
         // Full-bleed image is rendered once at the root, behind Android system bars.
         // This scene is illustrative, not a live geospatial map.
         // Gesture state is real. Geographic pan is deferred to native map SDK.
