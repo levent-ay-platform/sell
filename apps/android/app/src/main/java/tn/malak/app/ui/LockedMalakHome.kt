@@ -319,8 +319,8 @@ private fun LockedPropertyCard(
                     contentDescription="Photo illustrative non vérifiée",
                     contentScale=ContentScale.Crop,modifier=Modifier.fillMaxSize())
                 Surface(
-                    Modifier.align(Alignment.TopStart).padding(7.dp),
-                    color=Color.White.copy(alpha=.97f),
+                    Modifier.align(Alignment.TopStart).padding(7.dp).width(79.dp),
+                    color=Color.White.copy(alpha=.99f),
                     shape=RoundedCornerShape(20.dp)
                 ) {
                     Text("Démo",Modifier.padding(horizontal=6.dp,vertical=5.dp),
