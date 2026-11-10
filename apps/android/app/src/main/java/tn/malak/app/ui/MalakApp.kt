@@ -83,7 +83,7 @@ fun MalakApp() {
                     }
                     MalakAction("ارجع لاختيار عقار") { screen = "home" }
                 }
-                "seller" -> SellerDraftScreen(onBack = { screen = "home" })
+                "seller" -> SellerOcrJourney(onBack = { screen = "home" })
                 "visitor" -> SimplePage(
                     title = "حسابي", onBack = { screen = "home" },
                     bottom = { BottomNav(active=screen,onNavigate={ screen = it }) }
@@ -441,57 +441,5 @@ private fun InfoRow(label:String,value:String) {
             Text(label,color=Brand.Muted,fontSize=13.sp)
             Text(value,color=Brand.Ink,fontSize=13.sp,fontWeight=FontWeight.SemiBold)
         }
-    }
-}
-
-@Composable
-private fun SellerDraftScreen(onBack:()->Unit) {
-    var step by rememberSaveable { mutableIntStateOf(0) }
-    var title by rememberSaveable { mutableStateOf("") }
-    var area by rememberSaveable { mutableStateOf("") }
-    var rights by rememberSaveable { mutableStateOf("مالك منفرد") }
-
-    Column(
-        Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0xFFE9F3FF),Brand.Pearl)))
-            .verticalScroll(rememberScrollState()).padding(18.dp),
-        verticalArrangement=Arrangement.spacedBy(16.dp)
-    ) {
-        Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween) {
-            Text("‹ رجوع",Modifier.clickable { if(step>0) step-- else onBack() },color=Brand.Crimson)
-            Text("أضف عقارك",fontSize=22.sp,fontWeight=FontWeight.Bold,color=Brand.Ink)
-        }
-        Text("الخطوة "+(step+1)+" من 3",color=Brand.Crimson,fontSize=13.sp)
-        LinearProgressIndicator(progress={ (step+1)/3f },modifier=Modifier.fillMaxWidth(),
-            color=Brand.Crimson,trackColor=Brand.Rose)
-        when(step) {
-            0 -> {
-                MessageBlock("معلومات العقار","أضف وصفاً واضحاً. تستطيع الرجوع والتعديل قبل التقديم.")
-                OutlinedTextField(title,{title=it},label={Text("عنوان العقار")},modifier=Modifier.fillMaxWidth())
-                OutlinedTextField(area,{area=it},label={Text("المساحة بالمتر المربع")},modifier=Modifier.fillMaxWidth())
-                InfoRow("نوع العقار","أرض — نموذج أولي")
-            }
-            1 -> {
-                MessageBlock("الملكية والصلاحية","حدّد صفتك القانونية بدقة. لا يظهر الإعلان للعامة قبل موافقة المراجع.")
-                listOf("مالك منفرد","شريك في الملكية","وريث","صاحب وكالة","ممثل شركة").forEach { s ->
-                    Surface(Modifier.fillMaxWidth().clickable { rights=s },color=if(rights==s)Brand.Rose else Color.White,
-                        shape=RoundedCornerShape(15.dp)) {
-                        Text((if(rights==s)"✓  " else "") + s,Modifier.padding(16.dp),
-                            color=Brand.Ink,fontSize=15.sp)
-                    }
-                }
-            }
-            else -> {
-                MessageBlock("المستندات والتحقق","رفع بطاقة الهوية وعقود الملكية والوثائق سيُفعّل بعد إنشاء تخزين خاص وصلاحيات مراجعة. هذه نسخة معاينة فقط.")
-                InfoRow("العقار",title.ifBlank { "غير محدد" })
-                InfoRow("المساحة",area.ifBlank { "غير محددة" })
-                InfoRow("الصفة",rights)
-                InfoRow("الحالة","مسودة تجريبية، غير منشورة")
-            }
-        }
-        MalakAction(if(step<2)"التالي" else "إنهاء المعاينة") {
-            if(step<2) step++ else onBack()
-        }
-        Text("لا يتم إرسال بياناتك أو نشر العقار في هذا النموذج.",fontSize=12.sp,
-            color=Brand.Muted,textAlign=TextAlign.Center,modifier=Modifier.fillMaxWidth())
     }
 }
