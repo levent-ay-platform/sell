@@ -47,7 +47,9 @@ jobs:
           cat > "$root/clamd.conf" <<CONF
           DatabaseDirectory $root/database
           LocalSocket $root/clamd.sock
+          LocalSocketMode 600
           FixStaleSocket yes
+          User $(id -un)
           Foreground yes
           MaxThreads 2
           MaxQueue 4
@@ -57,7 +59,7 @@ jobs:
           MaxScanSize 16M
           StreamMaxLength 16M
           CONF
-          clamd --config-file="$root/clamd.conf" > "$root/clamd-log.txt" 2>&1 &
+          sudo clamd --config-file="$root/clamd.conf" > "$root/clamd-log.txt" 2>&1 &
           echo "$!" > "$root/clamd.pid"
           for i in $(seq 1 100); do
             if [ -S "$root/clamd.sock" ]; then
