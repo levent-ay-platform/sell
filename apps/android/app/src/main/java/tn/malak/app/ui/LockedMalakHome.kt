@@ -230,7 +230,7 @@ fun LockedMalakHome(
             }
             Surface(
                 modifier=Modifier.align(Alignment.BottomStart)
-                    .padding(start=15.dp,bottom=241.dp),
+                    .padding(start=15.dp,bottom=278.dp),
                 color=Color(0xE0BC1026),shape=RoundedCornerShape(18.dp),
                 shadowElevation=4.dp
             ) {
@@ -248,7 +248,7 @@ fun LockedMalakHome(
             exit=fadeOut(tween(200))+slideOutVertically(tween(320)){it}
         ) {
             Column(Modifier.fillMaxWidth().padding(horizontal=9.dp)
-                .padding(bottom=8.dp),verticalArrangement=Arrangement.spacedBy(10.dp)) {
+                .padding(bottom=16.dp),verticalArrangement=Arrangement.spacedBy(10.dp)) {
                 if(showCard) LockedPropertyCard(favorite,onFavorite,onOpen)
                 else Surface(
                     Modifier.fillMaxWidth(),color=Color.White.copy(alpha=.92f),
@@ -332,7 +332,7 @@ private fun LockedCategory(
 ) {
     val active=name==selected || (name=="Terrains" && selected=="أراضي")
     Surface(
-        modifier=modifier.height(68.dp).clickable { onSelect(name) },
+        modifier=modifier.height(55.dp).clickable { onSelect(name) },
         color=if(active)Color(0xFFE50927) else Color.White.copy(alpha=.92f),
         shape=RoundedCornerShape(16.dp),
         border=BorderStroke(1.dp,Color.White.copy(alpha=.55f)),
@@ -365,7 +365,7 @@ private fun LockedPropertyCard(
         shadowElevation=10.dp
     ) {
         Row(
-            Modifier.fillMaxWidth().padding(11.dp).height(151.dp),
+            Modifier.fillMaxWidth().padding(11.dp).height(126.dp),
             horizontalArrangement=Arrangement.spacedBy(11.dp)
         ) {
             Box(Modifier.weight(.91f).fillMaxHeight().clip(RoundedCornerShape(18.dp))) {
@@ -422,7 +422,7 @@ private fun LockedBottomNav(
     onMap:()->Unit
 ) {
     Surface(
-        Modifier.fillMaxWidth().height(65.dp),
+        Modifier.fillMaxWidth().height(75.dp),
         color=Color(0xF4FFFAFC),
         shape=RoundedCornerShape(34.dp),
         shadowElevation=7.dp
