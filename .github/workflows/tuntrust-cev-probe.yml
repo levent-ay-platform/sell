@@ -1,0 +1,48 @@
+name: TunTrust CEV API reachability - synthetic only
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/tuntrust-cev-probe.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  direct-post:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Run bounded no-credential HTTPS and historical HTTP POST probes
+        shell: bash
+        run: |
+          set -uo pipefail
+          payload='{"value":"DC_MALAK_INVALID_SYNTHETIC_PROBE_20261110"}'
+          urls=(
+            "https://checkcev.tuntrust.tn/TuntrustCevTest/rest/validService/validateDoc"
+            "https://checkcev.tuntrust.tn/TuntrustCev/rest/validService/validateDoc"
+            "https://cev.tuntrust.tn/TuntrustCevTest/rest/validService/validateDoc"
+            "https://cev.tuntrust.tn/TuntrustCev/rest/validService/validateDoc"
+            "http://cev.tuntrust.tn/TuntrustCevTest/rest/validService/validateDoc"
+            "http://cev.tuntrust.tn/TuntrustCev/rest/validService/validateDoc"
+          )
+          tmp=$(mktemp)
+          trap 'rm -f "$tmp"' EXIT
+          for url in "${urls[@]}"; do
+            echo "::group::POST $url"
+            : > "$tmp"
+            curl --silent --show-error --connect-timeout 6 --max-time 14 --max-redirs 0 \
+              --request POST \
+              --header 'Content-Type: application/json' \
+              --header 'Accept: application/json' \
+              --data "$payload" \
+              --output "$tmp" \
+              --write-out 'http_status=%{http_code} remote_ip=%{remote_ip} redirect=%{redirect_url} tls_verify=%{ssl_verify_result} content_type=%{content_type} total_time=%{time_total}\n' \
+              "$url" || echo 'curl_transport_failed=1'
+            echo 'body_first_600_bytes:'
+            head -c 600 "$tmp" || true
+            echo
+            echo "::endgroup::"
+          done
+          echo 'PROBE_COMPLETE: invalid synthetic value only; no property/user data; no credentials; no TLS bypass.'
