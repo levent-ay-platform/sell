@@ -311,7 +311,7 @@ private fun LockedPropertyCard(
         shadowElevation=10.dp
     ) {
         Row(
-            Modifier.fillMaxWidth().padding(11.dp).height(140.dp),
+            Modifier.fillMaxWidth().padding(11.dp).height(148.dp),
             horizontalArrangement=Arrangement.spacedBy(11.dp)
         ) {
             Box(Modifier.weight(.91f).fillMaxHeight().clip(RoundedCornerShape(18.dp))) {
@@ -319,11 +319,11 @@ private fun LockedPropertyCard(
                     contentDescription="Photo illustrative non vérifiée",
                     contentScale=ContentScale.Crop,modifier=Modifier.fillMaxSize())
                 Surface(
-                    Modifier.align(Alignment.TopStart).fillMaxWidth().padding(7.dp),
+                    Modifier.align(Alignment.TopStart).padding(7.dp),
                     color=Color.White.copy(alpha=.97f),
                     shape=RoundedCornerShape(20.dp)
                 ) {
-                    Text("Démo · non vérifié",Modifier.padding(horizontal=6.dp,vertical=5.dp),
+                    Text("Démo",Modifier.padding(horizontal=6.dp,vertical=5.dp),
                         fontSize=9.sp,color=Color(0xFFD90929),
                         maxLines=1, fontWeight=FontWeight.Bold)
                 }
@@ -368,7 +368,7 @@ private fun LockedBottomNav(
     onMap:()->Unit
 ) {
     Surface(
-        Modifier.fillMaxWidth().height(75.dp),
+        Modifier.fillMaxWidth().height(69.dp),
         color=Color(0xF4FFFAFC),
         shape=RoundedCornerShape(34.dp),
         shadowElevation=7.dp

@@ -58,6 +58,7 @@ fun MalakApp() {
                     contentScale = ContentScale.FillBounds,
                     modifier = Modifier.fillMaxSize()
                 )
+                LockedPhotoDecorations(Modifier.fillMaxSize())
             }
             Surface(color = Color.Transparent,
                 modifier = Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
