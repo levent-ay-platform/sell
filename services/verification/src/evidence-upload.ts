@@ -70,7 +70,7 @@ export interface UploadDependencies {
   scanner:MalwareScanner;
   objects:PrivateObjectStore;
   /** Fresh per-object KMS data key. wrappedKey is a KMS-encrypted DEK, NOT plaintext. */
-  generateDataKey():Promise<{plaintextKey:Uint8Array;wrappedKey:string;keyVersion:string}>;
+  generateDataKey(scope:{caseId:string;evidenceId:string}):Promise<{plaintextKey:Uint8Array;wrappedKey:string;keyVersion:string}>;
 }
 export interface EvidenceUploadRequest {
   bearerToken:string;
@@ -152,13 +152,15 @@ export async function uploadIndividualEvidence(input:EvidenceUploadRequest,deps:
     const evidenceId=randomUUID(), objectKey=`private/evidence/${randomUUID()}`;
     let sealed:Uint8Array, wrappedDataKey:string, keyVersion:string;
     try {
-      const dataKey=await deps.generateDataKey();
-      if(!dataKey.wrappedKey || !dataKey.keyVersion || dataKey.plaintextKey.byteLength!==32)throw new Error('INVALID_KMS_KEY');
-      wrappedDataKey=dataKey.wrappedKey;
-      keyVersion=dataKey.keyVersion;
-      // Keep the per-file key ephemeral, including when encryption fails.
-      try {sealed=sealEvidence(input.bytes,dataKey.plaintextKey,input.caseId,evidenceId);}
-      finally {dataKey.plaintextKey.fill(0);}
+      const dataKey=await deps.generateDataKey({caseId:input.caseId,evidenceId});
+      // Always zeroize any returned key bytes, even when metadata is malformed.
+      try {
+        if(!(dataKey.plaintextKey instanceof Uint8Array)||dataKey.plaintextKey.byteLength!==32 ||
+           !dataKey.wrappedKey || !dataKey.keyVersion)throw new Error('INVALID_KMS_KEY');
+        wrappedDataKey=dataKey.wrappedKey;
+        keyVersion=dataKey.keyVersion;
+        sealed=sealEvidence(input.bytes,dataKey.plaintextKey,input.caseId,evidenceId);
+      } finally { if(dataKey.plaintextKey instanceof Uint8Array)dataKey.plaintextKey.fill(0); }
     }catch{return deny('STORAGE_UNAVAILABLE');}
     try{await deps.objects.putPrivate(objectKey,sealed);}catch{return deny('STORAGE_UNAVAILABLE');}
     const row:EvidenceRow={evidenceId,caseId:input.caseId,uploadedBy:identity.userId,objectKey,digest,mime,
