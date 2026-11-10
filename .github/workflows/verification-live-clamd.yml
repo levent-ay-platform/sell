@@ -46,9 +46,8 @@ jobs:
           PY
           cat > "$root/clamd.conf" <<CONF
           DatabaseDirectory $root/database
-          LocalSocket $root/clamd.sock
-          LocalSocketMode 600
-          FixStaleSocket yes
+          TCPSocket 33177
+          TCPAddr 127.0.0.1
           User $(id -un)
           Foreground yes
           MaxThreads 2
@@ -62,8 +61,14 @@ jobs:
           sudo clamd --config-file="$root/clamd.conf" > "$root/clamd-log.txt" 2>&1 &
           echo "$!" > "$root/clamd.pid"
           for i in $(seq 1 100); do
-            if [ -S "$root/clamd.sock" ]; then
-              echo 'Clamd socket ready (isolated test-only)'
+            if python3 - <<'PY_READY'
+          import socket
+          with socket.socket() as s:
+              s.settimeout(0.1)
+              s.connect(('127.0.0.1',33177))
+          PY_READY
+            then
+              echo 'Clamd loopback TCP ready (isolated test-only)'
               exit 0
             fi
             if ! kill -0 "$(cat "$root/clamd.pid")" 2>/dev/null; then
@@ -80,7 +85,7 @@ jobs:
           MALAK_DISPOSABLE_CLAMD: 'yes'
         run: |
           set -euo pipefail
-          export MALAK_CLAMD_TEST_SOCKET="$RUNNER_TEMP/malak-clamd-ci/clamd.sock"
+          export MALAK_CLAMD_TEST_PORT=33177
           node --experimental-strip-types --test services/verification/ci/clamd-live.integration.ts
       - name: Remove isolated test daemon
         if: always()

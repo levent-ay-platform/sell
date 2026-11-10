@@ -1,5 +1,5 @@
 /**
- * GitHub-hosted Ubuntu ONLY: real clamd + private ciphertext filesystem proof.
+ * GitHub-hosted Ubuntu ONLY: real loopback clamd + private ciphertext filesystem proof.
  * clamd loads one CI-only fabricated signature, not official malware feeds.
  * No real document, production credential, Huawei or external scanner.
  */
@@ -15,15 +15,15 @@ import type {EvidenceRow, UploadDependencies} from '../src/evidence-upload.ts';
 
 if(process.env.MALAK_DISPOSABLE_CLAMD!=='yes'||
    !process.env.RUNNER_TEMP||
-   !process.env.MALAK_CLAMD_TEST_SOCKET?.startsWith(process.env.RUNNER_TEMP+'/'))
+   process.env.MALAK_CLAMD_TEST_PORT!=='33177')
   throw new Error('DISPOSABLE_GITHUB_CLAMD_ONLY');
 
-const socket=process.env.MALAK_CLAMD_TEST_SOCKET!;
+const port=Number(process.env.MALAK_CLAMD_TEST_PORT);
 const runner=process.env.RUNNER_TEMP!;
 const clean=Buffer.from('%PDF-1.7\nMALAK_CI_SYNTHETIC_CLEAN_DOCUMENT_ONLY\n');
 const flagged=Buffer.from('%PDF-1.7\nMALAK_CI_SYNTHETIC_FLAGGED_PATTERN_20261110\n');
 const owner=randomUUID(), caseId=randomUUID(), secret=Uint8Array.from(randomBytes(32));
-const scanner=new LocalClamdScanner({path:socket},{timeoutMs:10000});
+const scanner=new LocalClamdScanner({host:'127.0.0.1',port},{timeoutMs:10000});
 
 test('live isolated clamd detects CI signature; private ciphertext store and upload fail closed',async()=>{
   assert.equal(await scanner.scan(clean,'application/pdf'),'CLEAN');
