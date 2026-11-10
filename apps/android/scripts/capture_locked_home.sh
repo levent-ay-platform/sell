@@ -4,7 +4,9 @@ adb install -r apps/android/app/build/outputs/apk/debug/app-debug.apk
 mkdir -p screenshots
 adb shell wm size 786x1746
 adb shell wm density 320
-sleep 4
+# Give Launcher/SystemUI time to settle on hosted Ubuntu before opening app.
+sleep 14
+adb shell am force-stop com.android.launcher3 || true
 adb shell am force-stop tn.malak.app || true
 focus=''
 for attempt in 1 2 3; do
@@ -13,6 +15,12 @@ for attempt in 1 2 3; do
   sleep 5
   focus="$(adb shell dumpsys window | grep -m1 'mCurrentFocus=' || true)"
   echo "FOCUS_CHECK_ATTEMPT_${attempt}: ${focus}"
+  if [[ "$focus" == *"Application Not Responding: com.android.launcher3"* ]]; then
+    adb exec-out screencap -p > screenshots/diagnostic-launcher-anr.png || true
+    adb shell am force-stop com.android.launcher3 || true
+    adb shell input keyevent KEYCODE_BACK || true
+    sleep 3
+  fi
   case "$focus" in
     *tn.malak.app*) break ;;
   esac
@@ -21,6 +29,7 @@ case "$focus" in
   *tn.malak.app*) : ;;
   *)
     echo 'MALAK_SCREEN_NOT_VISIBLE: cannot accept screenshot proof'
+    adb exec-out screencap -p > screenshots/diagnostic-failure.png || true
     adb logcat -d -t 220 | tail -80 || true
     exit 1
     ;;
