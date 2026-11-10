@@ -1,17 +1,20 @@
 package tn.malak.app.ui
 
+import android.content.Context
 import android.net.Uri
-import android.content.pm.ApplicationInfo
-import java.util.UUID
-import kotlinx.coroutines.launch
 import android.provider.OpenableColumns
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -19,354 +22,258 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDirection
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import tn.malak.app.R
+import java.util.Locale
 
-private const val MAX_DOCUMENT_BYTES = 12L * 1024L * 1024L
-private data class PickedEvidence(
-    val uri: Uri, val label: String, val size: Long, val mime: String,
-    val requestKey: String = UUID.randomUUID().toString().replace("-", "")
-)
-private data class DemoReadField(
-    val label: String, val value: String, val source: String,
-    val state: String, val confidence: String? = null
+private const val MAX_DOC_BYTES = 12L * 1024L * 1024L
+private val CardBorder = Color(0xFFE7E8EC)
+private data class ChosenDocument(val uri:Uri, val displayName:String, val length:Long)
+private data class CapacityOption(val code:String, val label:Int)
+private val Capacities = listOf(
+    CapacityOption("owner",R.string.capacity_owner),
+    CapacityOption("partner",R.string.capacity_partner),
+    CapacityOption("heir",R.string.capacity_heir),
+    CapacityOption("mandate",R.string.capacity_mandate)
 )
 
 /**
- * Visual, explicitly labelled synthetic OCR preview. It is NOT extracted from
- * the selected phone document. Replace only with an authenticated private server
- * OCR presentation DTO when the backend endpoint has been approved and mounted.
+ * Buyer-facing, private land draft wizard. There are no synthetic documents,
+ * technical test sessions, manual API/token inputs or fabricated OCR results.
+ * Selected documents are held in memory only and never uploaded by this screen.
  */
-private val SyntheticOcrPreview = listOf(
-    DemoReadField("المساحة حسب الشهادة", "240", "صفحة 1 · OCR عربي", "قيمة أولية", "96%"),
-    DemoReadField("عدد صفحات الشهادة", "2", "صفحة 1 · OCR", "ناقص صفحة", "94%"),
-    DemoReadField("مرجع الرسم العقاري", "—", "الشهادة", "بحاجة إلى قراءة أوضح"),
-    DemoReadField("الأنصبة والحصص", "—", "صفحة 2 غير موجودة", "تحتاج مراجعة بشرية"),
-    DemoReadField("تاريخ إصدار الشهادة", "—", "الشهادة", "لم يُستخرج")
-)
-
 @Composable
-fun SellerOcrJourney(onBack: () -> Unit) {
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    val debugQa = (context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
-    // QA inputs are intentionally memory-only; no token or document is persisted.
-    var pilotUrl by remember { mutableStateOf("") }
-    var pilotCase by remember { mutableStateOf("") }
-    var pilotToken by remember { mutableStateOf("") }
-    var readingInProgress by remember { mutableStateOf(false) }
-    val actualReadings = remember { mutableStateListOf<Pair<String, ReadOcrResult>>() }
-    var readingNotice by remember { mutableStateOf("") }
-    var step by rememberSaveable { mutableIntStateOf(0) }
-    var propertyTitle by rememberSaveable { mutableStateOf("") }
-    var region by rememberSaveable { mutableStateOf("") }
-    var declaredArea by rememberSaveable { mutableStateOf("") }
-    var price by rememberSaveable { mutableStateOf("") }
-    var legalCapacity by rememberSaveable { mutableStateOf("مالك منفرد") }
-    var showSyntheticDemo by rememberSaveable { mutableStateOf(false) }
-    var documentNotice by remember { mutableStateOf("") }
-    val files = remember { mutableStateListOf<PickedEvidence>() }
+fun SellerOcrJourney(onBack:()->Unit) {
+    val context=LocalContext.current
+    val prefs=remember(context){context.getSharedPreferences("malak_unpublished_land_draft",Context.MODE_PRIVATE)}
+    var step by rememberSaveable {mutableIntStateOf(0)}
+    var name by rememberSaveable {mutableStateOf(prefs.getString("title","") ?: "")}
+    var region by rememberSaveable {mutableStateOf(prefs.getString("region","") ?: "")}
+    var area by rememberSaveable {mutableStateOf(prefs.getString("area","") ?: "")}
+    var price by rememberSaveable {mutableStateOf(prefs.getString("price","") ?: "")}
+    var capacity by rememberSaveable {mutableStateOf(prefs.getString("capacity","owner") ?: "owner")}
+    var showInvalid by rememberSaveable {mutableStateOf(false)}
+    var saveMessage by remember {mutableIntStateOf(0)}
+    var pickMessage by remember {mutableIntStateOf(0)}
+    val files=remember {mutableStateListOf<ChosenDocument>()}
 
-    val pickFiles = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
-        var rejected = 0
-        for (uri in uris) {
-            if (files.size >= 8) { rejected++; continue }
-            if (files.any { it.uri == uri }) continue
-            var name = "وثيقة محددة"
-            var size: Long? = null
+    val pickDocuments=rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+        var refused=false
+        for(uri in uris) {
+            if(files.any { it.uri==uri })continue
+            if(files.size>=8) { refused=true;continue }
             try {
-                context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE),
-                    null, null, null)?.use { cursor ->
-                    if (cursor.moveToFirst()) {
-                        val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-                        val sizeIndex = cursor.getColumnIndex(OpenableColumns.SIZE)
-                        if (nameIndex >= 0) name = cursor.getString(nameIndex)?.take(80) ?: name
-                        if (sizeIndex >= 0 && !cursor.isNull(sizeIndex)) size = cursor.getLong(sizeIndex)
+                var label=""
+                var length=0L
+                context.contentResolver.query(uri,arrayOf(OpenableColumns.DISPLAY_NAME,OpenableColumns.SIZE),null,null,null)?.use{cursor ->
+                    if(cursor.moveToFirst()) {
+                        val nameIndex=cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                        val sizeIndex=cursor.getColumnIndex(OpenableColumns.SIZE)
+                        if(nameIndex>=0&&!cursor.isNull(nameIndex))label=cursor.getString(nameIndex).take(90)
+                        if(sizeIndex>=0&&!cursor.isNull(sizeIndex))length=cursor.getLong(sizeIndex)
                     }
                 }
-                if (size == null || size <= 0L || size > MAX_DOCUMENT_BYTES) { rejected++; continue }
-                val type = context.contentResolver.getType(uri)
-                if (type !in setOf("application/pdf", "image/jpeg", "image/png", "image/tiff")) {
-                    rejected++; continue
+                val mime=context.contentResolver.getType(uri)
+                if(length !in 20..MAX_DOC_BYTES || mime !in setOf("application/pdf","image/png","image/jpeg","image/tiff")) {
+                    refused=true;continue
                 }
-                files.add(PickedEvidence(uri, name, size ?: continue, type ?: continue))
-            } catch (_: Exception) { rejected++ }
+                files.add(ChosenDocument(uri,label.ifBlank {uri.lastPathSegment?.take(50) ?: "PDF"},length))
+            } catch (_:Exception) {refused=true}
         }
-        documentNotice = if (rejected > 0) "$rejected ملف لم يُقبل (نوع أو حجم غير مدعوم، أو أكثر من 8 صفحات)." else "تم اختيار الملفات محلياً. لم تُرفع أو تُقرأ بعد."
-        showSyntheticDemo = false
-        actualReadings.clear()
-        readingNotice = ""
+        pickMessage=if(refused)R.string.file_rejected else if(files.isNotEmpty())R.string.file_selected else 0
     }
+    val validArea=(area.toDoubleOrNull() ?: 0.0).let {it>0 && it<=1_000_000_000 && it.isFinite()}
+    val validPrice=(price.toLongOrNull() ?: 0L)>0L
+    val validFirst=name.trim().isNotEmpty()&&region.trim().isNotEmpty()&&validArea&&validPrice
+    val stepLabels=listOf(R.string.step_property,R.string.step_capacity,R.string.step_certificate,R.string.step_summary)
 
-    Column(
-        Modifier.fillMaxSize().background(Brand.Pearl).verticalScroll(rememberScrollState())
-            .padding(horizontal = 16.dp, vertical = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(13.dp)
-    ) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween) {
-            Text("‹ رجوع", Modifier.clickable { if (step > 0) step-- else onBack() }, color = Brand.Crimson)
-            Text("أضف أرضك", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Brand.Ink)
-        }
-        Text("طلب أرض جديد · مسودة غير منشورة", color = Brand.Muted, fontSize = 12.sp)
-        LinearProgressIndicator(progress = { (step + 1) / 4f }, modifier = Modifier.fillMaxWidth(),
-            color = Brand.Crimson, trackColor = Brand.Rose)
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            listOf("العقار", "الصفة", "الشهادة", "الملخّص").forEachIndexed { index, label ->
-                Text(label, color = if (index == step) Brand.Crimson else Brand.Muted,
-                    fontWeight = if (index == step) FontWeight.Bold else FontWeight.Normal, fontSize = 12.sp)
+    Column(Modifier.fillMaxSize()) {
+        Row(Modifier.fillMaxWidth().padding(horizontal=16.dp,vertical=12.dp),
+            verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(10.dp)) {
+            IconButton(onClick={if(step>0){step--;showInvalid=false}else onBack()}, modifier=Modifier.size(48.dp)) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack,s(R.string.back),tint=Brand.Crimson)
+            }
+            Column(Modifier.weight(1f)) {
+                Text(s(R.string.seller_title),fontSize=21.sp,fontWeight=FontWeight.Bold,color=Brand.Ink)
+                Text(s(R.string.draft_label),fontSize=12.sp,color=Brand.Muted)
             }
         }
-        when (step) {
-            0 -> {
-                JourneyHeadline("عرّفنا على أرضك", "أضف معلومات واضحة. سنقارن المساحة لاحقاً بما تقرؤه أداة OCR من الشهادة.")
-                OutlinedTextField(propertyTitle, { propertyTitle = it.take(100) },
-                    label = { Text("عنوان الإعلان") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-                OutlinedTextField(region, { region = it.take(100) },
-                    label = { Text("المنطقة / المعتمدية") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-                OutlinedTextField(declaredArea, { declaredArea = it.filter { ch -> ch.isDigit() || ch == '.' }.take(12) },
-                    label = { Text("المساحة بالمتر المربع") }, modifier = Modifier.fillMaxWidth(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
-                OutlinedTextField(price, { price = it.filter { ch -> ch.isDigit() }.take(15) },
-                    label = { Text("السعر بالدينار التونسي") }, modifier = Modifier.fillMaxWidth(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true)
-            }
-            1 -> {
-                JourneyHeadline("ما صفتك القانونية؟", "الاختيار إقرار أولي منك، ولا يثبت الملكية أو حق التصرف.")
-                listOf("مالك منفرد", "شريك في الملكية", "وريث", "صاحب وكالة").forEach { capacity ->
-                    Surface(Modifier.fillMaxWidth().clickable { legalCapacity = capacity },
-                        color = if (legalCapacity == capacity) Brand.Rose else Color.White,
-                        shape = RoundedCornerShape(15.dp)) {
-                        Text((if (legalCapacity == capacity) "✓  " else "○  ") + capacity,
-                            Modifier.padding(15.dp), fontSize = 15.sp, color = Brand.Ink)
-                    }
+        Row(Modifier.fillMaxWidth().padding(horizontal=17.dp,vertical=8.dp),horizontalArrangement=Arrangement.spacedBy(5.dp)) {
+            stepLabels.forEachIndexed { i,label ->
+                Column(Modifier.weight(1f),horizontalAlignment=Alignment.CenterHorizontally,
+                    verticalArrangement=Arrangement.spacedBy(7.dp)) {
+                    Box(Modifier.fillMaxWidth().height(5.dp).background(
+                        if(i<=step)Brand.Crimson else Color(0xFFE5E8EE),CircleShape))
+                    Text(s(label),fontSize=11.sp,fontWeight=if(i==step)FontWeight.Bold else FontWeight.Normal,
+                        color=if(i==step)Brand.Crimson else Brand.Muted, maxLines=1)
                 }
-                JourneyNote("التحقق من الصفة، الأنصبة والهوية يتم لاحقاً على المستندات الأصلية ومن مصدر مخوّل.")
             }
-            2 -> {
-                JourneyHeadline("شهادة الملكية", "صوّر جميع الصفحات، أو اختر PDF كاملاً. تظهر البيانات المقروءة هنا بعد تشغيل خدمة OCR الخاصة.")
-                Surface(color = Color.White, shape = RoundedCornerShape(20.dp),
-                    modifier = Modifier.fillMaxWidth()) {
-                    Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
-                        Text("▤  مستندات العقار", fontWeight = FontWeight.Bold, color = Brand.Ink, fontSize = 17.sp)
-                        Text("PDF / JPG / PNG / TIFF · حتى 8 ملفات · 12 MB لكل ملف",
-                            color = Brand.Muted, fontSize = 12.sp)
-                        Button(onClick = { pickFiles.launch(arrayOf("application/pdf", "image/*")) },
-                            colors = ButtonDefaults.buttonColors(containerColor = Brand.Crimson),
-                            modifier = Modifier.fillMaxWidth()) {
-                            Text("اختيار صور أو PDF من الهاتف")
+        }
+        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal=17.dp,vertical=16.dp),
+            verticalArrangement=Arrangement.spacedBy(15.dp)) {
+            when(step) {
+                0 -> {
+                    SectionHeading(s(R.string.property_section),s(R.string.property_section_hint))
+                    OutlinedTextField(name,{name=it.take(100);saveMessage=0},
+                        label={Text(s(R.string.property_name))}, modifier=Modifier.fillMaxWidth(),singleLine=true,
+                        isError=showInvalid&&name.isBlank(),
+                        supportingText=if(showInvalid&&name.isBlank()){{Text(s(R.string.field_required))}}else null)
+                    OutlinedTextField(region,{region=it.take(100);saveMessage=0},
+                        label={Text(s(R.string.property_region))},modifier=Modifier.fillMaxWidth(),singleLine=true,
+                        isError=showInvalid&&region.isBlank(),
+                        supportingText=if(showInvalid&&region.isBlank()){{Text(s(R.string.field_required))}}else null)
+                    OutlinedTextField(area,{area=it.filter { char->char.isDigit()||char=='.'||char==',' }.take(16);saveMessage=0},
+                        label={Text(s(R.string.area_m2))},modifier=Modifier.fillMaxWidth(),singleLine=true,
+                        textStyle=TextStyle(textDirection=TextDirection.Ltr,textAlign=TextAlign.Start,fontSize=16.sp),
+                        keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Decimal),
+                        isError=showInvalid&&!validArea,
+                        supportingText=if(showInvalid&&!validArea){{Text(s(R.string.area_invalid))}}else null)
+                    OutlinedTextField(price,{price=it.filter { char->char.isDigit() }.take(15);saveMessage=0},
+                        label={Text(s(R.string.price_tnd))},modifier=Modifier.fillMaxWidth(),singleLine=true,
+                        textStyle=TextStyle(textDirection=TextDirection.Ltr,textAlign=TextAlign.Start,fontSize=16.sp),
+                        keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Number),
+                        isError=showInvalid&&!validPrice,
+                        supportingText=if(showInvalid&&!validPrice){{Text(s(R.string.price_invalid))}}else null)
+                }
+                1 -> {
+                    SectionHeading(s(R.string.capacity_section),s(R.string.capacity_hint))
+                    Capacities.forEach { option ->
+                        val active=capacity==option.code
+                        Surface(Modifier.fillMaxWidth().clickable {capacity=option.code;saveMessage=0},
+                            shape=RoundedCornerShape(17.dp),color=if(active)Brand.Rose else Color.White,
+                            border=BorderStroke(1.dp,if(active)Brand.Crimson else CardBorder)) {
+                            Row(Modifier.fillMaxWidth().heightIn(min=57.dp).padding(horizontal=15.dp),
+                                verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(11.dp)) {
+                                Icon(if(active)Icons.Outlined.CheckCircle else Icons.Outlined.RadioButtonUnchecked,
+                                    null,Modifier.size(22.dp),tint=if(active)Brand.Crimson else Brand.Muted)
+                                Text(s(option.label),color=Brand.Ink,fontSize=15.sp,
+                                    fontWeight=if(active)FontWeight.SemiBold else FontWeight.Normal)
+                            }
                         }
                     }
                 }
-                files.forEachIndexed { index, file ->
-                    Row(Modifier.fillMaxWidth().background(Brand.Rose, RoundedCornerShape(12.dp))
-                        .padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text("${index + 1}. ${file.label}", Modifier.weight(1f),
-                            fontSize = 12.sp, color = Brand.Ink, maxLines = 2)
-                        Text("إزالة", Modifier.clickable { if (!readingInProgress) { files.remove(file); showSyntheticDemo = false; actualReadings.clear() } },
-                            color = Brand.Crimson, fontSize = 12.sp)
+                2 -> {
+                    SectionHeading(s(R.string.document_section),s(R.string.document_hint))
+                    Surface(color=Color.White,shape=RoundedCornerShape(21.dp),border=BorderStroke(1.dp,CardBorder)) {
+                        Column(Modifier.fillMaxWidth().padding(20.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
+                            Icon(Icons.Outlined.Description,null,Modifier.size(34.dp),tint=Brand.Crimson)
+                            Text(s(R.string.file_rules),color=Brand.Muted,fontSize=12.sp)
+                            OutlinedButton(onClick={pickDocuments.launch(arrayOf("application/pdf","image/jpeg","image/png","image/tiff"))},
+                                modifier=Modifier.fillMaxWidth().heightIn(min=52.dp),shape=RoundedCornerShape(16.dp)) {
+                                Icon(Icons.Outlined.FolderOpen,null,Modifier.size(21.dp))
+                                Spacer(Modifier.width(8.dp))
+                                Text(s(R.string.pick_document))
+                            }
+                        }
                     }
-                }
-                if (documentNotice.isNotBlank()) JourneyNote(documentNotice)
-                JourneyNote("اختيار المستند محلي فقط. إرسال بياناته يتطلب موافقتك الصريحة وجلسة خادم خاصة؛ لا يوجد تحقق ملكية آلي.")
-                if (debugQa) {
-                    Surface(color = Brand.Rose, shape = RoundedCornerShape(18.dp)) {
-                        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
-                            Text("اختبار تقني خاص — مستندات اصطناعية فقط", fontWeight = FontWeight.Bold,
-                                fontSize = 14.sp, color = Brand.Crimson)
-                            Text("تُستخدم جلسة اختبار قصيرة العمر من خادم مستقل. لا تُدخل بطاقة هويتك أو شهادة ملكية حقيقية قبل اعتماد البيئة.",
-                                color = Brand.Ink, fontSize = 12.sp)
-                            OutlinedTextField(pilotUrl, { pilotUrl = it.take(180) },
-                                label = { Text("عنوان API الآمن (https://)") }, singleLine = true,
-                                modifier = Modifier.fillMaxWidth())
-                            OutlinedTextField(pilotCase, { pilotCase = it.take(36) },
-                                label = { Text("رمز طلب الاختبار UUID") }, singleLine = true,
-                                modifier = Modifier.fillMaxWidth())
-                            OutlinedTextField(pilotToken, { pilotToken = it.take(4096) },
-                                label = { Text("جلسة اختبار مؤقتة") }, singleLine = true,
-                                visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
-                                modifier = Modifier.fillMaxWidth())
-                            Button(
-                                enabled = !readingInProgress && files.isNotEmpty() &&
-                                    pilotUrl.startsWith("https://") && pilotCase.length == 36 && pilotToken.length >= 20,
-                                modifier = Modifier.fillMaxWidth(),
-                                colors = ButtonDefaults.buttonColors(containerColor = Brand.Crimson),
-                                onClick = {
-                                    val snapshot = files.toList()
-                                    val session = QaOcrSession(pilotUrl.trim(), pilotCase, pilotToken)
-                                    val areaSnapshot = declaredArea
-                                    actualReadings.clear()
-                                    readingNotice = ""
-                                    readingInProgress = true
-                                    scope.launch {
-                                        try {
-                                            for ((index, file) in snapshot.withIndex()) {
-                                                readingNotice = "قراءة الوثيقة ${index + 1} من ${snapshot.size}..."
-                                                val report = readOcrForOwner(context, file.uri, file.size, file.mime,
-                                                    if (file.mime == "application/pdf") null else index + 1,
-                                                    file.requestKey, areaSnapshot, session)
-                                                actualReadings.add(file.label to report)
-                                            }
-                                            readingNotice = "اكتملت قراءة ${actualReadings.size} وثيقة. راجع القيم بنفسك."
-                                            showSyntheticDemo = false
-                                        } catch (error: PrivateOcrClientException) {
-                                            readingNotice = "تعذّرت القراءة (رمز ${error.statusCode}). لا تعِد رفع الوثيقة إلا بعد التحقق من حالة الطلب."
-                                        } catch (_: Exception) {
-                                            readingNotice = "تعذّر الاتصال الآمن بخدمة القراءة. لم تُؤكَّد النتيجة."
-                                        } finally { readingInProgress = false }
+                    if(pickMessage!=0) Text(s(pickMessage),color=Brand.Muted,fontSize=12.sp)
+                    if(files.isEmpty()) {
+                        PlainNotice(Icons.Outlined.Description,s(R.string.file_none))
+                    } else {
+                        Text(s(R.string.documents_selected),color=Brand.Ink,fontSize=16.sp,fontWeight=FontWeight.SemiBold)
+                        files.toList().forEach {file ->
+                            Surface(shape=RoundedCornerShape(16.dp),color=Color.White,border=BorderStroke(1.dp,CardBorder)) {
+                                Row(Modifier.fillMaxWidth().heightIn(min=56.dp).padding(start=11.dp,end=6.dp),
+                                    verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(10.dp)) {
+                                    Icon(Icons.Outlined.InsertDriveFile,null,tint=Brand.Crimson,modifier=Modifier.size(23.dp))
+                                    Column(Modifier.weight(1f)) {
+                                        Text(file.displayName,color=Brand.Ink,maxLines=1,overflow=TextOverflow.Ellipsis,fontSize=13.sp)
+                                        Text("${file.length/1024} KB",color=Brand.Muted,fontSize=11.sp)
                                     }
-                                }
-                            ) { Text(if (readingInProgress) "تجري القراءة..." else "قراءة OCR من الخادم الخاص") }
-                        }
-                    }
-                } else {
-                    JourneyNote("رفع وقراءة وثائقك الحقيقية متاحان فقط بعد تفعيل تسجيل الدخول الآمن. لا ترسل بيانات حساسة عبر معاينة غير معتمدة.")
-                }
-                if (readingNotice.isNotBlank()) JourneyNote(readingNotice)
-                if (readingInProgress) LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-                OutlinedButton(onClick = { showSyntheticDemo = true }, modifier = Modifier.fillMaxWidth()) {
-                    Text("مثال اصطناعي — بدون قراءة مستندك")
-                }
-            }
-            else -> {
-                JourneyHeadline("ملخّص عقارك الذكي", "معلومات منظّمة مع مصادرها ونقاط المراجعة. لا توجد موافقة ملكية تلقائية.")
-                JourneyFact("العقار", propertyTitle.ifBlank { "غير مُدخل" })
-                JourneyFact("الموقع", region.ifBlank { "غير مُدخل" })
-                JourneyFact("المساحة المُصرّح بها", if (declaredArea.isBlank()) "غير مُدخلة" else "$declaredArea م²")
-                JourneyFact("صفة مقدّم الطلب", legalCapacity)
-                if (actualReadings.isNotEmpty()) {
-                    JourneyNote("نتائج OCR مقروءة آلياً من خادم الاختبار الخاص. القيم أولية وتحتاج تأكيدك، ولا تمثل تحققاً قانونياً.")
-                    actualReadings.forEach { (filename, reading) ->
-                        JourneyFact("المستند", filename)
-                        if (reading.status != "READY") {
-                            JourneyNote("الملف محفوظ لكن القراءة غير متاحة حالياً. لا توجد نتيجة OCR مؤكدة لهذا المستند.")
-                        } else {
-                            reading.facts.forEach { fact ->
-                                Surface(color = Color.White, shape = RoundedCornerShape(18.dp)) {
-                                    Column(Modifier.padding(15.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                            Text(fact.label, color = Brand.Muted, fontSize = 12.sp)
-                                            Text(ocrStatusArabic(fact.state), color = Brand.Crimson, fontSize = 11.sp)
-                                        }
-                                        Text(fact.value ?: "—", color = Brand.Ink, fontSize = 19.sp,
-                                            fontWeight = FontWeight.Bold)
-                                        Text("${fact.page?.let { "صفحة $it · " } ?: ""}${fact.source?.let { ocrSourceArabic(it) } ?: "مصدر غير معروف"}${fact.confidence?.let { " · ثقة القراءة $it%" } ?: ""}",
-                                            color = Brand.Muted, fontSize = 11.sp)
+                                    IconButton(onClick={files.remove(file)},modifier=Modifier.size(48.dp)) {
+                                        Icon(Icons.Outlined.DeleteOutline,s(R.string.remove),tint=Brand.Muted)
                                     }
                                 }
                             }
-                            if(reading.missingPages.isNotEmpty())
-                                JourneyNote("صفحات يُحتمل نقصها: ${reading.missingPages.joinToString("، ")}")
-                            if(reading.qualityPages.isNotEmpty())
-                                JourneyNote("تحسين التصوير مطلوب للصفحات: ${reading.qualityPages.joinToString("، ")}")
-                            val comparison = when(reading.areaComparison) {
-                                "SAME_NUMBER_UNVERIFIED" -> "المساحتان متساويتان عددياً — لم يُتحقق منهما قانونياً"
-                                "DIFFERENT_NUMBER_REVIEW" -> "توجد قيمة مساحة مختلفة — راجع شهادة الملكية"
-                                else -> "المساحة غير قابلة للمقارنة بثقة"
-                            }
-                            JourneyFact("مقارنة المساحة الأولية", comparison)
                         }
                     }
-                } else if (showSyntheticDemo) {
-                    JourneyNote("مثال اصطناعي للعرض فقط. القيم التالية لم تُقرأ من ملفك، ولا تُعد بيانات عقار حقيقي.")
-                    SyntheticOcrPreview.forEach { field -> OcrPreviewFact(field) }
-                    val area = declaredArea.toDoubleOrNull()
-                    val demoArea = 240.0
-                    val comparison = when {
-                        area == null -> "أدخل المساحة حتى تظهر المقارنة"
-                        area == demoArea -> "القيمتان متساويتان عددياً في المثال فقط"
-                        else -> "اختلاف يستلزم مراجعة: المصرّح $declaredArea م²، مثال OCR: 240 م²"
-                    }
-                    JourneyFact("مقارنة أولية للمساحة", comparison)
-                } else {
-                    JourneyNote("لم تصدر نتيجة OCR حقيقية بعد. ${files.size} ملف/ملفات مختارة محلياً، ولا توجد موافقة ملكية أو نشر.")
+                    PlainNotice(Icons.Outlined.Lock,s(R.string.file_privacy))
                 }
-                Surface(color = Brand.Rose, shape = RoundedCornerShape(18.dp)) {
-                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
-                        Text("المرحلة الثانية — التحقق والتطابق", fontWeight = FontWeight.Bold, color = Brand.Crimson)
-                        Text("تطابق الهوية مع صاحب الحق، مرجع شهادة الملكية، المساحة، الأنصبة، وحداثة الوضعية القانونية لدى الجهة المختصة.",
-                            color = Brand.Ink, fontSize = 13.sp)
-                        Text("الحالة: لم يبدأ التحقق الرسمي · الإعلان غير قابل للنشر",
-                            color = Brand.Crimson, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                else -> {
+                    SectionHeading(s(R.string.summary_title),s(R.string.summary_hint))
+                    SummaryFact(s(R.string.summary_property),name.ifBlank {s(R.string.no_value)})
+                    SummaryFact(s(R.string.summary_region),region.ifBlank {s(R.string.no_value)})
+                    SummaryFact(s(R.string.summary_area),"$area m²")
+                    SummaryFact(s(R.string.summary_price),"$price TND")
+                    SummaryFact(s(R.string.summary_capacity),s(Capacities.firstOrNull {it.code==capacity}?.label ?: R.string.capacity_owner))
+                    SummaryFact(s(R.string.summary_docs),if(files.isNotEmpty())"${files.size}" else s(R.string.not_uploaded))
+                    Surface(color=Color(0xFFEAF6F5),shape=RoundedCornerShape(17.dp)) {
+                        Column(Modifier.fillMaxWidth().padding(16.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
+                            Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(9.dp)) {
+                                Icon(Icons.Outlined.Description,null,tint=Color(0xFF14706E))
+                                Text(s(R.string.ocr_status),color=Brand.Ink,fontWeight=FontWeight.Bold)
+                            }
+                            Text(s(R.string.ocr_pending),color=Brand.Muted,fontSize=13.sp)
+                            Text(s(R.string.legal_pending),color=Brand.Muted,fontSize=12.sp)
+                        }
+                    }
+                    PlainNotice(Icons.Outlined.Info,s(R.string.never_verified))
+                    OutlinedButton(onClick={step=0;showInvalid=false},modifier=Modifier.fillMaxWidth().heightIn(min=51.dp)) {
+                        Icon(Icons.Outlined.Edit,null,Modifier.size(20.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text(s(R.string.edit_property))
                     }
                 }
             }
+            if(saveMessage!=0) PlainNotice(Icons.Outlined.CheckCircle,s(saveMessage))
+            if(step==3) Text(s(R.string.draft_local),color=Brand.Muted,fontSize=12.sp)
         }
-        Spacer(Modifier.height(5.dp))
-        Button(onClick = { if (step < 3) step++ else onBack() },
-            enabled = step != 0 || (propertyTitle.isNotBlank() && region.isNotBlank() &&
-                (declaredArea.toDoubleOrNull() ?: 0.0) > 0 && (price.toLongOrNull() ?: 0) > 0),
-            modifier = Modifier.fillMaxWidth().height(52.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = Brand.Crimson),
-            shape = RoundedCornerShape(24.dp)) {
-            Text(if (step < 3) "متابعة ←" else "إنهاء المعاينة", fontSize = 15.sp)
-        }
-        Text("تجربة واجهة محلية · لا إرسال ولا توثيق ملكية ولا نشر للعامة",
-            modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center,
-            fontSize = 11.sp, color = Brand.Muted)
-        Spacer(Modifier.height(18.dp))
-    }
-}
-
-@Composable
-private fun JourneyHeadline(title: String, subtitle: String) {
-    Surface(color = Color.White, shape = RoundedCornerShape(19.dp)) {
-        Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(title, fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Brand.Crimson)
-            Text(subtitle, fontSize = 13.sp, color = Brand.Muted, lineHeight = 20.sp)
-        }
-    }
-}
-
-@Composable
-private fun JourneyNote(message: String) {
-    Surface(color = Brand.Rose, shape = RoundedCornerShape(14.dp)) {
-        Text(message, Modifier.fillMaxWidth().padding(13.dp), color = Brand.Ink,
-            fontSize = 13.sp, lineHeight = 20.sp)
-    }
-}
-
-@Composable
-private fun JourneyFact(label: String, value: String) {
-    Surface(color = Color.White, shape = RoundedCornerShape(15.dp)) {
-        Row(Modifier.fillMaxWidth().padding(14.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text(label, color = Brand.Muted, fontSize = 12.sp, modifier = Modifier.weight(0.85f))
-            Text(value, color = Brand.Ink, fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.weight(1.15f), textAlign = TextAlign.End)
-        }
-    }
-}
-
-@Composable
-private fun OcrPreviewFact(field: DemoReadField) {
-    Surface(color = Color.White, shape = RoundedCornerShape(18.dp)) {
-        Column(Modifier.padding(15.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text(field.label, color = Brand.Muted, fontSize = 12.sp)
-                Text(field.state, color = Brand.Crimson, fontSize = 11.sp)
-            }
-            Text(field.value, color = Brand.Ink, fontSize = 20.sp, fontWeight = FontWeight.Bold)
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text(field.source, color = Brand.Muted, fontSize = 11.sp)
-                if (field.confidence != null) Text("ثقة القراءة: ${field.confidence}",
-                    color = Brand.Muted, fontSize = 11.sp)
+        Column(Modifier.fillMaxWidth().padding(horizontal=17.dp,vertical=12.dp),verticalArrangement=Arrangement.spacedBy(7.dp)) {
+            Button(onClick={
+                if(step==0&&!validFirst)showInvalid=true
+                else if(step<3){step++;showInvalid=false;saveMessage=0}
+                else {
+                    try {
+                        prefs.edit().putString("title",name.trim()).putString("region",region.trim())
+                            .putString("area",area).putString("price",price).putString("capacity",capacity).apply()
+                        saveMessage=R.string.draft_saved
+                    } catch (_:Exception) {saveMessage=R.string.draft_error}
+                }
+            }, modifier=Modifier.fillMaxWidth().heightIn(min=54.dp),
+                shape=RoundedCornerShape(17.dp),colors=ButtonDefaults.buttonColors(containerColor=Brand.Crimson)) {
+                Text(s(if(step==3)R.string.save_draft else R.string.continue_label),fontWeight=FontWeight.SemiBold,fontSize=15.sp)
+                Spacer(Modifier.width(9.dp))
+                Icon(if(step==3)Icons.Outlined.Save else Icons.AutoMirrored.Filled.ArrowForward,
+                    null,Modifier.size(21.dp))
             }
         }
     }
 }
 
-private fun ocrStatusArabic(status: String): String = when(status) {
-    "CANDIDATE" -> "قراءة أولية"
-    "LOW_CONFIDENCE" -> "ثقة منخفضة"
-    "CONFLICT" -> "تعارض يستلزم مراجعة"
-    else -> "غير مقروء"
+@Composable
+private fun SectionHeading(title:String,description:String) {
+    Column(Modifier.fillMaxWidth().padding(vertical=6.dp),verticalArrangement=Arrangement.spacedBy(7.dp)) {
+        Text(title,fontSize=21.sp,fontWeight=FontWeight.Bold,color=Brand.Ink)
+        Text(description,color=Brand.Muted,fontSize=13.sp,lineHeight=21.sp)
+    }
 }
-private fun ocrSourceArabic(source: String): String = when(source) {
-    "pdf-text" -> "نص PDF"
-    "ocr-ar" -> "OCR عربي"
-    "ocr-fr" -> "OCR فرنسي"
-    else -> "OCR"
+
+@Composable
+private fun PlainNotice(icon:androidx.compose.ui.graphics.vector.ImageVector,message:String) {
+    Surface(shape=RoundedCornerShape(16.dp),color=Color(0xFFF2F5F7)) {
+        Row(Modifier.fillMaxWidth().padding(13.dp),horizontalArrangement=Arrangement.spacedBy(10.dp),
+            verticalAlignment=Alignment.CenterVertically) {
+            Icon(icon,null,Modifier.size(22.dp),tint=Color(0xFF26718B))
+            Text(message,Modifier.weight(1f),fontSize=12.sp,color=Brand.Ink,lineHeight=19.sp)
+        }
+    }
+}
+
+@Composable
+private fun SummaryFact(label:String,value:String) {
+    Surface(shape=RoundedCornerShape(15.dp),color=Color.White,border=BorderStroke(1.dp,CardBorder)) {
+        Row(Modifier.fillMaxWidth().heightIn(min=54.dp).padding(13.dp),
+            horizontalArrangement=Arrangement.spacedBy(10.dp),verticalAlignment=Alignment.CenterVertically) {
+            Text(label,Modifier.weight(1f),color=Brand.Muted,fontSize=12.sp)
+            Text(value,Modifier.weight(1.3f),color=Brand.Ink,fontSize=13.sp,
+                fontWeight=FontWeight.SemiBold,textAlign=TextAlign.End)
+        }
+    }
 }
