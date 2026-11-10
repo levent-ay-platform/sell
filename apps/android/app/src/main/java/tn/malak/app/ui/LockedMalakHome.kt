@@ -278,7 +278,7 @@ private fun LockedCategory(
 ) {
     val active=name==selected || (name=="Terrains" && selected=="أراضي")
     Surface(
-        modifier=modifier.height(55.dp).clickable { onSelect(name) },
+        modifier=modifier.height(58.dp).clickable { onSelect(name) },
         color=if(active)Color(0xFFE50927) else Color.White.copy(alpha=.92f),
         shape=RoundedCornerShape(16.dp),
         border=BorderStroke(1.dp,Color.White.copy(alpha=.55f)),
@@ -290,8 +290,8 @@ private fun LockedCategory(
             horizontalAlignment=Alignment.CenterHorizontally
         ) {
             Icon(icon,null,tint=if(active)Color.White else Color(0xFFDD1229),
-                modifier=Modifier.size(21.dp))
-            Text(name, fontSize=8.sp, lineHeight=10.sp,
+                modifier=Modifier.size(22.dp))
+            Text(name, fontSize=if(name=="Locaux commerciaux") 8.sp else 9.sp, lineHeight=10.sp,
                 color=if(active)Color.White else Color(0xFF242027),
                 maxLines=2,textAlign=TextAlign.Center,
                 fontWeight=FontWeight.SemiBold)
@@ -310,8 +310,11 @@ private fun LockedPropertyCard(
         border=BorderStroke(1.dp,Color.White),
         shadowElevation=10.dp
     ) {
+        Box(Modifier.fillMaxWidth()) {
         Row(
-            Modifier.fillMaxWidth().padding(11.dp).height(148.dp),
+            Modifier.fillMaxWidth()
+                .padding(start=11.dp, end=11.dp, top=30.dp, bottom=11.dp)
+                .height(126.dp),
             horizontalArrangement=Arrangement.spacedBy(11.dp)
         ) {
             Box(Modifier.weight(.91f).fillMaxHeight().clip(RoundedCornerShape(18.dp))) {
@@ -331,7 +334,7 @@ private fun LockedPropertyCard(
                     Modifier.align(Alignment.BottomEnd).padding(8.dp).size(21.dp),
                     tint=Color.White)
             }
-            Column(Modifier.weight(1.05f).fillMaxHeight(),
+            Column(Modifier.weight(1.05f).fillMaxHeight().padding(top=9.dp),
                 verticalArrangement=Arrangement.SpaceBetween) {
                 Row(verticalAlignment=Alignment.Top) {
                     Text("Terrain à Hammamet",fontSize=14.sp,lineHeight=17.sp,
@@ -358,6 +361,15 @@ private fun LockedPropertyCard(
                         maxLines=1)
                 }
             }
+        }
+        // The original approved design includes a subtle sheet drag handle.
+        // Render it as a separate interactive-layer decoration above the photo row.
+        Box(
+            Modifier.align(Alignment.TopCenter)
+                .padding(top=7.dp)
+                .width(35.dp).height(4.dp)
+                .background(Color(0xFF9C969C).copy(alpha=.66f), RoundedCornerShape(6.dp))
+        )
         }
     }
 }
