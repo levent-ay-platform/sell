@@ -63,7 +63,7 @@ jobs:
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
-          target: google_apis
+          target: default
           arch: x86_64
           profile: pixel_6
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
@@ -71,17 +71,37 @@ jobs:
             set -e
             adb install -r apps/android/app/build/outputs/apk/debug/app-debug.apk
             mkdir -p screenshots
+            # Prevent "green" screenshots of Pixel Launcher ANRs.
+            # AOSP emulator is lighter; verify the app has window focus.
             adb shell wm size 786x1746
             adb shell wm density 320
-            adb shell am force-stop tn.malak.app || true
-            adb shell am start -n tn.malak.app/.MainActivity
             sleep 5
+            adb shell am force-stop tn.malak.app || true
+            FOCUS=""
+            for attempt in 1 2 3; do
+              adb shell input keyevent KEYCODE_BACK || true
+              adb shell am start -W -n tn.malak.app/.MainActivity || true
+              sleep 5
+              FOCUS="$(adb shell dumpsys window | grep -m1 'mCurrentFocus=' || true)"
+              echo "FOCUS_CHECK_ATTEMPT_${attempt}: ${FOCUS}"
+              if [[ "${FOCUS}" == *"tn.malak.app"* ]]; then break; fi
+            done
+            if [[ "${FOCUS}" != *"tn.malak.app"* ]]; then
+              echo "MALAK_SCREEN_NOT_VISIBLE: cannot accept screenshot proof"
+              adb logcat -d -t 220 | tail -80 || true
+              exit 1
+            fi
             adb exec-out screencap -p > screenshots/locked-home-393dp.png
             adb shell input swipe 250 650 410 575 400
-            sleep 1
+            sleep 2
+            FOCUS="$(adb shell dumpsys window | grep -m1 'mCurrentFocus=' || true)"
+            [[ "${FOCUS}" == *"tn.malak.app"* ]] || {
+              echo "MALAK_SCREEN_LOST_FOCUS_AFTER_SWIPE: ${FOCUS}"
+              exit 1
+            }
             adb exec-out screencap -p > screenshots/immersive-map-393dp.png
-            test $(wc -c < screenshots/locked-home-393dp.png) -gt 10000
-            test $(wc -c < screenshots/immersive-map-393dp.png) -gt 10000
+            test $(wc -c < screenshots/locked-home-393dp.png) -gt 100000
+            test $(wc -c < screenshots/immersive-map-393dp.png) -gt 100000
       - name: Upload screenshot proof (requires human visual approval)
         if: always() && github.event_name == 'pull_request'
         uses: actions/upload-artifact@v4
