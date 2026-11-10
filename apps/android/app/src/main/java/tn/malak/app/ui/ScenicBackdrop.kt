@@ -17,6 +17,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -75,53 +76,56 @@ fun PreviewGalleryThumbnail(index: Int, modifier: Modifier = Modifier) {
     )
 }
 
-/** Tiny, image-backed branch that sways softly, never circles covering system status icons. */
+/** Transparent floral corner; do not display the old JPEG's baked system icons. */
 @Composable
 fun BougainvilleaSway(modifier: Modifier = Modifier) {
     val ctx = LocalContext.current
-    val lowPower = remember(ctx) {
-        val power = ctx.getSystemService(Context.POWER_SERVICE) as? PowerManager
-        val memory = ctx.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
-        val reduced = runCatching {
-            Settings.Global.getFloat(
-                ctx.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f
-            ) == 0f
-        }.getOrDefault(false)
-        (power?.isPowerSaveMode == true) || (memory?.isLowRamDevice == true) || reduced
-    }
-    val rotation = if (!lowPower) {
-        val infinite = rememberInfiniteTransition(label = "bougainvillea-wind")
-        val degrees by infinite.animateFloat(
-            initialValue = -1.25f,
-            targetValue = 1.25f,
-            animationSpec = infiniteRepeatable(
-                animation = tween(6700, easing = FastOutSlowInEasing),
-                repeatMode = RepeatMode.Reverse
-            ),
-            label = "sway"
+    val petals = remember(ctx) {
+        val original = android.graphics.BitmapFactory.decodeResource(
+            ctx.resources, R.drawable.malak_flower_corner
         )
-        degrees
-    } else 0f
+        val w = (original.width * .70f).toInt()
+        val output = android.graphics.Bitmap.createBitmap(
+            w, original.height, android.graphics.Bitmap.Config.ARGB_8888
+        )
+        for(y in 0 until original.height) for(x in 0 until w) {
+            val pixel = original.getPixel(x,y)
+            val r = android.graphics.Color.red(pixel)
+            val g = android.graphics.Color.green(pixel)
+            val b = android.graphics.Color.blue(pixel)
+            val chroma = maxOf(r,g,b)-minOf(r,g,b)
+            val isFlower = r > g+25 && r > b+5
+            val isBranch = g > r+12 && g > b+6
+            val alpha = if(isFlower || isBranch) (chroma*4).coerceIn(0,255) else 0
+            output.setPixel(x,y,android.graphics.Color.argb(alpha,r,g,b))
+        }
+        output.asImageBitmap()
+    }
+    val suppressMotion = remember(ctx) {
+        val power=ctx.getSystemService(Context.POWER_SERVICE) as? PowerManager
+        val memory=ctx.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
+        val reduced=runCatching {
+            Settings.Global.getFloat(ctx.contentResolver,
+                Settings.Global.ANIMATOR_DURATION_SCALE,1f)==0f
+        }.getOrDefault(false)
+        reduced || power?.isPowerSaveMode==true || memory?.isLowRamDevice==true
+    }
+    val rotation = if(suppressMotion) 0f else {
+        val infinite=rememberInfiniteTransition(label="petals")
+        val value by infinite.animateFloat(
+            initialValue=-1.0f,targetValue=1.0f,
+            animationSpec=infiniteRepeatable(
+                animation=tween(7000,easing=FastOutSlowInEasing),
+                repeatMode=RepeatMode.Reverse
+            ),label="gentle-wind"
+        )
+        value
+    }
     Image(
-        painter = painterResource(id = R.drawable.malak_flower_corner),
-        contentDescription = null,
-        contentScale = ContentScale.Crop,
-        modifier = modifier
-            .graphicsLayer {
-                compositingStrategy = CompositingStrategy.Offscreen
-                rotationZ = rotation
-                transformOrigin = TransformOrigin(1f, 0f)
-            }
-            .drawWithContent {
-                drawContent()
-                drawRect(
-                    brush = Brush.radialGradient(
-                        colors = listOf(Color.White, Color.White, Color.Transparent),
-                        center = Offset(size.width * .45f, size.height * .31f),
-                        radius = size.width * .78f
-                    ),
-                    blendMode = BlendMode.DstIn
-                )
-            }
+        bitmap=petals,contentDescription=null,contentScale=ContentScale.FillBounds,
+        modifier=modifier.graphicsLayer {
+            rotationZ=rotation
+            transformOrigin=TransformOrigin(0f,0f)
+        }
     )
 }
