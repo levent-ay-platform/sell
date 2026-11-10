@@ -35,7 +35,8 @@ WHERE c.id=$1::uuid AND f.id=$2::uuid AND c.assigned_reviewer_user_id=$3::uuid
 FOR UPDATE OF c`;
 
 export class PostgresReviewerEvidenceLedger implements ReviewerEvidenceLedger {
-  constructor(private readonly pool:SqlPool) {}
+  private readonly pool:SqlPool;
+  constructor(pool:SqlPool) {this.pool=pool;}
   async authorizeAndAudit(caseId:string,evidenceId:string,reviewerId:string):Promise<AuthorizedEvidence|null> {
     const client=await this.pool.connect();let begun=false;
     try {
