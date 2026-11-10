@@ -73,15 +73,9 @@ fun LockedMalakHome(
         .any { search.contains(it, ignoreCase = true) }
     val showCard = activeTerrain && matches
 
-    BoxWithConstraints(Modifier.fillMaxSize().background(Color(0xFF0D69B8))) {
-        // The V1 photo-map is derived from the exact user-approved source,
-        // but it is NOT a native geospatial map or ownership evidence.
-        Image(
-            painter = painterResource(R.drawable.malak_locked_backdrop),
-            contentDescription = "Aperçu visuel photographique. Carte 3D indisponible.",
-            contentScale = ContentScale.FillBounds,
-            modifier = Modifier.fillMaxSize()
-        )
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        // Full-bleed image is rendered once at the root, behind Android system bars.
+        // This scene is illustrative, not a live geospatial map.
         // Gesture state is real. Geographic pan is deferred to native map SDK.
         Box(Modifier.fillMaxSize().pointerInput(Unit) {
             detectDragGestures(onDragStart = { immersive = true },
@@ -291,13 +285,13 @@ private fun LockedCategory(
         shadowElevation=4.dp
     ) {
         Column(
-            Modifier.padding(horizontal=2.dp,vertical=7.dp),
-            verticalArrangement=Arrangement.spacedBy(3.dp),
+            Modifier.padding(horizontal=2.dp,vertical=4.dp),
+            verticalArrangement=Arrangement.spacedBy(1.dp),
             horizontalAlignment=Alignment.CenterHorizontally
         ) {
             Icon(icon,null,tint=if(active)Color.White else Color(0xFFDD1229),
-                modifier=Modifier.size(24.dp))
-            Text(name, fontSize=9.sp, lineHeight=10.sp,
+                modifier=Modifier.size(21.dp))
+            Text(name, fontSize=8.sp, lineHeight=10.sp,
                 color=if(active)Color.White else Color(0xFF242027),
                 maxLines=2,textAlign=TextAlign.Center,
                 fontWeight=FontWeight.SemiBold)
@@ -325,13 +319,13 @@ private fun LockedPropertyCard(
                     contentDescription="Photo illustrative non vérifiée",
                     contentScale=ContentScale.Crop,modifier=Modifier.fillMaxSize())
                 Surface(
-                    Modifier.align(Alignment.TopStart).padding(7.dp),
-                    color=Color.White.copy(alpha=.94f),
+                    Modifier.align(Alignment.TopStart).fillMaxWidth().padding(7.dp),
+                    color=Color.White.copy(alpha=.97f),
                     shape=RoundedCornerShape(20.dp)
                 ) {
-                    Text("Démo",Modifier.padding(horizontal=8.dp,vertical=5.dp),
-                        fontSize=10.sp,color=Color(0xFFD90929),
-                        fontWeight=FontWeight.Bold)
+                    Text("Démo · non vérifié",Modifier.padding(horizontal=6.dp,vertical=5.dp),
+                        fontSize=9.sp,color=Color(0xFFD90929),
+                        maxLines=1, fontWeight=FontWeight.Bold)
                 }
                 Icon(Icons.Outlined.Image,"Images de démonstration",
                     Modifier.align(Alignment.BottomEnd).padding(8.dp).size(21.dp),

@@ -20,6 +20,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
+import androidx.compose.foundation.Image
+import tn.malak.app.R
 
 private val PreviewLand = PreviewListing(
     title = "أرض مطلّة على البحر",
@@ -46,9 +50,15 @@ fun MalakApp() {
     var notice by rememberSaveable { mutableStateOf("") }
 
     MaterialTheme(colorScheme = lightColorScheme(primary = Brand.Crimson, background = Brand.Pearl)) {
-        Box(Modifier.fillMaxSize().background(Brush.verticalGradient(
-            listOf(Color(0xFF075DA9), Color(0xFF075DA9), Brand.Pearl)
-        ))) {
+        Box(Modifier.fillMaxSize().background(Brand.Pearl)) {
+            if (screen == "home") {
+                Image(
+                    painter = painterResource(R.drawable.malak_locked_backdrop),
+                    contentDescription = null,
+                    contentScale = ContentScale.FillBounds,
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
             Surface(color = Color.Transparent,
                 modifier = Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
             when(screen) {
