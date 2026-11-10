@@ -96,4 +96,23 @@
     <string name="notice">معلومة</string>
     <string name="cancel">إلغاء</string>
     <string name="close">إغلاق</string>
+    <string name="step_identity">الهوية</string>
+    <string name="identity_section">بطاقة الهوية</string>
+    <string name="identity_hint">أضف وجهي الهوية لمقارنة البيانات مع شهادة الملكية بعد تفعيل القراءة الآمنة.</string>
+    <string name="identity_two_sides">الوجه الأمامي والخلفي، أو PDF يضم الوجهين.</string>
+    <string name="pick_identity">اختيار صور الهوية أو PDF</string>
+    <string name="identity_none">لم تُضف الهوية بعد</string>
+    <string name="identity_selected">ملفات الهوية المختارة</string>
+    <string name="identity_required">اختر صورتين للوجهين أو PDF يضمهما قبل المتابعة.</string>
+    <string name="identity_file_rejected">بعض ملفات الهوية غير مدعومة أو حجمها كبير.</string>
+    <string name="identity_privacy">الهوية تبقى على هاتفك؛ لا تُرفع ولا تُحفظ في المسودة.</string>
+    <string name="certificate_required">اختر شهادة الملكية قبل المتابعة.</string>
+    <string name="summary_identity">الهوية</string>
+    <string name="review_status_title">حالة قراءة الوثائق والمطابقة</string>
+    <string name="review_status_intro">لا توجد نتائج OCR بعد. المطابقة تحتاج قراءة حقيقية آمنة لكلتا الوثيقتين.</string>
+    <string name="identity_ocr_status">قراءة بطاقة الهوية</string>
+    <string name="identity_ocr_pending">لم تُقرأ الهوية بعد</string>
+    <string name="match_status">مطابقة الشهادة مع الهوية</string>
+    <string name="match_pending">لم تبدأ: لا توجد بيانات مستخرجة من كلا الملفين.</string>
+    <string name="official_status">التحقق الرسمي من الملكية</string>
 </resources>

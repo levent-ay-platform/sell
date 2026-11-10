@@ -96,4 +96,23 @@
     <string name="notice">Information</string>
     <string name="cancel">Annuler</string>
     <string name="close">Fermer</string>
+    <string name="step_identity">Identity</string>
+    <string name="identity_section">Identity card</string>
+    <string name="identity_hint">Add both sides for a future secure data comparison.</string>
+    <string name="identity_two_sides">Both sides, or one PDF containing both sides.</string>
+    <string name="pick_identity">Select identity photos / PDF</string>
+    <string name="identity_none">No identity document selected</string>
+    <string name="identity_selected">Identity document selected</string>
+    <string name="identity_required">Select two images or a PDF with both sides.</string>
+    <string name="identity_file_rejected">Invalid identity file or file too large.</string>
+    <string name="identity_privacy">Your identity stays on your phone. No upload or local draft copy.</string>
+    <string name="certificate_required">Select your property certificate before continuing.</string>
+    <string name="summary_identity">Identity</string>
+    <string name="review_status_title">Document review status</string>
+    <string name="review_status_intro">No OCR output exists yet. Matching requires a secure live service.</string>
+    <string name="identity_ocr_status">Identity document OCR</string>
+    <string name="identity_ocr_pending">Identity not yet read</string>
+    <string name="match_status">Certificate and identity match</string>
+    <string name="match_pending">Not started: no independently extracted data from both files.</string>
+    <string name="official_status">Official ownership verification</string>
 </resources>

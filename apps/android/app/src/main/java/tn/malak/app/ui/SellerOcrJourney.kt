@@ -63,6 +63,8 @@ fun SellerOcrJourney(onBack:()->Unit) {
     var saveMessage by remember {mutableIntStateOf(0)}
     var pickMessage by remember {mutableIntStateOf(0)}
     val files=remember {mutableStateListOf<ChosenDocument>()}
+    val identityFiles=remember {mutableStateListOf<ChosenDocument>()}
+    var identityMessage by remember {mutableIntStateOf(0)}
 
     val pickDocuments=rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
         var refused=false
@@ -89,10 +91,43 @@ fun SellerOcrJourney(onBack:()->Unit) {
         }
         pickMessage=if(refused)R.string.file_rejected else if(files.isNotEmpty())R.string.file_selected else 0
     }
+
+    // Keep CIN scans separate from certificate scans. Only temporary content URI references,
+    // never document bytes, names, or immutable identity fields in SharedPreferences.
+    val pickIdentity=rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+        var refused=false
+        for(uri in uris) {
+            if(identityFiles.any{it.uri==uri})continue
+            if(identityFiles.size>=2){refused=true;continue}
+            try {
+                var label=""
+                var length=0L
+                context.contentResolver.query(uri,arrayOf(OpenableColumns.DISPLAY_NAME,OpenableColumns.SIZE),null,null,null)?.use{cursor ->
+                    if(cursor.moveToFirst()){
+                        val ni=cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                        val si=cursor.getColumnIndex(OpenableColumns.SIZE)
+                        if(ni>=0&&!cursor.isNull(ni))label=cursor.getString(ni).take(90)
+                        if(si>=0&&!cursor.isNull(si))length=cursor.getLong(si)
+                    }
+                }
+                val mime=context.contentResolver.getType(uri)
+                if(length !in 20..MAX_DOC_BYTES || mime !in setOf("application/pdf","image/png","image/jpeg")){
+                    refused=true;continue
+                }
+                identityFiles.add(ChosenDocument(uri,label.ifBlank{uri.lastPathSegment?.take(50) ?: "Document"},length))
+            }catch(_:Exception){refused=true}
+        }
+        identityMessage=if(refused)R.string.identity_file_rejected
+            else if(identityFiles.isNotEmpty())R.string.file_selected else 0
+    }
+    // The selected PDF must be checked for both faces by the future private OCR service.
+    val identitySelected=identityFiles.any{context.contentResolver.getType(it.uri)=="application/pdf"} ||
+        identityFiles.size>=2
     val validArea=(area.toDoubleOrNull() ?: 0.0).let {it>0 && it<=1_000_000_000 && it.isFinite()}
     val validPrice=(price.toLongOrNull() ?: 0L)>0L
     val validFirst=name.trim().isNotEmpty()&&region.trim().isNotEmpty()&&validArea&&validPrice
-    val stepLabels=listOf(R.string.step_property,R.string.step_capacity,R.string.step_certificate,R.string.step_summary)
+    val stepLabels=listOf(R.string.step_property,R.string.step_capacity,R.string.step_certificate,
+        R.string.step_identity,R.string.step_summary)
 
     Column(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth().padding(horizontal=16.dp,vertical=12.dp),
@@ -111,7 +146,7 @@ fun SellerOcrJourney(onBack:()->Unit) {
                     verticalArrangement=Arrangement.spacedBy(7.dp)) {
                     Box(Modifier.fillMaxWidth().height(5.dp).background(
                         if(i<=step)Brand.Crimson else Color(0xFFE5E8EE),CircleShape))
-                    Text(s(label),fontSize=11.sp,fontWeight=if(i==step)FontWeight.Bold else FontWeight.Normal,
+                    Text(s(label),fontSize=10.sp,fontWeight=if(i==step)FontWeight.Bold else FontWeight.Normal,
                         color=if(i==step)Brand.Crimson else Brand.Muted, maxLines=1)
                 }
             }
@@ -196,6 +231,41 @@ fun SellerOcrJourney(onBack:()->Unit) {
                     }
                     PlainNotice(Icons.Outlined.Lock,s(R.string.file_privacy))
                 }
+                3 -> {
+                    SectionHeading(s(R.string.identity_section),s(R.string.identity_hint))
+                    Surface(color=Color.White,shape=RoundedCornerShape(21.dp),border=BorderStroke(1.dp,CardBorder)) {
+                        Column(Modifier.fillMaxWidth().padding(20.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
+                            Icon(Icons.Outlined.Badge,null,Modifier.size(34.dp),tint=Brand.Crimson)
+                            Text(s(R.string.identity_two_sides),color=Brand.Ink,fontSize=13.sp)
+                            OutlinedButton(onClick={pickIdentity.launch(arrayOf("application/pdf","image/jpeg","image/png"))},
+                                modifier=Modifier.fillMaxWidth().heightIn(min=52.dp),shape=RoundedCornerShape(16.dp)){
+                                Icon(Icons.Outlined.FolderOpen,null,Modifier.size(21.dp))
+                                Spacer(Modifier.width(8.dp))
+                                Text(s(R.string.pick_identity))
+                            }
+                        }
+                    }
+                    if(identityMessage!=0)Text(s(identityMessage),color=Brand.Muted,fontSize=12.sp)
+                    if(identityFiles.isEmpty())PlainNotice(Icons.Outlined.Badge,s(R.string.identity_none))
+                    else {
+                        Text(s(R.string.identity_selected),color=Brand.Ink,fontSize=15.sp,fontWeight=FontWeight.SemiBold)
+                        identityFiles.toList().forEach {doc ->
+                            Surface(shape=RoundedCornerShape(16.dp),color=Color.White,border=BorderStroke(1.dp,CardBorder)) {
+                                Row(Modifier.fillMaxWidth().heightIn(min=56.dp).padding(horizontal=11.dp),
+                                    verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(10.dp)) {
+                                    Icon(Icons.Outlined.InsertDriveFile,null,tint=Brand.Crimson,modifier=Modifier.size(23.dp))
+                                    Text(doc.displayName,Modifier.weight(1f),color=Brand.Ink,maxLines=1,
+                                        overflow=TextOverflow.Ellipsis,fontSize=13.sp)
+                                    IconButton(onClick={identityFiles.remove(doc)},modifier=Modifier.size(48.dp)) {
+                                        Icon(Icons.Outlined.DeleteOutline,s(R.string.remove),tint=Brand.Muted)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    if(!identitySelected)PlainNotice(Icons.Outlined.Info,s(R.string.identity_required))
+                    PlainNotice(Icons.Outlined.Lock,s(R.string.identity_privacy))
+                }
                 else -> {
                     SectionHeading(s(R.string.summary_title),s(R.string.summary_hint))
                     SummaryFact(s(R.string.summary_property),name.ifBlank {s(R.string.no_value)})
@@ -204,16 +274,12 @@ fun SellerOcrJourney(onBack:()->Unit) {
                     SummaryFact(s(R.string.summary_price),"$price TND")
                     SummaryFact(s(R.string.summary_capacity),s(Capacities.firstOrNull {it.code==capacity}?.label ?: R.string.capacity_owner))
                     SummaryFact(s(R.string.summary_docs),if(files.isNotEmpty())"${files.size}" else s(R.string.not_uploaded))
-                    Surface(color=Color(0xFFEAF6F5),shape=RoundedCornerShape(17.dp)) {
-                        Column(Modifier.fillMaxWidth().padding(16.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
-                            Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(9.dp)) {
-                                Icon(Icons.Outlined.Description,null,tint=Color(0xFF14706E))
-                                Text(s(R.string.ocr_status),color=Brand.Ink,fontWeight=FontWeight.Bold)
-                            }
-                            Text(s(R.string.ocr_pending),color=Brand.Muted,fontSize=13.sp)
-                            Text(s(R.string.legal_pending),color=Brand.Muted,fontSize=12.sp)
-                        }
-                    }
+                    SummaryFact(s(R.string.summary_identity),if(identitySelected)s(R.string.identity_selected) else s(R.string.not_uploaded))
+                    SectionHeading(s(R.string.review_status_title),s(R.string.review_status_intro))
+                    VerificationStage(Icons.Outlined.Description,s(R.string.ocr_status),s(R.string.ocr_pending))
+                    VerificationStage(Icons.Outlined.Badge,s(R.string.identity_ocr_status),s(R.string.identity_ocr_pending))
+                    VerificationStage(Icons.Outlined.CompareArrows,s(R.string.match_status),s(R.string.match_pending))
+                    VerificationStage(Icons.Outlined.Gavel,s(R.string.official_status),s(R.string.legal_pending))
                     PlainNotice(Icons.Outlined.Info,s(R.string.never_verified))
                     OutlinedButton(onClick={step=0;showInvalid=false},modifier=Modifier.fillMaxWidth().heightIn(min=51.dp)) {
                         Icon(Icons.Outlined.Edit,null,Modifier.size(20.dp))
@@ -223,12 +289,14 @@ fun SellerOcrJourney(onBack:()->Unit) {
                 }
             }
             if(saveMessage!=0) PlainNotice(Icons.Outlined.CheckCircle,s(saveMessage))
-            if(step==3) Text(s(R.string.draft_local),color=Brand.Muted,fontSize=12.sp)
+            if(step==4) Text(s(R.string.draft_local),color=Brand.Muted,fontSize=12.sp)
         }
         Column(Modifier.fillMaxWidth().padding(horizontal=17.dp,vertical=12.dp),verticalArrangement=Arrangement.spacedBy(7.dp)) {
             Button(onClick={
                 if(step==0&&!validFirst)showInvalid=true
-                else if(step<3){step++;showInvalid=false;saveMessage=0}
+                else if(step==2&&files.isEmpty()){pickMessage=R.string.certificate_required}
+                else if(step==3&&!identitySelected){identityMessage=R.string.identity_required}
+                else if(step<4){step++;showInvalid=false;saveMessage=0}
                 else {
                     try {
                         prefs.edit().putString("title",name.trim()).putString("region",region.trim())
@@ -238,9 +306,9 @@ fun SellerOcrJourney(onBack:()->Unit) {
                 }
             }, modifier=Modifier.fillMaxWidth().heightIn(min=54.dp),
                 shape=RoundedCornerShape(17.dp),colors=ButtonDefaults.buttonColors(containerColor=Brand.Crimson)) {
-                Text(s(if(step==3)R.string.save_draft else R.string.continue_label),fontWeight=FontWeight.SemiBold,fontSize=15.sp)
+                Text(s(if(step==4)R.string.save_draft else R.string.continue_label),fontWeight=FontWeight.SemiBold,fontSize=15.sp)
                 Spacer(Modifier.width(9.dp))
-                Icon(if(step==3)Icons.Outlined.Save else Icons.AutoMirrored.Filled.ArrowForward,
+                Icon(if(step==4)Icons.Outlined.Save else Icons.AutoMirrored.Filled.ArrowForward,
                     null,Modifier.size(21.dp))
             }
         }
@@ -274,6 +342,23 @@ private fun SummaryFact(label:String,value:String) {
             Text(label,Modifier.weight(1f),color=Brand.Muted,fontSize=12.sp)
             Text(value,Modifier.weight(1.3f),color=Brand.Ink,fontSize=13.sp,
                 fontWeight=FontWeight.SemiBold,textAlign=TextAlign.End)
+        }
+    }
+}
+
+@Composable
+private fun VerificationStage(icon:androidx.compose.ui.graphics.vector.ImageVector,heading:String,detail:String){
+    Surface(shape=RoundedCornerShape(16.dp),color=Color.White,border=BorderStroke(1.dp,CardBorder)){
+        Row(Modifier.fillMaxWidth().padding(14.dp),verticalAlignment=Alignment.CenterVertically,
+            horizontalArrangement=Arrangement.spacedBy(11.dp)){
+            Surface(shape=CircleShape,color=Color(0xFFF3F4F6)){
+                Icon(icon,null,Modifier.padding(10.dp).size(23.dp),tint=Brand.Muted)
+            }
+            Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(4.dp)){
+                Text(heading,fontSize=14.sp,fontWeight=FontWeight.SemiBold,color=Brand.Ink)
+                Text(detail,fontSize=12.sp,color=Brand.Muted,lineHeight=19.sp)
+            }
+            Icon(Icons.Outlined.Schedule,null,tint=Brand.Muted,modifier=Modifier.size(19.dp))
         }
     }
 }
