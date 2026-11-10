@@ -63,6 +63,7 @@ jobs:
           psql -h 127.0.0.1 -U sell_ci -d sell_ci -v ON_ERROR_STOP=1 -f db/tests/0001_publication_gate.sql
           psql -h 127.0.0.1 -U sell_ci -d sell_ci -v ON_ERROR_STOP=1 -f db/migrations/0002_individual_evidence.sql
           psql -h 127.0.0.1 -U sell_ci -d sell_ci -v ON_ERROR_STOP=1 -f db/tests/0002_individual_evidence.test.sql
+          psql -h 127.0.0.1 -U sell_ci -d sell_ci -v ON_ERROR_STOP=1 -f db/migrations/0003_private_evidence_http.sql
       - name: Test actual Node evidence repository against disposable PostgreSQL
         env:
           PGPASSWORD: sell_ci_disposable
@@ -79,3 +80,10 @@ jobs:
         run: |
           set -euo pipefail
           node --experimental-strip-types --test services/verification/ci/reviewer-live.integration.ts
+      - name: Verify real atomic private-request throttling and denial audit (disposable PostgreSQL)
+        env:
+          PGPASSWORD: sell_ci_disposable
+          MALAK_DISPOSABLE_PG: 'yes'
+        run: |
+          set -euo pipefail
+          node --experimental-strip-types --test services/verification/ci/private-http-live.integration.ts

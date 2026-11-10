@@ -1,0 +1,174 @@
+/**
+ * Unmounted HTTP adapter for Malak's private evidence service.
+ * It MUST only be bound behind separately reviewed TLS, identity/session,
+ * firewall and per-instance/routed rate limit controls; never mount on a public
+ * port until deployment authorization. No document, token or personal data logging.
+ * It deliberately exposes no download, OCR text or document-content route.
+ */
+import type {IncomingMessage, ServerResponse} from 'node:http';
+import {randomUUID} from 'node:crypto';
+import type {Authenticator, EvidenceKind, EvidenceUploadRequest, EvidenceUploadResult} from './evidence-upload.ts';
+import type {ReviewRequest, ReviewInspectionResult} from './evidence-review.ts';
+
+const MAX_BYTES=12*1024*1024;
+const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const KEY=/^[A-Za-z0-9_-]{16,100}$/;
+const TOKEN=/^Bearer ([A-Za-z0-9._~+\/-]{20,4096})$/;
+const KINDS=new Set<EvidenceKind>(['IDENTITY','OWNERSHIP_CERTIFICATE','TITLE_EXTRACT','OTHER_LEGAL_PROOF']);
+const UPLOAD=/^\/internal\/v1\/evidence\/([0-9a-f-]{36})\/upload$/i;
+const REVIEW=/^\/internal\/v1\/review\/([0-9a-f-]{36})\/([0-9a-f-]{36})\/inspect$/i;
+const MIME=new Set(['application/pdf','image/png','image/jpeg','image/tiff']);
+export type PrivateRoute='UPLOAD'|'INSPECT';
+export type DenialReason='BAD_ROUTE'|'BAD_REQUEST'|'UNAUTHENTICATED'|'FORBIDDEN'|'RATE_LIMITED'|'FILE_REJECTED'|'REPLAY_CONFLICT'|'UPSTREAM_UNAVAILABLE';
+export interface DenialAuditRecord {route:PrivateRoute|'UNKNOWN';reason:DenialReason;actorUserId:string|null;requestId:string;}
+export interface PrivateEvidenceHttpDeps {
+  auth:Authenticator;
+  /** Must be atomic and distributed over every API instance. NO in-memory fallback in production. */
+  limits:{consume(scope:{route:PrivateRoute|'UNKNOWN';remote:string}):Promise<boolean>};
+  /** Append-only, parameterized DB audit. Failure blocks request. No raw URL/token/IP in audit. */
+  audit:{recordDenied(event:DenialAuditRecord):Promise<void>};
+  upload:(request:EvidenceUploadRequest)=>Promise<EvidenceUploadResult>;
+  /** Private, server-only inspection. Must return status only; no plaintext. */
+  inspect:(request:ReviewRequest)=>Promise<ReviewInspectionResult>;
+}
+
+function json(res:ServerResponse,status:number,body:{ok:boolean;[key:string]:unknown}):void {
+  if(res.writableEnded||res.destroyed)return;
+  const encoded=Buffer.from(JSON.stringify(body),'utf8');
+  res.writeHead(status,{
+    'Content-Type':'application/json; charset=utf-8',
+    'Content-Length':String(encoded.length),
+    'Cache-Control':'no-store',
+    'Pragma':'no-cache',
+    'X-Content-Type-Options':'nosniff',
+    'Content-Security-Policy':"default-src 'none'",
+    'Referrer-Policy':'no-referrer',
+    'Connection':'close',
+  });
+  res.end(encoded);
+}
+function single(req:IncomingMessage,name:string):string|null {
+  const matches:string[]=[];
+  for(let i=0;i<req.rawHeaders.length;i+=2) {
+    if(req.rawHeaders[i]?.toLowerCase()===name)matches.push(req.rawHeaders[i+1]!);
+  }
+  return matches.length===1?matches[0]!:null;
+}
+function noDuplicate(req:IncomingMessage,name:string):boolean {
+  let count=0;
+  for(let i=0;i<req.rawHeaders.length;i+=2)if(req.rawHeaders[i]?.toLowerCase()===name)count++;
+  return count<=1;
+}
+async function limitedBody(req:IncomingMessage,size:number):Promise<Uint8Array> {
+  const chunks:Buffer[]=[];
+  let length=0;
+  for await (const piece of req) {
+    if(!(piece instanceof Buffer))throw Error('BAD_BODY');
+    length+=piece.length;
+    if(length>MAX_BYTES||length>size)throw Error('BODY_TOO_LARGE');
+    chunks.push(piece);
+  }
+  if(length!==size)throw Error('BODY_LENGTH_MISMATCH');
+  return Buffer.concat(chunks,length);
+}
+function reasonFromUpload(result:EvidenceUploadResult):{code:number;reason:DenialReason} {
+  if(result.ok)return {code:200,reason:'BAD_REQUEST'};
+  switch(result.code) {
+    case 'AUTH_REQUIRED':return {code:401,reason:'UNAUTHENTICATED'};
+    case 'CASE_UNAVAILABLE':case 'CONSENT_REQUIRED':return {code:403,reason:'FORBIDDEN'};
+    case 'REPLAY_CONFLICT':return {code:409,reason:'REPLAY_CONFLICT'};
+    case 'FILE_REJECTED':case 'UPLOAD_KEY_INVALID':return {code:422,reason:'FILE_REJECTED'};
+    case 'FILE_UNSAFE':return {code:422,reason:'FILE_REJECTED'};
+    default:return {code:503,reason:'UPSTREAM_UNAVAILABLE'};
+  }
+}
+function reasonFromReview(result:ReviewInspectionResult):{code:number;reason:DenialReason} {
+  if(result.ok)return {code:200,reason:'BAD_REQUEST'};
+  if(result.code==='AUTH_REQUIRED')return {code:401,reason:'UNAUTHENTICATED'};
+  if(result.code==='ACCESS_DENIED')return {code:403,reason:'FORBIDDEN'};
+  return {code:503,reason:'UPSTREAM_UNAVAILABLE'};
+}
+/**
+ * Receives authenticated bearer-only POST requests. Does not listen on a port.
+ * Does not permit cookies, query strings, or client-asserted roles, owners or IDs.
+ */
+export function createPrivateEvidenceHttpHandler(deps:PrivateEvidenceHttpDeps) {
+  return async (req:IncomingMessage,res:ServerResponse):Promise<void>=>{
+    const requestId=randomUUID();let actor:string|null=null;
+    const url=req.url??'';
+    const upload=UPLOAD.exec(url),review=REVIEW.exec(url);
+    const route:PrivateRoute|'UNKNOWN'=upload?'UPLOAD':review?'INSPECT':'UNKNOWN';
+    // Do not log/return raw URL, bearer token, file name or document identifiers.
+    const reject=async(status:number,reason:DenialReason)=>{
+      try {await deps.audit.recordDenied({route,reason,actorUserId:actor,requestId});}
+      catch {json(res,503,{ok:false,code:'SERVICE_UNAVAILABLE'});return;}
+      json(res,status,{ok:false,code:status===429?'RATE_LIMITED':status===401?'AUTH_REQUIRED':
+        status===503?'SERVICE_UNAVAILABLE':status===413?'TOO_LARGE':'REQUEST_DENIED'});
+    };
+    try {
+      const remote=req.socket.remoteAddress??'UNKNOWN';
+      // Rate limit before authentication and even for malformed routes to bound brute force.
+      let allow:boolean;
+      try {allow=await deps.limits.consume({route,remote});}
+      catch {await reject(503,'UPSTREAM_UNAVAILABLE');return;}
+      if(allow!==true){await reject(429,'RATE_LIMITED');return;}
+      if(req.method!=='POST'||route==='UNKNOWN') {await reject(404,'BAD_ROUTE');return;}
+      if(req.headers.cookie||req.headers.origin||req.headers['x-forwarded-proto']||
+         !noDuplicate(req,'authorization')||!noDuplicate(req,'content-type')||
+         !noDuplicate(req,'content-length')||!noDuplicate(req,'x-idempotency-key')||
+         !noDuplicate(req,'x-evidence-kind')||!noDuplicate(req,'x-page-number')||
+         !noDuplicate(req,'x-claimed-mime')||
+         req.headers['transfer-encoding']){await reject(400,'BAD_REQUEST');return;}
+      const authorization=single(req,'authorization')??'';
+      const match=TOKEN.exec(authorization);
+      if(!match){await reject(401,'UNAUTHENTICATED');return;}
+      const bearerToken=match[1]!;
+      try {
+        const id=await deps.auth.authenticate(bearerToken);
+        if(!id?.userId||!UUID.test(id.userId)){await reject(401,'UNAUTHENTICATED');return;}
+        actor=id.userId;
+      }catch {await reject(503,'UPSTREAM_UNAVAILABLE');return;}
+      if(route==='INSPECT') {
+        if(![null,'0'].includes(single(req,'content-length')) || single(req,'content-type')!==null ||
+           req.headers['x-evidence-kind']||req.headers['x-page-number']||req.headers['x-idempotency-key']||req.headers['x-claimed-mime']) {
+          await reject(400,'BAD_REQUEST');return;
+        }
+        const caseId=review![1]!,evidenceId=review![2]!;
+        if(!UUID.test(caseId)||!UUID.test(evidenceId)){await reject(400,'BAD_REQUEST');return;}
+        let result:ReviewInspectionResult;
+        try {result=await deps.inspect({bearerToken,caseId,evidenceId});}
+        catch {await reject(503,'UPSTREAM_UNAVAILABLE');return;}
+        if(!result.ok){const response=reasonFromReview(result);await reject(response.code,response.reason);return;}
+        // Never surface OCR, decrypted bytes, names, shares, title IDs or storage links.
+        json(res,200,{ok:true,inspected:true,mayPublish:false,ownershipVerified:false});
+        return;
+      }
+      const caseId=upload![1]!;
+      const headerSize=single(req,'content-length'),kind=single(req,'x-evidence-kind');
+      const idempotencyKey=single(req,'x-idempotency-key');
+      const mime=single(req,'x-claimed-mime');
+      const page=single(req,'x-page-number');
+      const len=(headerSize&&/^[0-9]{1,8}$/.test(headerSize))?Number(headerSize):NaN;
+      if(!UUID.test(caseId)||!idempotencyKey||!KEY.test(idempotencyKey)||
+         !kind||!KINDS.has(kind as EvidenceKind)||
+         !mime||!MIME.has(mime)||page===null||
+         !/^(?:[1-8]|null)$/.test(page)||
+         !Number.isSafeInteger(len)||len<20){await reject(400,'BAD_REQUEST');return;}
+      if(len>MAX_BYTES){await reject(413,'FILE_REJECTED');return;}
+      if(single(req,'content-type')!=='application/octet-stream'){await reject(415,'BAD_REQUEST');return;}
+      let bytes:Uint8Array;
+      try {bytes=await limitedBody(req,len);}
+      catch {await reject(400,'FILE_REJECTED');return;}
+      let result:EvidenceUploadResult;
+      try {result=await deps.upload({bearerToken,caseId,idempotencyKey,bytes,
+        evidenceKind:kind as EvidenceKind,pageNumber:page==='null'?null:Number(page),claimedMime:mime});}
+      catch {await reject(503,'UPSTREAM_UNAVAILABLE');return;}
+      finally {bytes.fill(0);}
+      if(!result.ok){const response=reasonFromUpload(result);await reject(response.code,response.reason);return;}
+      json(res,200,{ok:true,evidenceId:result.evidenceId,uploaded:result.uploaded,
+        mayPublish:false,ownershipVerified:false});
+    } catch {
+      await reject(503,'UPSTREAM_UNAVAILABLE');
+    }
+  };
+}
