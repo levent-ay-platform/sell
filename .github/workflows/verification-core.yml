@@ -26,3 +26,23 @@ jobs:
         run: node --experimental-strip-types --test services/verification/test/*.test.ts
       - name: Benchmark deterministic post-OCR extraction (not image OCR)
         run: node --experimental-strip-types services/verification/scripts/bench-smart-fields.mjs
+
+  synthetic-document-ocr:
+    name: Isolated synthetic PDF and Arabic/French OCR benchmark
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Install OCR runtime (synthetic fixtures only)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends tesseract-ocr tesseract-ocr-ara tesseract-ocr-fra poppler-utils fonts-dejavu-core python3-venv
+      - name: Install pinned Pillow into throwaway virtual environment
+        run: |
+          python3 -m venv /tmp/malak-ocr-venv
+          /tmp/malak-ocr-venv/bin/python -m pip install --quiet --only-binary=:all: Pillow==11.3.0
+      - name: Test image-only scans and native-PDF fast path (NO real documents)
+        run: |
+          /tmp/malak-ocr-venv/bin/python -m unittest discover -v -s services/verification/test -p test_ingest.py

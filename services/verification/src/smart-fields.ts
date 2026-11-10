@@ -75,6 +75,12 @@ function extractLineFields(text:string): Array<[FieldName,string|number]> {
   const pages=text.match(/(?:صفحه|صفحة)\s*[:：-]?\s*(\d{1,3})\s*(?:من|\/)\s*(\d{1,3})(?!\d)/u) ||
     text.match(/page\s*(\d{1,3})\s*(?:sur|of|\/)\s*(\d{1,3})(?!\d)/iu);
   if(pages){out.push(['documentPage',Number(pages[1])]);out.push(['documentPageCount',Number(pages[2])]);}
+  else {
+    // Tesseract bidi line order may produce "2 صفحة 1 من" from "صفحة 1 من 2".
+    // Treat as untrusted OCR candidate; still subject to page consistency checks.
+    const rtlBidi=text.match(/^(\d{1,3})\s+(?:صفحة|صفحه)\s+(\d{1,3})\s+من(?:\s|$)/u);
+    if(rtlBidi){out.push(['documentPage',Number(rtlBidi[2])]);out.push(['documentPageCount',Number(rtlBidi[1])]);}
+  }
   add('lastRegistryUpdatedAt',/(?:تاريخ\s*(?:اخر\s*)?تحيين|derni[eè]re\s*mise\s*[aà]\s*jour)\s*[:：-]?\s*(\d{4}[\/-]\d{1,2}[\/-]\d{1,2})/iu,'date');
   add('certificateIssuedAt',/(?:تاريخ\s*(?:اصدار|استخراج)\s*الشهاده|date\s*de\s*d[eé]livrance)\s*[:：-]?\s*(\d{4}[\/-]\d{1,2}[\/-]\d{1,2})/iu,'date');
   return out;

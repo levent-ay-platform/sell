@@ -42,3 +42,12 @@ Synthetic text parser benchmark (not OCR inference):
 ```sh
 node --experimental-strip-types services/verification/scripts/bench-smart-fields.mjs
 ```
+
+## F1 real image/PDF OCR worker — synthetic spike, no private upload API
+
+- `ocr/ingest.py`: detects PDF/PNG/JPEG/TIFF by file magic, rejects oversized/invalid inputs and symlinks, limits PDF page count to 8, uses native PDF text extraction **per page** where meaningful, and falls back to Poppler rasterization + Tesseract `ara+fra` for scans. Runs a second *selective* OCR segmentation pass if the first pass misses certificate headings. Caps processing time, page dimensions and text size. Returns OCR lines with source/page/confidence in JSON that **can contain personal text**; only run under an approved isolated private service, never in public logs or on the public GitHub repo with customer files.
+- `src/reader.ts`: validates the untrusted OCR worker payload and feeds its lines into `extractCpfSmartFields` without permitting ownership approval or publication. Keep official property verification and reviewer decisions separate.
+- `test/test_ingest.py`: builds **fictional** Arabic/French image-only scans and native-text PDF at runtime. Checks the text fast path, scanned-image OCR path, partial PDF rasterization, corrupt/oversized inputs, no symlink following, and fail-closed behavior. No real documents in tests.
+- GitHub Actions executes the image-OCR smoke tests on hosted Ubuntu with temporary Tesseract language packs and pinned Pillow. Benchmark output records **synthetic** per-document time. This is not a production throughput or real-Tunisian-document accuracy claim.
+
+Critical remaining integration: full field-coordinate bounding boxes, Arabic-RTL reading order calibration, quality rejection for blur/glare/rotations, PaddleOCR Arabic comparator on consented, privately-held redacted documents, native Android consented upload and protected service/storage. Performance and exact-field precision/recall acceptance must be measured on such a corpus before release. Any OCR uncertainty must block silent approval.
