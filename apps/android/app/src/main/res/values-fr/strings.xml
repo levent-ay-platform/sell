@@ -100,6 +100,9 @@
     <string name="identity_section">Carte d’identité</string>
     <string name="identity_hint">Ajoutez les deux faces pour la comparaison sécurisée à venir.</string>
     <string name="identity_two_sides">Recto et verso, ou un PDF avec les deux faces.</string>
+    <string name="pick_identity_pdf">Choisir un PDF (recto et verso)</string>
+    <string name="pick_identity_front">Choisir le recto de la carte</string>
+    <string name="pick_identity_back">Choisir le verso de la carte</string>
     <string name="pick_identity">Choisir la pièce d’identité</string>
     <string name="identity_none">Aucune pièce d’identité choisie</string>
     <string name="identity_selected">Pièce d’identité sélectionnée</string>

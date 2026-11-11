@@ -44,6 +44,28 @@ private val ValidLandPrice=Regex("""^[1-9][0-9]{0,11}$""")
 private val CardBorder = Color(0xFFE7E8EC)
 private data class ChosenDocument(val uri:Uri, val displayName:String, val length:Long,
     val mime:String, val uploadKey:String=UUID.randomUUID().toString())
+
+private fun readIdentityChoice(context:Context,uri:Uri,isPdf:Boolean):ChosenDocument? {
+    val mime=context.contentResolver.getType(uri)?:return null
+    if(if(isPdf)mime!="application/pdf" else mime !in setOf("image/jpeg","image/png"))
+        return null
+    var label=""
+    var length=0L
+    context.contentResolver.query(
+        uri,arrayOf(OpenableColumns.DISPLAY_NAME,OpenableColumns.SIZE),null,null,null
+    )?.use { cursor->
+        if(cursor.moveToFirst()) {
+            val nameIndex=cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+            val sizeIndex=cursor.getColumnIndex(OpenableColumns.SIZE)
+            if(nameIndex>=0&&!cursor.isNull(nameIndex))
+                label=cursor.getString(nameIndex).take(90)
+            if(sizeIndex>=0&&!cursor.isNull(sizeIndex))
+                length=cursor.getLong(sizeIndex)
+        }
+    }
+    if(length !in 20..MAX_DOC_BYTES)return null
+    return ChosenDocument(uri,label.ifBlank {uri.lastPathSegment?.take(50)?:"Document"},length,mime)
+}
 private data class CapacityOption(val code:String, val label:Int)
 private val Capacities = listOf(
     CapacityOption("owner",R.string.capacity_owner),
@@ -151,37 +173,44 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
         pickMessage=if(refused)R.string.file_rejected else if(files.isNotEmpty())R.string.file_selected else 0
     }
 
-    // Keep CIN scans separate from certificate scans. Only temporary content URI references,
-    // never document bytes, names, or immutable identity fields in SharedPreferences.
-    val pickIdentity=rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
-        var refused=false
-        for(uri in uris) {
-            if(identityFiles.any{it.uri==uri})continue
-            if(identityFiles.size>=2){refused=true;continue}
-            try {
-                var label=""
-                var length=0L
-                context.contentResolver.query(uri,arrayOf(OpenableColumns.DISPLAY_NAME,OpenableColumns.SIZE),null,null,null)?.use{cursor ->
-                    if(cursor.moveToFirst()){
-                        val ni=cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-                        val si=cursor.getColumnIndex(OpenableColumns.SIZE)
-                        if(ni>=0&&!cursor.isNull(ni))label=cursor.getString(ni).take(90)
-                        if(si>=0&&!cursor.isNull(si))length=cursor.getLong(si)
-                    }
-                }
-                val mime=context.contentResolver.getType(uri)
-                if(length !in 20..MAX_DOC_BYTES || mime==null || mime !in setOf("application/pdf","image/png","image/jpeg")){
-                    refused=true;continue
-                }
-                if((mime=="application/pdf" && identityFiles.isNotEmpty()) ||
-                   (mime!="application/pdf" && identityFiles.any{it.mime=="application/pdf"})) {
-                    refused=true;continue
-                }
-                identityFiles.add(ChosenDocument(uri,label.ifBlank{uri.lastPathSegment?.take(50) ?: "Document"},length,mime))
-            }catch(_:Exception){refused=true}
+    // Explicitly bind recto to page 1 and verso to page 2. An unordered
+    // multi-file picker could silently swap sides and mislabel OCR evidence.
+    // None of these URI references are persisted to device preferences.
+    val pickIdentityPdf=rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri->
+        if(uri!=null) {
+            val chosen=runCatching{readIdentityChoice(context,uri,true)}.getOrNull()
+            if(chosen==null)identityMessage=R.string.identity_file_rejected
+            else {
+                identityFiles.clear()
+                identityFiles.add(chosen)
+                identityMessage=R.string.file_selected
+            }
         }
-        identityMessage=if(refused)R.string.identity_file_rejected
-            else if(identityFiles.isNotEmpty())R.string.file_selected else 0
+    }
+    val pickIdentityFront=rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri->
+        if(uri!=null) {
+            val chosen=runCatching{readIdentityChoice(context,uri,false)}.getOrNull()
+            if(chosen==null)identityMessage=R.string.identity_file_rejected
+            else {
+                // New front invalidates any old back; user must pair them again.
+                identityFiles.clear()
+                identityFiles.add(chosen)
+                identityMessage=R.string.file_selected
+            }
+        }
+    }
+    val pickIdentityBack=rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri->
+        if(uri!=null) {
+            val chosen=runCatching{readIdentityChoice(context,uri,false)}.getOrNull()
+            if(chosen==null||identityFiles.size!=1||
+               identityFiles[0].mime=="application/pdf"||
+               chosen.uri==identityFiles[0].uri)
+                identityMessage=R.string.identity_file_rejected
+            else {
+                identityFiles.add(chosen)
+                identityMessage=R.string.file_selected
+            }
+        }
     }
     // The selected PDF must be checked for both faces by the future private OCR service.
     val identitySelected=(identityFiles.size==1&&identityFiles[0].mime=="application/pdf") ||
@@ -316,11 +345,27 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                         Column(Modifier.fillMaxWidth().padding(20.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
                             Icon(Icons.Outlined.Badge,null,Modifier.size(34.dp),tint=Brand.Crimson)
                             Text(s(R.string.identity_two_sides),color=Brand.Ink,fontSize=13.sp)
-                            OutlinedButton(onClick={pickIdentity.launch(arrayOf("application/pdf","image/jpeg","image/png"))},
-                                modifier=Modifier.fillMaxWidth().heightIn(min=52.dp),shape=RoundedCornerShape(16.dp)){
-                                Icon(Icons.Outlined.FolderOpen,null,Modifier.size(21.dp))
+                            OutlinedButton(onClick={pickIdentityPdf.launch(arrayOf("application/pdf"))},
+                                modifier=Modifier.fillMaxWidth().heightIn(min=52.dp),shape=RoundedCornerShape(16.dp)) {
+                                Icon(Icons.Outlined.Description,null,Modifier.size(21.dp))
                                 Spacer(Modifier.width(8.dp))
-                                Text(s(R.string.pick_identity))
+                                Text(s(R.string.pick_identity_pdf))
+                            }
+                            OutlinedButton(onClick={pickIdentityFront.launch(arrayOf("image/jpeg","image/png"))},
+                                modifier=Modifier.fillMaxWidth().heightIn(min=52.dp),shape=RoundedCornerShape(16.dp)) {
+                                Icon(Icons.Outlined.Badge,null,Modifier.size(21.dp))
+                                Spacer(Modifier.width(8.dp))
+                                Text(s(R.string.pick_identity_front))
+                            }
+                            OutlinedButton(
+                                onClick={pickIdentityBack.launch(arrayOf("image/jpeg","image/png"))},
+                                enabled=identityFiles.size==1&&identityFiles[0].mime!="application/pdf",
+                                modifier=Modifier.fillMaxWidth().heightIn(min=52.dp),
+                                shape=RoundedCornerShape(16.dp)
+                            ) {
+                                Icon(Icons.Outlined.Badge,null,Modifier.size(21.dp))
+                                Spacer(Modifier.width(8.dp))
+                                Text(s(R.string.pick_identity_back))
                             }
                         }
                     }
@@ -328,14 +373,19 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                     if(identityFiles.isEmpty())PlainNotice(Icons.Outlined.Badge,s(R.string.identity_none))
                     else {
                         Text(s(R.string.identity_selected),color=Brand.Ink,fontSize=15.sp,fontWeight=FontWeight.SemiBold)
-                        identityFiles.toList().forEach {doc ->
+                        identityFiles.toList().forEachIndexed { index,doc ->
                             Surface(shape=RoundedCornerShape(16.dp),color=Color.White,border=BorderStroke(1.dp,CardBorder)) {
                                 Row(Modifier.fillMaxWidth().heightIn(min=56.dp).padding(horizontal=11.dp),
                                     verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(10.dp)) {
                                     Icon(Icons.Outlined.InsertDriveFile,null,tint=Brand.Crimson,modifier=Modifier.size(23.dp))
-                                    Text(doc.displayName,Modifier.weight(1f),color=Brand.Ink,maxLines=1,
-                                        overflow=TextOverflow.Ellipsis,fontSize=13.sp)
-                                    IconButton(onClick={identityFiles.remove(doc)},modifier=Modifier.size(48.dp)) {
+                                    val faceLabel=when {
+                                        doc.mime=="application/pdf"->R.string.pick_identity_pdf
+                                        index==0->R.string.pick_identity_front
+                                        else->R.string.pick_identity_back
+                                    }
+                                    Text("${s(faceLabel)}: ${doc.displayName}",Modifier.weight(1f),
+                                        color=Brand.Ink,maxLines=1,overflow=TextOverflow.Ellipsis,fontSize=13.sp)
+                                    IconButton(onClick={identityFiles.clear();identityMessage=0},modifier=Modifier.size(48.dp)) {
                                         Icon(Icons.Outlined.DeleteOutline,s(R.string.remove),tint=Brand.Muted)
                                     }
                                 }

@@ -100,6 +100,9 @@
     <string name="identity_section">بطاقة الهوية</string>
     <string name="identity_hint">أضف وجهي الهوية لمقارنة البيانات مع شهادة الملكية بعد تفعيل القراءة الآمنة.</string>
     <string name="identity_two_sides">الوجه الأمامي والخلفي، أو PDF يضم الوجهين.</string>
+    <string name="pick_identity_pdf">اختيار ملف PDF للوجهين</string>
+    <string name="pick_identity_front">اختيار الوجه الأمامي للبطاقة</string>
+    <string name="pick_identity_back">اختيار الوجه الخلفي للبطاقة</string>
     <string name="pick_identity">اختيار صور الهوية أو PDF</string>
     <string name="identity_none">لم تُضف الهوية بعد</string>
     <string name="identity_selected">ملفات الهوية المختارة</string>
