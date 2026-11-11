@@ -89,7 +89,9 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
     var area by rememberSaveable {mutableStateOf(prefs.getString("area","") ?: "")}
     var price by rememberSaveable {mutableStateOf(prefs.getString("price","") ?: "")}
     var capacity by rememberSaveable {mutableStateOf(prefs.getString("capacity","owner") ?: "owner")}
-    val caseRequestKey=remember(name,region,area,price,capacity){UUID.randomUUID().toString()}
+    // Generate the case request key only when the user submits. Persist the
+    // payload fingerprint + opaque key BEFORE the first network request, so an
+    // unknown server response followed by app restart cannot create a new case.
     var showInvalid by rememberSaveable {mutableStateOf(false)}
     var saveMessage by remember {mutableIntStateOf(0)}
     var pickMessage by remember {mutableIntStateOf(0)}
@@ -390,6 +392,33 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                             }
                             val idDocs=identityFiles.toList().map{
                                 PairEvidenceFile(it.uri,it.length,it.mime,it.uploadKey)
+                            }
+                            val caseRequestKey=try {
+                                val parts=listOf(name.trim(),region.trim(),normalizedArea,price,capacity)
+                                val serialized=parts.joinToString(separator="") { "${it.length}:${it}" }
+                                val fingerprint=java.security.MessageDigest.getInstance("SHA-256")
+                                    .digest(serialized.toByteArray(Charsets.UTF_8))
+                                    .joinToString("") { "%02x".format(it.toInt() and 0xff) }
+                                val saved=prefs.getString("pending_case_key",null)
+                                val key=if(prefs.getString("pending_case_fingerprint",null)==fingerprint &&
+                                    saved!=null && Regex("^[0-9a-fA-F-]{36}$").matches(saved)) saved
+                                    else UUID.randomUUID().toString()
+                                // A failed disk write means we must not risk a duplicate
+                                // case on retry after process death.
+                                val stored=prefs.edit()
+                                    .putString("pending_case_fingerprint",fingerprint)
+                                    .putString("pending_case_key",key)
+                                    .putString("title",name.trim())
+                                    .putString("region",region.trim())
+                                    .putString("area",area)
+                                    .putString("price",price)
+                                    .putString("capacity",capacity)
+                                    .commit()
+                                if(!stored)throw IllegalStateException("CASE_INTENT_NOT_DURABLE")
+                                key
+                            }catch (_:Exception) {
+                                pairError=R.string.pair_request_failed
+                                return@Button
                             }
                             pairError=0
                             pairReport=null
