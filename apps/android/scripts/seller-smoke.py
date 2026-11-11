@@ -70,10 +70,10 @@ def enter_pilot(phone="29500000",check_bad_code=True):
     visible=texts(dump_nodes())
     print("After pilot login:",visible[:40])
     if not any(x in visible for x in [
-            "Compte confirmé — version pilote",
-            "الحساب مؤكّد — نسخة تجريبية",
-            "Pilot account confirmed"]):
-        raise AssertionError("Correct pilot code did not confirm actual Malak pilot session")
+            "Accès pilote — numéro non vérifié",
+            "دخول تجريبي — الرقم غير متحقق منه",
+            "Pilot access — phone unverified"]):
+        raise AssertionError("Correct pilot code did not enter clearly labelled unverified pilot mode")
     # The Add Land button is below the fold on small emulators; validate the
     # home route here, then let click_text scroll to the actual button.
     if "MALAK / ملاك" not in visible:

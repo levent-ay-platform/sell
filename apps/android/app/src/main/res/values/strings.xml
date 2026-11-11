@@ -156,7 +156,7 @@
     <string name="pilot_otp_invalid">Incorrect test code. Try again.</string>
     <string name="pilot_enter">Enter pilot</string>
     <string name="pilot_change_phone">Change phone number</string>
-    <string name="pilot_no_real_identity">Your Malak pilot access is confirmed. Browse properties, add land and save drafts.</string>
-    <string name="pilot_session_badge">Pilot account confirmed</string>
+    <string name="pilot_no_real_identity">Your Malak access is a test mode. No SMS was sent, no phone ownership was confirmed, and no identity or land title was verified. You can browse and save local drafts.</string>
+    <string name="pilot_session_badge">Pilot access — phone unverified</string>
     <string name="pilot_sign_out">Sign out</string>
 </resources>

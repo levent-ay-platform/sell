@@ -156,7 +156,7 @@
     <string name="pilot_otp_invalid">الرمز التجريبي غير صحيح. حاول مجدداً.</string>
     <string name="pilot_enter">الدخول إلى النسخة التجريبية</string>
     <string name="pilot_change_phone">تغيير رقم الهاتف</string>
-    <string name="pilot_no_real_identity">تم تأكيد الدخول إلى نسخة ملاك التجريبية. يمكنك تصفّح العقارات وإضافة أرضك وحفظ المسودة.</string>
-    <string name="pilot_session_badge">الحساب مؤكّد — نسخة تجريبية</string>
+    <string name="pilot_no_real_identity">هذه نسخة تجريبية فقط. لم تُرسل رسالة SMS ولم نتحقق من ملكية رقم الهاتف أو الهوية أو ملكية الأرض. يمكنك التصفح وحفظ مسودة محلية.</string>
+    <string name="pilot_session_badge">دخول تجريبي — الرقم غير متحقق منه</string>
     <string name="pilot_sign_out">تسجيل الخروج</string>
 </resources>

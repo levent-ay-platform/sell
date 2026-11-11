@@ -156,7 +156,7 @@
     <string name="pilot_otp_invalid">Code de test incorrect. Réessayez.</string>
     <string name="pilot_enter">Entrer en mode pilote</string>
     <string name="pilot_change_phone">Modifier le numéro</string>
-    <string name="pilot_no_real_identity">Votre accès à la version pilote de Malak est confirmé. Vous pouvez parcourir les biens, ajouter un terrain et enregistrer un brouillon.</string>
-    <string name="pilot_session_badge">Compte confirmé — version pilote</string>
+    <string name="pilot_no_real_identity">Vous utilisez un mode de test : aucun SMS n’a été envoyé, le numéro de téléphone et l’identité ne sont pas vérifiés, et aucune propriété n’est confirmée. Vous pouvez parcourir les annonces et enregistrer un brouillon local.</string>
+    <string name="pilot_session_badge">Accès pilote — numéro non vérifié</string>
     <string name="pilot_sign_out">Déconnexion</string>
 </resources>
