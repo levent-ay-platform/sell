@@ -59,3 +59,8 @@ jobs:
           MALAK_SYNTHETIC_OCR: 'yes'
           MALAK_OCR_PYTHON: /tmp/malak-ocr-venv/bin/python
         run: node --experimental-strip-types --test services/verification/ci/private-identity-title-live.integration.ts
+      - name: Real sealed certificate/CIN pair over localhost HTTP (synthetic ONLY)
+        env:
+          MALAK_SYNTHETIC_OCR: 'yes'
+          MALAK_OCR_PYTHON: /tmp/malak-ocr-venv/bin/python
+        run: node --experimental-strip-types --test services/verification/ci/private-pair-http-live.integration.ts
