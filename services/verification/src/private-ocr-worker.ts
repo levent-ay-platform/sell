@@ -9,6 +9,7 @@ import {constants} from 'node:fs';
 import {lstat,mkdtemp,open,realpath,rm} from 'node:fs/promises';
 import {isAbsolute,join,resolve} from 'node:path';
 import type {PrivateOcrWorker, SellerOcrRequest} from './seller-ocr-service.ts';
+import {exclusivePrivateOcrWorker} from './ocr-capacity-gate.ts';
 
 const MAX_BYTES=12*1024*1024, MAX_JSON=400*1024;
 export interface PrivateOcrWorkerConfig {
@@ -62,7 +63,7 @@ export function createPrivatePythonOcrWorker(config:PrivateOcrWorkerConfig):Priv
       !isAbsolute(config.pythonPath??'/usr/bin/python3') || (config.pythonPath??'').includes('\0')||
       !Number.isInteger(config.timeoutMs??45000)|| (config.timeoutMs??45000)<5000 ||
       (config.timeoutMs??45000)>60000)throw Error('OCR_WORKER_CONFIG_INVALID');
-  return {async extract(bytes:Uint8Array,mime:SellerOcrRequest['mime']):Promise<unknown> {
+  return exclusivePrivateOcrWorker({async extract(bytes:Uint8Array,mime:SellerOcrRequest['mime']):Promise<unknown> {
     if(!(bytes instanceof Uint8Array)||bytes.length<20||bytes.length>MAX_BYTES||
       !['application/pdf','image/png','image/jpeg','image/tiff'].includes(mime))
       throw Error('OCR_INVALID_INPUT');
@@ -75,5 +76,5 @@ export function createPrivatePythonOcrWorker(config:PrivateOcrWorkerConfig):Priv
       return await executeOcr(config.pythonPath??'/usr/bin/python3',config.scriptPath,
         path,folder,config.timeoutMs??45000);
     } finally {await rm(folder,{recursive:true,force:true});}
-  }};
+  }});
 }

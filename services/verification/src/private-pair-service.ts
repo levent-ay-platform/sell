@@ -157,10 +157,15 @@ export async function analyzeAuthorizedPrivateEvidencePair(
   if(idRows.length===2 &&
      idRows.some((row,i)=>row.mime==='application/pdf'||row.pageNumber!==i+1))
     throw new PrivatePairAccessDenied();
+  // A pair can contain several pages/files. Bound the entire synchronous
+  // extraction sequence, not only each Python subprocess (max 60 seconds).
+  // The current OCR job is always awaited/killed by its worker before exiting.
+  const startedAt=Date.now(),maximumElapsedMs=180000;
+  const checkBudget=()=>{if(Date.now()-startedAt>=maximumElapsedMs)throw new PrivatePairUnavailable();};
   const certDocs:IngestedDocument[]=[];
-  for(const row of certRows)certDocs.push(await readOne(row,deps));
+  for(const row of certRows){checkBudget();certDocs.push(await readOne(row,deps));checkBudget();}
   const identityDocs:IngestedDocument[]=[];
-  for(const row of idRows)identityDocs.push(await readOne(row,deps));
+  for(const row of idRows){checkBudget();identityDocs.push(await readOne(row,deps));checkBudget();}
   const cert=joinPages(certDocs),identity=joinPages(identityDocs);
   const cinComparison=compareCertificateIdentityCinText(cert,identity);
   const coverage:PrivatePairReport['identitySides']=idRows.length===2?
