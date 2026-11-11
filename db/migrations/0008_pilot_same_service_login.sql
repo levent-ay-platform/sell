@@ -8,7 +8,7 @@ CREATE TABLE sell.pilot_accounts (
  user_id uuid PRIMARY KEY REFERENCES sell.users(id),
  device_phone_digest char(64) NOT NULL UNIQUE
    CHECK (device_phone_digest ~ '^[0-9a-f]{64}$'),
- phone_e164 text NOT NULL CHECK (phone_e164 ~ '^\\+216[2-9][0-9]{7}$'),
+ phone_e164 text NOT NULL CHECK (phone_e164 ~ '^\+216[2-9][0-9]{7}$'),
  created_at timestamptz NOT NULL DEFAULT now()
 );
 CREATE TRIGGER pilot_accounts_immutable BEFORE UPDATE OR DELETE
