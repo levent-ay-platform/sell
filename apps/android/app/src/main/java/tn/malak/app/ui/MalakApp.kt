@@ -52,7 +52,7 @@ internal fun s(id: Int): String = LocalMalakStringsContext.current.getString(id)
 
 /** Arabic RTL, French LTR; an explicit user language selection drives every Compose layout. */
 @Composable
-fun MalakApp() {
+internal fun MalakApp(ownerEvidenceSession: OwnerEvidenceSession? = null) {
     val baseContext = LocalContext.current
     val preferences = remember(baseContext) {
         baseContext.getSharedPreferences("malak_public_preferences", Context.MODE_PRIVATE)
@@ -71,7 +71,9 @@ fun MalakApp() {
     var query by rememberSaveable { mutableStateOf("") }
     val tabs = setOf("home", "map", "favorites", "more")
 
-    CompositionLocalProvider(LocalMalakStringsContext provides localizedContext, LocalLayoutDirection provides direction) {
+    CompositionLocalProvider(LocalMalakStringsContext provides localizedContext,
+        LocalLayoutDirection provides direction,
+        LocalOwnerEvidenceSession provides ownerEvidenceSession) {
         MaterialTheme(colorScheme = lightColorScheme(
             primary = Brand.Crimson,
             background = Brand.Pearl,
