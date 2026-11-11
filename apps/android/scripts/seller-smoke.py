@@ -39,26 +39,27 @@ def click_text(labels):
             adb("shell","input","swipe","190","650","190","260","330")
             time.sleep(1)
     raise AssertionError(f"Seller entry not found in actual Android UI: {labels}; visible={texts(nodes)[:40]}")
-def enter_pilot():
-    """Use only invented test number and the debug-only fixed pilot code."""
+def enter_pilot(phone="29500000",check_bad_code=True):
+    """Use only invented test numbers and the debug-only fixed pilot code."""
     print("Pilot visible labels:",texts(dump_nodes())[:40])
     click_text(["Numéro tunisien","رقم الهاتف التونسي","Tunisian phone number"])
-    adb("shell","input","text","29500000")
+    adb("shell","input","text",phone)
     adb("shell","input","keyevent","KEYCODE_BACK")
     click_text(["Continuer","متابعة","Continue"])
     time.sleep(1)
     click_text(["Code de test à 4 chiffres","رمز الدخول التجريبي (4 أرقام)","4-digit test code"])
-    # Negative check: an incorrect PIN must not open the seller workspace.
-    adb("shell","input","text","0000")
-    adb("shell","input","keyevent","KEYCODE_BACK")
-    click_text(["Entrer en mode pilote","الدخول إلى النسخة التجريبية","Enter pilot"])
-    time.sleep(1)
-    rejected=texts(dump_nodes())
-    if not any(x in rejected for x in [
-            "Code de test incorrect. Réessayez.",
-            "الرمز التجريبي غير صحيح. حاول مجدداً.",
-            "Incorrect test code. Try again."]):
-        raise AssertionError("Incorrect pilot code did not show a rejection")
+    if check_bad_code:
+        # Negative check: an incorrect PIN must not open the seller workspace.
+        adb("shell","input","text","0000")
+        adb("shell","input","keyevent","KEYCODE_BACK")
+        click_text(["Entrer en mode pilote","الدخول إلى النسخة التجريبية","Enter pilot"])
+        time.sleep(1)
+        rejected=texts(dump_nodes())
+        if not any(x in rejected for x in [
+                "Code de test incorrect. Réessayez.",
+                "الرمز التجريبي غير صحيح. حاول مجدداً.",
+                "Incorrect test code. Try again."]):
+            raise AssertionError("Incorrect pilot code did not show a rejection")
     click_text(["Code de test à 4 chiffres","رمز الدخول التجريبي (4 أرقام)","4-digit test code"])
     for _ in range(4):
         adb("shell","input","keyevent","KEYCODE_DEL")
@@ -93,6 +94,20 @@ def assert_alive_and_seller():
     if not pid or not any(x in visible for x in ("Description du terrain","تفاصيل الأرض","Déposer un terrain","إضافة أرض")):
         crash_log()
         raise AssertionError("Clicking Add Land closed the app or did not render seller form")
+def relaunch():
+    adb("shell","am","force-stop",PACKAGE)
+    print(adb("shell","am","start","-W","-n",PACKAGE+"/.MainActivity").stdout)
+    time.sleep(2)
+
+def assert_draft_value(expected,should_exist=True):
+    visible=texts(dump_nodes())
+    found=any(expected in line for line in visible)
+    if found != should_exist:
+        raise AssertionError(
+            f"Pilot draft isolation or process restart failed: expected_present={should_exist}; "
+            f"visible={visible[:50]}"
+        )
+
 def main():
     print(adb("shell","am","start","-W","-n",PACKAGE+"/.MainActivity").stdout)
     time.sleep(3)
@@ -103,7 +118,27 @@ def main():
     with open(TMP/"seller-open.png","wb") as out:
         shot=subprocess.run(["adb","exec-out","screencap","-p"],stdout=out,stderr=subprocess.PIPE,timeout=30)
         if shot.returncode: print("Screen capture unavailable (nonblocking)")
-    print("PASS: fixed pilot 1234 entered Malak and Add Land remained alive on disposable emulator")
+    # Synthetic draft must be durable on a process restart, but must never
+    # appear under a different pilot phone on the same emulator installation.
+    click_text(["Titre de l’annonce","عنوان الإعلان"])
+    adb("shell","input","text","TerrainAlpha")
+    adb("shell","input","keyevent","KEYCODE_BACK")
+    click_text(["Région / délégation","المنطقة / المعتمدية"])
+    adb("shell","input","text","Kelibia")
+    adb("shell","input","keyevent","KEYCODE_BACK")
+    click_text(["Enregistrer le brouillon","حفظ المسودة"])
+    time.sleep(1)
+    relaunch()
+    enter_pilot(phone="55500001",check_bad_code=False)
+    click_text(["Déposer un terrain","أضف أرضك"])
+    time.sleep(1)
+    assert_draft_value("TerrainAlpha",should_exist=False)
+    relaunch()
+    enter_pilot(phone="29500000",check_bad_code=False)
+    click_text(["Déposer un terrain","أضف أرضك"])
+    time.sleep(1)
+    assert_draft_value("TerrainAlpha",should_exist=True)
+    print("PASS: 1234 pilot seller navigation, durable draft and cross-account isolation on disposable emulator")
 if __name__=="__main__":
     try:main()
     except Exception:
