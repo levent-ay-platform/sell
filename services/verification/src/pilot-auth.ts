@@ -17,9 +17,11 @@ export class PilotLoginUnavailable extends Error { constructor(){super('PILOT_LO
 export class SameServicePilotAuth implements Authenticator {
   private readonly secret:Buffer;
   private readonly enabled:boolean;
-  constructor(private readonly pool:SqlPool,params:{enabled:boolean;deviceHmacSecret:Uint8Array}){
+  private readonly pool:SqlPool;
+  constructor(pool:SqlPool,params:{enabled:boolean;deviceHmacSecret:Uint8Array}){
     if(!(params.deviceHmacSecret instanceof Uint8Array)||params.deviceHmacSecret.length<32||
       params.deviceHmacSecret.length>128)throw new PilotLoginUnavailable();
+    this.pool=pool;
     this.secret=Buffer.from(params.deviceHmacSecret);
     this.enabled=params.enabled===true;
   }
