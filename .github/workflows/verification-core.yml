@@ -31,23 +31,25 @@ jobs:
     name: Isolated synthetic PDF and Arabic/French OCR benchmark
     runs-on: ubuntu-24.04
     timeout-minutes: 15
-    # Proven, versioned OCRmyPDF distribution supplies Tesseract, Poppler and
-    # Python/Pillow without the hosted Ubuntu APT DNS dependency.
+    # Upstream full textract OCR image provides Tesseract, Poppler and Pillow.
+    # Avoid Ubuntu APT on the hosted runner during the mirror DNS outage.
     # No real documents, user tokens, or release credentials.
     container:
-      image: jbarlow83/ocrmypdf-ubuntu:v17.11.0
+      image: ghcr.io/deanmalmgren/textract:latest-full
       options: --user 0
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
-      - name: Fetch only pinned official Arabic Tesseract model (synthetic CI)
+      - name: Fetch pinned official Arabic and French Tesseract models (synthetic CI)
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           repository: tesseract-ocr/tessdata_fast
           ref: 87416418657359cb625c412a48b6e1d6d41c29bd
           path: ci-tessdata
-          sparse-checkout: ara.traineddata
+          sparse-checkout: |
+            ara.traineddata
+            fra.traineddata
           sparse-checkout-cone-mode: false
           persist-credentials: false
       - name: Verify preinstalled OCR runtime and language models
@@ -64,9 +66,10 @@ jobs:
           model="$(find /usr/share/tesseract-ocr /usr/local/share -name eng.traineddata -print -quit 2>/dev/null)"
           test -f "$model"
           tessdir="$(dirname "$model")"
-          test -f "$tessdir/fra.traineddata"
+          test -f ci-tessdata/fra.traineddata
           test -f ci-tessdata/ara.traineddata
           test "$(wc -c < ci-tessdata/ara.traineddata)" -gt 100000
+          cp ci-tessdata/fra.traineddata "$tessdir/fra.traineddata"
           cp ci-tessdata/ara.traineddata "$tessdir/ara.traineddata"
           chmod 0644 "$tessdir/ara.traineddata"
           tesseract --list-langs | grep -E '^(ara|eng|fra)$'
