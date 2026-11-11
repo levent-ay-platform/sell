@@ -15,6 +15,8 @@ import type {PrivateOcrPresentation} from './ocr-presentation.ts';
 import {PrivateOcrAccessDenied} from './seller-ocr-service.ts';
 import {PrivatePairAccessDenied} from './private-pair-service.ts';
 import type {PrivatePairReport,PrivatePairRequest} from './private-pair-service.ts';
+import {OwnerCaseDenied} from './private-owner-case.ts';
+import type {OwnerCaseResult} from './private-owner-case.ts';
 
 const MAX_BYTES=12*1024*1024;
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -25,8 +27,10 @@ const UPLOAD=/^\/internal\/v1\/evidence\/([0-9a-f-]{36})\/upload$/i;
 const OCR_UPLOAD=/^\/internal\/v1\/evidence\/([0-9a-f-]{36})\/upload-ocr$/i;
 const PAIR=/^\/internal\/v1\/evidence\/([0-9a-f-]{36})\/compare-pair$/i;
 const REVIEW=/^\/internal\/v1\/review\/([0-9a-f-]{36})\/([0-9a-f-]{36})\/inspect$/i;
+const OWNER_CASE=/^\/internal\/v1\/owner\/cases$/;
+const CONSENT_REVOKE=/^\/internal\/v1\/owner\/cases\/([0-9a-f-]{36})\/revoke-consent$/i;
 const MIME=new Set(['application/pdf','image/png','image/jpeg','image/tiff']);
-export type PrivateRoute='UPLOAD'|'INSPECT'|'OCR'|'PAIR';
+export type PrivateRoute='UPLOAD'|'INSPECT'|'OCR'|'PAIR'|'OWNER_CASE'|'CONSENT_REVOKE';
 export type DenialReason='BAD_ROUTE'|'BAD_REQUEST'|'UNAUTHENTICATED'|'FORBIDDEN'|'RATE_LIMITED'|'FILE_REJECTED'|'REPLAY_CONFLICT'|'UPSTREAM_UNAVAILABLE';
 export interface DenialAuditRecord {route:PrivateRoute|'UNKNOWN';reason:DenialReason;actorUserId:string|null;requestId:string;}
 export interface PrivateEvidenceHttpDeps {
@@ -42,6 +46,9 @@ export interface PrivateEvidenceHttpDeps {
   analyzeOwnerUpload?:(request:{bearerToken:string;caseId:string;evidenceId:string;bytes:Uint8Array;mime:'application/pdf'|'image/png'|'image/jpeg'|'image/tiff';declaredArea:string|null})=>Promise<PrivateOcrPresentation>;
   /** Explicitly injected, server-only owner comparison of already sealed evidence IDs. */
   analyzeOwnerPair?:(request:PrivatePairRequest)=>Promise<PrivatePairReport>;
+  /** Trusted auth, transaction and consent service. No public listener is mounted. */
+  provisionOwnerCase?:(bearerToken:string,input:unknown)=>Promise<OwnerCaseResult>;
+  withdrawOwnerConsent?:(bearerToken:string,caseId:string)=>Promise<{revoked:true;ownershipVerified:false;identityVerified:false;mayPublish:false}>;
 }
 
 function json(res:ServerResponse,status:number,body:{ok:boolean;[key:string]:unknown}):void {
@@ -120,7 +127,9 @@ export function createPrivateEvidenceHttpHandler(deps:PrivateEvidenceHttpDeps) {
     const requestId=randomUUID();let actor:string|null=null;
     const url=req.url??'';
     const upload=UPLOAD.exec(url),ocrUpload=OCR_UPLOAD.exec(url),review=REVIEW.exec(url),pair=PAIR.exec(url);
-    const route:PrivateRoute|'UNKNOWN'=pair?'PAIR':ocrUpload?'OCR':upload?'UPLOAD':review?'INSPECT':'UNKNOWN';
+    const caseCreate=OWNER_CASE.test(url),consentRevoke=CONSENT_REVOKE.exec(url);
+    const route:PrivateRoute|'UNKNOWN'=caseCreate?'OWNER_CASE':consentRevoke?'CONSENT_REVOKE':
+      pair?'PAIR':ocrUpload?'OCR':upload?'UPLOAD':review?'INSPECT':'UNKNOWN';
     // Do not log/return raw URL, bearer token, file name or document identifiers.
     const reject=async(status:number,reason:DenialReason)=>{
       try {await deps.audit.recordDenied({route,reason,actorUserId:actor,requestId});}
@@ -153,6 +162,72 @@ export function createPrivateEvidenceHttpHandler(deps:PrivateEvidenceHttpDeps) {
         if(!id?.userId||!UUID.test(id.userId)){await reject(401,'UNAUTHENTICATED');return;}
         actor=id.userId;
       }catch {await reject(503,'UPSTREAM_UNAVAILABLE');return;}
+      if(route==='OWNER_CASE'||route==='CONSENT_REVOKE') {
+        // Bearer must resolve to a real server identity; the injected
+        // service independently rechecks that identity before COMMIT.
+        if(req.headers['x-evidence-kind']||req.headers['x-page-number']||
+           req.headers['x-idempotency-key']||req.headers['x-claimed-mime']||
+           req.headers['x-declared-area-m2']){
+          await reject(400,'BAD_REQUEST');return;
+        }
+        if(route==='CONSENT_REVOKE'){
+          if(!deps.withdrawOwnerConsent){await reject(503,'UPSTREAM_UNAVAILABLE');return;}
+          const caseId=consentRevoke![1]!;
+          if(!UUID.test(caseId)||single(req,'content-type')!==null||
+             ![null,'0'].includes(single(req,'content-length'))){
+            await reject(400,'BAD_REQUEST');return;
+          }
+          let revoked;
+          try {revoked=await deps.withdrawOwnerConsent(bearerToken,caseId);}
+          catch(e){
+            if(e instanceof OwnerCaseDenied){
+              const status=e.code==='AUTH_REQUIRED'?401:e.code==='INVALID_REQUEST'?400:403;
+              await reject(status,status===401?'UNAUTHENTICATED':status===400?'BAD_REQUEST':'FORBIDDEN');
+            }else await reject(503,'UPSTREAM_UNAVAILABLE');
+            return;
+          }
+          if(revoked?.revoked!==true||revoked.ownershipVerified!==false||
+             revoked.identityVerified!==false||revoked.mayPublish!==false){
+            await reject(503,'UPSTREAM_UNAVAILABLE');return;
+          }
+          json(res,200,{ok:true,revoked:true,ownershipVerified:false,
+            identityVerified:false,mayPublish:false});
+          return;
+        }
+        if(!deps.provisionOwnerCase){await reject(503,'UPSTREAM_UNAVAILABLE');return;}
+        const header=single(req,'content-length');
+        const length=header&&/^[0-9]{1,4}$/.test(header)?Number(header):NaN;
+        if(single(req,'content-type')!=='application/json'||
+           !Number.isSafeInteger(length)||length<2||length>1536){
+          await reject(400,'BAD_REQUEST');return;
+        }
+        let value:unknown,raw:Uint8Array;
+        try {raw=await limitedBody(req,length);}
+        catch{await reject(400,'BAD_REQUEST');return;}
+        try {value=JSON.parse(Buffer.from(raw).toString('utf8'));}
+        catch{await reject(400,'BAD_REQUEST');return;}
+        finally{raw.fill(0);}
+        let created:OwnerCaseResult;
+        try {created=await deps.provisionOwnerCase(bearerToken,value);}
+        catch(e) {
+          if(e instanceof OwnerCaseDenied){
+            const status=e.code==='AUTH_REQUIRED'?401:e.code==='INVALID_REQUEST'?400:
+              e.code==='REPLAY_CONFLICT'?409:403;
+            await reject(status,status===401?'UNAUTHENTICATED':status===400?'BAD_REQUEST':
+              status===409?'REPLAY_CONFLICT':'FORBIDDEN');
+          }else await reject(503,'UPSTREAM_UNAVAILABLE');
+          return;
+        }
+        if(!created||!UUID.test(created.caseId)||created.consentRecorded!==true||
+           created.ownershipVerified!==false||created.identityVerified!==false||
+           created.mayPublish!==false||typeof created.reused!=='boolean'){
+          await reject(503,'UPSTREAM_UNAVAILABLE');return;
+        }
+        json(res,created.reused?200:201,{ok:true,caseId:created.caseId,
+          reused:created.reused,consentRecorded:true,ownershipVerified:false,
+          identityVerified:false,mayPublish:false});
+        return;
+      }
       if(route==='INSPECT') {
         if(![null,'0'].includes(single(req,'content-length')) || single(req,'content-type')!==null ||
            req.headers['x-evidence-kind']||req.headers['x-page-number']||req.headers['x-idempotency-key']||req.headers['x-claimed-mime']||req.headers['x-declared-area-m2']) {
