@@ -55,7 +55,7 @@ private val Capacities = listOf(
  * Selected documents are held in memory only and never uploaded by this screen.
  */
 @Composable
-fun SellerOcrJourney(onBack:()->Unit) {
+fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
     val context=LocalContext.current
     val ownerSession=LocalOwnerEvidenceSession.current
     val authenticatedOwnerSession=LocalAuthenticatedOwnerSession.current
@@ -66,7 +66,20 @@ fun SellerOcrJourney(onBack:()->Unit) {
     var provisionedCase by remember {mutableStateOf<OwnerEvidenceSession?>(null)}
     var pairError by remember {mutableIntStateOf(0)}
     var uploadConsent by remember {mutableStateOf(false)}
-    val prefs=remember(context){context.getSharedPreferences("malak_unpublished_land_draft",Context.MODE_PRIVATE)}
+    // Each pilot number gets a separate local draft; never show another user's
+    // unpublished property when switching accounts on the same Android device.
+    val draftFile=remember(draftScope) {
+        if(draftScope==null) "malak_unpublished_land_draft"
+        else {
+            val hash=java.security.MessageDigest.getInstance("SHA-256")
+                .digest(draftScope.toByteArray(Charsets.UTF_8))
+                .joinToString("") { "%02x".format(it.toInt() and 0xff) }
+            "malak_pilot_land_draft_"+hash
+        }
+    }
+    val prefs=remember(context,draftFile){
+        context.getSharedPreferences(draftFile,Context.MODE_PRIVATE)
+    }
     var step by rememberSaveable {mutableIntStateOf(0)}
     var name by rememberSaveable {mutableStateOf(prefs.getString("title","") ?: "")}
     var region by rememberSaveable {mutableStateOf(prefs.getString("region","") ?: "")}
