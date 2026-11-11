@@ -23,7 +23,8 @@ const CAPACITY:Readonly<Record<string,string>>={
 
 export type OwnerCaseFailure='AUTH_REQUIRED'|'INVALID_REQUEST'|'REPLAY_CONFLICT'|'CASE_UNAVAILABLE';
 export class OwnerCaseDenied extends Error {
-  constructor(readonly code:OwnerCaseFailure){super(code);}
+  readonly code:OwnerCaseFailure;
+  constructor(code:OwnerCaseFailure){super(code);this.code=code;}
 }
 export class OwnerCaseUnavailable extends Error {
   constructor(){super('OWNER_CASE_SERVICE_UNAVAILABLE');}
