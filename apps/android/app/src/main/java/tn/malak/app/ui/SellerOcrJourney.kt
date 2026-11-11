@@ -38,6 +38,9 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
 private const val MAX_DOC_BYTES = 12L * 1024L * 1024L
+// Keep form acceptance identical to provisionIndividualOwnerCase's server contract.
+private val ValidLandArea=Regex("""^[1-9][0-9]{0,8}(?:\.[0-9]{1,3})?$""")
+private val ValidLandPrice=Regex("""^[1-9][0-9]{0,11}$""")
 private val CardBorder = Color(0xFFE7E8EC)
 private data class ChosenDocument(val uri:Uri, val displayName:String, val length:Long,
     val mime:String, val uploadKey:String=UUID.randomUUID().toString())
@@ -173,9 +176,11 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
     // The selected PDF must be checked for both faces by the future private OCR service.
     val identitySelected=(identityFiles.size==1&&identityFiles[0].mime=="application/pdf") ||
         (identityFiles.size==2&&identityFiles.none{it.mime=="application/pdf"})
-    val validArea=(area.toDoubleOrNull() ?: 0.0).let {it>0 && it<=1_000_000_000 && it.isFinite()}
-    val validPrice=(price.toLongOrNull() ?: 0L)>0L
-    val validFirst=name.trim().isNotEmpty()&&region.trim().isNotEmpty()&&validArea&&validPrice
+    // Tunisian/French comma is normalized only for numeric validation and API.
+    val normalizedArea=area.replace(',', '.')
+    val validArea=normalizedArea.matches(ValidLandArea)
+    val validPrice=price.matches(ValidLandPrice)
+    val validFirst=name.trim().length in 2..100&&region.trim().length in 2..100&&validArea&&validPrice
     val stepLabels=listOf(R.string.step_property,R.string.step_capacity,R.string.step_certificate,
         R.string.step_identity,R.string.step_summary)
 
@@ -208,12 +213,12 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                     SectionHeading(s(R.string.property_section),s(R.string.property_section_hint))
                     OutlinedTextField(name,{name=it.take(100);saveMessage=0},
                         label={Text(s(R.string.property_name))}, modifier=Modifier.fillMaxWidth(),singleLine=true,
-                        isError=showInvalid&&name.isBlank(),
-                        supportingText=if(showInvalid&&name.isBlank()){{Text(s(R.string.field_required))}}else null)
+                        isError=showInvalid&&name.trim().length<2,
+                        supportingText=if(showInvalid&&name.trim().length<2){{Text(s(R.string.field_required))}}else null)
                     OutlinedTextField(region,{region=it.take(100);saveMessage=0},
                         label={Text(s(R.string.property_region))},modifier=Modifier.fillMaxWidth(),singleLine=true,
-                        isError=showInvalid&&region.isBlank(),
-                        supportingText=if(showInvalid&&region.isBlank()){{Text(s(R.string.field_required))}}else null)
+                        isError=showInvalid&&region.trim().length<2,
+                        supportingText=if(showInvalid&&region.trim().length<2){{Text(s(R.string.field_required))}}else null)
                     OutlinedTextField(area,{area=it.filter { char->char.isDigit()||char=='.'||char==',' }.take(16);saveMessage=0},
                         label={Text(s(R.string.area_m2))},modifier=Modifier.fillMaxWidth(),singleLine=true,
                         textStyle=TextStyle(textDirection=TextDirection.Ltr,textAlign=TextAlign.Start,fontSize=16.sp),
@@ -397,7 +402,7 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                                         provisionOwnerEvidenceCase(
                                             authenticatedOwnerSession?:throw OwnerPairException(401),
                                             NewOwnerCaseDraft(caseRequestKey,name.trim(),region.trim(),
-                                                area,price,capacity)
+                                                normalizedArea,price,capacity)
                                         ).also{provisionedCase=it}
                                     val result=compareOwnerCertificateAndIdentity(
                                         context,activeCase,cert,idDocs){pairProgress=it}
