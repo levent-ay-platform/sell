@@ -132,6 +132,7 @@
     <string name="pair_reverse_missing">Verso non reçu</string>
     <string name="pair_reverse_unconfirmed">Pages reçues, authenticité des deux faces non établie</string>
     <string name="pair_preliminary_only">L’OCR ne vérifie ni l’identité ni la propriété et n’autorise pas une publication. Contrôle indépendant obligatoire.</string>
+    <string name="pair_creating_case">Création de la demande de vérification privée…</string>
     <string name="pair_upload_cert">Envoi sécurisé du certificat…</string>
     <string name="pair_upload_identity">Envoi sécurisé de la pièce d’identité…</string>
     <string name="pair_comparing">Lecture et comparaison des documents…</string>
