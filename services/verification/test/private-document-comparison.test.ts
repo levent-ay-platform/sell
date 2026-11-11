@@ -94,6 +94,28 @@ test('consistent full name plus independent Nom and Prénom can still agree prov
   assert.equal(result.assessment,'PRELIMINARY_TEXT_AGREEMENT');
   assert.equal(result.ownershipVerified,false);
 });
+test('known missing certificate page blocks preliminary identity agreement',()=>{
+  const cert=doc(['Propriétaire: Amira Ben Salem','Page 1 sur 2']);
+  const id=doc(['Nom et prénom: Amira Ben Salem']);
+  const result=compare(cert,id);
+  assert.equal(result.assessment,'INSUFFICIENT_OR_AMBIGUOUS');
+  assert.ok(result.reasons.includes('CERTIFICATE_PAGES_MISSING'));
+  assert.equal(result.mayPublish,false);
+});
+test('inconsistent printed certificate page count blocks agreement',()=>{
+  const cert=doc(['Propriétaire: Amira Ben Salem','Page 3 sur 2']);
+  const id=doc(['Nom et prénom: Amira Ben Salem']);
+  const result=compare(cert,id);
+  assert.equal(result.assessment,'INSUFFICIENT_OR_AMBIGUOUS');
+  assert.ok(result.reasons.includes('CERTIFICATE_PAGE_NUMBER_INCONSISTENT'));
+});
+test('consistent one-page printed title may still have preliminary text agreement',()=>{
+  const cert=doc(['Propriétaire: Amira Ben Salem','Page 1 sur 1']);
+  const id=doc(['Nom et prénom: Amira Ben Salem']);
+  const result=compare(cert,id);
+  assert.equal(result.assessment,'PRELIMINARY_TEXT_AGREEMENT');
+  assert.equal(result.ownershipVerified,false);
+});
 test('blur warning on otherwise high-confidence matching names requires review',()=>{
   const title=doc(['Propriétaire: Amira Ben Salem']);
   const risky={...title,pages:title.pages.map(p=>({...p,qualityWarnings:['POSSIBLE_BLUR']}))};

@@ -64,6 +64,10 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
     val authenticatedOwnerSession=LocalAuthenticatedOwnerSession.current
     val scope=rememberCoroutineScope()
     var requestJob by remember {mutableStateOf<Job?>(null)}
+    // Invalidate old asynchronous work whenever fields, documents, consented
+    // case or owner session change. Cancellation of a blocking HTTPS request
+    // alone cannot guarantee its callback will never arrive after a new run.
+    var requestEpoch by remember {mutableIntStateOf(0)}
     var pairProgress by remember {mutableStateOf<PairProgress?>(null)}
     var pairReport by remember {mutableStateOf<CertificateIdentityReview?>(null)}
     var provisionedCase by remember {mutableStateOf<OwnerEvidenceSession?>(null)}
@@ -102,6 +106,7 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
     // navigation, account or case changes. Private report is memory-only.
     LaunchedEffect(files.toList(),identityFiles.toList(),ownerSession,authenticatedOwnerSession,
         name,region,area,price,capacity) {
+        requestEpoch++
         requestJob?.cancel()
         provisionedCase=null
         pairReport=null
@@ -110,7 +115,10 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
         uploadConsent=false
     }
     DisposableEffect(Unit) {
-        onDispose {requestJob?.cancel()}
+        onDispose {
+            requestEpoch++
+            requestJob?.cancel()
+        }
     }
 
     val pickDocuments=rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
@@ -437,6 +445,7 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                             pairError=0
                             pairReport=null
                             pairProgress=PairProgress.CASE_PROVISION
+                            val thisRequest=++requestEpoch
                             requestJob=scope.launch {
                                 try {
                                     // The trusted sign-in identity first provisions a real,
@@ -446,18 +455,24 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                                             authenticatedOwnerSession?:throw OwnerPairException(401),
                                             NewOwnerCaseDraft(caseRequestKey,name.trim(),region.trim(),
                                                 normalizedArea,price,capacity)
-                                        ).also{provisionedCase=it}
+                                        ).also{if(requestEpoch==thisRequest)provisionedCase=it}
                                     val result=compareOwnerCertificateAndIdentity(
-                                        context,activeCase,cert,idDocs){pairProgress=it}
-                                    if(files.map{it.uploadKey}==cert.map{it.idempotencyKey} &&
+                                        context,activeCase,cert,idDocs){
+                                        if(requestEpoch==thisRequest)pairProgress=it
+                                    }
+                                    if(requestEpoch==thisRequest &&
+                                       files.map{it.uploadKey}==cert.map{it.idempotencyKey} &&
                                        identityFiles.map{it.uploadKey}==idDocs.map{it.idempotencyKey}) {
                                         pairReport=result
                                     }
                                 }catch(cancel:CancellationException) {
                                     throw cancel
                                 }catch(_:Exception){
-                                    pairError=R.string.pair_request_failed
-                                }finally{pairProgress=null}
+                                    if(requestEpoch==thisRequest)
+                                        pairError=R.string.pair_request_failed
+                                }finally{
+                                    if(requestEpoch==thisRequest)pairProgress=null
+                                }
                             }
                         },enabled=uploadConsent&&pairProgress==null&&files.isNotEmpty()&&identitySelected,
                             modifier=Modifier.fillMaxWidth().heightIn(min=54.dp),

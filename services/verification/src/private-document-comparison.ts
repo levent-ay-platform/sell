@@ -7,6 +7,7 @@
  * names rather than claiming a legal identity match from imperfect OCR.
  */
 import {parseOcrWorkerOutput} from './reader.ts';
+import {extractCpfSmartFields} from './smart-fields.ts';
 import type {IngestedDocument} from './reader.ts';
 import type {RecognizedLine} from './smart-fields.ts';
 
@@ -112,6 +113,12 @@ export function comparePrivateCertificateIdentityOcr(certInput:unknown,idInput:u
   let assessment:ComparisonAssessment='INSUFFICIENT_OR_AMBIGUOUS';
   if(!a||!b)issues.push('MISSING_OR_AMBIGUOUS_LABELED_NAME');
   if(sharedTitle)issues.push('MULTIPLE_OWNERS_OR_SHARED_TITLE_NEEDS_REVIEW');
+  // A title that explicitly says page 1/2 but only supplies page 1 can
+  // omit additional owners on page 2. Never agree on a known partial title.
+  const pageReview=extractCpfSmartFields(cert.pages.flatMap(p=>p.lines));
+  if(pageReview.missingPages.length>0)issues.push('CERTIFICATE_PAGES_MISSING');
+  if(pageReview.issues.includes('INCONSISTENT_PAGE_COUNT'))
+    issues.push('CERTIFICATE_PAGE_NUMBER_INCONSISTENT');
   // An OCR worker may return a high-confidence name from an otherwise blurred,
   // low-resolution or badly oriented document; that is not a clean agreement.
   if([...cert.pages,...identity.pages].some(p=>(p.qualityWarnings?.length??0)>0))
