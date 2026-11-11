@@ -25,11 +25,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Install real clamd binary, NO official signature downloads
+      - name: Obtain official prebuilt ClamAV daemon (no APT or signature downloads)
         run: |
           set -euo pipefail
-          sudo apt-get update -qq
-          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends clamav-daemon clamav-base
+          # Versioned official ClamAV image with no external signatures.
+          timeout 180s docker pull clamav/clamav:1.5.4_base-debian
       - name: Start clamd with one local fabricated CI-only signature
         run: |
           set -euo pipefail
@@ -45,10 +45,9 @@ jobs:
           (pathlib.Path(sys.argv[1])/'malak-ci.ndb').write_text(signature)
           PY
           cat > "$root/clamd.conf" <<CONF
-          DatabaseDirectory $root/database
+          DatabaseDirectory /ci/database
           TCPSocket 33177
           TCPAddr 127.0.0.1
-          User $(id -un)
           Foreground yes
           MaxThreads 2
           MaxQueue 4
@@ -58,8 +57,14 @@ jobs:
           MaxScanSize 16M
           StreamMaxLength 16M
           CONF
-          sudo clamd --config-file="$root/clamd.conf" > "$root/clamd-log.txt" 2>&1 &
-          echo "$!" > "$root/clamd.pid"
+          # Real daemon runs without host privileges; test DB/config are read-only.
+          docker run --detach --rm --name malak-clamd-ci --network host \
+            --user "$(id -u):$(id -g)" \
+            --volume "$root/database:/ci/database:ro" \
+            --volume "$root/clamd.conf:/ci/clamd.conf:ro" \
+            --entrypoint clamd \
+            clamav/clamav:1.5.4_base-debian \
+            --config-file=/ci/clamd.conf
           for i in $(seq 1 100); do
             if python3 - <<'PY_READY'
           import socket
@@ -71,9 +76,8 @@ jobs:
               echo 'Clamd loopback TCP ready (isolated test-only)'
               exit 0
             fi
-            if ! kill -0 "$(cat "$root/clamd.pid")" 2>/dev/null; then
-              echo 'Clamd did not start; filtered logs:'
-              tail -30 "$root/clamd-log.txt" | sed -E 's/[A-Za-z0-9+_\/=-]{60,}/[REDACTED]/g'
+            if [ "$(docker inspect -f '{{.State.Running}}' malak-clamd-ci 2>/dev/null || true)" != true ]; then
+              echo 'Official ClamAV CI container exited during startup'
               exit 1
             fi
             sleep 0.2
@@ -89,7 +93,4 @@ jobs:
           node --experimental-strip-types --test services/verification/ci/clamd-live.integration.ts
       - name: Remove isolated test daemon
         if: always()
-        run: |
-          if [ -f "$RUNNER_TEMP/malak-clamd-ci/clamd.pid" ]; then
-            kill "$(cat "$RUNNER_TEMP/malak-clamd-ci/clamd.pid")" 2>/dev/null || true
-          fi
+        run: docker rm -f malak-clamd-ci 2>/dev/null || true
