@@ -99,14 +99,14 @@
     <string name="step_identity">Identité</string>
     <string name="identity_section">Carte d’identité</string>
     <string name="identity_hint">Ajoutez les deux faces pour la comparaison sécurisée à venir.</string>
-    <string name="identity_two_sides">Recto et verso, ou un PDF avec les deux faces.</string>
+    <string name="identity_two_sides">Une photo nette du recto suffit pour comparer les noms. Le verso est facultatif.</string>
     <string name="pick_identity_pdf">Choisir un PDF (recto et verso)</string>
     <string name="pick_identity_front">Choisir le recto de la carte</string>
     <string name="pick_identity_back">Choisir le verso de la carte</string>
     <string name="pick_identity">Choisir la pièce d’identité</string>
     <string name="identity_none">Aucune pièce d’identité choisie</string>
     <string name="identity_selected">Pièce d’identité sélectionnée</string>
-    <string name="identity_required">Choisissez deux images ou un PDF recto verso.</string>
+    <string name="identity_required">Choisissez une photo du recto de la CIN, ou un PDF.</string>
     <string name="identity_file_rejected">Certains fichiers sont non pris en charge ou trop volumineux.</string>
     <string name="identity_privacy">La pièce d’identité reste sur votre téléphone jusqu’à votre accord pour l’envoi sécurisé.</string>
     <string name="certificate_required">Choisissez le certificat de propriété pour continuer.</string>
@@ -167,6 +167,8 @@
     <string name="local_ocr_processing">Lecture des documents sur ce téléphone…</string>
     <string name="local_ocr_failed">Lecture impossible. Réessayez avec des photos JPG/PNG plus nettes ou un PDF lisible.</string>
     <string name="local_ocr_server_later">La vérification serveur n’est pas encore connectée. L’OCR local fonctionne indépendamment.</string>
+    <string name="pair_front_only">Le recto suffit pour la comparaison textuelle provisoire du nom.</string>
+    <string name="identity_back_optional">Ajouter le verso (facultatif)</string>
     <string name="pair_preliminary_only">L’OCR ne vérifie ni l’identité ni la propriété et n’autorise pas une publication. Contrôle indépendant obligatoire.</string>
     <string name="pair_creating_case">Création de la demande de vérification privée…</string>
     <string name="pair_upload_cert">Envoi sécurisé du certificat…</string>

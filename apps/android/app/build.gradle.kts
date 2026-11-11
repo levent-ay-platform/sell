@@ -23,8 +23,8 @@ android {
         applicationId = "tn.malak.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 3
-        versionName = "0.3.0-ocr-qa"
+        versionCode = 4
+        versionName = "0.3.1-ocr-tunisia-qa"
         buildConfigField("String", "MALAK_PRIVATE_SERVICE_URL", "\"$malakPrivateBaseUrl\"")
     }
 
@@ -54,4 +54,5 @@ dependencies {
     implementation("androidx.compose.ui:ui-tooling-preview")
     debugImplementation("androidx.compose.ui:ui-tooling")
     implementation("cz.adaptech.tesseract4android:tesseract4android:4.9.0")
+    testImplementation("junit:junit:4.13.2")
 }

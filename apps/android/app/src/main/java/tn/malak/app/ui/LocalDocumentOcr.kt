@@ -53,7 +53,7 @@ internal object LocalDocumentOcr {
         val root=File(context.noBackupFilesDir,"malak-ocr")
         val folder=File(root,"tessdata")
         if(!folder.exists() && !folder.mkdirs())throw IllegalStateException("OCR_MODEL_STORAGE")
-        for(lang in listOf("ara","fra","eng")) {
+        for(lang in listOf("ara","fra")) {
             val target=File(folder,lang+".traineddata")
             val asset="tessdata/"+lang+".traineddata"
             // Recheck every model on each run, never trust an empty or truncated copy.

@@ -99,14 +99,14 @@
     <string name="step_identity">Identity</string>
     <string name="identity_section">Identity card</string>
     <string name="identity_hint">Add both sides for a future secure data comparison.</string>
-    <string name="identity_two_sides">Both sides, or one PDF containing both sides.</string>
+    <string name="identity_two_sides">One clear photo of the front is enough for the preliminary name check. The back is optional.</string>
     <string name="pick_identity_pdf">Choose one PDF (front and back)</string>
     <string name="pick_identity_front">Choose card front</string>
     <string name="pick_identity_back">Choose card back</string>
     <string name="pick_identity">Select identity photos / PDF</string>
     <string name="identity_none">No identity document selected</string>
     <string name="identity_selected">Identity document selected</string>
-    <string name="identity_required">Select two images or a PDF with both sides.</string>
+    <string name="identity_required">Choose the front-side photo of the identity card, or a PDF.</string>
     <string name="identity_file_rejected">Invalid identity file or file too large.</string>
     <string name="identity_privacy">Your identity stays on your phone until you agree to a secure upload.</string>
     <string name="certificate_required">Select your property certificate before continuing.</string>
@@ -167,6 +167,8 @@
     <string name="local_ocr_processing">Reading selected documents on this phone…</string>
     <string name="local_ocr_failed">Could not read these documents. Choose clearer JPG/PNG images or a readable PDF and try again.</string>
     <string name="local_ocr_server_later">Server verification is not connected yet. The local OCR button above works without it.</string>
+    <string name="pair_front_only">The front of the identity card is sufficient for this preliminary name comparison.</string>
+    <string name="identity_back_optional">Add the back (optional)</string>
     <string name="pair_preliminary_only">OCR does not verify identity or title ownership, and does not permit publication. Independent review required.</string>
     <string name="pair_creating_case">Creating private verification request…</string>
     <string name="pair_upload_cert">Securely uploading certificate…</string>

@@ -99,14 +99,14 @@
     <string name="step_identity">الهوية</string>
     <string name="identity_section">بطاقة الهوية</string>
     <string name="identity_hint">أضف وجهي الهوية لمقارنة البيانات مع شهادة الملكية بعد تفعيل القراءة الآمنة.</string>
-    <string name="identity_two_sides">الوجه الأمامي والخلفي، أو PDF يضم الوجهين.</string>
+    <string name="identity_two_sides">تكفي صورة واضحة للوجه الأمامي من الهوية لمقارنة الاسم الأولية. الوجه الخلفي اختياري.</string>
     <string name="pick_identity_pdf">اختيار ملف PDF للوجهين</string>
     <string name="pick_identity_front">اختيار الوجه الأمامي للبطاقة</string>
     <string name="pick_identity_back">اختيار الوجه الخلفي للبطاقة</string>
     <string name="pick_identity">اختيار صور الهوية أو PDF</string>
     <string name="identity_none">لم تُضف الهوية بعد</string>
     <string name="identity_selected">ملفات الهوية المختارة</string>
-    <string name="identity_required">اختر صورتين للوجهين أو PDF يضمهما قبل المتابعة.</string>
+    <string name="identity_required">اختر صورة الوجه الأمامي من بطاقة التعريف أو ملف PDF.</string>
     <string name="identity_file_rejected">بعض ملفات الهوية غير مدعومة أو حجمها كبير.</string>
     <string name="identity_privacy">الهوية تبقى على هاتفك حتى توافق على إرسالها بأمان؛ لا تُحفظ ضمن المسودة.</string>
     <string name="certificate_required">اختر شهادة الملكية قبل المتابعة.</string>
@@ -167,6 +167,8 @@
     <string name="local_ocr_processing">جارٍ قراءة الوثائق على الهاتف…</string>
     <string name="local_ocr_failed">تعذرت قراءة الملفات. اختر صور JPG أو PNG أو ملف PDF واضحاً ثم أعد المحاولة.</string>
     <string name="local_ocr_server_later">التحقق عبر الخادم غير متصل حالياً، لكن زر OCR المحلي يعمل بدونه.</string>
+    <string name="pair_front_only">الوجه الأمامي كافٍ لمقارنة الاسم الأولية، من دون إثبات صحة الهوية.</string>
+    <string name="identity_back_optional">إضافة الوجه الخلفي (اختياري)</string>
     <string name="pair_preliminary_only">نتيجة OCR لا تثبت صحة الهوية أو ملكية العقار ولا تسمح بالنشر. يلزم تدقيق مستقل.</string>
     <string name="pair_creating_case">جارٍ إنشاء طلب التحقق الخاص…</string>
     <string name="pair_upload_cert">جارٍ إرسال شهادة الملكية بأمان…</string>

@@ -92,10 +92,8 @@ internal object TunisianNameParser {
         val given=first.distinctBy(::canonical)
         if(surnames.size==1&&given.size==1) {
             valid(surnames[0]+" "+given[0],2)?.let(full::add)
-            // French title examples often print given first; keep this second
-            // order only when both components are Latin, never fuzzy match.
-            if(!surnames[0].any{it in '\u0600'..'\u06ff'})
-                valid(given[0]+" "+surnames[0],2)?.let(full::add)
+            // Only use the printed surname + given name order on Tunisian
+            // documents. No fuzzy name reordering or automatic legal match.
         }
         return full.distinctBy(::canonical)
     }

@@ -237,8 +237,14 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
             }
         }
     }
-    // The selected PDF must be checked for both faces by the future private OCR service.
-    val identitySelected=(identityFiles.size==1&&identityFiles[0].mime=="application/pdf") ||
+    // One front-side photograph is sufficient for local *text* comparison.
+    // A complete PDF or a second photograph can still be supplied if needed.
+    val identitySelected=identityFiles.isNotEmpty()&&(
+        (identityFiles.size==1&&identityFiles[0].mime in
+            setOf("application/pdf","image/jpeg","image/png"))||
+        (identityFiles.size==2&&identityFiles.none{it.mime=="application/pdf"}))
+    val identityReadyForRemote=(identityFiles.size==1&&
+        identityFiles[0].mime=="application/pdf")||
         (identityFiles.size==2&&identityFiles.none{it.mime=="application/pdf"})
     // Tunisian/French comma is normalized only for numeric validation and API.
     val normalizedArea=area.replace(',', '.')
@@ -411,7 +417,7 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                             ) {
                                 Icon(Icons.Outlined.Badge,null,Modifier.size(21.dp))
                                 Spacer(Modifier.width(8.dp))
-                                Text(s(R.string.pick_identity_back))
+                                Text(s(R.string.identity_back_optional))
                             }
                         }
                     }
@@ -439,6 +445,8 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                         }
                     }
                     if(!identitySelected)PlainNotice(Icons.Outlined.Info,s(R.string.identity_required))
+                    else if(identityFiles.size==1&&identityFiles[0].mime!="application/pdf")
+                        PlainNotice(Icons.Outlined.CheckCircle,s(R.string.pair_front_only))
                     PlainNotice(Icons.Outlined.Lock,s(R.string.identity_privacy))
                 }
                 else -> {
@@ -527,6 +535,7 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                         SummaryFact(s(R.string.pair_identity_coverage),
                             s(when(result.identityCoverage){
                                 "MISSING_REVERSE"->R.string.pair_reverse_missing
+                                "FRONT_ONLY"->R.string.pair_front_only
                                 else->R.string.pair_reverse_unconfirmed
                             }))
                         if(result.reasons.isNotEmpty()) {
@@ -607,7 +616,7 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                                 fontSize=12.sp,color=Brand.Ink,lineHeight=19.sp)
                         }
                         Button(onClick={
-                            if(pairProgress!=null||!uploadConsent||files.isEmpty()||!identitySelected)
+                            if(pairProgress!=null||!uploadConsent||files.isEmpty()||!identityReadyForRemote)
                                 return@Button
                             val cert=files.toList().map{
                                 PairEvidenceFile(it.uri,it.length,it.mime,it.uploadKey)
@@ -686,7 +695,7 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                                     if(requestEpoch==thisRequest)pairProgress=null
                                 }
                             }
-                        },enabled=uploadConsent&&pairProgress==null&&files.isNotEmpty()&&identitySelected,
+                        },enabled=uploadConsent&&pairProgress==null&&files.isNotEmpty()&&identityReadyForRemote,
                             modifier=Modifier.fillMaxWidth().heightIn(min=54.dp),
                             colors=ButtonDefaults.buttonColors(containerColor=Brand.Crimson),
                             shape=RoundedCornerShape(16.dp)) {

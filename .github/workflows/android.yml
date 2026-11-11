@@ -41,14 +41,13 @@ jobs:
           sparse-checkout: |
             ara.traineddata
             fra.traineddata
-            eng.traineddata
           sparse-checkout-cone-mode: false
           persist-credentials: false
       - name: Prepare offline OCR assets for QA APK
         run: |
           set -euo pipefail
           mkdir -p apps/android/app/src/main/assets/tessdata
-          for lang in ara fra eng; do
+          for lang in ara fra; do
             test -f "ci-tessdata/$lang.traineddata"
             test "$(wc -c < "ci-tessdata/$lang.traineddata")" -gt 100000
             cp "ci-tessdata/$lang.traineddata" apps/android/app/src/main/assets/tessdata/
@@ -71,8 +70,8 @@ jobs:
         with:
           gradle-version: '8.13'
           cache-provider: basic
-      - name: Assemble synthetic QA Android APK
-        run: gradle -p apps/android :app:assembleDebug --no-daemon --stacktrace
+      - name: Test Tunisian OCR name parser and assemble QA APK
+        run: gradle -p apps/android :app:testDebugUnitTest :app:assembleDebug --no-daemon --stacktrace
       - name: Upload QA APK (no signing keys, no personal data)
         uses: actions/upload-artifact@v4
         with:
