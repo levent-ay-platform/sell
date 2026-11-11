@@ -110,6 +110,19 @@ internal object TunisianNameParser {
             names.all{canonical(it)==canonical(first)}
         }
     }
+    /** Text agreement and OCR confidence are distinct concepts. An apparent
+     * mismatch must NOT be reported if a scanned name is uncertain. No outcome
+     * here verifies legal ownership or identity documents.
+     */
+    fun assess(certName:String?,cinName:String?,confidence:Int,
+               missingTitlePages:Boolean=false):String {
+        if(certName==null||cinName==null||missingTitlePages)
+            return "INSUFFICIENT_OR_AMBIGUOUS"
+        val equal=canonical(certName)==canonical(cinName)
+        if(equal&&confidence>=65)return "PRELIMINARY_TEXT_AGREEMENT"
+        return if(!equal&&confidence>=92)"TEXT_DIFFERENCE_NEEDS_REVIEW"
+            else "INSUFFICIENT_OR_AMBIGUOUS"
+    }
     /** Only explicit printed page count; never infer all title pages from one photo. */
     fun declaredPages(text:String):Int? {
         val ar=Regex("""(?:صفحة|الصفحة)\s*[\d٠-٩]+\s*من\s*([2-8٢-٨])""")

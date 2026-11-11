@@ -229,26 +229,22 @@ internal object LocalDocumentOcr {
             val enoughImages=id.isNotEmpty() && cert.isNotEmpty()
             // Whole-image OCR confidence includes watermarks and portraits.
             // Below 65% we cannot assert a textual mismatch; request review.
-            val confident=(owner?.confidence?:0)>=65&&(person?.confidence?:0)>=65
+            val minimumConfidence=minOf(owner?.confidence?:0,person?.confidence?:0)
             val missingCertificatePages=cert.mapNotNull{
                 TunisianNameParser.declaredPages(it.text)}.any{it>cert.size}
             val ambiguity=(certCandidates.size>1 && owner==null)||
                 (identityCandidates.size>1&&person==null)
-            val same=owner!=null&&person!=null&&normalized(owner.value)==normalized(person.value)
-            val assessment=when{
-                owner==null||person==null||!enoughImages||!confident||
-                    ambiguity||missingCertificatePages->
-                    "INSUFFICIENT_OR_AMBIGUOUS"
-                same->"PRELIMINARY_TEXT_AGREEMENT"
-                else->"TEXT_DIFFERENCE_NEEDS_REVIEW"
-            }
+            val assessment=TunisianNameParser.assess(
+                if(!enoughImages||ambiguity)null else owner?.value,
+                person?.value,minimumConfidence,missingCertificatePages)
             val reasons=mutableListOf("OFFICIAL_CPF_AND_DOCUMENT_AUTHENTICITY_NOT_CHECKED")
             if(missingCertificatePages)reasons.add("CERTIFICATE_PAGES_MISSING")
             if(certCandidates.size>1&&owner==null)
                 reasons.add("MULTIPLE_OWNERS_OR_SHARED_TITLE_NEEDS_REVIEW")
             if(owner==null||person==null||ambiguity)
                 reasons.add("MISSING_OR_AMBIGUOUS_LABELED_NAME")
-            if(!confident)reasons.add("LOW_OCR_CONFIDENCE")
+            if(minimumConfidence<92 && assessment!="PRELIMINARY_TEXT_AGREEMENT")
+                reasons.add("LOW_OCR_CONFIDENCE")
             if(assessment=="TEXT_DIFFERENCE_NEEDS_REVIEW")
                 reasons.add("NAME_TEXT_DIFFERS_OR_SCRIPT_MISMATCH")
             CertificateIdentityReview(

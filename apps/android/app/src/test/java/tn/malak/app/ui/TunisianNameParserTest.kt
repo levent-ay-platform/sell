@@ -53,3 +53,18 @@ class TunisianNameParserTest {
         assertFalse(a.contains("Amira Ben Salem")) // no invented reordering
     }
 }
+
+    @Test fun lowConfidenceScanCannotFalselyClaimDifferentNames() {
+        assertEquals("INSUFFICIENT_OR_AMBIGUOUS",
+            TunisianNameParser.assess("المكي ياسين","المكي مروان",78))
+        assertEquals("TEXT_DIFFERENCE_NEEDS_REVIEW",
+            TunisianNameParser.assess("المكي ياسين","المكي مروان",96))
+        assertEquals("PRELIMINARY_TEXT_AGREEMENT",
+            TunisianNameParser.assess("المكي ياسين","المكي ياسين",74))
+    }
+    @Test fun incompleteTitleStillRequiresReviewWhenPrintedOwnerAgrees() {
+        assertEquals("INSUFFICIENT_OR_AMBIGUOUS",
+            TunisianNameParser.assess("المكي ياسين","المكي ياسين",97,true))
+    }
+
+}
