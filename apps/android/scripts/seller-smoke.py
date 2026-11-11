@@ -48,16 +48,33 @@ def enter_pilot():
     click_text(["Continuer","متابعة","Continue"])
     time.sleep(1)
     click_text(["Code de test à 4 chiffres","رمز الدخول التجريبي (4 أرقام)","4-digit test code"])
+    # Negative check: an incorrect PIN must not open the seller workspace.
+    adb("shell","input","text","0000")
+    adb("shell","input","keyevent","KEYCODE_BACK")
+    click_text(["Entrer en mode pilote","الدخول إلى النسخة التجريبية","Enter pilot"])
+    time.sleep(1)
+    rejected=texts(dump_nodes())
+    if not any(x in rejected for x in [
+            "Code de test incorrect. Réessayez.",
+            "الرمز التجريبي غير صحيح. حاول مجدداً.",
+            "Incorrect test code. Try again."]):
+        raise AssertionError("Incorrect pilot code did not show a rejection")
+    click_text(["Code de test à 4 chiffres","رمز الدخول التجريبي (4 أرقام)","4-digit test code"])
+    for _ in range(4):
+        adb("shell","input","keyevent","KEYCODE_DEL")
     adb("shell","input","text","1234")
     adb("shell","input","keyevent","KEYCODE_BACK")
     click_text(["Entrer en mode pilote","الدخول إلى النسخة التجريبية","Enter pilot"])
     time.sleep(2)
     visible=texts(dump_nodes())
     print("After pilot login:",visible[:40])
-    if not any(x in visible for x in
-            ["Déposer un terrain","أضف أرضك","Mode pilote — utilisateur non vérifié",
-             "وضع تجريبي — المستخدم غير متحقق منه"]):
-        raise AssertionError("Pilot code 1234 did not enter actual Malak home")
+    if not any(x in visible for x in [
+            "Compte confirmé — version pilote",
+            "الحساب مؤكّد — نسخة تجريبية",
+            "Pilot account confirmed"]):
+        raise AssertionError("Correct pilot code did not confirm actual Malak pilot session")
+    if not any(x in visible for x in ["Déposer un terrain","أضف أرضك"]):
+        raise AssertionError("Correct pilot code did not open normal Malak home")
 
 def crash_log():
     result=adb("logcat","-d","-b","crash","-v","brief",check=False)
