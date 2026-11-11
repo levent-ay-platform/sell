@@ -85,6 +85,13 @@ jobs:
         run: |
           set -euo pipefail
           node --experimental-strip-types --test services/verification/ci/owner-case-live.integration.ts
+      - name: Verify pilot 1234 session and cross-user case isolation (disposable PostgreSQL)
+        env:
+          PGPASSWORD: sell_ci_disposable
+          MALAK_DISPOSABLE_PG: 'yes'
+        run: |
+          set -euo pipefail
+          node --experimental-strip-types --test services/verification/ci/pilot-auth-live.integration.ts
       - name: Verify real PostgreSQL reviewer-only evidence access and immutable audit
         env:
           PGPASSWORD: sell_ci_disposable
