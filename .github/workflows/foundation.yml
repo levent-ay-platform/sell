@@ -66,6 +66,7 @@ jobs:
           psql -h 127.0.0.1 -U sell_ci -d sell_ci -v ON_ERROR_STOP=1 -f db/migrations/0003_private_evidence_http.sql
           psql -h 127.0.0.1 -U sell_ci -d sell_ci -v ON_ERROR_STOP=1 -f db/migrations/0004_private_ocr_route.sql
           psql -h 127.0.0.1 -U sell_ci -d sell_ci -v ON_ERROR_STOP=1 -f db/migrations/0005_private_pair_route.sql
+          psql -h 127.0.0.1 -U sell_ci -d sell_ci -v ON_ERROR_STOP=1 -f db/migrations/0006_private_owner_case_intents.sql
       - name: Test actual Node evidence repository against disposable PostgreSQL
         env:
           PGPASSWORD: sell_ci_disposable
@@ -75,6 +76,13 @@ jobs:
           mkdir -p "$RUNNER_TEMP/malak-pg"
           npm --prefix "$RUNNER_TEMP/malak-pg" install --no-save --no-package-lock --ignore-scripts --no-audit --no-fund pg@8.16.3
           node --experimental-strip-types --test services/verification/ci/postgres-live.integration.ts
+      - name: Verify authenticated owner-case replay and consent withdrawal in disposable PostGIS
+        env:
+          PGPASSWORD: sell_ci_disposable
+          MALAK_DISPOSABLE_PG: 'yes'
+        run: |
+          set -euo pipefail
+          node --experimental-strip-types --test services/verification/ci/owner-case-live.integration.ts
       - name: Verify real PostgreSQL reviewer-only evidence access and immutable audit
         env:
           PGPASSWORD: sell_ci_disposable
