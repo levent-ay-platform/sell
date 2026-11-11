@@ -45,6 +45,22 @@ private val CardBorder = Color(0xFFE7E8EC)
 private data class ChosenDocument(val uri:Uri, val displayName:String, val length:Long,
     val mime:String, val uploadKey:String=UUID.randomUUID().toString())
 
+/** Translate only known audited reason codes; never show raw backend codes to users. */
+private fun pairReasonText(code:String):Int=when(code){
+    "MISSING_OR_AMBIGUOUS_LABELED_NAME"->R.string.pair_reason_name_unreadable
+    "MULTIPLE_OWNERS_OR_SHARED_TITLE_NEEDS_REVIEW"->R.string.pair_reason_shared_title
+    "CERTIFICATE_PAGES_MISSING"->R.string.pair_reason_pages_missing
+    "CERTIFICATE_PAGE_NUMBER_INCONSISTENT"->R.string.pair_reason_pages_conflict
+    "SCAN_QUALITY_NEEDS_REVIEW"->R.string.pair_reason_quality
+    "LOW_OCR_CONFIDENCE"->R.string.pair_reason_low_confidence
+    "NAME_TEXT_DIFFERS_OR_SCRIPT_MISMATCH"->R.string.pair_reason_name_diff
+    "CIN_NUMBER_TEXT_DIFFERS"->R.string.pair_reason_cin_diff
+    "CIN_NUMBER_UNCERTAIN"->R.string.pair_reason_cin_uncertain
+    "IDENTITY_REVERSE_MISSING"->R.string.pair_reason_missing_back
+    "OFFICIAL_CPF_AND_DOCUMENT_AUTHENTICITY_NOT_CHECKED"->R.string.pair_reason_not_official
+    else->R.string.pair_reason_other
+}
+
 private fun readIdentityChoice(context:Context,uri:Uri,isPdf:Boolean):ChosenDocument? {
     val mime=context.contentResolver.getType(uri)?:return null
     if(if(isPdf)mime!="application/pdf" else mime !in setOf("image/jpeg","image/png"))
@@ -421,8 +437,26 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                         val result=pairReport!!
                         SummaryFact(s(R.string.pair_certificate_owner),
                             result.certificateName?.value?:s(R.string.pair_unreadable))
+                        result.certificateName?.let { evidence->
+                            val source=s(if(evidence.source=="pdf-text")
+                                R.string.pair_source_pdf else R.string.pair_source_ocr)
+                            val score=evidence.confidence?.let {
+                                " · ${s(R.string.pair_confidence)}: ${it}%"
+                            }?:""
+                            Text("${s(R.string.pair_source_page)} ${evidence.page} · $source$score",
+                                color=Brand.Muted,fontSize=12.sp)
+                        }
                         SummaryFact(s(R.string.pair_identity_owner),
                             result.identityName?.value?:s(R.string.pair_unreadable))
+                        result.identityName?.let { evidence->
+                            val source=s(if(evidence.source=="pdf-text")
+                                R.string.pair_source_pdf else R.string.pair_source_ocr)
+                            val score=evidence.confidence?.let {
+                                " · ${s(R.string.pair_confidence)}: ${it}%"
+                            }?:""
+                            Text("${s(R.string.pair_source_page)} ${evidence.page} · $source$score",
+                                color=Brand.Muted,fontSize=12.sp)
+                        }
                         SummaryFact(s(R.string.pair_cin_label),
                             s(when(result.cinStatus) {
                                 "SAME_NUMBER_UNVERIFIED"->R.string.pair_cin_equal
@@ -435,6 +469,13 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                                 "MISSING_REVERSE"->R.string.pair_reverse_missing
                                 else->R.string.pair_reverse_unconfirmed
                             }))
+                        if(result.reasons.isNotEmpty()) {
+                            Text(s(R.string.pair_reasons_title),color=Brand.Ink,
+                                fontSize=15.sp,fontWeight=FontWeight.SemiBold)
+                            result.reasons.distinct().forEach { code->
+                                PlainNotice(Icons.Outlined.Info,s(pairReasonText(code)))
+                            }
+                        }
                         PlainNotice(Icons.Outlined.Info,s(R.string.pair_preliminary_only))
                     }
                     if(pairProgress!=null) {
