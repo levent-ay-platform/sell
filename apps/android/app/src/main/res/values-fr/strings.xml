@@ -154,6 +154,11 @@
     <string name="certificate_page_order_hint">Pour les photos, ajoutez chaque page séparément dans l’ordre imprimé. Sinon, sélectionnez un seul PDF complet.</string>
     <string name="certificate_pdf_label">PDF du certificat complet</string>
     <string name="certificate_page_label">Page du certificat</string>
+    <string name="pair_name_extracted">Nom extrait de ce document, authenticité non vérifiée</string>
+    <string name="pair_name_unreadable">Document traité, mais nom illisible de manière fiable</string>
+    <string name="pair_reading_in_progress">Lecture sécurisée du document en cours</string>
+    <string name="pair_certificate_pages">Pages du certificat traitées</string>
+    <string name="pair_identity_pages">Pages de la carte d’identité traitées</string>
     <string name="pair_preliminary_only">L’OCR ne vérifie ni l’identité ni la propriété et n’autorise pas une publication. Contrôle indépendant obligatoire.</string>
     <string name="pair_creating_case">Création de la demande de vérification privée…</string>
     <string name="pair_upload_cert">Envoi sécurisé du certificat…</string>

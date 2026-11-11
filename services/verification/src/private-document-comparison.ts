@@ -52,8 +52,13 @@ function canonical(name:string):string|null {
 }
 function parsedName(raw:string):string|null {
   // Forbid digits, OCR control characters and field-value leakage.
-  if(raw.length>100||/\d/.test(raw)||/[\u0000-\u001f]/.test(raw))return null;
+  // OCR text is untrusted. Bidi overrides/zero-width formatting can make the
+  // displayed identity look different from the value used in comparison.
+  // Unicode digits or punctuation can also be silently discarded by canonical().
+  // Reject them rather than showing a cosmetically "matching" owner name.
+  if(raw.length>100||/[\p{N}\p{Cc}\p{Cf}]/u.test(raw))return null;
   const trimmed=raw.trim().replace(/^[\s:：–\-]+/u,'').replace(/\s+$/u,'');
+  if(!/^[\p{L}\p{M}\p{Zs}'’\-]+$/u.test(trimmed))return null;
   return canonical(trimmed)?trimmed:null;
 }
 function collect(doc:IngestedDocument, kind:'CERTIFICATE'|'IDENTITY'):CandidateName[] {

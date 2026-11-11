@@ -82,6 +82,8 @@ private fun readIdentityChoice(context:Context,uri:Uri,isPdf:Boolean):ChosenDocu
     if(length !in 20..MAX_DOC_BYTES)return null
     return ChosenDocument(uri,label.ifBlank {uri.lastPathSegment?.take(50)?:"Document"},length,mime)
 }
+private enum class ReadingStatus { PENDING, READING, EXTRACTED, REVIEW }
+
 private data class CapacityOption(val code:String, val label:Int)
 private val Capacities = listOf(
     CapacityOption("owner",R.string.capacity_owner),
@@ -433,18 +435,48 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                     SectionHeading(s(R.string.review_status_title),
                         s(if(pairReport==null)R.string.review_status_intro else R.string.pair_review_received))
                     VerificationStage(Icons.Outlined.Description,s(R.string.ocr_status),
-                        s(if(pairReport==null)R.string.ocr_pending else R.string.pair_document_read))
+                        s(when {
+                            pairReport?.certificateName!=null->R.string.pair_name_extracted
+                            pairReport!=null->R.string.pair_name_unreadable
+                            pairProgress!=null->R.string.pair_reading_in_progress
+                            else->R.string.ocr_pending
+                        }),
+                        when {
+                            pairReport?.certificateName!=null->ReadingStatus.EXTRACTED
+                            pairReport!=null->ReadingStatus.REVIEW
+                            pairProgress!=null->ReadingStatus.READING
+                            else->ReadingStatus.PENDING
+                        })
                     VerificationStage(Icons.Outlined.Badge,s(R.string.identity_ocr_status),
-                        s(if(pairReport==null)R.string.identity_ocr_pending else R.string.pair_document_read))
+                        s(when {
+                            pairReport?.identityName!=null->R.string.pair_name_extracted
+                            pairReport!=null->R.string.pair_name_unreadable
+                            pairProgress!=null->R.string.pair_reading_in_progress
+                            else->R.string.identity_ocr_pending
+                        }),
+                        when {
+                            pairReport?.identityName!=null->ReadingStatus.EXTRACTED
+                            pairReport!=null->ReadingStatus.REVIEW
+                            pairProgress!=null->ReadingStatus.READING
+                            else->ReadingStatus.PENDING
+                        })
                     VerificationStage(Icons.Outlined.CompareArrows,s(R.string.match_status),
                         s(when(pairReport?.assessment){
                             "PRELIMINARY_TEXT_AGREEMENT"->R.string.pair_agreement
                             "TEXT_DIFFERENCE_NEEDS_REVIEW"->R.string.pair_difference
                             "INSUFFICIENT_OR_AMBIGUOUS"->R.string.pair_uncertain
                             else->R.string.match_pending
-                        }))
+                        }),
+                        when(pairReport?.assessment){
+                            "PRELIMINARY_TEXT_AGREEMENT"->ReadingStatus.EXTRACTED
+                            "TEXT_DIFFERENCE_NEEDS_REVIEW",
+                            "INSUFFICIENT_OR_AMBIGUOUS"->ReadingStatus.REVIEW
+                            else->if(pairProgress!=null)ReadingStatus.READING else ReadingStatus.PENDING
+                        })
                     if(pairReport!=null) {
                         val result=pairReport!!
+                        SummaryFact(s(R.string.pair_certificate_pages),result.certificatePages.toString())
+                        SummaryFact(s(R.string.pair_identity_pages),result.identityPages.toString())
                         SummaryFact(s(R.string.pair_certificate_owner),
                             result.certificateName?.value?:s(R.string.pair_unreadable))
                         result.certificateName?.let { evidence->
@@ -669,18 +701,33 @@ private fun SummaryFact(label:String,value:String) {
 }
 
 @Composable
-private fun VerificationStage(icon:androidx.compose.ui.graphics.vector.ImageVector,heading:String,detail:String){
+private fun VerificationStage(
+    icon:androidx.compose.ui.graphics.vector.ImageVector,
+    heading:String,detail:String,status:ReadingStatus=ReadingStatus.PENDING
+){
+    val accent=when(status){
+        ReadingStatus.EXTRACTED->Color(0xFF267B63)
+        ReadingStatus.REVIEW->Color(0xFFAD753A)
+        ReadingStatus.READING->Brand.Crimson
+        ReadingStatus.PENDING->Brand.Muted
+    }
+    val statusIcon=when(status){
+        ReadingStatus.EXTRACTED->Icons.Outlined.CheckCircle
+        ReadingStatus.REVIEW->Icons.Outlined.ErrorOutline
+        ReadingStatus.READING->Icons.Outlined.HourglassTop
+        ReadingStatus.PENDING->Icons.Outlined.Schedule
+    }
     Surface(shape=RoundedCornerShape(16.dp),color=Color.White,border=BorderStroke(1.dp,CardBorder)){
         Row(Modifier.fillMaxWidth().padding(14.dp),verticalAlignment=Alignment.CenterVertically,
             horizontalArrangement=Arrangement.spacedBy(11.dp)){
             Surface(shape=CircleShape,color=Color(0xFFF3F4F6)){
-                Icon(icon,null,Modifier.padding(10.dp).size(23.dp),tint=Brand.Muted)
+                Icon(icon,null,Modifier.padding(10.dp).size(23.dp),tint=accent)
             }
             Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(4.dp)){
                 Text(heading,fontSize=14.sp,fontWeight=FontWeight.SemiBold,color=Brand.Ink)
                 Text(detail,fontSize=12.sp,color=Brand.Muted,lineHeight=19.sp)
             }
-            Icon(Icons.Outlined.Schedule,null,tint=Brand.Muted,modifier=Modifier.size(19.dp))
+            Icon(statusIcon,null,tint=accent,modifier=Modifier.size(19.dp))
         }
     }
 }

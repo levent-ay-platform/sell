@@ -158,3 +158,24 @@ test('unlabelled names never count as reliable evidence',()=>{
   const r=compare(doc(['Amira Ben Salem']),doc(['Amira Ben Salem']));
   assert.equal(r.assessment,'INSUFFICIENT_OR_AMBIGUOUS');
 });
+
+test('never present bidi-override or invisible owner names as agreement',()=>{
+  for(const hostile of ['Amira\\u202e Ben Salem','Amira\\u200f Ben Salem',
+     'Amira\\u2067 Ben Salem','Amira\\u200b Ben Salem']){
+    const value=hostile.replace(/\\u([0-9a-f]{4})/gi,(_,hex)=>String.fromCharCode(parseInt(hex,16)));
+    const r=compare(doc(['Propriétaire: Amira Ben Salem']),
+      doc(['Nom et prénom: '+value]));
+    assert.equal(r.assessment,'INSUFFICIENT_OR_AMBIGUOUS');
+    assert.equal(r.identityName,null);
+    assert.equal(r.mayPublish,false);
+  }
+});
+test('unexpected punctuation and Unicode numerals cannot disappear into canonical equality',()=>{
+  for(const hostile of ['Amira Ben Salem ***','Amira Ben Salem ١٢',
+     'Amira Ben Salem ۱۲','Amira Ben Salem <script>']){
+    const r=compare(doc(['Propriétaire: Amira Ben Salem']),
+      doc(['Nom et prénom: '+hostile]));
+    assert.equal(r.assessment,'INSUFFICIENT_OR_AMBIGUOUS');
+    assert.equal(r.identityName,null);
+  }
+});

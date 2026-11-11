@@ -154,6 +154,11 @@
     <string name="certificate_page_order_hint">إذا عندك صور، أضف كل صفحة على حدة وبالترتيب المطبوع. أو اختر ملف PDF واحداً يشمل كل الصفحات.</string>
     <string name="certificate_pdf_label">شهادة الملكية بصيغة PDF</string>
     <string name="certificate_page_label">صفحة الشهادة</string>
+    <string name="pair_name_extracted">تم استخراج اسم صاحب الوثيقة، ولم يتم التحقق من أصالتها</string>
+    <string name="pair_name_unreadable">تمت معالجة الوثيقة لكن الاسم غير مقروء بشكل موثوق</string>
+    <string name="pair_reading_in_progress">جارٍ معالجة الوثائق بأمان</string>
+    <string name="pair_certificate_pages">صفحات شهادة الملكية المعالجة</string>
+    <string name="pair_identity_pages">صفحات بطاقة التعريف المعالجة</string>
     <string name="pair_preliminary_only">نتيجة OCR لا تثبت صحة الهوية أو ملكية العقار ولا تسمح بالنشر. يلزم تدقيق مستقل.</string>
     <string name="pair_creating_case">جارٍ إنشاء طلب التحقق الخاص…</string>
     <string name="pair_upload_cert">جارٍ إرسال شهادة الملكية بأمان…</string>
