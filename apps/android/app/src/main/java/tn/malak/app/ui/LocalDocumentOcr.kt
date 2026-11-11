@@ -5,11 +5,13 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.ColorMatrix
+import android.graphics.ColorMatrixColorFilter
+import android.graphics.Paint
 import android.graphics.pdf.PdfRenderer
 import android.net.Uri
 import com.googlecode.tesseract.android.TessBaseAPI
 import java.io.File
-import java.text.Normalizer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
@@ -28,58 +30,24 @@ internal object LocalDocumentOcr {
     private const val MAX_BYTES = 12L * 1024L * 1024L
     private const val MAX_IMAGE_EDGE = 2400
     private const val MAX_PAGES = 8
-    private val unsafeName = Regex("""[\p{N}\p{Cc}\p{Cf}]""")
-    private val permittedName = Regex("""^[\p{L}\p{M}\p{Zs}'’\-]{7,100}$""")
-    private val ownerLine = Regex(
-        """(?iu)^\s*(?:nom\s+du\s+propri[ée]taire|propri[ée]taire|titulaire|المالك|اسم\s+المالك|صاحب\s+الرسم)\s*(?:[:：\-]|\s+)\s*(.{7,100})\s*$"""
-    )
-    private val fullIdentity = Regex(
-        """(?iu)^\s*(?:nom\s+et\s+pr[ée]nom|nom\s+et\s+pr[ée]noms|الاسم\s+واللقب|الاسم\s+و\s+اللقب)\s*(?:[:：\-]|\s+)\s*(.{7,100})\s*$"""
-    )
-    private val lastName = Regex("""(?iu)^\s*nom\s*[:：\-]\s*(.{2,70})\s*$""")
-    private val firstName = Regex("""(?iu)^\s*pr[ée]nom\s*[:：\-]\s*(.{2,70})\s*$""")
-    private val spaces = Regex("""\s+""")
-    private val foldedMarks = Regex("""\p{M}+""")
-
+    // Keep document-specific labelled-name extraction independent of OCR
+    // engine details. Never match a father name/date or invented OCR letters.
     private data class ScanPage(val page:Int,val text:String,val confidence:Int) {
-        val source:String get() = if (text.any { it in '\u0600'..'\u06ff' }) "ocr-ar" else "ocr-fr"
-    }
-    private fun recognizedName(raw:String):String? {
-        val clean=raw.trim().replace(spaces," ")
-        if(clean.length !in 7..100 || unsafeName.containsMatchIn(clean) ||
-            !permittedName.matches(clean) || clean.split(' ').size<2)return null
-        return clean
+        val source:String get() = if(text.any{it in '\u0600'..'\u06ff'}) "ocr-ar" else "ocr-fr"
     }
     private fun labelCandidates(pages:List<ScanPage>,identity:Boolean):List<PairNameEvidence> {
-        val found=mutableListOf<PairNameEvidence>()
-        for(page in pages) {
-            val lines=page.text.lineSequence().map{it.trim()}.filter{it.isNotEmpty()}.toList()
-            for(line in lines) {
-                val raw=if(identity)fullIdentity.matchEntire(line)?.groupValues?.get(1)
-                    else ownerLine.matchEntire(line)?.groupValues?.get(1)
-                val name=raw?.let(::recognizedName)
-                if(name!=null)found.add(PairNameEvidence(name,page.page,page.source,page.confidence))
-            }
-            if(identity) {
-                val sur=lines.firstNotNullOfOrNull { lastName.matchEntire(it)?.groupValues?.get(1) }
-                val given=lines.firstNotNullOfOrNull { firstName.matchEntire(it)?.groupValues?.get(1) }
-                if(sur!=null && given!=null) {
-                    recognizedName(given.trim()+" "+sur.trim())?.let {
-                        found.add(PairNameEvidence(it,page.page,page.source,page.confidence))
-                    }
-                }
-            }
+        return pages.flatMap { page->
+            val names=if(identity)TunisianNameParser.identity(page.text)
+                else TunisianNameParser.certificate(page.text)
+            names.map{PairNameEvidence(it,page.page,page.source,page.confidence)}
         }
-        return found
     }
-    private fun normalized(value:String):String {
-        val compact=Normalizer.normalize(value,Normalizer.Form.NFD).replace(foldedMarks,"")
-        return compact.lowercase(java.util.Locale.ROOT).replace(spaces," ").trim()
-    }
-    private fun oneName(candidates:List<PairNameEvidence>):PairNameEvidence? =
-        candidates.firstOrNull()?.takeIf { first ->
+    private fun normalized(value:String):String=TunisianNameParser.canonical(value)
+    private fun oneName(candidates:List<PairNameEvidence>):PairNameEvidence? {
+        return candidates.firstOrNull()?.takeIf { first->
             candidates.all { normalized(it.value)==normalized(first.value) }
         }
+    }
 
     private fun ensureModels(context:Context):String {
         val root=File(context.noBackupFilesDir,"malak-ocr")
@@ -132,15 +100,64 @@ internal object LocalDocumentOcr {
             BitmapFactory.decodeStream(it,null,opts)
         }?:throw IllegalStateException("OCR_IMAGE_UNAVAILABLE")
     }
-    private fun ocrSingle(api:TessBaseAPI,bitmap:Bitmap,index:Int):ScanPage {
+    /** Preprocess only the name region of a CIN; document pixels stay in RAM.
+     * This is much smaller than an entire photo and avoids the portrait,
+     * watermark and unrelated birth/father data confusing Arabic OCR.
+     */
+    private fun nameRegion(bitmap:Bitmap,isIdentity:Boolean):Bitmap {
+        val left=(bitmap.width*(if(isIdentity)0.50f else 0.40f)).toInt()
+        val top=(bitmap.height*(if(isIdentity)0.32f else 0.40f)).toInt()
+        val right=(bitmap.width*0.97f).toInt()
+        val bottom=(bitmap.height*(if(isIdentity)0.72f else 0.78f)).toInt()
+        val cropped=Bitmap.createBitmap(bitmap,left,top,
+            (right-left).coerceAtLeast(1),(bottom-top).coerceAtLeast(1))
+        val prepared=Bitmap.createBitmap(cropped.width,cropped.height,
+            Bitmap.Config.ARGB_8888)
         try {
-            api.setImage(bitmap)
-            val text=api.getUTF8Text().orEmpty().take(60000)
-            return ScanPage(index,text,api.meanConfidence().coerceIn(0,100))
-        }finally { bitmap.recycle() }
+            val mono=ColorMatrix().apply{setSaturation(0f)}
+            val paint=Paint(Paint.FILTER_BITMAP_FLAG).apply {
+                colorFilter=ColorMatrixColorFilter(mono)
+            }
+            Canvas(prepared).apply{
+                drawColor(Color.WHITE)
+                drawBitmap(cropped,0f,0f,paint)
+            }
+        }finally{cropped.recycle()}
+        return prepared
+    }
+    private fun readText(api:TessBaseAPI,bitmap:Bitmap):ScanPage {
+        api.clear()
+        api.setImage(bitmap)
+        return ScanPage(1,api.getUTF8Text().orEmpty().take(60000),
+            api.meanConfidence().coerceIn(0,100))
+    }
+    private fun ocrSingle(api:TessBaseAPI,bitmap:Bitmap,index:Int,
+                          identity:Boolean):ScanPage {
+        try {
+            // For title certificates, start with full text to preserve page
+            // counts and joint-owner warnings. For CIN, scan only printed
+            // owner-name area first. Retry full image only if labels were lost.
+            if(identity){
+                val crop=nameRegion(bitmap,true)
+                val first=try{readText(api,crop)}finally{crop.recycle()}
+                if(TunisianNameParser.identity(first.text).isNotEmpty())
+                    return first.copy(page=index)
+                val full=readText(api,bitmap)
+                val merged=if(full.text.length+first.text.length<60000)
+                    first.text+"\n"+full.text else full.text
+                return ScanPage(index,merged,minOf(first.confidence,full.confidence))
+            }
+            val full=readText(api,bitmap)
+            if(TunisianNameParser.certificate(full.text).isNotEmpty())
+                return full.copy(page=index)
+            val crop=nameRegion(bitmap,false)
+            val focus=try{readText(api,crop)}finally{crop.recycle()}
+            return ScanPage(index,full.text+"\n"+focus.text,
+                minOf(full.confidence,focus.confidence))
+        }finally{bitmap.recycle()}
     }
     private suspend fun scanInput(context:Context,api:TessBaseAPI,
-        files:List<PairEvidenceFile>):List<ScanPage>{
+        files:List<PairEvidenceFile>,identity:Boolean):List<ScanPage>{
         val output=mutableListOf<ScanPage>()
         for((position,file) in files.withIndex()) {
             currentCoroutineContext().ensureActive()
@@ -165,7 +182,7 @@ internal object LocalDocumentOcr {
                             Canvas(bmp).drawColor(Color.WHITE)
                             try {
                                 page.render(bmp,null,null,PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
-                                output.add(ocrSingle(api,bmp,i+1))
+                                output.add(ocrSingle(api,bmp,i+1,identity))
                             }catch(t:Throwable){
                                 if(!bmp.isRecycled)bmp.recycle()
                                 throw t
@@ -176,7 +193,7 @@ internal object LocalDocumentOcr {
             } else {
                 if(file.mime !in setOf("image/jpeg","image/png","image/tiff")||
                     files.size>MAX_PAGES)throw IllegalStateException("OCR_FILE_TYPE")
-                output.add(ocrSingle(api,decodeImage(context,file.uri),position+1))
+                output.add(ocrSingle(api,decodeImage(context,file.uri),position+1,identity))
             }
         }
         return output
@@ -190,35 +207,43 @@ internal object LocalDocumentOcr {
             certificates.size>MAX_PAGES||identity.size>2||
             (certificates.size>1&&certificates.any{it.mime=="application/pdf"})||
             (identity.size==2&&identity.any{it.mime=="application/pdf"})||
-            (identity.size==1&&identity.single().mime!="application/pdf")||
             (certificates+identity).map{it.uri}.distinct().size!=certificates.size+identity.size)
             throw IllegalStateException("OCR_DOCUMENT_SELECTION")
         val api=TessBaseAPI()
         try {
-            if(!api.init(ensureModels(context),"ara+fra+eng"))
+            // French OCR includes Latin-script names; two models initialize
+            // faster than running Arabic, French and English simultaneously.
+            if(!api.init(ensureModels(context),"ara+fra"))
                 throw IllegalStateException("OCR_ENGINE_UNAVAILABLE")
             withContext(Dispatchers.Main){onProgress(PairProgress.CERTIFICATE_UPLOAD)}
-            val cert=scanInput(context,api,certificates)
+            val cert=scanInput(context,api,certificates,false)
             withContext(Dispatchers.Main){onProgress(PairProgress.IDENTITY_UPLOAD)}
-            val id=scanInput(context,api,identity)
+            val id=scanInput(context,api,identity,true)
             withContext(Dispatchers.Main){onProgress(PairProgress.COMPARING)}
             val certCandidates=labelCandidates(cert,false)
             val identityCandidates=labelCandidates(id,true)
             val owner=oneName(certCandidates)
             val person=oneName(identityCandidates)
-            val enoughImages=id.size>=2 && cert.isNotEmpty()
-            val confident=(owner?.confidence?:0)>=70&&(person?.confidence?:0)>=70
+            // A front-facing CIN is enough for this first-stage *text*
+            // comparison. The back is optional and not proof of identity.
+            val enoughImages=id.isNotEmpty() && cert.isNotEmpty()
+            // Whole-image OCR confidence includes watermarks and portraits.
+            // Below 65% we cannot assert a textual mismatch; request review.
+            val confident=(owner?.confidence?:0)>=65&&(person?.confidence?:0)>=65
+            val missingCertificatePages=cert.mapNotNull{
+                TunisianNameParser.declaredPages(it.text)}.any{it>cert.size}
             val ambiguity=(certCandidates.size>1 && owner==null)||
                 (identityCandidates.size>1&&person==null)
             val same=owner!=null&&person!=null&&normalized(owner.value)==normalized(person.value)
             val assessment=when{
-                owner==null||person==null||!enoughImages||!confident||ambiguity->
+                owner==null||person==null||!enoughImages||!confident||
+                    ambiguity||missingCertificatePages->
                     "INSUFFICIENT_OR_AMBIGUOUS"
                 same->"PRELIMINARY_TEXT_AGREEMENT"
                 else->"TEXT_DIFFERENCE_NEEDS_REVIEW"
             }
             val reasons=mutableListOf("OFFICIAL_CPF_AND_DOCUMENT_AUTHENTICITY_NOT_CHECKED")
-            if(!enoughImages)reasons.add("IDENTITY_REVERSE_MISSING")
+            if(missingCertificatePages)reasons.add("CERTIFICATE_PAGES_MISSING")
             if(certCandidates.size>1&&owner==null)
                 reasons.add("MULTIPLE_OWNERS_OR_SHARED_TITLE_NEEDS_REVIEW")
             if(owner==null||person==null||ambiguity)
@@ -229,7 +254,7 @@ internal object LocalDocumentOcr {
             CertificateIdentityReview(
                 assessment,owner,person,"NOT_COMPARABLE",reasons,
                 if(identity.size==2)"TWO_FILES_UNCONFIRMED"
-                else if(id.size>=2)"MULTI_PAGE_UNCONFIRMED" else "MISSING_REVERSE",
+                else if(id.size>=2)"MULTI_PAGE_UNCONFIRMED" else "FRONT_ONLY",
                 cert.size,id.size,
                 ownershipVerified=false,identityVerified=false,mayPublish=false
             )
