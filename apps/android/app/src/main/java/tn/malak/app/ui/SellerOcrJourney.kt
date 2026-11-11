@@ -183,6 +183,20 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
     val validArea=normalizedArea.matches(ValidLandArea)
     val validPrice=price.matches(ValidLandPrice)
     val validFirst=name.trim().length in 2..100&&region.trim().length in 2..100&&validArea&&validPrice
+    // Saving a private local draft must work BEFORE document selection or OCR.
+    // Do not pretend success when the device fails to persist these fields.
+    val saveLocalDraft:()->Unit={
+        saveMessage=try {
+            val committed=prefs.edit()
+                .putString("title",name.trim())
+                .putString("region",region.trim())
+                .putString("area",area)
+                .putString("price",price)
+                .putString("capacity",capacity)
+                .commit()
+            if(committed)R.string.draft_saved else R.string.draft_error
+        }catch (_:Exception){R.string.draft_error}
+    }
     val stepLabels=listOf(R.string.step_property,R.string.step_capacity,R.string.step_certificate,
         R.string.step_identity,R.string.step_summary)
 
@@ -472,19 +486,22 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                 else if(step==2&&files.isEmpty()){pickMessage=R.string.certificate_required}
                 else if(step==3&&!identitySelected){identityMessage=R.string.identity_required}
                 else if(step<4){step++;showInvalid=false;saveMessage=0}
-                else {
-                    try {
-                        prefs.edit().putString("title",name.trim()).putString("region",region.trim())
-                            .putString("area",area).putString("price",price).putString("capacity",capacity).apply()
-                        saveMessage=R.string.draft_saved
-                    } catch (_:Exception) {saveMessage=R.string.draft_error}
-                }
+                else saveLocalDraft()
             }, modifier=Modifier.fillMaxWidth().heightIn(min=54.dp),
                 shape=RoundedCornerShape(17.dp),colors=ButtonDefaults.buttonColors(containerColor=Brand.Crimson)) {
                 Text(s(if(step==4)R.string.save_draft else R.string.continue_label),fontWeight=FontWeight.SemiBold,fontSize=15.sp)
                 Spacer(Modifier.width(9.dp))
                 Icon(if(step==4)Icons.Outlined.Save else Icons.AutoMirrored.Filled.ArrowForward,
                     null,Modifier.size(21.dp))
+            }
+            if(step<4) {
+                OutlinedButton(onClick=saveLocalDraft,
+                    modifier=Modifier.fillMaxWidth().heightIn(min=48.dp),
+                    shape=RoundedCornerShape(16.dp)) {
+                    Icon(Icons.Outlined.Save,contentDescription=null,modifier=Modifier.size(19.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text(s(R.string.save_draft))
+                }
             }
         }
     }
