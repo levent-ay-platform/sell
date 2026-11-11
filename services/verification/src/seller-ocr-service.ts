@@ -48,13 +48,15 @@ export async function analyzeOwnerUploadedEvidence(request:SellerOcrRequest,deps
     (request.declaredArea!==null && (typeof request.declaredArea!=='string'||
        request.declaredArea.length>32)))throw new PrivateOcrAccessDenied();
   const first=await deps.auth.authenticate(request.bearerToken);
-  if(!first?.userId||!UUID.test(first.userId))throw new PrivateOcrAccessDenied();
+  if(!first?.userId||first.pilotUnverified===true||!UUID.test(first.userId))
+    throw new PrivateOcrAccessDenied();
   const before=await deps.cases.getUploadCase(request.caseId,first.userId);
   if(!currentlyAllowed(before,request.caseId,first.userId))throw new PrivateOcrAccessDenied();
   const payload=await deps.worker.extract(request.bytes,request.mime);
   const reading=presentPrivateCpfReading(readUntrustedOcrDocument(payload),request.declaredArea);
   const second=await deps.auth.authenticate(request.bearerToken);
-  if(second?.userId!==first.userId)throw new PrivateOcrAccessDenied();
+  if(second?.pilotUnverified===true||second?.userId!==first.userId)
+    throw new PrivateOcrAccessDenied();
   const after=await deps.cases.getUploadCase(request.caseId,first.userId);
   if(!currentlyAllowed(after,request.caseId,first.userId))throw new PrivateOcrAccessDenied();
   return reading;

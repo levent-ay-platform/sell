@@ -198,6 +198,9 @@ export function createPrivateEvidenceHttpHandler(deps:PrivateEvidenceHttpDeps) {
         const id=await deps.auth.authenticate(bearerToken);
         if(!id?.userId||!UUID.test(id.userId)){await reject(401,'UNAUTHENTICATED');return;}
         actor=id.userId;
+        // Enforce at the HTTP boundary even if an injected downstream action
+        // accidentally forgets to check the pilot's limited assurance level.
+        if(id.pilotUnverified===true){await reject(403,'FORBIDDEN');return;}
       }catch {await reject(503,'UPSTREAM_UNAVAILABLE');return;}
       if(route==='OWNER_CASE'||route==='CONSENT_REVOKE') {
         // Bearer must resolve to a real server identity; the injected

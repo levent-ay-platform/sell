@@ -52,7 +52,8 @@ export async function inspectReviewerEvidence(
      !UUID.test(request.caseId)||!UUID.test(request.evidenceId))return denied('ACCESS_DENIED');
   let identity;
   try {identity=await deps.auth.authenticate(request.bearerToken);}catch{return denied('AUTH_REQUIRED');}
-  if(!identity?.userId||!UUID.test(identity.userId))return denied('AUTH_REQUIRED');
+  if(!identity?.userId||identity.pilotUnverified===true||!UUID.test(identity.userId))
+    return denied('AUTH_REQUIRED');
   let row:AuthorizedEvidence|null;
   try {row=await deps.ledger.authorizeAndAudit(request.caseId,request.evidenceId,identity.userId);}
   catch{return denied('EVIDENCE_UNAVAILABLE');}

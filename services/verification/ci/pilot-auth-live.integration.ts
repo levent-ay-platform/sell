@@ -6,9 +6,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createRequire} from 'node:module';
 import {join} from 'node:path';
-import {createHash} from 'node:crypto';
+import {createHash,randomUUID} from 'node:crypto';
 import {SameServicePilotAuth,PilotLoginDenied,PilotLoginUnavailable} from '../src/pilot-auth.ts';
 import {provisionIndividualOwnerCase,revokeIndividualOwnerConsent,OwnerCaseDenied} from '../src/private-owner-case.ts';
+import {uploadIndividualEvidence} from '../src/evidence-upload.ts';
 import type {SqlPool} from '../src/postgres-evidence-repository.ts';
 
 const runner=process.env.RUNNER_TEMP;
@@ -21,7 +22,7 @@ const deviceA='A'.repeat(43),deviceB='B'.repeat(43);
 const phone='+21629500000',otherPhone='+21655500001';
 const secret=Buffer.alloc(48,0x42);
 
-test('disposable DB: 1234 pilot login signs into existing owner case service but never shares evidence by phone',async()=>{
+test('disposable DB: shared 1234 pilot sessions are scoped, but cannot open private cases or upload identity documents',async()=>{
  try{
   const auth=new SameServicePilotAuth(pool as SqlPool,{enabled:true,deviceHmacSecret:secret});
   const disabled=new SameServicePilotAuth(pool as SqlPool,{enabled:false,deviceHmacSecret:secret});
@@ -47,22 +48,36 @@ test('disposable DB: 1234 pilot login signs into existing owner case service but
   const changedPhone=await auth.login({phone:otherPhone,code:'1234',deviceKey:deviceA});
   assert.notEqual((await auth.authenticate(changedPhone.bearer))?.userId,firstId);
 
-  const data={idempotencyKey:'pilot-real-case-synthetic-001',title:'Terrain fictif',
+  assert.equal((await auth.authenticate(first.bearer))?.pilotUnverified,true);
+  assert.equal((await auth.authenticate(otherDevice.bearer))?.pilotUnverified,true);
+  const data={idempotencyKey:'pilot-private-case-must-deny-001',title:'Terrain fictif',
     region:'Kélibia',areaSquareMetres:'200',priceTnd:'18900',
     capacity:'owner',consentAccepted:true};
   const deps={auth,pool:pool as SqlPool,policyVersion:'pilot-consent-v1'};
-  const caseA=await provisionIndividualOwnerCase(replay.bearer,data,deps);
-  assert.equal(caseA.ownershipVerified,false);
-  assert.equal(caseA.identityVerified,false);
-  assert.equal(caseA.mayPublish,false);
-  const caseB=await provisionIndividualOwnerCase(otherDevice.bearer,data,deps);
-  assert.notEqual(caseA.caseId,caseB.caseId);
-  await assert.rejects(revokeIndividualOwnerConsent(otherDevice.bearer,caseA.caseId,deps),
-    (err:unknown)=>err instanceof OwnerCaseDenied&&err.code==='CASE_UNAVAILABLE');
-  const access=await pool.query(
-    'SELECT sell.case_accepts_individual_evidence($1::uuid,$2::uuid) AS allowed',
-    [caseA.caseId,otherId]);
-  assert.equal(access.rows[0].allowed,false);
+  for(const token of [first.bearer,replay.bearer,otherDevice.bearer]){
+    await assert.rejects(provisionIndividualOwnerCase(token,data,deps),
+      (err:unknown)=>err instanceof OwnerCaseDenied&&err.code==='AUTH_REQUIRED');
+    await assert.rejects(revokeIndividualOwnerConsent(token,randomUUID(),deps),
+      (err:unknown)=>err instanceof OwnerCaseDenied&&err.code==='AUTH_REQUIRED');
+  }
+  // Defense in depth: even a badly configured upload dependency must never
+  // accept a pilot bearer as authority for any document bytes.
+  const upload=await uploadIndividualEvidence({
+    bearerToken:replay.bearer,caseId:randomUUID(),idempotencyKey:'pilot_must_not_upload_001',
+    bytes:Buffer.from('%PDF-1.4\\nSYNTHETIC ONLY\\n%%EOF'),
+    evidenceKind:'IDENTITY',pageNumber:null,claimedMime:'application/pdf'
+  },{
+    auth,cases:{
+      inCaseLock:async()=>{throw Error('PILOT_REACHED_DB_LOCK');},
+      getUploadCase:async()=>{throw Error('PILOT_REACHED_PRIVATE_CASE');},
+      findReplay:async()=>null,attachEvidence:async()=>{throw Error('PILOT_ATTACHED');}
+    },
+    scanner:{scan:async()=>{throw Error('PILOT_REACHED_SCANNER');}},
+    objects:{putPrivate:async()=>{throw Error('PILOT_STORED_DOCUMENT');},
+      deletePrivate:async()=>{}},
+    generateDataKey:async()=>{throw Error('PILOT_REACHED_VAULT');}
+  });
+  assert.deepEqual(upload,{ok:false,code:'AUTH_REQUIRED',mayPublish:false,ownershipVerified:false});
   await pool.query(
     "UPDATE sell.pilot_sessions SET expires_at=now()-interval '1 second' WHERE token_digest=$1",
     [createHash('sha256').update(replay.bearer).digest('hex')]);

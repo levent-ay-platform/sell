@@ -13,7 +13,14 @@ export type EvidenceKind = 'IDENTITY'|'OWNERSHIP_CERTIFICATE'|'TITLE_EXTRACT'|'O
 export type EvidenceUploadFailure =
   | 'AUTH_REQUIRED'|'CASE_UNAVAILABLE'|'CONSENT_REQUIRED'|'FILE_REJECTED'
   | 'FILE_UNSAFE'|'UPLOAD_KEY_INVALID'|'REPLAY_CONFLICT'|'STORAGE_UNAVAILABLE';
-export interface AuthenticatedIdentity { readonly userId:string; }
+export interface AuthenticatedIdentity {
+  readonly userId:string;
+  /** Explicitly deny all private-document operations for shared-code pilot sessions.
+   * A pilot token is NOT evidence of ownership of a +216 phone number.
+   * Trusted production authenticators must perform their own identity verification.
+   */
+  readonly pilotUnverified?:true;
+}
 export interface Authenticator {
   /** Authenticates a verified, server-supplied bearer credential, never a userId parameter. */
   authenticate(token:string):Promise<AuthenticatedIdentity|null>;
@@ -124,7 +131,7 @@ export async function uploadIndividualEvidence(input:EvidenceUploadRequest,deps:
     typeof input.caseId!=='string'||!UUID.test(input.caseId) ||
     typeof input.idempotencyKey!=='string'||!KEY.test(input.idempotencyKey))return deny('UPLOAD_KEY_INVALID');
   const identity=await deps.auth.authenticate(input.bearerToken);
-  if(!identity?.userId)return deny('AUTH_REQUIRED');
+  if(!identity?.userId||identity.pilotUnverified===true)return deny('AUTH_REQUIRED');
   if(!(input.bytes instanceof Uint8Array)||input.bytes.byteLength<20||input.bytes.byteLength>MAX_BYTES||
     !KINDS.has(input.evidenceKind)||
     (input.pageNumber!==null&&(!Number.isInteger(input.pageNumber)||input.pageNumber<1||input.pageNumber>8)))return deny('FILE_REJECTED');

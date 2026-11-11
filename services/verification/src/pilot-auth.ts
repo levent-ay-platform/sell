@@ -32,7 +32,8 @@ export class SameServicePilotAuth implements Authenticator {
       'SELECT user_id::text FROM sell.pilot_sessions WHERE token_digest=$1 AND expires_at>now()',
       [digest]);
     if(found.rows.length!==1)return null;
-    return {userId:found.rows[0]!.user_id};
+    // The shared 1234 code is a UI pilot, never a trusted document session.
+    return {userId:found.rows[0]!.user_id,pilotUnverified:true};
   }
   async login(input:unknown):Promise<{bearer:string;expiresInSeconds:number;pilotConfirmed:true}>{
     if(!this.enabled)throw new PilotLoginUnavailable();

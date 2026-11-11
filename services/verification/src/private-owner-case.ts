@@ -81,11 +81,12 @@ function validate(input:unknown):Omit<OwnerCaseInput,'bearerToken'> {
 async function requireUser(auth:Authenticator,bearer:string):Promise<string> {
   if(typeof bearer!=='string'||!TOKEN.test(bearer))
     throw new OwnerCaseDenied('AUTH_REQUIRED');
-  let userId:string|undefined;
-  try {userId=(await auth.authenticate(bearer))?.userId;}
+  let identity;
+  try {identity=await auth.authenticate(bearer);}
   catch {throw new OwnerCaseDenied('AUTH_REQUIRED');}
-  if(!userId||!UUID.test(userId))throw new OwnerCaseDenied('AUTH_REQUIRED');
-  return userId;
+  if(!identity?.userId||identity.pilotUnverified===true||!UUID.test(identity.userId))
+    throw new OwnerCaseDenied('AUTH_REQUIRED');
+  return identity.userId;
 }
 async function transaction<T>(pool:SqlPool,action:(db:SqlClient)=>Promise<T>):Promise<T> {
   let db:SqlClient;

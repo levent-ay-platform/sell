@@ -136,7 +136,8 @@ export async function analyzeAuthorizedPrivateEvidencePair(
   let userId:string;
   try {
     const id=await deps.auth.authenticate(req.bearerToken);
-    if(!id?.userId||!ID.test(id.userId))throw new PrivatePairAccessDenied();
+    if(!id?.userId||id.pilotUnverified===true||!ID.test(id.userId))
+      throw new PrivatePairAccessDenied();
     userId=id.userId;
     const c=await deps.cases.getUploadCase(req.caseId,userId);
     if(!allowed(c,req.caseId,userId))throw new PrivatePairAccessDenied();
@@ -196,7 +197,8 @@ export async function analyzeAuthorizedPrivateEvidencePair(
     const [identityNow,caseNow]=await Promise.all([
       deps.auth.authenticate(req.bearerToken),deps.cases.getUploadCase(req.caseId,userId)
     ]);
-    if(identityNow?.userId!==userId||!allowed(caseNow,req.caseId,userId))
+    if(identityNow?.pilotUnverified===true||identityNow?.userId!==userId||
+       !allowed(caseNow,req.caseId,userId))
       throw new PrivatePairAccessDenied();
   }catch(e){
     if(e instanceof PrivatePairAccessDenied)throw e;

@@ -39,10 +39,12 @@ function call(port:number,body:string,token=bearer,contentType='application/json
  });
 }
 async function withServer(run:(p:number,seen:PrivatePairRequest[],audit:any[])=>Promise<void>,
- handler:((x:PrivatePairRequest)=>Promise<PrivatePairReport>)|null=async()=>preliminary){
+ handler:((x:PrivatePairRequest)=>Promise<PrivatePairReport>)|null=async()=>preliminary,
+ pilot=false){
  const seen:PrivatePairRequest[]=[],audit:any[]=[];
  const server=createServer(createPrivateEvidenceHttpHandler({
-  auth:{authenticate:async t=>t===bearer?{userId}:null},
+  auth:{authenticate:async t=>t===bearer?
+    (pilot?{userId,pilotUnverified:true as const}:{userId}):null},
   limits:{consume:async()=>true},
   audit:{recordDenied:async e=>{audit.push(e);}},
   upload:async()=>{throw Error('PAIR_MUST_NOT_UPLOAD');},
@@ -116,4 +118,15 @@ test('malicious injected analyzer cannot return a verified flag',async()=>{
   assert.equal(r.status,503);assert.equal(r.body.report,undefined);assert.equal(seen.length,1);
   assert.equal(audit[0]?.reason,'UPSTREAM_UNAVAILABLE');
  },async()=>({...preliminary,mayPublish:true} as unknown as PrivatePairReport));
+});
+\ntest('shared-code pilot credential is rejected before reading any private document or returning an owner report',async()=>{
+ await withServer(async(port,seen,audit)=>{
+   const r=await call(port,JSON.stringify(payload));
+   assert.equal(r.status,403);
+   assert.equal(r.body.report,undefined);
+   assert.equal(seen.length,0);
+   assert.equal(audit[0]?.route,'PAIR');
+   assert.equal(audit[0]?.reason,'FORBIDDEN');
+   assert.equal(r.body.ownershipVerified,undefined);
+ },async()=>preliminary,true);
 });
