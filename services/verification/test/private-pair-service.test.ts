@@ -177,3 +177,24 @@ test('explicit CIN mismatch overrides otherwise agreeing owner names; no digits 
   assert.equal(JSON.stringify(r.cinComparison).includes('87654321'),false);
   assert.equal(JSON.stringify(r.cinComparison).includes('12345678'),false);
 });
+
+test('page-two image as first or only selected page never reaches OCR',async()=>{
+  const h=harness();
+  h.rows.set(certificateId,{...h.certRow,mime:'image/png',pageNumber:2});
+  await assert.rejects(analyze(h.request,h.deps),PrivatePairAccessDenied);
+  assert.equal(h.ocrCalls,0);
+  const other=harness();
+  other.rows.set(identityId,{...other.identityRow,mime:'image/jpeg',pageNumber:2});
+  await assert.rejects(analyze(other.request,other.deps),PrivatePairAccessDenied);
+  assert.equal(other.ocrCalls,0);
+});
+test('single PDF cannot disguise itself as a numbered scanned page',async()=>{
+  const h=harness();
+  h.rows.set(certificateId,{...h.certRow,pageNumber:1});
+  await assert.rejects(analyze(h.request,h.deps),PrivatePairAccessDenied);
+  assert.equal(h.ocrCalls,0);
+  const other=harness();
+  other.rows.set(identityId,{...other.identityRow,pageNumber:1});
+  await assert.rejects(analyze(other.request,other.deps),PrivatePairAccessDenied);
+  assert.equal(other.ocrCalls,0);
+});

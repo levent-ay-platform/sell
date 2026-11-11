@@ -158,12 +158,15 @@ export async function analyzeAuthorizedPrivateEvidencePair(
   };
   const certRows=await fetchRows(req.certificateEvidenceIds,'OWNERSHIP_CERTIFICATE');
   const idRows=await fetchRows(req.identityEvidenceIds,'IDENTITY');
-  // A certificate is one PDF, or explicitly numbered single-page images.
-  if(certRows.length>1 && certRows.some((row,i)=>row.mime==='application/pdf'||row.pageNumber!==i+1))
-    throw new PrivatePairAccessDenied();
-  if(idRows.length===2 &&
-     idRows.some((row,i)=>row.mime==='application/pdf'||row.pageNumber!==i+1))
-    throw new PrivatePairAccessDenied();
+  // Certificates and identity cards are exactly one complete PDF, or image
+  // receipts numbered from page one in explicit selection order. Even a lone
+  // image labelled page 2/3 is not a valid page-one comparison source.
+  // Never silently renumber a malicious or stale receipt before OCR.
+  const ordered=(rows:readonly EvidenceRow[])=>rows.every((row,i)=>
+    row.mime==='application/pdf'
+      ?rows.length===1&&row.pageNumber===null
+      :row.pageNumber===i+1);
+  if(!ordered(certRows)||!ordered(idRows))throw new PrivatePairAccessDenied();
   // A pair can contain several pages/files. Bound the entire synchronous
   // extraction sequence, not only each Python subprocess (max 60 seconds).
   // The current OCR job is always awaited/killed by its worker before exiting.
