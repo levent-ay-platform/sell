@@ -9,6 +9,8 @@ import {createDecipheriv,createHash} from 'node:crypto';
 import {parseOcrWorkerOutput} from './reader.ts';
 import type {IngestedDocument,IngestedPage} from './reader.ts';
 import {comparePrivateCertificateIdentityOcr} from './private-document-comparison.ts';
+import {compareCertificateIdentityCinText} from './private-cin-comparison.ts';
+import type {PrivateCinComparison} from './private-cin-comparison.ts';
 import type {PrivateDocumentComparison} from './private-document-comparison.ts';
 import type {Authenticator,AuthorizedUploadCase,EvidenceRow,CaseEvidenceRepository} from './evidence-upload.ts';
 import type {PrivateCiphertextReader} from './local-private-store.ts';
@@ -47,6 +49,8 @@ export interface PrivatePairReport {
   readonly certificatePagesReceived:number;
   readonly identitySides:'MISSING_REVERSE'|'MULTI_PAGE_UNCONFIRMED'|'TWO_FILES_UNCONFIRMED';
   readonly comparison:PrivateDocumentComparison;
+  /** Number values are NEVER returned; document-level review remains mandatory. */
+  readonly cinComparison:PrivateCinComparison;
   readonly ownershipVerified:false;
   readonly identityVerified:false;
   readonly mayPublish:false;
@@ -158,12 +162,21 @@ export async function analyzeAuthorizedPrivateEvidencePair(
   const identityDocs:IngestedDocument[]=[];
   for(const row of idRows)identityDocs.push(await readOne(row,deps));
   const cert=joinPages(certDocs),identity=joinPages(identityDocs);
+  const cinComparison=compareCertificateIdentityCinText(cert,identity);
   const coverage:PrivatePairReport['identitySides']=idRows.length===2?
     'TWO_FILES_UNCONFIRMED':identity.pages.length>=2?
     'MULTI_PAGE_UNCONFIRMED':'MISSING_REVERSE';
   let comparison:PrivateDocumentComparison;
   try {comparison=comparePrivateCertificateIdentityOcr(cert,identity);}
   catch {throw new PrivatePairUnavailable();}
+  if(cinComparison.status==='NUMBER_DIFFERS_NEEDS_REVIEW'){
+    comparison={...comparison,assessment:'TEXT_DIFFERENCE_NEEDS_REVIEW',
+      reasons:[...comparison.reasons,'CIN_NUMBER_TEXT_DIFFERS']};
+  }else if(cinComparison.status==='AMBIGUOUS_OR_LOW_CONFIDENCE' &&
+           comparison.assessment==='PRELIMINARY_TEXT_AGREEMENT'){
+    comparison={...comparison,assessment:'INSUFFICIENT_OR_AMBIGUOUS',
+      reasons:[...comparison.reasons,'CIN_NUMBER_UNCERTAIN']};
+  }
   if(coverage==='MISSING_REVERSE'&&comparison.assessment==='PRELIMINARY_TEXT_AGREEMENT'){
     comparison={...comparison,assessment:'INSUFFICIENT_OR_AMBIGUOUS',
       reasons:[...comparison.reasons,'IDENTITY_REVERSE_MISSING']};
@@ -179,6 +192,6 @@ export async function analyzeAuthorizedPrivateEvidencePair(
     throw new PrivatePairUnavailable();
   }
   return {access:'AUTHORIZED_CASE_OWNER_ONLY',certificatePagesReceived:cert.pages.length,
-    identityPagesReceived:identity.pages.length,identitySides:coverage,comparison,
+    identityPagesReceived:identity.pages.length,identitySides:coverage,comparison,cinComparison,
     ownershipVerified:false,identityVerified:false,mayPublish:false,requiresHumanReview:true};
 }

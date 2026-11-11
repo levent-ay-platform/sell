@@ -143,3 +143,22 @@ test('missing or inaccessible consent case and company claims fail closed',async
   h.setCase(consent);h.setUser(null);
   await assert.rejects(analyze(h.request,h.deps),PrivatePairAccessDenied);
 });
+
+test('explicit CIN mismatch overrides otherwise agreeing owner names; no digits leaked',async()=>{
+  const h=harness();
+  const original=h.deps.worker.extract;
+  h.deps.worker.extract=async bytes=>{
+    const payload=await original(bytes);
+    const id=Buffer.from(bytes).toString('utf8').includes('ID2');
+    const label=id?'CIN: 87654321':'CIN: 12345678';
+    payload.pages[0]!.lines.push({text:label,page:1,source:'pdf-text',confidence:null});
+    return payload;
+  };
+  const r=await analyze(h.request,h.deps);
+  assert.equal(r.comparison.assessment,'TEXT_DIFFERENCE_NEEDS_REVIEW');
+  assert.equal(r.cinComparison.status,'NUMBER_DIFFERS_NEEDS_REVIEW');
+  assert.equal(r.ownershipVerified,false);
+  assert.equal(r.identityVerified,false);
+  assert.equal(JSON.stringify(r.cinComparison).includes('87654321'),false);
+  assert.equal(JSON.stringify(r.cinComparison).includes('12345678'),false);
+});
