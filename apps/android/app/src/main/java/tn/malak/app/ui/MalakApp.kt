@@ -72,12 +72,14 @@ internal fun MalakApp(
     var screen by rememberSaveable { mutableStateOf("home") }
     var category by rememberSaveable { mutableStateOf("all") }
     var query by rememberSaveable { mutableStateOf("") }
+    // In-memory only: never promote fixed pilot OTP to an authenticated server identity.
+    var pilotPhone by remember { mutableStateOf<String?>(null) }
     val tabs = setOf("home", "map", "favorites", "more")
 
     CompositionLocalProvider(LocalMalakStringsContext provides localizedContext,
         LocalLayoutDirection provides direction,
-        LocalOwnerEvidenceSession provides ownerEvidenceSession,
-        LocalAuthenticatedOwnerSession provides authenticatedOwnerSession) {
+        LocalOwnerEvidenceSession provides (if (PilotOtpGate.enabled) null else ownerEvidenceSession),
+        LocalAuthenticatedOwnerSession provides (if (PilotOtpGate.enabled) null else authenticatedOwnerSession)) {
         MaterialTheme(colorScheme = lightColorScheme(
             primary = Brand.Crimson,
             background = Brand.Pearl,
@@ -85,9 +87,17 @@ internal fun MalakApp(
             onSurface = Brand.Ink
         )) {
             Surface(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing), color = Brand.Pearl) {
-                Scaffold(
+                if (PilotOtpGate.enabled && pilotPhone == null) {
+                    PilotOtpScreen(onEnterPilot = { pilotPhone = it; screen = "home" })
+                } else Scaffold(
                     containerColor = Brand.Pearl,
                     contentWindowInsets = WindowInsets(0, 0, 0, 0),
+                    topBar = {
+                        if (PilotOtpGate.enabled) PilotSessionBar(pilotPhone.orEmpty()) {
+                            pilotPhone = null
+                            screen = "home"
+                        }
+                    },
                     bottomBar = {
                         if (screen in tabs) MalakBottomBar(screen) { screen = it }
                     }
