@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Synthetic Android emulator smoke: app must remain alive after seller navigation.
+"""Synthetic Android emulator smoke: fixed pilot PIN enters app and seller navigation stays alive.
 
 Run only in disposable GitHub-hosted emulator; no real documents, sessions or data.
 """
@@ -39,6 +39,26 @@ def click_text(labels):
             adb("shell","input","swipe","190","650","190","260","330")
             time.sleep(1)
     raise AssertionError(f"Seller entry not found in actual Android UI: {labels}; visible={texts(nodes)[:40]}")
+def enter_pilot():
+    """Use only invented test number and the debug-only fixed pilot code."""
+    print("Pilot visible labels:",texts(dump_nodes())[:40])
+    click_text(["Numéro tunisien","رقم الهاتف التونسي","Tunisian phone number"])
+    adb("shell","input","text","29500000")
+    adb("shell","input","keyevent","KEYCODE_BACK")
+    click_text(["Continuer","متابعة","Continue"])
+    time.sleep(1)
+    click_text(["Code de test à 4 chiffres","رمز الدخول التجريبي (4 أرقام)","4-digit test code"])
+    adb("shell","input","text","1234")
+    adb("shell","input","keyevent","KEYCODE_BACK")
+    click_text(["Entrer en mode pilote","الدخول إلى النسخة التجريبية","Enter pilot"])
+    time.sleep(2)
+    visible=texts(dump_nodes())
+    print("After pilot login:",visible[:40])
+    if not any(x in visible for x in
+            ["Déposer un terrain","أضف أرضك","Mode pilote — utilisateur non vérifié",
+             "وضع تجريبي — المستخدم غير متحقق منه"]):
+        raise AssertionError("Pilot code 1234 did not enter actual Malak home")
+
 def crash_log():
     result=adb("logcat","-d","-b","crash","-v","brief",check=False)
     log=result.stdout
@@ -57,14 +77,14 @@ def assert_alive_and_seller():
 def main():
     print(adb("shell","am","start","-W","-n",PACKAGE+"/.MainActivity").stdout)
     time.sleep(3)
-    print("Home visible labels:",texts(dump_nodes())[:40])
+    enter_pilot()
     click_text(["Déposer un terrain","أضف أرضك"])
     time.sleep(2)
     assert_alive_and_seller()
     with open(TMP/"seller-open.png","wb") as out:
         shot=subprocess.run(["adb","exec-out","screencap","-p"],stdout=out,stderr=subprocess.PIPE,timeout=30)
         if shot.returncode: print("Screen capture unavailable (nonblocking)")
-    print("PASS: app stayed alive and seller form rendered after actual tap on disposable emulator")
+    print("PASS: fixed pilot 1234 entered Malak and Add Land remained alive on disposable emulator")
 if __name__=="__main__":
     try:main()
     except Exception:
