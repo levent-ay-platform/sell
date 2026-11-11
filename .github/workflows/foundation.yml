@@ -29,7 +29,7 @@ concurrency:
 jobs:
   verification-schema:
     name: Docs, workflow policy and PostGIS publication gate
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     services:
       postgres:
