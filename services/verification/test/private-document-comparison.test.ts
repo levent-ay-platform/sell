@@ -19,6 +19,15 @@ test('Arabic exact text candidate may agree but remains unverified',()=>{
   const r=compare(doc(['المالك: محمد بن صالح'],'ocr-ar'),doc(['الاسم واللقب: محمد بن صالح'],'ocr-ar'));
   assert.equal(r.assessment,'PRELIMINARY_TEXT_AGREEMENT');assert.equal(r.ownershipVerified,false);
 });
+test('reordered name tokens must never appear as preliminary identity agreement',()=>{
+  const report=compare(doc(['Propriétaire: Amira Ben Salem']),
+    doc(['Nom et prénom: Salem Ben Amira']));
+  assert.equal(report.assessment,'TEXT_DIFFERENCE_NEEDS_REVIEW');
+  assert.ok(report.reasons.includes('NAME_TEXT_DIFFERS_OR_SCRIPT_MISMATCH'));
+  assert.equal(report.ownershipVerified,false);
+  assert.equal(report.identityVerified,false);
+  assert.equal(report.mayPublish,false);
+});
 test('different names require human review, not an automatic identity-fraud conclusion',()=>{
   const r=compare(doc(['Propriétaire: Amira Ben Salem']),doc(['Nom et prénom: Amira Gharbi']));
   assert.equal(r.assessment,'TEXT_DIFFERENCE_NEEDS_REVIEW');assert.equal(r.mayPublish,false);
