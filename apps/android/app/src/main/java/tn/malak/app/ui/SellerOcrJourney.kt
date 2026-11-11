@@ -106,11 +106,11 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
     // case or owner session change. Cancellation of a blocking HTTPS request
     // alone cannot guarantee its callback will never arrive after a new run.
     var requestEpoch by remember {mutableIntStateOf(0)}
-    var pairProgress by remember {mutableStateOf<PairProgress?>(null)}
-    var pairReport by remember {mutableStateOf<CertificateIdentityReview?>(null)}
-    var provisionedCase by remember {mutableStateOf<OwnerEvidenceSession?>(null)}
-    var pairError by remember {mutableIntStateOf(0)}
-    var uploadConsent by remember {mutableStateOf(false)}
+    var pairProgress by remember(draftFile) {mutableStateOf<PairProgress?>(null)}
+    var pairReport by remember(draftFile) {mutableStateOf<CertificateIdentityReview?>(null)}
+    var provisionedCase by remember(draftFile) {mutableStateOf<OwnerEvidenceSession?>(null)}
+    var pairError by remember(draftFile) {mutableIntStateOf(0)}
+    var uploadConsent by remember(draftFile) {mutableStateOf(false)}
     // Each pilot number gets a separate local draft; never show another user's
     // unpublished property when switching accounts on the same Android device.
     val draftFile=remember(draftScope) {
@@ -125,24 +125,24 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
     val prefs=remember(context,draftFile){
         context.getSharedPreferences(draftFile,Context.MODE_PRIVATE)
     }
-    var step by rememberSaveable {mutableIntStateOf(0)}
-    var name by rememberSaveable {mutableStateOf(prefs.getString("title","") ?: "")}
-    var region by rememberSaveable {mutableStateOf(prefs.getString("region","") ?: "")}
-    var area by rememberSaveable {mutableStateOf(prefs.getString("area","") ?: "")}
-    var price by rememberSaveable {mutableStateOf(prefs.getString("price","") ?: "")}
-    var capacity by rememberSaveable {mutableStateOf(prefs.getString("capacity","owner") ?: "owner")}
+    var step by rememberSaveable(draftFile) {mutableIntStateOf(0)}
+    var name by rememberSaveable(draftFile) {mutableStateOf(prefs.getString("title","") ?: "")}
+    var region by rememberSaveable(draftFile) {mutableStateOf(prefs.getString("region","") ?: "")}
+    var area by rememberSaveable(draftFile) {mutableStateOf(prefs.getString("area","") ?: "")}
+    var price by rememberSaveable(draftFile) {mutableStateOf(prefs.getString("price","") ?: "")}
+    var capacity by rememberSaveable(draftFile) {mutableStateOf(prefs.getString("capacity","owner") ?: "owner")}
     // Generate the case request key only when the user submits. Persist the
     // payload fingerprint + opaque key BEFORE the first network request, so an
     // unknown server response followed by app restart cannot create a new case.
-    var showInvalid by rememberSaveable {mutableStateOf(false)}
-    var saveMessage by remember {mutableIntStateOf(0)}
-    var pickMessage by remember {mutableIntStateOf(0)}
-    val files=remember {mutableStateListOf<ChosenDocument>()}
-    val identityFiles=remember {mutableStateListOf<ChosenDocument>()}
-    var identityMessage by remember {mutableIntStateOf(0)}
+    var showInvalid by rememberSaveable(draftFile) {mutableStateOf(false)}
+    var saveMessage by remember(draftFile) {mutableIntStateOf(0)}
+    var pickMessage by remember(draftFile) {mutableIntStateOf(0)}
+    val files=remember(draftFile) {mutableStateListOf<ChosenDocument>()}
+    val identityFiles=remember(draftFile) {mutableStateListOf<ChosenDocument>()}
+    var identityMessage by remember(draftFile) {mutableIntStateOf(0)}
     // Never let a stale comparison be displayed after selecting other documents,
     // navigation, account or case changes. Private report is memory-only.
-    LaunchedEffect(files.toList(),identityFiles.toList(),ownerSession,authenticatedOwnerSession,
+    LaunchedEffect(draftFile,files.toList(),identityFiles.toList(),ownerSession,authenticatedOwnerSession,
         name,region,area,price,capacity) {
         requestEpoch++
         requestJob?.cancel()
@@ -159,34 +159,37 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
         }
     }
 
-    val pickDocuments=rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
-        var refused=false
-        for(uri in uris) {
-            if(files.any { it.uri==uri })continue
-            if(files.size>=8) { refused=true;continue }
-            try {
+    // Select one certificate page at a time. Android OpenMultipleDocuments
+    // does not promise page order and could silently reverse evidence pages.
+    val pickDocuments=rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if(uri!=null) {
+            var refused=false
+            if(files.any{it.uri==uri}||files.size>=8)refused=true
+            else try {
                 var label=""
                 var length=0L
-                context.contentResolver.query(uri,arrayOf(OpenableColumns.DISPLAY_NAME,OpenableColumns.SIZE),null,null,null)?.use{cursor ->
+                context.contentResolver.query(
+                    uri,arrayOf(OpenableColumns.DISPLAY_NAME,OpenableColumns.SIZE),null,null,null
+                )?.use {cursor ->
                     if(cursor.moveToFirst()) {
-                        val nameIndex=cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-                        val sizeIndex=cursor.getColumnIndex(OpenableColumns.SIZE)
-                        if(nameIndex>=0&&!cursor.isNull(nameIndex))label=cursor.getString(nameIndex).take(90)
-                        if(sizeIndex>=0&&!cursor.isNull(sizeIndex))length=cursor.getLong(sizeIndex)
+                        val ni=cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                        val si=cursor.getColumnIndex(OpenableColumns.SIZE)
+                        if(ni>=0&&!cursor.isNull(ni))label=cursor.getString(ni).take(90)
+                        if(si>=0&&!cursor.isNull(si))length=cursor.getLong(si)
                     }
                 }
                 val mime=context.contentResolver.getType(uri)
-                if(length !in 20..MAX_DOC_BYTES || mime==null || mime !in setOf("application/pdf","image/png","image/jpeg","image/tiff")) {
-                    refused=true;continue
-                }
-                if((mime=="application/pdf" && files.isNotEmpty()) ||
-                    (mime!="application/pdf" && files.any{it.mime=="application/pdf"})) {
-                    refused=true;continue
-                }
-                files.add(ChosenDocument(uri,label.ifBlank {uri.lastPathSegment?.take(50) ?: "PDF"},length,mime))
-            } catch (_:Exception) {refused=true}
+                if(length !in 20..MAX_DOC_BYTES || mime==null ||
+                   mime !in setOf("application/pdf","image/png","image/jpeg","image/tiff") ||
+                   (mime=="application/pdf"&&files.isNotEmpty()) ||
+                   (mime!="application/pdf"&&files.any{it.mime=="application/pdf"})) {
+                    refused=true
+                } else files.add(ChosenDocument(
+                    uri,label.ifBlank{uri.lastPathSegment?.take(50)?:"Document"},length,mime))
+            }catch(_:Exception){refused=true}
+            pickMessage=if(refused)R.string.file_rejected
+                else R.string.file_selected
         }
-        pickMessage=if(refused)R.string.file_rejected else if(files.isNotEmpty())R.string.file_selected else 0
     }
 
     // Explicitly bind recto to page 1 and verso to page 2. An unordered
@@ -324,6 +327,8 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                         Column(Modifier.fillMaxWidth().padding(20.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
                             Icon(Icons.Outlined.Description,null,Modifier.size(34.dp),tint=Brand.Crimson)
                             Text(s(R.string.file_rules),color=Brand.Muted,fontSize=12.sp)
+                            Text(s(R.string.certificate_page_order_hint),color=Brand.Muted,
+                                fontSize=12.sp,lineHeight=18.sp)
                             OutlinedButton(onClick={pickDocuments.launch(arrayOf("application/pdf","image/jpeg","image/png","image/tiff"))},
                                 modifier=Modifier.fillMaxWidth().heightIn(min=52.dp),shape=RoundedCornerShape(16.dp)) {
                                 Icon(Icons.Outlined.FolderOpen,null,Modifier.size(21.dp))
@@ -337,14 +342,19 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                         PlainNotice(Icons.Outlined.Description,s(R.string.file_none))
                     } else {
                         Text(s(R.string.documents_selected),color=Brand.Ink,fontSize=16.sp,fontWeight=FontWeight.SemiBold)
-                        files.toList().forEach {file ->
+                        files.toList().forEachIndexed { index,file ->
                             Surface(shape=RoundedCornerShape(16.dp),color=Color.White,border=BorderStroke(1.dp,CardBorder)) {
                                 Row(Modifier.fillMaxWidth().heightIn(min=56.dp).padding(start=11.dp,end=6.dp),
                                     verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(10.dp)) {
                                     Icon(Icons.Outlined.InsertDriveFile,null,tint=Brand.Crimson,modifier=Modifier.size(23.dp))
                                     Column(Modifier.weight(1f)) {
-                                        Text(file.displayName,color=Brand.Ink,maxLines=1,overflow=TextOverflow.Ellipsis,fontSize=13.sp)
-                                        Text("${file.length/1024} KB",color=Brand.Muted,fontSize=11.sp)
+                                        Text(if(file.mime=="application/pdf")
+                                            s(R.string.certificate_pdf_label)
+                                            else "${s(R.string.certificate_page_label)} ${index+1}",
+                                            color=Brand.Ink,fontWeight=FontWeight.SemiBold,fontSize=12.sp)
+                                        Text("${file.displayName} · ${file.length/1024} KB",
+                                            color=Brand.Muted,maxLines=1,
+                                            overflow=TextOverflow.Ellipsis,fontSize=11.sp)
                                     }
                                     IconButton(onClick={files.remove(file)},modifier=Modifier.size(48.dp)) {
                                         Icon(Icons.Outlined.DeleteOutline,s(R.string.remove),tint=Brand.Muted)

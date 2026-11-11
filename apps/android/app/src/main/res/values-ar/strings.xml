@@ -151,6 +151,9 @@
     <string name="pair_reason_missing_back">الوجه الخلفي لبطاقة التعريف غير موجود.</string>
     <string name="pair_reason_not_official">لم يتم فحص الحقوق الحالية بالسجل العقاري أو أصالة الوثيقة.</string>
     <string name="pair_reason_other">يوجد تعارض إضافي في الوثائق يتطلب مراجعة بشرية.</string>
+    <string name="certificate_page_order_hint">إذا عندك صور، أضف كل صفحة على حدة وبالترتيب المطبوع. أو اختر ملف PDF واحداً يشمل كل الصفحات.</string>
+    <string name="certificate_pdf_label">شهادة الملكية بصيغة PDF</string>
+    <string name="certificate_page_label">صفحة الشهادة</string>
     <string name="pair_preliminary_only">نتيجة OCR لا تثبت صحة الهوية أو ملكية العقار ولا تسمح بالنشر. يلزم تدقيق مستقل.</string>
     <string name="pair_creating_case">جارٍ إنشاء طلب التحقق الخاص…</string>
     <string name="pair_upload_cert">جارٍ إرسال شهادة الملكية بأمان…</string>

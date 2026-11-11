@@ -151,6 +151,9 @@
     <string name="pair_reason_missing_back">The reverse side of the identity card has not been received.</string>
     <string name="pair_reason_not_official">Current registry rights and document authenticity have not been checked.</string>
     <string name="pair_reason_other">Another document inconsistency requires manual review.</string>
+    <string name="certificate_page_order_hint">For photos, add each page separately in the printed order. Use one PDF if all pages are already included.</string>
+    <string name="certificate_pdf_label">Complete certificate PDF</string>
+    <string name="certificate_page_label">Certificate page</string>
     <string name="pair_preliminary_only">OCR does not verify identity or title ownership, and does not permit publication. Independent review required.</string>
     <string name="pair_creating_case">Creating private verification request…</string>
     <string name="pair_upload_cert">Securely uploading certificate…</string>

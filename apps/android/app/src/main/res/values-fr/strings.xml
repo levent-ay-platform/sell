@@ -151,6 +151,9 @@
     <string name="pair_reason_missing_back">Le verso de la carte d’identité est manquant.</string>
     <string name="pair_reason_not_official">Les droits actuels au registre et l’authenticité du document n’ont pas été vérifiés.</string>
     <string name="pair_reason_other">Une autre incohérence nécessite un examen manuel.</string>
+    <string name="certificate_page_order_hint">Pour les photos, ajoutez chaque page séparément dans l’ordre imprimé. Sinon, sélectionnez un seul PDF complet.</string>
+    <string name="certificate_pdf_label">PDF du certificat complet</string>
+    <string name="certificate_page_label">Page du certificat</string>
     <string name="pair_preliminary_only">L’OCR ne vérifie ni l’identité ni la propriété et n’autorise pas une publication. Contrôle indépendant obligatoire.</string>
     <string name="pair_creating_case">Création de la demande de vérification privée…</string>
     <string name="pair_upload_cert">Envoi sécurisé du certificat…</string>
