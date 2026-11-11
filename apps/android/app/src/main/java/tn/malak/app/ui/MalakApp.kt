@@ -113,10 +113,15 @@ internal fun MalakApp(
                                 language = it
                                 preferences.edit().putString("language", it).apply()
                             }, onSeller = { screen = "seller" })
-                            "seller" -> SellerOcrJourney(
-                                onBack = { screen = "home" },
-                                draftScope = if (PilotOtpGate.enabled) pilotPhone else null
-                            )
+                            "seller" -> key(if (PilotOtpGate.enabled) pilotPhone else "owner") {
+                                // Recreate all seller Compose state when the pilot account changes.
+                                // A document URI, consent checkbox or OCR result must not be
+                                // inherited by a different account on a shared device.
+                                SellerOcrJourney(
+                                    onBack = { screen = "home" },
+                                    draftScope = if (PilotOtpGate.enabled) pilotPhone else null
+                                )
+                            }
                             else -> LaunchedEffect(Unit) { screen = "home" }
                         }
                     }
