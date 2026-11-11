@@ -80,6 +80,19 @@ test('LIVE disposable PostGIS: authorization, consent, AES-GCM upload, page 2, r
     assert.equal(first.uploaded,true);
     assert.equal(first.mayPublish,false);
     assert.equal(first.ownershipVerified,false);
+    // Same-case and same-uploader lookup must never expose private object
+    // keys to an unrelated user or case even if the UUID is known.
+    const scoped=await repo.getPrivateEvidence(caseId,owner,first.evidenceId);
+    assert.equal(scoped?.evidenceId,first.evidenceId);
+    assert.equal(scoped?.caseId,caseId);
+    assert.equal(scoped?.uploadedBy,owner);
+    assert.equal(scoped?.kind,'OWNERSHIP_CERTIFICATE');
+    assert.ok(scoped?.objectKey.startsWith('private/evidence/'));
+    assert.equal(await repo.getPrivateEvidence(caseId,stranger,first.evidenceId),null);
+    assert.equal(await repo.getPrivateEvidence('00000000-0000-4000-8000-000000000000',
+      owner,first.evidenceId),null);
+    assert.equal(await repo.getPrivateEvidence(caseId,owner,
+      '00000000-0000-4000-8000-000000000000'),null);
     const repeat=await uploadIndividualEvidence(request,deps);
     assert.equal(repeat.ok,true);
     if(repeat.ok){assert.equal(repeat.uploaded,false);assert.equal(repeat.evidenceId,first.evidenceId);}

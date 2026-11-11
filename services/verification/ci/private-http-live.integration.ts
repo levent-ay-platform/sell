@@ -25,8 +25,9 @@ test('LIVE disposable Postgres: HMAC rate window atomic under concurrency and de
      assert.equal(await limiter.consume({route:'UPLOAD',remote}),false);
      assert.equal(await limiter.consume({route:'INSPECT',remote}),true);
      assert.equal(await limiter.consume({route:'OCR',remote}),true);
+     assert.equal(await limiter.consume({route:'PAIR',remote}),true);
      const buckets=await db.query('SELECT bucket_hash,route,hits FROM sell.private_evidence_rate_limits');
-     assert.equal(buckets.rows.length,3);
+     assert.equal(buckets.rows.length,4);
      assert.ok(buckets.rows.every((r:any)=>/^[a-f0-9]{64}$/.test(r.bucket_hash)));
      assert.ok(!JSON.stringify(buckets.rows).includes(remote));
      const audit=new PostgresPrivateEvidenceDenialAudit(pool);
@@ -43,6 +44,12 @@ test('LIVE disposable Postgres: HMAC rate window atomic under concurrency and de
      assert.deepEqual(rows.rows[0].metadata,{route:'UPLOAD',reason:'RATE_LIMITED'});
      assert.equal(rows.rows[1].actor_user_id,user);
      assert.deepEqual(rows.rows[1].metadata,{route:'INSPECT',reason:'FORBIDDEN'});
+     const third=randomUUID();
+     await audit.recordDenied({route:'PAIR',reason:'FORBIDDEN',actorUserId:user,
+       requestId:third});
+     const pairDenied=await db.query('SELECT metadata FROM sell.audit_events WHERE entity_id=$1::uuid',
+       [third]);
+     assert.deepEqual(pairDenied.rows[0].metadata,{route:'PAIR',reason:'FORBIDDEN'});
      assert.ok(!JSON.stringify(rows.rows).includes(remote));
    } finally {privateSecret.fill(0);}
  } finally {await db.end();}

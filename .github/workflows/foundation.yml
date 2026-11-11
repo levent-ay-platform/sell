@@ -65,6 +65,7 @@ jobs:
           psql -h 127.0.0.1 -U sell_ci -d sell_ci -v ON_ERROR_STOP=1 -f db/tests/0002_individual_evidence.test.sql
           psql -h 127.0.0.1 -U sell_ci -d sell_ci -v ON_ERROR_STOP=1 -f db/migrations/0003_private_evidence_http.sql
           psql -h 127.0.0.1 -U sell_ci -d sell_ci -v ON_ERROR_STOP=1 -f db/migrations/0004_private_ocr_route.sql
+          psql -h 127.0.0.1 -U sell_ci -d sell_ci -v ON_ERROR_STOP=1 -f db/migrations/0005_private_pair_route.sql
       - name: Test actual Node evidence repository against disposable PostgreSQL
         env:
           PGPASSWORD: sell_ci_disposable
