@@ -10,6 +10,10 @@ val malakPrivateBaseUrl = providers.gradleProperty("malakPrivateBaseUrl")
     .orElse(providers.environmentVariable("MALAK_PRIVATE_SERVICE_URL"))
     .orElse("")
     .get()
+require(malakPrivateBaseUrl.isEmpty() ||
+    malakPrivateBaseUrl.matches(Regex("^https://[A-Za-z0-9.-]+(?::[0-9]{2,5})?$"))) {
+    "Only an approved HTTPS host:port can configure the Malak private pilot gateway"
+}
 
 android {
     namespace = "tn.malak.app"
@@ -21,8 +25,7 @@ android {
         targetSdk = 35
         versionCode = 2
         versionName = "0.2.0-qa"
-        buildConfigField("String", "MALAK_PRIVATE_SERVICE_URL",
-            "\\\"" + malakPrivateBaseUrl.replace("\\\\", "\\\\\\\\").replace("\\\"", "\\\\\\\"") + "\\\"")
+        buildConfigField("String", "MALAK_PRIVATE_SERVICE_URL", "\"$malakPrivateBaseUrl\"")
     }
 
     buildTypes {
