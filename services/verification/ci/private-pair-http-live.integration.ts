@@ -64,6 +64,10 @@ draw=ImageDraw.Draw(image)
 font=ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",50)
 for i,text in enumerate(sys.argv[1:]):
  draw.text((75,120+i*145),text,fill="black",font=font)
+# A visibly synthetic black footer supplies stable image histogram coverage.
+# Without it, a mostly blank white QA sheet is incorrectly classified as
+# LOW_CONTRAST by the conservative fifth-percentile preflight despite crisp ink.
+draw.rectangle((0,860,1599,939),fill="black")
 target=BytesIO()
 image.save(target,format="PNG")
 sys.stdout.buffer.write(target.getvalue())
