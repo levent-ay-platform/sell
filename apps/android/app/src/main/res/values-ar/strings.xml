@@ -161,6 +161,12 @@
     <string name="pair_identity_pages">صفحات بطاقة التعريف المعالجة</string>
     <string name="certificate_add_next_page">إضافة الصفحة التالية للشهادة</string>
     <string name="certificate_following_pages_removed">حُذفت هذه الصفحة وكل الصفحات التي تليها للحفاظ على الترتيب المطبوع. أضفها مجدداً بالتسلسل.</string>
+    <string name="local_ocr_hint">اقرأ شهادة الملكية ووجهي بطاقة التعريف باستخدام OCR حقيقي على الهاتف، بدون رفع الوثائق إلى الخادم. النتيجة مقارنة نصية أولية.</string>
+    <string name="local_ocr_button">فحص الشهادة والهوية الآن</string>
+    <string name="local_ocr_result_label">هذه نتيجة OCR محلي على الهاتف؛ لا تثبت صحة الوثيقة أو الملكية العقارية الحالية.</string>
+    <string name="local_ocr_processing">جارٍ قراءة الوثائق على الهاتف…</string>
+    <string name="local_ocr_failed">تعذرت قراءة الملفات. اختر صور JPG أو PNG أو ملف PDF واضحاً ثم أعد المحاولة.</string>
+    <string name="local_ocr_server_later">التحقق عبر الخادم غير متصل حالياً، لكن زر OCR المحلي يعمل بدونه.</string>
     <string name="pair_preliminary_only">نتيجة OCR لا تثبت صحة الهوية أو ملكية العقار ولا تسمح بالنشر. يلزم تدقيق مستقل.</string>
     <string name="pair_creating_case">جارٍ إنشاء طلب التحقق الخاص…</string>
     <string name="pair_upload_cert">جارٍ إرسال شهادة الملكية بأمان…</string>

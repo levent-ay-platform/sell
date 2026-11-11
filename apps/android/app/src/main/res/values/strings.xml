@@ -161,6 +161,12 @@
     <string name="pair_identity_pages">Identity card pages processed</string>
     <string name="certificate_add_next_page">Add the next certificate page</string>
     <string name="certificate_following_pages_removed">This page and all following pages were removed to preserve printed page order. Add them again in sequence.</string>
+    <string name="local_ocr_hint">Read the property certificate and both ID sides with real offline OCR. Documents stay on this phone. Results are preliminary text comparisons.</string>
+    <string name="local_ocr_button">Scan certificate and ID now</string>
+    <string name="local_ocr_result_label">Offline phone OCR result. Document authenticity and current land ownership have not been verified.</string>
+    <string name="local_ocr_processing">Reading selected documents on this phone…</string>
+    <string name="local_ocr_failed">Could not read these documents. Choose clearer JPG/PNG images or a readable PDF and try again.</string>
+    <string name="local_ocr_server_later">Server verification is not connected yet. The local OCR button above works without it.</string>
     <string name="pair_preliminary_only">OCR does not verify identity or title ownership, and does not permit publication. Independent review required.</string>
     <string name="pair_creating_case">Creating private verification request…</string>
     <string name="pair_upload_cert">Securely uploading certificate…</string>

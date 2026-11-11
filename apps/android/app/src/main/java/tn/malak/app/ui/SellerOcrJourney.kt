@@ -123,6 +123,8 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
         context.getSharedPreferences(draftFile,Context.MODE_PRIVATE)
     }
     var pairProgress by remember(draftFile) {mutableStateOf<PairProgress?>(null)}
+    var localOcrResult by remember(draftFile) {mutableStateOf(false)}
+    var localOcrRunning by remember(draftFile) {mutableStateOf(false)}
     var pairReport by remember(draftFile) {mutableStateOf<CertificateIdentityReview?>(null)}
     var provisionedCase by remember(draftFile) {mutableStateOf<OwnerEvidenceSession?>(null)}
     var pairError by remember(draftFile) {mutableIntStateOf(0)}
@@ -152,6 +154,8 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
         pairReport=null
         pairProgress=null
         pairError=0
+        localOcrResult=false
+        localOcrRunning=false
         uploadConsent=false
     }
     DisposableEffect(Unit) {
@@ -532,11 +536,13 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                                 PlainNotice(Icons.Outlined.Info,s(pairReasonText(code)))
                             }
                         }
+                        if(localOcrResult)PlainNotice(Icons.Outlined.Smartphone,
+                            s(R.string.local_ocr_result_label))
                         PlainNotice(Icons.Outlined.Info,s(R.string.pair_preliminary_only))
                     }
                     if(pairProgress!=null) {
                         PlainNotice(Icons.Outlined.HourglassTop,
-                            s(when(pairProgress){
+                            s(if(localOcrRunning)R.string.local_ocr_processing else when(pairProgress){
                                 PairProgress.CASE_PROVISION->R.string.pair_creating_case
                                 PairProgress.CERTIFICATE_UPLOAD->R.string.pair_upload_cert
                                 PairProgress.IDENTITY_UPLOAD->R.string.pair_upload_identity
@@ -544,8 +550,55 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                             }))
                     }
                     if(pairError!=0)PlainNotice(Icons.Outlined.Info,s(pairError))
+                    // Real offline OCR always works without a trusted online session.
+                    // The fixed 1234 pilot code remains prohibited from server uploads.
+                    PlainNotice(Icons.Outlined.Smartphone,s(R.string.local_ocr_hint))
+                    Button(onClick={
+                        if(pairProgress!=null||files.isEmpty()||!identitySelected)return@Button
+                        val selectedCert=files.toList().map{
+                            PairEvidenceFile(it.uri,it.length,it.mime,it.uploadKey)
+                        }
+                        val selectedId=identityFiles.toList().map{
+                            PairEvidenceFile(it.uri,it.length,it.mime,it.uploadKey)
+                        }
+                        pairReport=null
+                        pairError=0
+                        localOcrResult=false
+                        localOcrRunning=true
+                        pairProgress=PairProgress.CERTIFICATE_UPLOAD
+                        val thisRequest=++requestEpoch
+                        requestJob=scope.launch {
+                            try {
+                                val report=LocalDocumentOcr.readAndCompare(
+                                    context,selectedCert,selectedId){ progress->
+                                    if(requestEpoch==thisRequest)pairProgress=progress
+                                }
+                                if(requestEpoch==thisRequest &&
+                                    files.map{it.uploadKey}==selectedCert.map{it.idempotencyKey} &&
+                                    identityFiles.map{it.uploadKey}==selectedId.map{it.idempotencyKey}){
+                                    pairReport=report
+                                    localOcrResult=true
+                                }
+                            }catch(cancel:CancellationException){throw cancel}
+                            catch(_:Exception){
+                                if(requestEpoch==thisRequest)pairError=R.string.local_ocr_failed
+                            }finally {
+                                if(requestEpoch==thisRequest){
+                                    pairProgress=null
+                                    localOcrRunning=false
+                                }
+                            }
+                        }
+                    },
+                        enabled=pairProgress==null&&files.isNotEmpty()&&identitySelected,
+                        modifier=Modifier.fillMaxWidth().heightIn(min=54.dp),
+                        shape=RoundedCornerShape(16.dp)) {
+                        Icon(Icons.Outlined.DocumentScanner,null,Modifier.size(21.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text(s(R.string.local_ocr_button))
+                    }
                     if(ownerSession==null&&authenticatedOwnerSession==null) {
-                        PlainNotice(Icons.Outlined.Lock,s(R.string.pair_not_connected))
+                        Text(s(R.string.local_ocr_server_later),color=Brand.Muted,fontSize=12.sp)
                     }else{
                         Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
                             Checkbox(checked=uploadConsent,onCheckedChange={uploadConsent=it},
@@ -591,6 +644,8 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                             }
                             pairError=0
                             pairReport=null
+                            localOcrResult=false
+                            localOcrRunning=false
                             pairProgress=PairProgress.CASE_PROVISION
                             val thisRequest=++requestEpoch
                             requestJob=scope.launch {
