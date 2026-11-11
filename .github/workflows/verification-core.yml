@@ -33,7 +33,7 @@ jobs:
     timeout-minutes: 15
     # Proven, versioned OCRmyPDF distribution supplies Tesseract, Poppler and
     # Python/Pillow without the hosted Ubuntu APT DNS dependency.
-    # No real documents, provider credentials, or deployment secrets.
+    # No real documents, user tokens, or release credentials.
     container:
       image: jbarlow83/ocrmypdf-ubuntu:v17.11.0
       options: --user 0
