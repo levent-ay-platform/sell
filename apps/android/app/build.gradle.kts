@@ -4,6 +4,13 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
+// URL is a public endpoint setting, NOT a credential; optional for offline UI smoke.
+// Set -PmalakPrivateBaseUrl=https://<your-approved-Malak-gateway> for a connected pilot.
+val malakPrivateBaseUrl = providers.gradleProperty("malakPrivateBaseUrl")
+    .orElse(providers.environmentVariable("MALAK_PRIVATE_SERVICE_URL"))
+    .orElse("")
+    .get()
+
 android {
     namespace = "tn.malak.app"
     compileSdk = 36
@@ -14,6 +21,8 @@ android {
         targetSdk = 35
         versionCode = 2
         versionName = "0.2.0-qa"
+        buildConfigField("String", "MALAK_PRIVATE_SERVICE_URL",
+            "\\\"" + malakPrivateBaseUrl.replace("\\\\", "\\\\\\\\").replace("\\\"", "\\\\\\\"") + "\\\"")
     }
 
     buildTypes {
@@ -27,7 +36,7 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
     kotlin { jvmToolchain(17) }
-    buildFeatures { compose = true }
+    buildFeatures { compose = true; buildConfig = true }
 }
 
 dependencies {
