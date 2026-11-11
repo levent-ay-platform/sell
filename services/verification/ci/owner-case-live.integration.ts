@@ -13,7 +13,7 @@ import type {SqlPool} from '../src/postgres-evidence-repository.ts';
 
 const runner=process.env.RUNNER_TEMP;
 if(!runner||process.env.MALAK_DISPOSABLE_PG!=='yes')throw Error('DISPOSABLE_GITHUB_POSTGRES_ONLY');
-const require=createRequire(join(runner,'malak-owner-case','driver.cjs'));
+const require=createRequire(join(runner,'malak-pg','driver.cjs'));
 const {Pool}=require('pg');
 const pool=new Pool({host:'127.0.0.1',port:5432,user:'sell_ci',
  password:process.env.PGPASSWORD,database:'sell_ci',max:4,connectionTimeoutMillis:4000});
