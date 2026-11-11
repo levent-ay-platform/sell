@@ -23,7 +23,7 @@ internal val LocalOwnerEvidenceSession=staticCompositionLocalOf<OwnerEvidenceSes
 
 internal data class PairEvidenceFile(val uri:Uri,val expectedBytes:Long,val mime:String,
     val idempotencyKey:String=UUID.randomUUID().toString())
-internal enum class PairProgress { CERTIFICATE_UPLOAD,IDENTITY_UPLOAD,COMPARING }
+internal enum class PairProgress { CASE_PROVISION,CERTIFICATE_UPLOAD,IDENTITY_UPLOAD,COMPARING }
 internal data class PairNameEvidence(val value:String,val page:Int,val source:String,val confidence:Int?)
 internal data class CertificateIdentityReview(
     val assessment:String,val certificateName:PairNameEvidence?,val identityName:PairNameEvidence?,
