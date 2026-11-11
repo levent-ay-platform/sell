@@ -106,11 +106,6 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
     // case or owner session change. Cancellation of a blocking HTTPS request
     // alone cannot guarantee its callback will never arrive after a new run.
     var requestEpoch by remember {mutableIntStateOf(0)}
-    var pairProgress by remember(draftFile) {mutableStateOf<PairProgress?>(null)}
-    var pairReport by remember(draftFile) {mutableStateOf<CertificateIdentityReview?>(null)}
-    var provisionedCase by remember(draftFile) {mutableStateOf<OwnerEvidenceSession?>(null)}
-    var pairError by remember(draftFile) {mutableIntStateOf(0)}
-    var uploadConsent by remember(draftFile) {mutableStateOf(false)}
     // Each pilot number gets a separate local draft; never show another user's
     // unpublished property when switching accounts on the same Android device.
     val draftFile=remember(draftScope) {
@@ -125,6 +120,11 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
     val prefs=remember(context,draftFile){
         context.getSharedPreferences(draftFile,Context.MODE_PRIVATE)
     }
+    var pairProgress by remember(draftFile) {mutableStateOf<PairProgress?>(null)}
+    var pairReport by remember(draftFile) {mutableStateOf<CertificateIdentityReview?>(null)}
+    var provisionedCase by remember(draftFile) {mutableStateOf<OwnerEvidenceSession?>(null)}
+    var pairError by remember(draftFile) {mutableIntStateOf(0)}
+    var uploadConsent by remember(draftFile) {mutableStateOf(false)}
     var step by rememberSaveable(draftFile) {mutableIntStateOf(0)}
     var name by rememberSaveable(draftFile) {mutableStateOf(prefs.getString("title","") ?: "")}
     var region by rememberSaveable(draftFile) {mutableStateOf(prefs.getString("region","") ?: "")}
