@@ -16,6 +16,7 @@ import {PrivateOcrAccessDenied} from './seller-ocr-service.ts';
 import {PrivatePairAccessDenied} from './private-pair-service.ts';
 import type {PrivatePairReport,PrivatePairRequest} from './private-pair-service.ts';
 import {OwnerCaseDenied} from './private-owner-case.ts';
+import {PilotLoginDenied} from './pilot-auth.ts';
 import type {OwnerCaseResult} from './private-owner-case.ts';
 
 const MAX_BYTES=12*1024*1024;
@@ -28,9 +29,10 @@ const OCR_UPLOAD=/^\/internal\/v1\/evidence\/([0-9a-f-]{36})\/upload-ocr$/i;
 const PAIR=/^\/internal\/v1\/evidence\/([0-9a-f-]{36})\/compare-pair$/i;
 const REVIEW=/^\/internal\/v1\/review\/([0-9a-f-]{36})\/([0-9a-f-]{36})\/inspect$/i;
 const OWNER_CASE=/^\/internal\/v1\/owner\/cases$/;
+const PILOT_LOGIN=/^\/internal\/v1\/pilot\/login$/;
 const CONSENT_REVOKE=/^\/internal\/v1\/owner\/cases\/([0-9a-f-]{36})\/revoke-consent$/i;
 const MIME=new Set(['application/pdf','image/png','image/jpeg','image/tiff']);
-export type PrivateRoute='UPLOAD'|'INSPECT'|'OCR'|'PAIR'|'OWNER_CASE'|'CONSENT_REVOKE';
+export type PrivateRoute='UPLOAD'|'INSPECT'|'OCR'|'PAIR'|'OWNER_CASE'|'CONSENT_REVOKE'|'PILOT_LOGIN';
 export type DenialReason='BAD_ROUTE'|'BAD_REQUEST'|'UNAUTHENTICATED'|'FORBIDDEN'|'RATE_LIMITED'|'FILE_REJECTED'|'REPLAY_CONFLICT'|'UPSTREAM_UNAVAILABLE';
 export interface DenialAuditRecord {route:PrivateRoute|'UNKNOWN';reason:DenialReason;actorUserId:string|null;requestId:string;}
 export interface PrivateEvidenceHttpDeps {
@@ -48,6 +50,8 @@ export interface PrivateEvidenceHttpDeps {
   analyzeOwnerPair?:(request:PrivatePairRequest)=>Promise<PrivatePairReport>;
   /** Trusted auth, transaction and consent service. No public listener is mounted. */
   provisionOwnerCase?:(bearerToken:string,input:unknown)=>Promise<OwnerCaseResult>;
+  /** Optional pilot entry point of this SAME private service; never a standalone API. */
+  loginPilot?:(input:unknown)=>Promise<{bearer:string;expiresInSeconds:number;pilotConfirmed:true}>;
   withdrawOwnerConsent?:(bearerToken:string,caseId:string)=>Promise<{revoked:true;ownershipVerified:false;identityVerified:false;mayPublish:false}>;
 }
 
@@ -128,7 +132,7 @@ export function createPrivateEvidenceHttpHandler(deps:PrivateEvidenceHttpDeps) {
     const url=req.url??'';
     const upload=UPLOAD.exec(url),ocrUpload=OCR_UPLOAD.exec(url),review=REVIEW.exec(url),pair=PAIR.exec(url);
     const caseCreate=OWNER_CASE.test(url),consentRevoke=CONSENT_REVOKE.exec(url);
-    const route:PrivateRoute|'UNKNOWN'=caseCreate?'OWNER_CASE':consentRevoke?'CONSENT_REVOKE':
+    const route:PrivateRoute|'UNKNOWN'=PILOT_LOGIN.test(url)?'PILOT_LOGIN':caseCreate?'OWNER_CASE':consentRevoke?'CONSENT_REVOKE':
       pair?'PAIR':ocrUpload?'OCR':upload?'UPLOAD':review?'INSPECT':'UNKNOWN';
     // Do not log/return raw URL, bearer token, file name or document identifiers.
     const reject=async(status:number,reason:DenialReason)=>{
@@ -153,6 +157,39 @@ export function createPrivateEvidenceHttpHandler(deps:PrivateEvidenceHttpDeps) {
          !noDuplicate(req,'x-claimed-mime')||
          !noDuplicate(req,'x-declared-area-m2')||
          req.headers['transfer-encoding']){await reject(400,'BAD_REQUEST');return;}
+      if(route==='PILOT_LOGIN'){
+        if(!deps.loginPilot){await reject(503,'UPSTREAM_UNAVAILABLE');return;}
+        if(single(req,'authorization')!==null||
+           req.headers['x-evidence-kind']||req.headers['x-page-number']||
+           req.headers['x-idempotency-key']||req.headers['x-claimed-mime']||
+           req.headers['x-declared-area-m2']){
+          await reject(400,'BAD_REQUEST');return;
+        }
+        const sizeHeader=single(req,'content-length');
+        const size=sizeHeader&&/^[0-9]{1,4}$/.test(sizeHeader)?Number(sizeHeader):NaN;
+        if(single(req,'content-type')!=='application/json'||!Number.isSafeInteger(size)||
+           size<2||size>512){await reject(400,'BAD_REQUEST');return;}
+        let input:unknown,raw:Uint8Array;
+        try {raw=await limitedBody(req,size);}catch{await reject(400,'BAD_REQUEST');return;}
+        try {input=JSON.parse(Buffer.from(raw).toString('utf8'));}
+        catch{await reject(400,'BAD_REQUEST');return;}
+        finally{raw.fill(0);}
+        let login:{bearer:string;expiresInSeconds:number;pilotConfirmed:true};
+        try {login=await deps.loginPilot(input);}
+        catch(err){
+          if(err instanceof PilotLoginDenied)await reject(401,'UNAUTHENTICATED');
+          else await reject(503,'UPSTREAM_UNAVAILABLE');
+          return;
+        }
+        if(login?.pilotConfirmed!==true||
+           typeof login.bearer!=='string'||!/^[A-Za-z0-9_-]{43}$/.test(login.bearer)||
+           login.expiresInSeconds!==43200){
+          await reject(503,'UPSTREAM_UNAVAILABLE');return;
+        }
+        json(res,200,{ok:true,bearer:login.bearer,expiresInSeconds:43200,
+          pilotConfirmed:true,identityVerified:false,ownershipVerified:false,mayPublish:false});
+        return;
+      }
       const authorization=single(req,'authorization')??'';
       const match=TOKEN.exec(authorization);
       if(!match){await reject(401,'UNAUTHENTICATED');return;}
