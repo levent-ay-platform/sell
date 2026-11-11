@@ -30,37 +30,62 @@ jobs:
   synthetic-document-ocr:
     name: Isolated synthetic PDF and Arabic/French OCR benchmark
     runs-on: ubuntu-24.04
-    timeout-minutes: 12
+    timeout-minutes: 15
+    # Proven, versioned OCRmyPDF distribution supplies Tesseract, Poppler and
+    # Python/Pillow without the hosted Ubuntu APT DNS dependency.
+    # No real documents, provider credentials, or deployment secrets.
+    container:
+      image: jbarlow83/ocrmypdf-ubuntu:v17.11.0
+      options: --user 0
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
-      - name: Install OCR runtime (synthetic fixtures only)
+      - name: Fetch only pinned official Arabic Tesseract model (synthetic CI)
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          repository: tesseract-ocr/tessdata_fast
+          ref: 87416418657359cb625c412a48b6e1d6d41c29bd
+          path: ci-tessdata
+          sparse-checkout: ara.traineddata
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - name: Verify preinstalled OCR runtime and language models
+        shell: bash
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq --no-install-recommends tesseract-ocr tesseract-ocr-ara tesseract-ocr-fra poppler-utils fonts-dejavu-core python3-venv
-      - name: Install pinned Pillow into throwaway virtual environment
-        run: |
-          python3 -m venv /tmp/malak-ocr-venv
-          /tmp/malak-ocr-venv/bin/python -m pip install --quiet --only-binary=:all: Pillow==11.3.0
+          set -euo pipefail
+          command -v tesseract
+          command -v pdftoppm
+          command -v pdfinfo
+          python3 -c "from PIL import Image,ImageDraw,ImageFont"
+          python_exec="$(command -v python3)"
+          case "$python_exec" in /*) ;; *) exit 1 ;; esac
+          echo "MALAK_OCR_PYTHON=$python_exec" >> "$GITHUB_ENV"
+          model="$(find /usr/share/tesseract-ocr /usr/local/share -name eng.traineddata -print -quit 2>/dev/null)"
+          test -f "$model"
+          tessdir="$(dirname "$model")"
+          test -f "$tessdir/fra.traineddata"
+          test -f ci-tessdata/ara.traineddata
+          test "$(wc -c < ci-tessdata/ara.traineddata)" -gt 100000
+          cp ci-tessdata/ara.traineddata "$tessdir/ara.traineddata"
+          chmod 0644 "$tessdir/ara.traineddata"
+          tesseract --list-langs | grep -E '^(ara|eng|fra)$'
+          test "$(tesseract --list-langs 2>/dev/null | grep -Ec '^(ara|eng|fra)$')" -eq 3
       - name: Test image-only scans and native-PDF fast path (NO real documents)
         run: |
-          /tmp/malak-ocr-venv/bin/python -m unittest discover -v -s services/verification/test -p 'test_*.py'
+          python3 -m unittest discover -v -s services/verification/test -p 'test_*.py'
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
       - name: Real synthetic HTTP to sealed private evidence to Python OCR and seller field cards
         env:
           MALAK_SYNTHETIC_OCR: 'yes'
-          MALAK_OCR_PYTHON: /tmp/malak-ocr-venv/bin/python
         run: node --experimental-strip-types --test services/verification/ci/seller-ocr-http.integration.ts
       - name: Real dual synthetic document OCR and preliminary text comparison
         env:
           MALAK_SYNTHETIC_OCR: 'yes'
-          MALAK_OCR_PYTHON: /tmp/malak-ocr-venv/bin/python
         run: node --experimental-strip-types --test services/verification/ci/private-identity-title-live.integration.ts
       - name: Real sealed certificate/CIN pair over localhost HTTP (synthetic ONLY)
         env:
           MALAK_SYNTHETIC_OCR: 'yes'
-          MALAK_OCR_PYTHON: /tmp/malak-ocr-venv/bin/python
         run: node --experimental-strip-types --test services/verification/ci/private-pair-http-live.integration.ts
