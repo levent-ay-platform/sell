@@ -113,7 +113,10 @@ internal fun MalakApp(
                                 language = it
                                 preferences.edit().putString("language", it).apply()
                             }, onSeller = { screen = "seller" })
-                            "seller" -> SellerOcrJourney(onBack = { screen = "home" })
+                            "seller" -> SellerOcrJourney(
+                                onBack = { screen = "home" },
+                                draftScope = if (PilotOtpGate.enabled) pilotPhone else null
+                            )
                             else -> LaunchedEffect(Unit) { screen = "home" }
                         }
                     }
