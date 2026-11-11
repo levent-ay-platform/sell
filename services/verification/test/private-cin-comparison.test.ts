@@ -32,6 +32,20 @@ test('conflicting values or low-confidence text fail closed',()=>{
  assert.equal(compare(doc(['CIN: 12345678'],0.5),doc(['CIN: 12345678'])).status,
    'AMBIGUOUS_OR_LOW_CONFIDENCE');
 });
+test('conflicting 31st labelled CIN cannot be hidden by candidate limits',()=>{
+  const numbers=Array(30).fill('CIN: 12345678');
+  numbers.push('CIN: 87654321');
+  const result=compare(doc(numbers),doc(['CIN: 12345678']));
+  assert.equal(result.status,'AMBIGUOUS_OR_LOW_CONFIDENCE');
+  assert.equal(result.mayVerifyIdentity,false);
+});
+test('blurred source cannot claim an apparently matching CIN number',()=>{
+  const clean=doc(['CIN: 12345678']);
+  const uncertain={...clean,pages:clean.pages.map(p=>({
+    ...p,qualityWarnings:['POSSIBLE_BLUR' as const]
+  }))};
+  assert.equal(compare(uncertain,clean).status,'AMBIGUOUS_OR_LOW_CONFIDENCE');
+});
 test('no CIN on either document means not comparable, not matching',()=>{
  assert.equal(compare(doc(['Propriétaire: Amira Ben Salem']),
    doc(['Nom et prénom: Amira Ben Salem'])).status,'NOT_COMPARABLE');

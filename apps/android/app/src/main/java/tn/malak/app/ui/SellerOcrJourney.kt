@@ -477,7 +477,11 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                     }
                 }
             }
-            if(saveMessage!=0) PlainNotice(Icons.Outlined.CheckCircle,s(saveMessage))
+            if(saveMessage!=0) PlainNotice(
+                if(saveMessage==R.string.draft_error) Icons.Outlined.ErrorOutline
+                else Icons.Outlined.CheckCircle,
+                s(saveMessage)
+            )
             if(step==4) Text(s(R.string.draft_local),color=Brand.Muted,fontSize=12.sp)
         }
         Column(Modifier.fillMaxWidth().padding(horizontal=17.dp,vertical=12.dp),verticalArrangement=Arrangement.spacedBy(7.dp)) {

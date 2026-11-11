@@ -69,6 +69,39 @@ test('ambiguous multiple owners and different names cannot auto-match',()=>{
     doc(['Nom et prénom: Amira Ben Salem']));
   assert.equal(r.assessment,'INSUFFICIENT_OR_AMBIGUOUS');assert.equal(r.certificateName,null);
 });
+test('conflicting 13th labelled owner cannot be hidden by candidate limits',()=>{
+  const many=Array(12).fill('Propriétaire: Amira Ben Salem');
+  many.push('Propriétaire: Amira Gharbi');
+  const result=compare(doc(many),doc(['Nom et prénom: Amira Ben Salem']));
+  assert.equal(result.assessment,'INSUFFICIENT_OR_AMBIGUOUS');
+  assert.equal(result.certificateName,null);
+  assert.equal(result.mayPublish,false);
+});
+test('full CIN name conflicting with independent Nom and Prénom fails closed',()=>{
+  const result=compare(doc(['Propriétaire: Amira Ben Salem']),
+    doc(['Nom et prénom: Amira Ben Salem','Nom: Gharbi','Prénom: Amira']));
+  assert.equal(result.assessment,'INSUFFICIENT_OR_AMBIGUOUS');
+  assert.equal(result.identityName,null);
+});
+test('partial split CIN name cannot silently corroborate the full name',()=>{
+  const result=compare(doc(['Propriétaire: Amira Ben Salem']),
+    doc(['Nom et prénom: Amira Ben Salem','Nom: Ben Salem']));
+  assert.equal(result.assessment,'INSUFFICIENT_OR_AMBIGUOUS');
+});
+test('consistent full name plus independent Nom and Prénom can still agree provisionally',()=>{
+  const result=compare(doc(['Propriétaire: Amira Ben Salem']),
+    doc(['Nom et prénom: Amira Ben Salem','Nom: Ben Salem','Prénom: Amira']));
+  assert.equal(result.assessment,'PRELIMINARY_TEXT_AGREEMENT');
+  assert.equal(result.ownershipVerified,false);
+});
+test('blur warning on otherwise high-confidence matching names requires review',()=>{
+  const title=doc(['Propriétaire: Amira Ben Salem']);
+  const risky={...title,pages:title.pages.map(p=>({...p,qualityWarnings:['POSSIBLE_BLUR']}))};
+  const result=compare(risky,doc(['Nom et prénom: Amira Ben Salem']));
+  assert.equal(result.assessment,'INSUFFICIENT_OR_AMBIGUOUS');
+  assert.ok(result.reasons.includes('SCAN_QUALITY_NEEDS_REVIEW'));
+  assert.equal(result.mayPublish,false);
+});
 test('reject hostile OCR payload metadata before any comparison',()=>{
   assert.throws(()=>compare(doc(['Propriétaire: Amira Ben Salem']),
     {format:'image',mayApproveOwnership:true,pages:[]}),/INVALID_OCR_PAYLOAD/);

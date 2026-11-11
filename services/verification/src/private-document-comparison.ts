@@ -80,14 +80,20 @@ function collect(doc:IngestedDocument, kind:'CERTIFICATE'|'IDENTITY'):CandidateN
       add(last,lastname);add(first,firstname);
     }
   }
-  // Only assemble separate French ID components if each has exactly one value.
-  if(kind==='IDENTITY'&&lastname.length===1&&firstname.length===1&&out.length===0) {
+  // A complete ID-name field and a separate Nom / Prénom pair are independent
+  // OCR observations. Compare BOTH; never ignore a contradictory second field.
+  // Partial or duplicated separate components are ambiguous, not corroboration.
+  if(kind==='IDENTITY'&&(lastname.length>0||firstname.length>0)) {
+    if(lastname.length!==1||firstname.length!==1)return [];
     const value=parsedName(firstname[0]!.value+' '+lastname[0]!.value);
-    if(value)out.push({value,page:firstname[0]!.page,source:firstname[0]!.source,
+    if(!value)return [];
+    out.push({value,page:firstname[0]!.page,source:firstname[0]!.source,
       confidence:firstname[0]!.confidence===null||lastname[0]!.confidence===null?null:
         Math.min(firstname[0]!.confidence!,lastname[0]!.confidence!)});
   }
-  return out.slice(0,12);
+  // The reader already bounds input at 8 pages × 600 OCR lines. Truncating
+  // candidates here could hide a contradictory 13th owner/name.
+  return out;
 }
 function unique(candidates:CandidateName[]):CandidateName|null {
   if(!candidates.length)return null;
@@ -106,16 +112,19 @@ export function comparePrivateCertificateIdentityOcr(certInput:unknown,idInput:u
   let assessment:ComparisonAssessment='INSUFFICIENT_OR_AMBIGUOUS';
   if(!a||!b)issues.push('MISSING_OR_AMBIGUOUS_LABELED_NAME');
   if(sharedTitle)issues.push('MULTIPLE_OWNERS_OR_SHARED_TITLE_NEEDS_REVIEW');
-  if(issues.length) {
-    // Missing or multiple owners must never produce positive text agreement.
-  }
-  else if((a!.confidence!==null&&a!.confidence<0.90)||(b!.confidence!==null&&b!.confidence<0.90))
+  // An OCR worker may return a high-confidence name from an otherwise blurred,
+  // low-resolution or badly oriented document; that is not a clean agreement.
+  if([...cert.pages,...identity.pages].some(p=>(p.qualityWarnings?.length??0)>0))
+    issues.push('SCAN_QUALITY_NEEDS_REVIEW');
+  if((a?.confidence!==null&&a?.confidence!==undefined&&a.confidence<0.90)||
+     (b?.confidence!==null&&b?.confidence!==undefined&&b.confidence<0.90))
     issues.push('LOW_OCR_CONFIDENCE');
-  else if(canonical(a!.value)===canonical(b!.value))
-    assessment='PRELIMINARY_TEXT_AGREEMENT';
-  else {
-    assessment='TEXT_DIFFERENCE_NEEDS_REVIEW';
-    issues.push('NAME_TEXT_DIFFERS_OR_SCRIPT_MISMATCH');
+  if(issues.length===0&&a&&b) {
+    if(canonical(a.value)===canonical(b.value))assessment='PRELIMINARY_TEXT_AGREEMENT';
+    else {
+      assessment='TEXT_DIFFERENCE_NEEDS_REVIEW';
+      issues.push('NAME_TEXT_DIFFERS_OR_SCRIPT_MISMATCH');
+    }
   }
   if(assessment==='PRELIMINARY_TEXT_AGREEMENT')issues.push('OFFICIAL_CPF_AND_DOCUMENT_AUTHENTICITY_NOT_CHECKED');
   return {assessment,certificateName:a,identityName:b,reasons:issues,

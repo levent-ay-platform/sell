@@ -39,7 +39,9 @@ function collect(doc:IngestedDocument):Match[] {
       evidence:{page:line.page,source:line.source,
         confidencePercent:line.confidence===null?null:Math.round(line.confidence*100)}});
   }
-  return out.slice(0,30);
+  // Input is bounded by the OCR reader. Truncation can conceal a conflicting
+  // 31st labelled number, so examine the full set before any agreement.
+  return out;
 }
 function unique(items:Match[]):Match|null {
   if(!items.length||new Set(items.map(x=>x.number)).size!==1)return null;
@@ -48,7 +50,8 @@ function unique(items:Match[]):Match|null {
 /** Full CIN digits NEVER appear in the returned report. */
 export function compareCertificateIdentityCinText(cert:IngestedDocument,id:IngestedDocument):PrivateCinComparison {
   const ac=collect(cert),bc=collect(id),a=unique(ac),b=unique(bc);
-  const ambiguous=(ac.length>0&&!a)||(bc.length>0&&!b)||
+  const uncertainImage=[...cert.pages,...id.pages].some(p=>(p.qualityWarnings?.length??0)>0);
+  const ambiguous=uncertainImage||(ac.length>0&&!a)||(bc.length>0&&!b)||
     (a?.confidence!==null&&a?.confidence!==undefined&&a.confidence<0.90)||
     (b?.confidence!==null&&b?.confidence!==undefined&&b.confidence<0.90);
   const status:CinTextStatus=ambiguous?'AMBIGUOUS_OR_LOW_CONFIDENCE':
