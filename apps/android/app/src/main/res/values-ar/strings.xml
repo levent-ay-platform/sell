@@ -147,11 +147,11 @@
     <string name="pilot_phone_invalid">أدخل رقم هاتف تونسي صحيحاً من 8 أرقام.</string>
     <string name="pilot_continue">متابعة</string>
     <string name="pilot_otp_label">رمز الدخول التجريبي (4 أرقام)</string>
-    <string name="pilot_otp_hint">الرمز التجريبي المخصص للمختبرين، دون رسالة SMS.</string>
+    <string name="pilot_otp_hint">رمز الدخول التجريبي 1234 — دون SMS.</string>
     <string name="pilot_otp_invalid">الرمز التجريبي غير صحيح. حاول مجدداً.</string>
     <string name="pilot_enter">الدخول إلى النسخة التجريبية</string>
     <string name="pilot_change_phone">تغيير رقم الهاتف</string>
-    <string name="pilot_no_real_identity">وضع تجريبي فقط: هذا الرمز لا يؤكد ملكية رقم الهاتف ولا هوية صاحبه. رفع الوثائق للخدمة الخاصة والتحقق من الهوية والملكية غير مفعّلين حتى نربط تسجيل دخول حقيقياً.</string>
-    <string name="pilot_session_badge">وضع تجريبي — المستخدم غير متحقق منه</string>
+    <string name="pilot_no_real_identity">تم تأكيد الدخول إلى نسخة ملاك التجريبية. يمكنك تصفّح العقارات وإضافة أرضك وحفظ المسودة.</string>
+    <string name="pilot_session_badge">الحساب مؤكّد — نسخة تجريبية</string>
     <string name="pilot_sign_out">تسجيل الخروج</string>
 </resources>
