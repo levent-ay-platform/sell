@@ -45,6 +45,25 @@ test('owner name absent in certificate does not silently infer it from the ID',(
   const r=compare(doc(['Certificat de propriété','Superficie: 240 m2']),doc(['Nom et prénom: Amira Ben Salem']));
   assert.equal(r.assessment,'INSUFFICIENT_OR_AMBIGUOUS');assert.equal(r.certificateName,null);
 });
+test('French title with a separately labelled co-owner cannot agree with one matching CIN',()=>{
+  const certificate=doc([
+    'Propriétaire: Amira Ben Salem',
+    'Copropriétaire: Kamel Ben Salem'
+  ]);
+  const id=doc(['Nom et prénom: Amira Ben Salem']);
+  const result=compare(certificate,id);
+  assert.equal(result.assessment,'INSUFFICIENT_OR_AMBIGUOUS');
+  assert.ok(result.reasons.includes('MULTIPLE_OWNERS_OR_SHARED_TITLE_NEEDS_REVIEW'));
+  assert.equal(result.mayPublish,false);assert.equal(result.ownershipVerified,false);
+});
+test('Arabic undivided/shared title cannot agree with a matching identity name',()=>{
+  const certificate=doc(['المالك: محمد بن صالح','ملاك على الشياع'],'ocr-ar');
+  const id=doc(['الاسم واللقب: محمد بن صالح'],'ocr-ar');
+  const result=compare(certificate,id);
+  assert.equal(result.assessment,'INSUFFICIENT_OR_AMBIGUOUS');
+  assert.ok(result.reasons.includes('MULTIPLE_OWNERS_OR_SHARED_TITLE_NEEDS_REVIEW'));
+  assert.equal(result.identityVerified,false);assert.equal(result.mayPublish,false);
+});
 test('ambiguous multiple owners and different names cannot auto-match',()=>{
   const r=compare(doc(['Propriétaire: Amira Ben Salem','Propriétaire: Kamel Ben Salem']),
     doc(['Nom et prénom: Amira Ben Salem']));
