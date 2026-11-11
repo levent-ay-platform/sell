@@ -8,6 +8,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {randomBytes,randomUUID} from 'node:crypto';
+import {spawnSync} from 'node:child_process';
 import {createServer,request} from 'node:http';
 import {once} from 'node:events';
 import {mkdtemp,readdir,rm} from 'node:fs/promises';
@@ -49,6 +50,30 @@ function pdf(pages:readonly (readonly string[])[]):Buffer {
  for(const n of offsets.slice(1))body+=String(n).padStart(10,'0')+' 00000 n \n';
  body+='trailer\n<< /Size '+offsets.length+' /Root 1 0 R >>\nstartxref\n'+ptr+'\n%%EOF\n';
  return Buffer.from(body);
+}
+/** Synthetic-only images, generated in-memory by pinned CI Pillow. The
+ * backend then uses actual Python/Tesseract OCR, never precomputed responses. */
+function syntheticPng(lines:readonly string[]):Buffer {
+ if(process.env.MALAK_SYNTHETIC_OCR!=='yes'||!process.env.MALAK_OCR_PYTHON)
+   throw Error('SYNTHETIC_IMAGE_ONLY');
+ const python=`from PIL import Image,ImageFont,ImageDraw
+from io import BytesIO
+import sys
+image=Image.new("RGB",(1600,940),"white")
+draw=ImageDraw.Draw(image)
+font=ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",50)
+for i,text in enumerate(sys.argv[1:]):
+ draw.text((75,120+i*145),text,fill="black",font=font)
+target=BytesIO()
+image.save(target,format="PNG")
+sys.stdout.buffer.write(target.getvalue())
+`;
+ const result=spawnSync(process.env.MALAK_OCR_PYTHON,['-c',python,...lines],{
+   timeout:15000,maxBuffer:2*1024*1024
+ });
+ if(result.status!==0||result.error||result.stdout.length<100)
+   throw Error('SYNTHETIC_IMAGE_GENERATION_FAILED');
+ return result.stdout;
 }
 function http(port:number,url:string,body:Buffer,headers:Record<string,string>={}){
  return new Promise<{status:number;body:any}>((resolve,reject)=>{
@@ -111,18 +136,21 @@ test('real two-PDF identity flow over local HTTP: matching, differing, revoked, 
  const addr=server.address();if(!addr||typeof addr==='string')throw Error('NO_PORT');
  const base='/internal/v1/evidence/'+caseId;
  let serial=0;
- async function upload(bytes:Buffer,kind:EvidenceKind){
+ async function upload(bytes:Buffer,kind:EvidenceKind,
+   mime:'application/pdf'|'image/png'='application/pdf',page:number|null=null){
    const result=await http(addr!.port,base+'/upload',bytes,{
      'X-Idempotency-Key':'synthetic_pair_upload_'+(++serial),
-     'X-Evidence-Kind':kind,'X-Page-Number':'null','X-Claimed-Mime':'application/pdf'
+     'X-Evidence-Kind':kind,'X-Page-Number':page===null?'null':String(page),
+     'X-Claimed-Mime':mime
    });
    assert.equal(result.status,200,JSON.stringify(result.body));
    assert.equal(result.body.ownershipVerified,false);
    assert.equal(result.body.mayPublish,false);
    return result.body.evidenceId as string;
  }
- async function compare(cert:string,id:string){
-   const body=Buffer.from(JSON.stringify({certificateEvidenceIds:[cert],identityEvidenceIds:[id]}));
+ async function compare(cert:string,id:string|string[]){
+   const ids=Array.isArray(id)?id:[id];
+   const body=Buffer.from(JSON.stringify({certificateEvidenceIds:[cert],identityEvidenceIds:ids}));
    return http(addr!.port,base+'/compare-pair',body,{'Content-Type':'application/json'});
  }
  try{
@@ -142,6 +170,39 @@ test('real two-PDF identity flow over local HTTP: matching, differing, revoked, 
    assert.equal(yes.body.report.identityVerified,false);
    assert.equal(yes.body.report.mayPublish,false);
    assert.ok(!JSON.stringify(yes.body.report.cinComparison).includes('12345678'));
+   // Real two-photo path: HTTP upload -> immutable sealed store -> Python OCR
+   // on each image -> ordered page receipts -> private comparison.
+   const front=syntheticPng([
+     'CARTE NATIONALE IDENTITE',
+     'Nom et prenom: Amira Ben Salem',
+     'CIN: 12345678'
+   ]);
+   const back=syntheticPng([
+     'VERSO CARTE NATIONALE',
+     'Adresse: Exemple Fictif'
+   ]);
+   const frontId=await upload(front,'IDENTITY','image/png',1);
+   const backId=await upload(back,'IDENTITY','image/png',2);
+   front.fill(0);back.fill(0);
+   const imagePair=await compare(certId,[frontId,backId]);
+   assert.equal(imagePair.status,200,JSON.stringify({status:imagePair.status,
+     code:imagePair.body.code}));
+   assert.equal(imagePair.body.report.identityPagesReceived,2);
+   assert.equal(imagePair.body.report.identitySides,'TWO_FILES_UNCONFIRMED');
+   assert.equal(imagePair.body.report.comparison.assessment,'PRELIMINARY_TEXT_AGREEMENT');
+   assert.equal(imagePair.body.report.cinComparison.status,'SAME_NUMBER_UNVERIFIED');
+   assert.equal(imagePair.body.report.ownershipVerified,false);
+   assert.equal(imagePair.body.report.identityVerified,false);
+   assert.equal(imagePair.body.report.mayPublish,false);
+   const reversed=await compare(certId,[backId,frontId]);
+   assert.equal(reversed.status,403);
+   assert.equal(reversed.body.report,undefined);
+   const duplicate=await compare(certId,[frontId,frontId]);
+   assert.equal(duplicate.status,400);
+   const missingBack=await compare(certId,frontId);
+   assert.equal(missingBack.status,200);
+   assert.equal(missingBack.body.report.identitySides,'MISSING_REVERSE');
+   assert.equal(missingBack.body.report.comparison.assessment,'INSUFFICIENT_OR_AMBIGUOUS');
    const differentId=await upload(pdf([
      ['Carte nationale identite','Nom et prenom: Amira Ben Salem','CIN: 87654321'],
      ['Verso document exemple','Adresse: autre exemple']
