@@ -73,7 +73,9 @@ def enter_pilot():
             "الحساب مؤكّد — نسخة تجريبية",
             "Pilot account confirmed"]):
         raise AssertionError("Correct pilot code did not confirm actual Malak pilot session")
-    if not any(x in visible for x in ["Déposer un terrain","أضف أرضك"]):
+    # The Add Land button is below the fold on small emulators; validate the
+    # home route here, then let click_text scroll to the actual button.
+    if "MALAK / ملاك" not in visible:
         raise AssertionError("Correct pilot code did not open normal Malak home")
 
 def crash_log():
