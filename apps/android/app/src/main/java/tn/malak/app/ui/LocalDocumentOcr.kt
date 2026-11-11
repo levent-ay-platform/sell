@@ -6,7 +6,6 @@ import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.pdf.PdfRenderer
-import android.os.ParcelFileDescriptor
 import android.net.Uri
 import com.googlecode.tesseract.android.TessBaseAPI
 import java.io.File
@@ -116,8 +115,9 @@ internal object LocalDocumentOcr {
     }
     private fun decodeImage(context:Context,uri:Uri):Bitmap {
         val bounds=BitmapFactory.Options().apply{inJustDecodeBounds=true}
-        context.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it,null,bounds) }
+        val boundsInput=context.contentResolver.openInputStream(uri)
             ?:throw IllegalStateException("OCR_IMAGE_UNAVAILABLE")
+        boundsInput.use { BitmapFactory.decodeStream(it,null,bounds) }
         if(bounds.outWidth !in 40..12000 || bounds.outHeight !in 40..12000 ||
             bounds.outWidth.toLong()*bounds.outHeight>100000000L)
             throw IllegalStateException("OCR_IMAGE_DIMENSIONS")
@@ -197,11 +197,11 @@ internal object LocalDocumentOcr {
         try {
             if(!api.init(ensureModels(context),"ara+fra+eng"))
                 throw IllegalStateException("OCR_ENGINE_UNAVAILABLE")
-            onProgress(PairProgress.CERTIFICATE_UPLOAD)
+            withContext(Dispatchers.Main){onProgress(PairProgress.CERTIFICATE_UPLOAD)}
             val cert=scanInput(context,api,certificates)
-            onProgress(PairProgress.IDENTITY_UPLOAD)
+            withContext(Dispatchers.Main){onProgress(PairProgress.IDENTITY_UPLOAD)}
             val id=scanInput(context,api,identity)
-            onProgress(PairProgress.COMPARING)
+            withContext(Dispatchers.Main){onProgress(PairProgress.COMPARING)}
             val certCandidates=labelCandidates(cert,false)
             val identityCandidates=labelCandidates(id,true)
             val owner=oneName(certCandidates)

@@ -20,6 +20,27 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
+      - name: Bundle pinned official Arabic, French and English OCR models
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          repository: tesseract-ocr/tessdata_fast
+          ref: 87416418657359cb625c412a48b6e1d6d41c29bd
+          path: ci-tessdata
+          sparse-checkout: |
+            ara.traineddata
+            fra.traineddata
+            eng.traineddata
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - name: Prepare offline OCR assets for QA APK
+        run: |
+          set -euo pipefail
+          mkdir -p apps/android/app/src/main/assets/tessdata
+          for lang in ara fra eng; do
+            test -f "ci-tessdata/$lang.traineddata"
+            test "$(wc -c < "ci-tessdata/$lang.traineddata")" -gt 100000
+            cp "ci-tessdata/$lang.traineddata" apps/android/app/src/main/assets/tessdata/
+          done
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
