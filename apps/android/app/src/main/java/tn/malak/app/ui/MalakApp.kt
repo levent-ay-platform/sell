@@ -143,6 +143,15 @@ private fun MalakHome(
                             fontSize = 12.sp, maxLines = 2)
                     }
                 }
+                // Primary seller action stays visible without scrolling, including small screens.
+                Button(onClick = onSeller, modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp),
+                    shape = RoundedCornerShape(18.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color.White, contentColor = Brand.Crimson)) {
+                    Icon(Icons.Outlined.Add, contentDescription = null, modifier = Modifier.size(22.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text(s(R.string.add_land), fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                }
                 Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(Color.White)
                     .heightIn(min = 58.dp).padding(horizontal = 15.dp),
                     verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -176,12 +185,6 @@ private fun MalakHome(
             val emptyTitle = if (query.isBlank() && selected == "all") R.string.listings_empty_title else R.string.search_empty_title
             val emptyHint = if (query.isBlank() && selected == "all") R.string.listings_empty_hint else R.string.search_empty_hint
             PolishedEmptyState(Icons.Outlined.RealEstateAgent, s(emptyTitle), s(emptyHint))
-            Button(onClick = onSeller, modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp),
-                shape = RoundedCornerShape(18.dp), colors = ButtonDefaults.buttonColors(containerColor = Brand.Crimson)) {
-                Icon(Icons.Outlined.Add, contentDescription = null, modifier = Modifier.size(22.dp))
-                Spacer(Modifier.width(8.dp))
-                Text(s(R.string.add_land), fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
-            }
         }
     }
 }
