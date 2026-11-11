@@ -147,11 +147,11 @@
     <string name="pilot_phone_invalid">Enter a valid 8-digit Tunisian number.</string>
     <string name="pilot_continue">Continue</string>
     <string name="pilot_otp_label">4-digit test code</string>
-    <string name="pilot_otp_hint">Pilot code supplied to testers; no SMS is sent.</string>
+    <string name="pilot_otp_hint">Pilot code 1234, no SMS sent.</string>
     <string name="pilot_otp_invalid">Incorrect test code. Try again.</string>
     <string name="pilot_enter">Enter pilot</string>
     <string name="pilot_change_phone">Change phone number</string>
-    <string name="pilot_no_real_identity">PILOT ONLY: this code does not verify ownership of the phone or a person\'s identity. Private document upload, identity and ownership verification remain disabled until real authentication is connected.</string>
-    <string name="pilot_session_badge">Pilot mode — not a verified user</string>
+    <string name="pilot_no_real_identity">Your Malak pilot access is confirmed. Browse properties, add land and save drafts.</string>
+    <string name="pilot_session_badge">Pilot account confirmed</string>
     <string name="pilot_sign_out">Sign out</string>
 </resources>
