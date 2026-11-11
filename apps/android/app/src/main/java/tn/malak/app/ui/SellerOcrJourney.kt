@@ -32,10 +32,15 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import tn.malak.app.R
 import java.util.Locale
+import java.util.UUID
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.launch
 
 private const val MAX_DOC_BYTES = 12L * 1024L * 1024L
 private val CardBorder = Color(0xFFE7E8EC)
-private data class ChosenDocument(val uri:Uri, val displayName:String, val length:Long)
+private data class ChosenDocument(val uri:Uri, val displayName:String, val length:Long,
+    val mime:String, val uploadKey:String=UUID.randomUUID().toString())
 private data class CapacityOption(val code:String, val label:Int)
 private val Capacities = listOf(
     CapacityOption("owner",R.string.capacity_owner),
@@ -52,6 +57,13 @@ private val Capacities = listOf(
 @Composable
 fun SellerOcrJourney(onBack:()->Unit) {
     val context=LocalContext.current
+    val ownerSession=LocalOwnerEvidenceSession.current
+    val scope=rememberCoroutineScope()
+    var requestJob by remember {mutableStateOf<Job?>(null)}
+    var pairProgress by remember {mutableStateOf<PairProgress?>(null)}
+    var pairReport by remember {mutableStateOf<CertificateIdentityReview?>(null)}
+    var pairError by remember {mutableIntStateOf(0)}
+    var uploadConsent by remember {mutableStateOf(false)}
     val prefs=remember(context){context.getSharedPreferences("malak_unpublished_land_draft",Context.MODE_PRIVATE)}
     var step by rememberSaveable {mutableIntStateOf(0)}
     var name by rememberSaveable {mutableStateOf(prefs.getString("title","") ?: "")}
@@ -65,6 +77,18 @@ fun SellerOcrJourney(onBack:()->Unit) {
     val files=remember {mutableStateListOf<ChosenDocument>()}
     val identityFiles=remember {mutableStateListOf<ChosenDocument>()}
     var identityMessage by remember {mutableIntStateOf(0)}
+    // Never let a stale comparison be displayed after selecting other documents,
+    // navigation, account or case changes. Private report is memory-only.
+    LaunchedEffect(files.toList(),identityFiles.toList(),ownerSession) {
+        requestJob?.cancel()
+        pairReport=null
+        pairProgress=null
+        pairError=0
+        uploadConsent=false
+    }
+    DisposableEffect(Unit) {
+        onDispose {requestJob?.cancel()}
+    }
 
     val pickDocuments=rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
         var refused=false
@@ -83,10 +107,14 @@ fun SellerOcrJourney(onBack:()->Unit) {
                     }
                 }
                 val mime=context.contentResolver.getType(uri)
-                if(length !in 20..MAX_DOC_BYTES || mime !in setOf("application/pdf","image/png","image/jpeg","image/tiff")) {
+                if(length !in 20..MAX_DOC_BYTES || mime==null || mime !in setOf("application/pdf","image/png","image/jpeg","image/tiff")) {
                     refused=true;continue
                 }
-                files.add(ChosenDocument(uri,label.ifBlank {uri.lastPathSegment?.take(50) ?: "PDF"},length))
+                if((mime=="application/pdf" && files.isNotEmpty()) ||
+                    (mime!="application/pdf" && files.any{it.mime=="application/pdf"})) {
+                    refused=true;continue
+                }
+                files.add(ChosenDocument(uri,label.ifBlank {uri.lastPathSegment?.take(50) ?: "PDF"},length,mime))
             } catch (_:Exception) {refused=true}
         }
         pickMessage=if(refused)R.string.file_rejected else if(files.isNotEmpty())R.string.file_selected else 0
@@ -111,18 +139,22 @@ fun SellerOcrJourney(onBack:()->Unit) {
                     }
                 }
                 val mime=context.contentResolver.getType(uri)
-                if(length !in 20..MAX_DOC_BYTES || mime !in setOf("application/pdf","image/png","image/jpeg")){
+                if(length !in 20..MAX_DOC_BYTES || mime==null || mime !in setOf("application/pdf","image/png","image/jpeg")){
                     refused=true;continue
                 }
-                identityFiles.add(ChosenDocument(uri,label.ifBlank{uri.lastPathSegment?.take(50) ?: "Document"},length))
+                if((mime=="application/pdf" && identityFiles.isNotEmpty()) ||
+                   (mime!="application/pdf" && identityFiles.any{it.mime=="application/pdf"})) {
+                    refused=true;continue
+                }
+                identityFiles.add(ChosenDocument(uri,label.ifBlank{uri.lastPathSegment?.take(50) ?: "Document"},length,mime))
             }catch(_:Exception){refused=true}
         }
         identityMessage=if(refused)R.string.identity_file_rejected
             else if(identityFiles.isNotEmpty())R.string.file_selected else 0
     }
     // The selected PDF must be checked for both faces by the future private OCR service.
-    val identitySelected=identityFiles.any{context.contentResolver.getType(it.uri)=="application/pdf"} ||
-        identityFiles.size>=2
+    val identitySelected=(identityFiles.size==1&&identityFiles[0].mime=="application/pdf") ||
+        (identityFiles.size==2&&identityFiles.none{it.mime=="application/pdf"})
     val validArea=(area.toDoubleOrNull() ?: 0.0).let {it>0 && it<=1_000_000_000 && it.isFinite()}
     val validPrice=(price.toLongOrNull() ?: 0L)>0L
     val validFirst=name.trim().isNotEmpty()&&region.trim().isNotEmpty()&&validArea&&validPrice
@@ -275,10 +307,91 @@ fun SellerOcrJourney(onBack:()->Unit) {
                     SummaryFact(s(R.string.summary_capacity),s(Capacities.firstOrNull {it.code==capacity}?.label ?: R.string.capacity_owner))
                     SummaryFact(s(R.string.summary_docs),if(files.isNotEmpty())"${files.size}" else s(R.string.not_uploaded))
                     SummaryFact(s(R.string.summary_identity),if(identitySelected)s(R.string.identity_selected) else s(R.string.not_uploaded))
-                    SectionHeading(s(R.string.review_status_title),s(R.string.review_status_intro))
-                    VerificationStage(Icons.Outlined.Description,s(R.string.ocr_status),s(R.string.ocr_pending))
-                    VerificationStage(Icons.Outlined.Badge,s(R.string.identity_ocr_status),s(R.string.identity_ocr_pending))
-                    VerificationStage(Icons.Outlined.CompareArrows,s(R.string.match_status),s(R.string.match_pending))
+                    SectionHeading(s(R.string.review_status_title),
+                        s(if(pairReport==null)R.string.review_status_intro else R.string.pair_review_received))
+                    VerificationStage(Icons.Outlined.Description,s(R.string.ocr_status),
+                        s(if(pairReport==null)R.string.ocr_pending else R.string.pair_document_read))
+                    VerificationStage(Icons.Outlined.Badge,s(R.string.identity_ocr_status),
+                        s(if(pairReport==null)R.string.identity_ocr_pending else R.string.pair_document_read))
+                    VerificationStage(Icons.Outlined.CompareArrows,s(R.string.match_status),
+                        s(when(pairReport?.assessment){
+                            "PRELIMINARY_TEXT_AGREEMENT"->R.string.pair_agreement
+                            "TEXT_DIFFERENCE_NEEDS_REVIEW"->R.string.pair_difference
+                            "INSUFFICIENT_OR_AMBIGUOUS"->R.string.pair_uncertain
+                            else->R.string.match_pending
+                        }))
+                    if(pairReport!=null) {
+                        val result=pairReport!!
+                        SummaryFact(s(R.string.pair_certificate_owner),
+                            result.certificateName?.value?:s(R.string.pair_unreadable))
+                        SummaryFact(s(R.string.pair_identity_owner),
+                            result.identityName?.value?:s(R.string.pair_unreadable))
+                        SummaryFact(s(R.string.pair_cin_label),
+                            s(when(result.cinStatus) {
+                                "SAME_NUMBER_UNVERIFIED"->R.string.pair_cin_equal
+                                "NUMBER_DIFFERS_NEEDS_REVIEW"->R.string.pair_cin_diff
+                                "AMBIGUOUS_OR_LOW_CONFIDENCE"->R.string.pair_cin_uncertain
+                                else->R.string.pair_cin_missing
+                            }))
+                        SummaryFact(s(R.string.pair_identity_coverage),
+                            s(when(result.identityCoverage){
+                                "MISSING_REVERSE"->R.string.pair_reverse_missing
+                                else->R.string.pair_reverse_unconfirmed
+                            }))
+                        PlainNotice(Icons.Outlined.Info,s(R.string.pair_preliminary_only))
+                    }
+                    if(pairProgress!=null) {
+                        PlainNotice(Icons.Outlined.HourglassTop,
+                            s(when(pairProgress){
+                                PairProgress.CERTIFICATE_UPLOAD->R.string.pair_upload_cert
+                                PairProgress.IDENTITY_UPLOAD->R.string.pair_upload_identity
+                                else->R.string.pair_comparing
+                            }))
+                    }
+                    if(pairError!=0)PlainNotice(Icons.Outlined.Info,s(pairError))
+                    if(ownerSession==null) {
+                        PlainNotice(Icons.Outlined.Lock,s(R.string.pair_not_connected))
+                    }else{
+                        Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
+                            Checkbox(checked=uploadConsent,onCheckedChange={uploadConsent=it},
+                                enabled=pairProgress==null)
+                            Text(s(R.string.pair_upload_consent),Modifier.weight(1f),
+                                fontSize=12.sp,color=Brand.Ink,lineHeight=19.sp)
+                        }
+                        Button(onClick={
+                            if(pairProgress!=null||!uploadConsent||files.isEmpty()||!identitySelected)
+                                return@Button
+                            val cert=files.toList().map{
+                                PairEvidenceFile(it.uri,it.length,it.mime,it.uploadKey)
+                            }
+                            val idDocs=identityFiles.toList().map{
+                                PairEvidenceFile(it.uri,it.length,it.mime,it.uploadKey)
+                            }
+                            pairError=0
+                            pairReport=null
+                            requestJob=scope.launch {
+                                try {
+                                    val result=compareOwnerCertificateAndIdentity(
+                                        context,ownerSession,cert,idDocs){pairProgress=it}
+                                    if(files.map{it.uploadKey}==cert.map{it.idempotencyKey} &&
+                                       identityFiles.map{it.uploadKey}==idDocs.map{it.idempotencyKey}) {
+                                        pairReport=result
+                                    }
+                                }catch(cancel:CancellationException) {
+                                    throw cancel
+                                }catch(_:Exception){
+                                    pairError=R.string.pair_request_failed
+                                }finally{pairProgress=null}
+                            }
+                        },enabled=uploadConsent&&pairProgress==null&&files.isNotEmpty()&&identitySelected,
+                            modifier=Modifier.fillMaxWidth().heightIn(min=54.dp),
+                            colors=ButtonDefaults.buttonColors(containerColor=Brand.Crimson),
+                            shape=RoundedCornerShape(16.dp)) {
+                            Icon(Icons.Outlined.FactCheck,null)
+                            Spacer(Modifier.width(8.dp))
+                            Text(s(R.string.pair_start))
+                        }
+                    }
                     VerificationStage(Icons.Outlined.Gavel,s(R.string.official_status),s(R.string.legal_pending))
                     PlainNotice(Icons.Outlined.Info,s(R.string.never_verified))
                     OutlinedButton(onClick={step=0;showInvalid=false},modifier=Modifier.fillMaxWidth().heightIn(min=51.dp)) {

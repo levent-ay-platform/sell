@@ -105,7 +105,7 @@
     <string name="identity_selected">Identity document selected</string>
     <string name="identity_required">Select two images or a PDF with both sides.</string>
     <string name="identity_file_rejected">Invalid identity file or file too large.</string>
-    <string name="identity_privacy">Your identity stays on your phone. No upload or local draft copy.</string>
+    <string name="identity_privacy">Your identity stays on your phone until you agree to a secure upload.</string>
     <string name="certificate_required">Select your property certificate before continuing.</string>
     <string name="summary_identity">Identity</string>
     <string name="review_status_title">Document review status</string>
@@ -115,4 +115,28 @@
     <string name="match_status">Certificate and identity match</string>
     <string name="match_pending">Not started: no independently extracted data from both files.</string>
     <string name="official_status">Official ownership verification</string>
+    <string name="pair_review_received">Private OCR report received. This is only a preliminary text comparison.</string>
+    <string name="pair_document_read">Document read by private service</string>
+    <string name="pair_agreement">Names agree in text, independent review required</string>
+    <string name="pair_difference">Document text differs and needs review</string>
+    <string name="pair_uncertain">Insufficient or ambiguous OCR; review your documents</string>
+    <string name="pair_certificate_owner">Name on ownership certificate</string>
+    <string name="pair_identity_owner">Name on identity card</string>
+    <string name="pair_unreadable">Not reliably readable</string>
+    <string name="pair_cin_label">CIN number mentioned</string>
+    <string name="pair_cin_equal">Mentioned numbers provisionally agree</string>
+    <string name="pair_cin_diff">Numbers differ and need review</string>
+    <string name="pair_cin_uncertain">Number unclear or conflicting</string>
+    <string name="pair_cin_missing">Not comparable</string>
+    <string name="pair_identity_coverage">Identity card sides</string>
+    <string name="pair_reverse_missing">Reverse side missing</string>
+    <string name="pair_reverse_unconfirmed">Pages received; sides not authenticated</string>
+    <string name="pair_preliminary_only">OCR does not verify identity or title ownership, and does not permit publication. Independent review required.</string>
+    <string name="pair_upload_cert">Securely uploading certificate…</string>
+    <string name="pair_upload_identity">Securely uploading identity card…</string>
+    <string name="pair_comparing">Reading and comparing documents…</string>
+    <string name="pair_request_failed">Unable to compare. Check your connection and retry after secure service activation.</string>
+    <string name="pair_not_connected">Secure document reading is not yet enabled for your account. You can save your draft.</string>
+    <string name="pair_upload_consent">I agree to send my certificate and identity documents to Malak’s private service for reading and comparison for my verification case.</string>
+    <string name="pair_start">Read and compare documents</string>
 </resources>

@@ -105,7 +105,7 @@
     <string name="identity_selected">ملفات الهوية المختارة</string>
     <string name="identity_required">اختر صورتين للوجهين أو PDF يضمهما قبل المتابعة.</string>
     <string name="identity_file_rejected">بعض ملفات الهوية غير مدعومة أو حجمها كبير.</string>
-    <string name="identity_privacy">الهوية تبقى على هاتفك؛ لا تُرفع ولا تُحفظ في المسودة.</string>
+    <string name="identity_privacy">الهوية تبقى على هاتفك حتى توافق على إرسالها بأمان؛ لا تُحفظ ضمن المسودة.</string>
     <string name="certificate_required">اختر شهادة الملكية قبل المتابعة.</string>
     <string name="summary_identity">الهوية</string>
     <string name="review_status_title">حالة قراءة الوثائق والمطابقة</string>
@@ -115,4 +115,28 @@
     <string name="match_status">مطابقة الشهادة مع الهوية</string>
     <string name="match_pending">لم تبدأ: لا توجد بيانات مستخرجة من كلا الملفين.</string>
     <string name="official_status">التحقق الرسمي من الملكية</string>
+    <string name="pair_review_received">وصل تقرير القراءة الخاصة. هذه مقارنة نصية أولية فقط.</string>
+    <string name="pair_document_read">قُرئت الوثيقة عبر الخدمة الخاصة</string>
+    <string name="pair_agreement">الاسم مطابق نصياً بين الشهادة والهوية، بانتظار المراجعة</string>
+    <string name="pair_difference">يوجد اختلاف بالنص بين الشهادة والهوية ويحتاج مراجعة</string>
+    <string name="pair_uncertain">القراءة غير كافية أو فيها غموض، يرجى مراجعة المستندات</string>
+    <string name="pair_certificate_owner">الاسم حسب شهادة الملكية</string>
+    <string name="pair_identity_owner">الاسم حسب الهوية</string>
+    <string name="pair_unreadable">غير مقروء بشكل موثوق</string>
+    <string name="pair_cin_label">رقم بطاقة التعريف المذكور</string>
+    <string name="pair_cin_equal">الرقمان المكتوبان متطابقان أولياً</string>
+    <string name="pair_cin_diff">الرقمان مختلفان ويحتاجان مراجعة</string>
+    <string name="pair_cin_uncertain">الرقم غير واضح أو متضارب</string>
+    <string name="pair_cin_missing">غير متاح للمقارنة</string>
+    <string name="pair_identity_coverage">وجها بطاقة الهوية</string>
+    <string name="pair_reverse_missing">الوجه الخلفي غير ظاهر</string>
+    <string name="pair_reverse_unconfirmed">تم استلام الصفحات، لم تُثبت صحة الوجهين</string>
+    <string name="pair_preliminary_only">نتيجة OCR لا تثبت صحة الهوية أو ملكية العقار ولا تسمح بالنشر. يلزم تدقيق مستقل.</string>
+    <string name="pair_upload_cert">جارٍ إرسال شهادة الملكية بأمان…</string>
+    <string name="pair_upload_identity">جارٍ إرسال بطاقة الهوية بأمان…</string>
+    <string name="pair_comparing">جارٍ استخراج البيانات ومقارنتها…</string>
+    <string name="pair_request_failed">تعذّر إكمال المقارنة. تحقق من الاتصال وحاول مجدداً بعد تفعيل الخدمة.</string>
+    <string name="pair_not_connected">القراءة الآمنة غير مفعّلة لحسابك حالياً. يمكنك حفظ مسودتك.</string>
+    <string name="pair_upload_consent">أوافق على إرسال ملفات الشهادة والهوية إلى خدمة ملاك الخاصة لقراءة البيانات ومقارنتها ضمن طلب التحقق الخاص بي.</string>
+    <string name="pair_start">قراءة الوثائق ومقارنتها</string>
 </resources>

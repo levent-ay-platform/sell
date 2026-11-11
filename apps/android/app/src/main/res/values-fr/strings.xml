@@ -105,7 +105,7 @@
     <string name="identity_selected">Pièce d’identité sélectionnée</string>
     <string name="identity_required">Choisissez deux images ou un PDF recto verso.</string>
     <string name="identity_file_rejected">Certains fichiers sont non pris en charge ou trop volumineux.</string>
-    <string name="identity_privacy">La pièce d’identité reste sur votre téléphone : pas d’envoi ni de copie dans le brouillon.</string>
+    <string name="identity_privacy">La pièce d’identité reste sur votre téléphone jusqu’à votre accord pour l’envoi sécurisé.</string>
     <string name="certificate_required">Choisissez le certificat de propriété pour continuer.</string>
     <string name="summary_identity">Identité</string>
     <string name="review_status_title">État de lecture et comparaison</string>
@@ -115,4 +115,28 @@
     <string name="match_status">Comparaison certificat et identité</string>
     <string name="match_pending">Non commencée : données des deux documents non extraites.</string>
     <string name="official_status">Vérification officielle de propriété</string>
+    <string name="pair_review_received">Rapport de lecture privée reçu. Il s’agit uniquement d’une comparaison préliminaire.</string>
+    <string name="pair_document_read">Document lu par le service privé</string>
+    <string name="pair_agreement">Les noms concordent dans les textes, sous réserve de contrôle</string>
+    <string name="pair_difference">Différence entre les documents. Examen nécessaire</string>
+    <string name="pair_uncertain">Lecture insuffisante ou ambiguë. Vérifiez les documents</string>
+    <string name="pair_certificate_owner">Nom sur le certificat</string>
+    <string name="pair_identity_owner">Nom sur la carte d’identité</string>
+    <string name="pair_unreadable">Lecture non fiable</string>
+    <string name="pair_cin_label">Numéro CIN cité dans le document</string>
+    <string name="pair_cin_equal">Les numéros cités concordent provisoirement</string>
+    <string name="pair_cin_diff">Numéros différents, examen nécessaire</string>
+    <string name="pair_cin_uncertain">Numéro incertain ou contradictoire</string>
+    <string name="pair_cin_missing">Impossible de comparer</string>
+    <string name="pair_identity_coverage">Faces de la carte d’identité</string>
+    <string name="pair_reverse_missing">Verso non reçu</string>
+    <string name="pair_reverse_unconfirmed">Pages reçues, authenticité des deux faces non établie</string>
+    <string name="pair_preliminary_only">L’OCR ne vérifie ni l’identité ni la propriété et n’autorise pas une publication. Contrôle indépendant obligatoire.</string>
+    <string name="pair_upload_cert">Envoi sécurisé du certificat…</string>
+    <string name="pair_upload_identity">Envoi sécurisé de la pièce d’identité…</string>
+    <string name="pair_comparing">Lecture et comparaison des documents…</string>
+    <string name="pair_request_failed">Comparaison impossible. Vérifiez la connexion et réessayez lorsque le service est activé.</string>
+    <string name="pair_not_connected">La lecture sécurisée n’est pas encore activée pour votre compte. Vous pouvez enregistrer le brouillon.</string>
+    <string name="pair_upload_consent">J’accepte l’envoi de mon certificat et de ma carte d’identité au service privé de Malak pour la lecture et la comparaison liées à mon dossier.</string>
+    <string name="pair_start">Lire et comparer les documents</string>
 </resources>
