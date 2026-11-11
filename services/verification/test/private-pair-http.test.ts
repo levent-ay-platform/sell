@@ -119,7 +119,8 @@ test('malicious injected analyzer cannot return a verified flag',async()=>{
   assert.equal(audit[0]?.reason,'UPSTREAM_UNAVAILABLE');
  },async()=>({...preliminary,mayPublish:true} as unknown as PrivatePairReport));
 });
-\ntest('shared-code pilot credential is rejected before reading any private document or returning an owner report',async()=>{
+
+test('shared-code pilot credential is rejected before reading any private document or returning an owner report',async()=>{
  await withServer(async(port,seen,audit)=>{
    const r=await call(port,JSON.stringify(payload));
    assert.equal(r.status,403);
