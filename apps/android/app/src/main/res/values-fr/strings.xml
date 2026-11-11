@@ -147,11 +147,11 @@
     <string name="pilot_phone_invalid">Saisissez un numéro tunisien valide de 8 chiffres.</string>
     <string name="pilot_continue">Continuer</string>
     <string name="pilot_otp_label">Code de test à 4 chiffres</string>
-    <string name="pilot_otp_hint">Code pilote fourni aux testeurs, sans envoi de SMS.</string>
+    <string name="pilot_otp_hint">Code pilote 1234, sans SMS.</string>
     <string name="pilot_otp_invalid">Code de test incorrect. Réessayez.</string>
     <string name="pilot_enter">Entrer en mode pilote</string>
     <string name="pilot_change_phone">Modifier le numéro</string>
-    <string name="pilot_no_real_identity">PILOTE UNIQUEMENT : ce code ne vérifie pas la possession du numéro ni l\'identité. L\'envoi privé des documents et les vérifications d\'identité et de propriété restent désactivés jusqu\'à la mise en place d\'une véritable authentification.</string>
-    <string name="pilot_session_badge">Mode pilote — utilisateur non vérifié</string>
+    <string name="pilot_no_real_identity">Votre accès à la version pilote de Malak est confirmé. Vous pouvez parcourir les biens, ajouter un terrain et enregistrer un brouillon.</string>
+    <string name="pilot_session_badge">Compte confirmé — version pilote</string>
     <string name="pilot_sign_out">Déconnexion</string>
 </resources>
