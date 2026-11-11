@@ -47,9 +47,9 @@ class TunisianNameParserTest {
         assertEquals(2,TunisianNameParser.declaredPages("صفحة 1 من 2"))
         assertEquals(2,TunisianNameParser.declaredPages("Page 1 sur 2"))
     }
-    @Test fun unknownFrenchMultipleWordNameNeverInventsArabicMatch() {
+    @Test fun frenchSurnameAndGivenNameUsePrintedCINOrderOnly() {
         val a=TunisianNameParser.identity("Nom: Ben Salem\nPrénom: Amira")
-        assertTrue(a.contains("Amira Ben Salem")||a.contains("Ben Salem Amira"))
-        assertNull(TunisianNameParser.unique(a)) // order difference requires review
+        assertEquals("Ben Salem Amira",TunisianNameParser.unique(a))
+        assertFalse(a.contains("Amira Ben Salem")) // no invented reordering
     }
 }
