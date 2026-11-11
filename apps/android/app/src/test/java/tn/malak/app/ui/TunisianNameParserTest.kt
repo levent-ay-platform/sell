@@ -52,7 +52,6 @@ class TunisianNameParserTest {
         assertEquals("Ben Salem Amira",TunisianNameParser.unique(a))
         assertFalse(a.contains("Amira Ben Salem")) // no invented reordering
     }
-}
 
     @Test fun lowConfidenceScanCannotFalselyClaimDifferentNames() {
         assertEquals("INSUFFICIENT_OR_AMBIGUOUS",
