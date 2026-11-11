@@ -58,10 +58,12 @@ private val Capacities = listOf(
 fun SellerOcrJourney(onBack:()->Unit) {
     val context=LocalContext.current
     val ownerSession=LocalOwnerEvidenceSession.current
+    val authenticatedOwnerSession=LocalAuthenticatedOwnerSession.current
     val scope=rememberCoroutineScope()
     var requestJob by remember {mutableStateOf<Job?>(null)}
     var pairProgress by remember {mutableStateOf<PairProgress?>(null)}
     var pairReport by remember {mutableStateOf<CertificateIdentityReview?>(null)}
+    var provisionedCase by remember {mutableStateOf<OwnerEvidenceSession?>(null)}
     var pairError by remember {mutableIntStateOf(0)}
     var uploadConsent by remember {mutableStateOf(false)}
     val prefs=remember(context){context.getSharedPreferences("malak_unpublished_land_draft",Context.MODE_PRIVATE)}
@@ -71,6 +73,7 @@ fun SellerOcrJourney(onBack:()->Unit) {
     var area by rememberSaveable {mutableStateOf(prefs.getString("area","") ?: "")}
     var price by rememberSaveable {mutableStateOf(prefs.getString("price","") ?: "")}
     var capacity by rememberSaveable {mutableStateOf(prefs.getString("capacity","owner") ?: "owner")}
+    val caseRequestKey=remember(name,region,area,price,capacity){UUID.randomUUID().toString()}
     var showInvalid by rememberSaveable {mutableStateOf(false)}
     var saveMessage by remember {mutableIntStateOf(0)}
     var pickMessage by remember {mutableIntStateOf(0)}
@@ -79,8 +82,10 @@ fun SellerOcrJourney(onBack:()->Unit) {
     var identityMessage by remember {mutableIntStateOf(0)}
     // Never let a stale comparison be displayed after selecting other documents,
     // navigation, account or case changes. Private report is memory-only.
-    LaunchedEffect(files.toList(),identityFiles.toList(),ownerSession) {
+    LaunchedEffect(files.toList(),identityFiles.toList(),ownerSession,authenticatedOwnerSession,
+        name,region,area,price,capacity) {
         requestJob?.cancel()
+        provisionedCase=null
         pairReport=null
         pairProgress=null
         pairError=0
@@ -343,13 +348,14 @@ fun SellerOcrJourney(onBack:()->Unit) {
                     if(pairProgress!=null) {
                         PlainNotice(Icons.Outlined.HourglassTop,
                             s(when(pairProgress){
+                                PairProgress.CASE_PROVISION->R.string.pair_creating_case
                                 PairProgress.CERTIFICATE_UPLOAD->R.string.pair_upload_cert
                                 PairProgress.IDENTITY_UPLOAD->R.string.pair_upload_identity
                                 else->R.string.pair_comparing
                             }))
                     }
                     if(pairError!=0)PlainNotice(Icons.Outlined.Info,s(pairError))
-                    if(ownerSession==null) {
+                    if(ownerSession==null&&authenticatedOwnerSession==null) {
                         PlainNotice(Icons.Outlined.Lock,s(R.string.pair_not_connected))
                     }else{
                         Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
@@ -369,10 +375,19 @@ fun SellerOcrJourney(onBack:()->Unit) {
                             }
                             pairError=0
                             pairReport=null
+                            pairProgress=PairProgress.CASE_PROVISION
                             requestJob=scope.launch {
                                 try {
+                                    // The trusted sign-in identity first provisions a real,
+                                    // consented case; an absent login never invents a case.
+                                    val activeCase=ownerSession?:provisionedCase?:
+                                        provisionOwnerEvidenceCase(
+                                            authenticatedOwnerSession?:throw OwnerPairException(401),
+                                            NewOwnerCaseDraft(caseRequestKey,name.trim(),region.trim(),
+                                                area,price,capacity)
+                                        ).also{provisionedCase=it}
                                     val result=compareOwnerCertificateAndIdentity(
-                                        context,ownerSession,cert,idDocs){pairProgress=it}
+                                        context,activeCase,cert,idDocs){pairProgress=it}
                                     if(files.map{it.uploadKey}==cert.map{it.idempotencyKey} &&
                                        identityFiles.map{it.uploadKey}==idDocs.map{it.idempotencyKey}) {
                                         pairReport=result
