@@ -40,7 +40,10 @@ function canonical(name:string):string|null {
   const ar=/[\p{Script=Arabic}]/u.test(input);
   const lat=/[\p{Script=Latin}]/u.test(input);
   if((ar&&lat)||(!ar&&!lat))return null;
-  return tokens.sort().join(' ');
+  // Preserve token order: sorting could treat two different personal names
+  // with the same words in a different order as an apparent agreement.
+  // Safer to require review for inverted/reordered names.
+  return tokens.join(' ');
 }
 function parsedName(raw:string):string|null {
   // Forbid digits, OCR control characters and field-value leakage.
