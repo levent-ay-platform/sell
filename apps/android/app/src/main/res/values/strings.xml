@@ -132,6 +132,7 @@
     <string name="pair_reverse_missing">Reverse side missing</string>
     <string name="pair_reverse_unconfirmed">Pages received; sides not authenticated</string>
     <string name="pair_preliminary_only">OCR does not verify identity or title ownership, and does not permit publication. Independent review required.</string>
+    <string name="pair_creating_case">Creating private verification request…</string>
     <string name="pair_upload_cert">Securely uploading certificate…</string>
     <string name="pair_upload_identity">Securely uploading identity card…</string>
     <string name="pair_comparing">Reading and comparing documents…</string>
