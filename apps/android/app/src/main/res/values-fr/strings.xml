@@ -136,6 +136,11 @@
     <string name="pair_upload_cert">Envoi sécurisé du certificat…</string>
     <string name="pair_upload_identity">Envoi sécurisé de la pièce d’identité…</string>
     <string name="pair_comparing">Lecture et comparaison des documents…</string>
+    <string name="pair_session_invalid">Votre session sécurisée a expiré ou est invalide. Reconnectez-vous avant l’envoi.</string>
+    <string name="pair_case_forbidden">Ce dossier n’est plus accessible ou le consentement a été retiré.</string>
+    <string name="pair_document_rejected">Document refusé. Vérifiez le format, la taille et les pages, puis sélectionnez-le à nouveau.</string>
+    <string name="pair_rate_limited">Trop de tentatives. Veuillez réessayer plus tard.</string>
+    <string name="pair_service_unavailable">La lecture sécurisée est temporairement indisponible. Vous pouvez enregistrer un brouillon local.</string>
     <string name="pair_request_failed">Comparaison impossible. Vérifiez la connexion et réessayez lorsque le service est activé.</string>
     <string name="pair_not_connected">La lecture sécurisée n’est pas encore activée pour votre compte. Vous pouvez enregistrer le brouillon.</string>
     <string name="pair_upload_consent">J’accepte l’envoi de mon certificat et de ma carte d’identité au service privé de Malak pour la lecture et la comparaison liées à mon dossier.</string>

@@ -136,6 +136,11 @@
     <string name="pair_upload_cert">Securely uploading certificate…</string>
     <string name="pair_upload_identity">Securely uploading identity card…</string>
     <string name="pair_comparing">Reading and comparing documents…</string>
+    <string name="pair_session_invalid">Your secure session expired or is invalid. Sign in again before uploading.</string>
+    <string name="pair_case_forbidden">This verification request is no longer accessible, or consent was withdrawn.</string>
+    <string name="pair_document_rejected">Document rejected. Check its type, size and pages, then select it again.</string>
+    <string name="pair_rate_limited">Too many attempts. Please try again later.</string>
+    <string name="pair_service_unavailable">Secure document service is temporarily unavailable. You can save a local draft.</string>
     <string name="pair_request_failed">Unable to compare. Check your connection and retry after secure service activation.</string>
     <string name="pair_not_connected">Secure document reading is not yet enabled for your account. You can save your draft.</string>
     <string name="pair_upload_consent">I agree to send my certificate and identity documents to Malak’s private service for reading and comparison for my verification case.</string>

@@ -136,6 +136,11 @@
     <string name="pair_upload_cert">جارٍ إرسال شهادة الملكية بأمان…</string>
     <string name="pair_upload_identity">جارٍ إرسال بطاقة الهوية بأمان…</string>
     <string name="pair_comparing">جارٍ استخراج البيانات ومقارنتها…</string>
+    <string name="pair_session_invalid">انتهت جلستك الآمنة أو أصبحت غير صالحة. أعد تسجيل الدخول قبل رفع الوثائق.</string>
+    <string name="pair_case_forbidden">لم يعد الوصول إلى طلب التحقق مسموحاً، أو تم سحب الموافقة.</string>
+    <string name="pair_document_rejected">رُفض الملف. تحقق من نوعه وحجمه وصفحاته، ثم اختره مجدداً.</string>
+    <string name="pair_rate_limited">محاولات كثيرة خلال وقت قصير. حاول لاحقاً.</string>
+    <string name="pair_service_unavailable">خدمة قراءة الوثائق الآمنة غير متاحة مؤقتاً. يمكنك حفظ مسودة محلية.</string>
     <string name="pair_request_failed">تعذّر إكمال المقارنة. تحقق من الاتصال وحاول مجدداً بعد تفعيل الخدمة.</string>
     <string name="pair_not_connected">القراءة الآمنة غير مفعّلة لحسابك حالياً. يمكنك حفظ مسودتك.</string>
     <string name="pair_upload_consent">أوافق على إرسال ملفات الشهادة والهوية إلى خدمة ملاك الخاصة لقراءة البيانات ومقارنتها ضمن طلب التحقق الخاص بي.</string>

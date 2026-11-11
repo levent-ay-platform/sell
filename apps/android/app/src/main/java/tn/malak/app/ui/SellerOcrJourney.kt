@@ -467,6 +467,16 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                                     }
                                 }catch(cancel:CancellationException) {
                                     throw cancel
+                                }catch(err:OwnerPairException) {
+                                    // Never show tokens, provider URLs or internal service errors.
+                                    if(requestEpoch==thisRequest)pairError=when(err.statusCode) {
+                                        401->R.string.pair_session_invalid
+                                        403->R.string.pair_case_forbidden
+                                        413,415,422->R.string.pair_document_rejected
+                                        429->R.string.pair_rate_limited
+                                        502,503,504->R.string.pair_service_unavailable
+                                        else->R.string.pair_request_failed
+                                    }
                                 }catch(_:Exception){
                                     if(requestEpoch==thisRequest)
                                         pairError=R.string.pair_request_failed
