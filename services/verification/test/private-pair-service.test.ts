@@ -128,6 +128,21 @@ test('wrong evidence kind, missing receipt and duplicate identity ID fail closed
   await assert.rejects(analyze({...h.request,identityEvidenceIds:[certificateId]},h.deps),PrivatePairAccessDenied);
   await assert.rejects(analyze({...h.request,identityEvidenceIds:[identityId,identityId]},h.deps),PrivatePairAccessDenied);
 });
+test('image receipt cannot claim multi-page PDF OCR output',async()=>{
+  const h=harness();
+  h.rows.set(identityId,{...h.identityRow,mime:'image/jpeg',pageNumber:1});
+  await assert.rejects(analyze(h.request,h.deps),PrivatePairUnavailable);
+});
+test('single image receipt cannot claim two physical image pages',async()=>{
+  const h=harness();
+  h.rows.set(identityId,{...h.identityRow,mime:'image/jpeg',pageNumber:1});
+  const original=h.deps.worker.extract;
+  const deps={...h.deps,worker:{extract:async(bytes:Uint8Array,mime:string)=>{
+    const result=await original(bytes);
+    return mime==='image/jpeg'?{...result,format:'image' as const}:result;
+  }}};
+  await assert.rejects(analyze(h.request,deps),PrivatePairUnavailable);
+});
 test('tampered GCM ciphertext, key or receipt digest never produces a report',async()=>{
   const h=harness(),sealed=Buffer.from(h.objects.get(h.certRow.objectKey)!);
   sealed[sealed.length-2]^=1;h.objects.set(h.certRow.objectKey,sealed);

@@ -105,7 +105,13 @@ async function readOne(row:EvidenceRow,deps:PrivatePairDependencies):Promise<Ing
       wrappedKey:row.wrappedDataKey,keyVersion:row.keyVersion});
     clear=decryptEvidence(sealed,key,row);
     const raw=await deps.worker.extract(clear,row.mime);
-    return parseOcrWorkerOutput(raw);
+    const read=parseOcrWorkerOutput(raw);
+    // A single still image can only contribute one physical page. Reject
+    // OCR metadata that claims PDF or multiple pages for an image receipt.
+    if(row.mime==='application/pdf' ? read.format!=='pdf' :
+       (read.format!=='image'||read.pages.length!==1))
+      throw new PrivatePairUnavailable();
+    return read;
   } catch {
     // Never forward storage, OCR, Vault or personal information in exceptions.
     throw new PrivatePairUnavailable();

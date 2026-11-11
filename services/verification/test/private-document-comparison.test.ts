@@ -124,6 +124,32 @@ test('blur warning on otherwise high-confidence matching names requires review',
   assert.ok(result.reasons.includes('SCAN_QUALITY_NEEDS_REVIEW'));
   assert.equal(result.mayPublish,false);
 });
+test('a second unreadable owner label cannot be hidden behind a valid one',()=>{
+  const cert=doc(['Propriétaire: Amira Ben Salem','Propriétaire: ???']);
+  const result=compare(cert,doc(['Nom et prénom: Amira Ben Salem']));
+  assert.equal(result.assessment,'INSUFFICIENT_OR_AMBIGUOUS');
+  assert.equal(result.certificateName,null);
+});
+test('a second unreadable full identity field prevents an apparent agreement',()=>{
+  const id=doc(['Nom et prénom: Amira Ben Salem','Nom et prénom: ???']);
+  const result=compare(doc(['Propriétaire: Amira Ben Salem']),id);
+  assert.equal(result.assessment,'INSUFFICIENT_OR_AMBIGUOUS');
+  assert.equal(result.identityName,null);
+});
+test('OCR names without confidence are uncertain, including a duplicate native text line',()=>{
+  const partial=doc(['Propriétaire: Amira Ben Salem'],'ocr-fr',null);
+  const result=compare(partial,doc(['Nom et prénom: Amira Ben Salem']));
+  assert.equal(result.assessment,'INSUFFICIENT_OR_AMBIGUOUS');
+  assert.ok(result.reasons.includes('LOW_OCR_CONFIDENCE'));
+  const mixed={format:'pdf',mayApproveOwnership:false,pages:[
+    {page:1,method:'pdf-text',lines:[{text:'Propriétaire: Amira Ben Salem',page:1,
+      source:'pdf-text',confidence:null}]},
+    {page:2,method:'ocr',lines:[{text:'Propriétaire: Amira Ben Salem',page:2,
+      source:'ocr-fr',confidence:null}]}
+  ]};
+  const duplicate=compare(mixed,doc(['Nom et prénom: Amira Ben Salem']));
+  assert.equal(duplicate.assessment,'INSUFFICIENT_OR_AMBIGUOUS');
+});
 test('reject hostile OCR payload metadata before any comparison',()=>{
   assert.throws(()=>compare(doc(['Propriétaire: Amira Ben Salem']),
     {format:'image',mayApproveOwnership:true,pages:[]}),/INVALID_OCR_PAYLOAD/);

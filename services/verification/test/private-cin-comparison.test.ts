@@ -46,6 +46,11 @@ test('blurred source cannot claim an apparently matching CIN number',()=>{
   }))};
   assert.equal(compare(uncertain,clean).status,'AMBIGUOUS_OR_LOW_CONFIDENCE');
 });
+test('OCR CIN without confidence is uncertain, not a number match',()=>{
+  const result=compare(doc(['CIN: 12345678'],null),doc(['CIN: 12345678']));
+  assert.equal(result.status,'AMBIGUOUS_OR_LOW_CONFIDENCE');
+  assert.equal(result.mayVerifyIdentity,false);
+});
 test('no CIN on either document means not comparable, not matching',()=>{
  assert.equal(compare(doc(['Propriétaire: Amira Ben Salem']),
    doc(['Nom et prénom: Amira Ben Salem'])).status,'NOT_COMPARABLE');

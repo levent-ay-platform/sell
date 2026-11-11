@@ -45,15 +45,19 @@ function collect(doc:IngestedDocument):Match[] {
 }
 function unique(items:Match[]):Match|null {
   if(!items.length||new Set(items.map(x=>x.number)).size!==1)return null;
-  return items.reduce((a,b)=>(a.confidence??1)<(b.confidence??1)?a:b);
+  const certainty=(x:Match)=>x.confidence===null?
+    (x.evidence.source==='pdf-text'?1:-1):x.confidence;
+  return items.reduce((a,b)=>certainty(a)<certainty(b)?a:b);
 }
 /** Full CIN digits NEVER appear in the returned report. */
 export function compareCertificateIdentityCinText(cert:IngestedDocument,id:IngestedDocument):PrivateCinComparison {
   const ac=collect(cert),bc=collect(id),a=unique(ac),b=unique(bc);
   const uncertainImage=[...cert.pages,...id.pages].some(p=>(p.qualityWarnings?.length??0)>0);
+  const lowOrUnknown=(x:Match|null)=>!!x&&(
+    (x.confidence===null&&x.evidence.source!=='pdf-text')||
+    (x.confidence!==null&&x.confidence<0.90));
   const ambiguous=uncertainImage||(ac.length>0&&!a)||(bc.length>0&&!b)||
-    (a?.confidence!==null&&a?.confidence!==undefined&&a.confidence<0.90)||
-    (b?.confidence!==null&&b?.confidence!==undefined&&b.confidence<0.90);
+    lowOrUnknown(a)||lowOrUnknown(b);
   const status:CinTextStatus=ambiguous?'AMBIGUOUS_OR_LOW_CONFIDENCE':
     !a||!b?'NOT_COMPARABLE':
     a.number===b.number?'SAME_NUMBER_UNVERIFIED':'NUMBER_DIFFERS_NEEDS_REVIEW';

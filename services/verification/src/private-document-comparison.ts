@@ -60,6 +60,7 @@ function collect(doc:IngestedDocument, kind:'CERTIFICATE'|'IDENTITY'):CandidateN
   const out:CandidateName[]=[];
   const lastname:CandidateName[]=[];
   const firstname:CandidateName[]=[];
+  let unreadableLabel=false;
   for(const p of doc.pages)for(const line of p.lines){
     const t=line.text.trim().normalize('NFKC');
     if(t.length>180)continue;
@@ -67,9 +68,16 @@ function collect(doc:IngestedDocument, kind:'CERTIFICATE'|'IDENTITY'):CandidateN
       /^(?:propri[eé]taire|titulaire\s+du\s+titre|اسم\s+(?:و\s*لقب\s+)?المالك|المالك)\s*[:：\-–]\s*(.{7,95})$/iu:
       /^(?:nom\s+et\s+pr[eé]nom|nom\s+complet|الاسم\s+واللقب|اللقب\s+والاسم)\s*[:：\-–]\s*(.{7,95})$/iu;
     const m=re.exec(t);
+    // Invalid/blank lines with a recognized owner label must not disappear
+    // merely because another line on the same certificate has a valid name.
+    const label=kind==='CERTIFICATE'?
+      /^(?:propri[eé]taire|titulaire\s+du\s+titre|اسم\s+(?:و\s*لقب\s+)?المالك|المالك)\s*[:：\-–]/iu:
+      /^(?:nom\s+et\s+pr[eé]nom|nom\s+complet|الاسم\s+واللقب|اللقب\s+والاسم)\s*[:：\-–]/iu;
+    if(label.test(t)&&!m)unreadableLabel=true;
     if(m){
       const value=parsedName(m[1]!);
       if(value)out.push({value,page:line.page,source:line.source,confidence:line.confidence});
+      else unreadableLabel=true;
     }
     if(kind==='IDENTITY'){
       const last=/^nom\s*[:：\-–]\s*(.{2,60})$/iu.exec(t);
@@ -78,9 +86,16 @@ function collect(doc:IngestedDocument, kind:'CERTIFICATE'|'IDENTITY'):CandidateN
         if(hit&&hit[1]&&/^[\p{Script=Latin}\p{M}\s'-]{2,60}$/u.test(hit[1]))
           into.push({value:hit[1].trim(),page:line.page,source:line.source,confidence:line.confidence});
       };
+      if((/^nom\s*[:：\-–]/iu.test(t)&&!last)||
+         (/^pr[eé]nom\s*[:：\-–]/iu.test(t)&&!first))
+        unreadableLabel=true;
       add(last,lastname);add(first,firstname);
+      if((last&&!lastname.some(x=>x.page===line.page&&x.value===last[1]?.trim()))||
+         (first&&!firstname.some(x=>x.page===line.page&&x.value===first[1]?.trim())))
+        unreadableLabel=true;
     }
   }
+  if(unreadableLabel)return [];
   // A complete ID-name field and a separate Nom / Prénom pair are independent
   // OCR observations. Compare BOTH; never ignore a contradictory second field.
   // Partial or duplicated separate components are ambiguous, not corroboration.
@@ -100,7 +115,15 @@ function unique(candidates:CandidateName[]):CandidateName|null {
   if(!candidates.length)return null;
   const normalized=new Set(candidates.map(x=>canonical(x.value)));
   if(normalized.size!==1||normalized.has(null))return null;
-  return candidates.reduce((a,b)=> (a.confidence??1)<(b.confidence??1)?a:b);
+  // Unknown confidence from an OCR source must never be discarded just
+  // because a duplicate native-PDF or high-confidence line exists.
+  const certainty=(x:CandidateName)=>x.confidence===null?
+    (x.source==='pdf-text'?1:-1):x.confidence;
+  return candidates.reduce((a,b)=>certainty(a)<certainty(b)?a:b);
+}
+function uncertainNameConfidence(x:CandidateName|null):boolean {
+  return !!x&&((x.confidence===null&&x.source!=='pdf-text')||
+    (x.confidence!==null&&x.confidence<0.90));
 }
 /** Source must already have been authenticated, malware-scanned and privately decrypted. */
 export function comparePrivateCertificateIdentityOcr(certInput:unknown,idInput:unknown):PrivateDocumentComparison {
@@ -123,8 +146,7 @@ export function comparePrivateCertificateIdentityOcr(certInput:unknown,idInput:u
   // low-resolution or badly oriented document; that is not a clean agreement.
   if([...cert.pages,...identity.pages].some(p=>(p.qualityWarnings?.length??0)>0))
     issues.push('SCAN_QUALITY_NEEDS_REVIEW');
-  if((a?.confidence!==null&&a?.confidence!==undefined&&a.confidence<0.90)||
-     (b?.confidence!==null&&b?.confidence!==undefined&&b.confidence<0.90))
+  if(uncertainNameConfidence(a)||uncertainNameConfidence(b))
     issues.push('LOW_OCR_CONFIDENCE');
   if(issues.length===0&&a&&b) {
     if(canonical(a.value)===canonical(b.value))assessment='PRELIMINARY_TEXT_AGREEMENT';
