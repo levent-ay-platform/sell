@@ -159,6 +159,8 @@
     <string name="pair_reading_in_progress">Lecture sécurisée du document en cours</string>
     <string name="pair_certificate_pages">Pages du certificat traitées</string>
     <string name="pair_identity_pages">Pages de la carte d’identité traitées</string>
+    <string name="certificate_add_next_page">Ajouter la page suivante du certificat</string>
+    <string name="certificate_following_pages_removed">Cette page et toutes les suivantes ont été retirées pour préserver l’ordre imprimé. Ajoutez-les à nouveau dans l’ordre.</string>
     <string name="pair_preliminary_only">L’OCR ne vérifie ni l’identité ni la propriété et n’autorise pas une publication. Contrôle indépendant obligatoire.</string>
     <string name="pair_creating_case">Création de la demande de vérification privée…</string>
     <string name="pair_upload_cert">Envoi sécurisé du certificat…</string>

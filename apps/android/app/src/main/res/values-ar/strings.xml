@@ -159,6 +159,8 @@
     <string name="pair_reading_in_progress">جارٍ معالجة الوثائق بأمان</string>
     <string name="pair_certificate_pages">صفحات شهادة الملكية المعالجة</string>
     <string name="pair_identity_pages">صفحات بطاقة التعريف المعالجة</string>
+    <string name="certificate_add_next_page">إضافة الصفحة التالية للشهادة</string>
+    <string name="certificate_following_pages_removed">حُذفت هذه الصفحة وكل الصفحات التي تليها للحفاظ على الترتيب المطبوع. أضفها مجدداً بالتسلسل.</string>
     <string name="pair_preliminary_only">نتيجة OCR لا تثبت صحة الهوية أو ملكية العقار ولا تسمح بالنشر. يلزم تدقيق مستقل.</string>
     <string name="pair_creating_case">جارٍ إنشاء طلب التحقق الخاص…</string>
     <string name="pair_upload_cert">جارٍ إرسال شهادة الملكية بأمان…</string>

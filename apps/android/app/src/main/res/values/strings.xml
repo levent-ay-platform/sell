@@ -159,6 +159,8 @@
     <string name="pair_reading_in_progress">Secure document processing in progress</string>
     <string name="pair_certificate_pages">Certificate pages processed</string>
     <string name="pair_identity_pages">Identity card pages processed</string>
+    <string name="certificate_add_next_page">Add the next certificate page</string>
+    <string name="certificate_following_pages_removed">This page and all following pages were removed to preserve printed page order. Add them again in sequence.</string>
     <string name="pair_preliminary_only">OCR does not verify identity or title ownership, and does not permit publication. Independent review required.</string>
     <string name="pair_creating_case">Creating private verification request…</string>
     <string name="pair_upload_cert">Securely uploading certificate…</string>

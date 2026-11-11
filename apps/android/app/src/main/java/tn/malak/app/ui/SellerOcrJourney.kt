@@ -331,11 +331,16 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                             Text(s(R.string.file_rules),color=Brand.Muted,fontSize=12.sp)
                             Text(s(R.string.certificate_page_order_hint),color=Brand.Muted,
                                 fontSize=12.sp,lineHeight=18.sp)
-                            OutlinedButton(onClick={pickDocuments.launch(arrayOf("application/pdf","image/jpeg","image/png","image/tiff"))},
+                            OutlinedButton(onClick={pickDocuments.launch(
+                                if(files.isEmpty())arrayOf("application/pdf","image/jpeg","image/png","image/tiff")
+                                else arrayOf("image/jpeg","image/png","image/tiff"))},
+                                enabled=files.isEmpty()||
+                                    (files.size<8&&files.none{it.mime=="application/pdf"}),
                                 modifier=Modifier.fillMaxWidth().heightIn(min=52.dp),shape=RoundedCornerShape(16.dp)) {
                                 Icon(Icons.Outlined.FolderOpen,null,Modifier.size(21.dp))
                                 Spacer(Modifier.width(8.dp))
-                                Text(s(R.string.pick_document))
+                                Text(s(if(files.isEmpty())R.string.pick_document
+                                    else R.string.certificate_add_next_page))
                             }
                         }
                     }
@@ -358,7 +363,16 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                                             color=Brand.Muted,maxLines=1,
                                             overflow=TextOverflow.Ellipsis,fontSize=11.sp)
                                     }
-                                    IconButton(onClick={files.remove(file)},modifier=Modifier.size(48.dp)) {
+                                    IconButton(onClick={
+                                        // A later image's apparent page number must not change
+                                        // silently after deleting an earlier page.
+                                        if(index<files.size&&files[index].uri==file.uri){
+                                            val following=files.size-index-1
+                                            while(files.size>index)files.removeAt(files.lastIndex)
+                                            pickMessage=if(following>0)
+                                                R.string.certificate_following_pages_removed else 0
+                                        }
+                                    },modifier=Modifier.size(48.dp)) {
                                         Icon(Icons.Outlined.DeleteOutline,s(R.string.remove),tint=Brand.Muted)
                                     }
                                 }
