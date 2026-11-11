@@ -13,6 +13,8 @@ import type {Authenticator, EvidenceKind, EvidenceUploadRequest, EvidenceUploadR
 import type {ReviewRequest, ReviewInspectionResult} from './evidence-review.ts';
 import type {PrivateOcrPresentation} from './ocr-presentation.ts';
 import {PrivateOcrAccessDenied} from './seller-ocr-service.ts';
+import {PrivatePairAccessDenied} from './private-pair-service.ts';
+import type {PrivatePairReport,PrivatePairRequest} from './private-pair-service.ts';
 
 const MAX_BYTES=12*1024*1024;
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -21,9 +23,10 @@ const TOKEN=/^Bearer ([A-Za-z0-9._~+\/-]{20,4096})$/;
 const KINDS=new Set<EvidenceKind>(['IDENTITY','OWNERSHIP_CERTIFICATE','TITLE_EXTRACT','OTHER_LEGAL_PROOF']);
 const UPLOAD=/^\/internal\/v1\/evidence\/([0-9a-f-]{36})\/upload$/i;
 const OCR_UPLOAD=/^\/internal\/v1\/evidence\/([0-9a-f-]{36})\/upload-ocr$/i;
+const PAIR=/^\/internal\/v1\/evidence\/([0-9a-f-]{36})\/compare-pair$/i;
 const REVIEW=/^\/internal\/v1\/review\/([0-9a-f-]{36})\/([0-9a-f-]{36})\/inspect$/i;
 const MIME=new Set(['application/pdf','image/png','image/jpeg','image/tiff']);
-export type PrivateRoute='UPLOAD'|'INSPECT'|'OCR';
+export type PrivateRoute='UPLOAD'|'INSPECT'|'OCR'|'PAIR';
 export type DenialReason='BAD_ROUTE'|'BAD_REQUEST'|'UNAUTHENTICATED'|'FORBIDDEN'|'RATE_LIMITED'|'FILE_REJECTED'|'REPLAY_CONFLICT'|'UPSTREAM_UNAVAILABLE';
 export interface DenialAuditRecord {route:PrivateRoute|'UNKNOWN';reason:DenialReason;actorUserId:string|null;requestId:string;}
 export interface PrivateEvidenceHttpDeps {
@@ -37,6 +40,8 @@ export interface PrivateEvidenceHttpDeps {
   inspect:(request:ReviewRequest)=>Promise<ReviewInspectionResult>;
   /** Private owner-only field DTO. Called AFTER a successful, scanned and sealed upload. */
   analyzeOwnerUpload?:(request:{bearerToken:string;caseId:string;evidenceId:string;bytes:Uint8Array;mime:'application/pdf'|'image/png'|'image/jpeg'|'image/tiff';declaredArea:string|null})=>Promise<PrivateOcrPresentation>;
+  /** Explicitly injected, server-only owner comparison of already sealed evidence IDs. */
+  analyzeOwnerPair?:(request:PrivatePairRequest)=>Promise<PrivatePairReport>;
 }
 
 function json(res:ServerResponse,status:number,body:{ok:boolean;[key:string]:unknown}):void {
@@ -114,8 +119,8 @@ export function createPrivateEvidenceHttpHandler(deps:PrivateEvidenceHttpDeps) {
   return async (req:IncomingMessage,res:ServerResponse):Promise<void>=>{
     const requestId=randomUUID();let actor:string|null=null;
     const url=req.url??'';
-    const upload=UPLOAD.exec(url),ocrUpload=OCR_UPLOAD.exec(url),review=REVIEW.exec(url);
-    const route:PrivateRoute|'UNKNOWN'=ocrUpload?'OCR':upload?'UPLOAD':review?'INSPECT':'UNKNOWN';
+    const upload=UPLOAD.exec(url),ocrUpload=OCR_UPLOAD.exec(url),review=REVIEW.exec(url),pair=PAIR.exec(url);
+    const route:PrivateRoute|'UNKNOWN'=pair?'PAIR':ocrUpload?'OCR':upload?'UPLOAD':review?'INSPECT':'UNKNOWN';
     // Do not log/return raw URL, bearer token, file name or document identifiers.
     const reject=async(status:number,reason:DenialReason)=>{
       try {await deps.audit.recordDenied({route,reason,actorUserId:actor,requestId});}
@@ -161,6 +166,60 @@ export function createPrivateEvidenceHttpHandler(deps:PrivateEvidenceHttpDeps) {
         if(!result.ok){const response=reasonFromReview(result);await reject(response.code,response.reason);return;}
         // Never surface OCR, decrypted bytes, names, shares, title IDs or storage links.
         json(res,200,{ok:true,inspected:true,mayPublish:false,ownershipVerified:false});
+        return;
+      }
+      if(route==='PAIR') {
+        if(!deps.analyzeOwnerPair){await reject(503,'UPSTREAM_UNAVAILABLE');return;}
+        if(req.headers['x-evidence-kind']||req.headers['x-page-number']||
+           req.headers['x-idempotency-key']||req.headers['x-claimed-mime']||
+           req.headers['x-declared-area-m2']||
+           single(req,'content-type')!=='application/json'){
+          await reject(400,'BAD_REQUEST');return;
+        }
+        const sizeHeader=single(req,'content-length');
+        const size=sizeHeader&&/^[0-9]{1,4}$/.test(sizeHeader)?Number(sizeHeader):NaN;
+        if(!Number.isSafeInteger(size)||size<2||size>1024){
+          await reject(400,'BAD_REQUEST');return;
+        }
+        let data:unknown;
+        let bytes:Uint8Array;
+        try {bytes=await limitedBody(req,size);}
+        catch {await reject(400,'FILE_REJECTED');return;}
+        try {data=JSON.parse(Buffer.from(bytes).toString('utf8'));}
+        catch {await reject(400,'BAD_REQUEST');return;}
+        finally {bytes.fill(0);}
+        if(!data||typeof data!=='object'||Array.isArray(data)||
+           Object.keys(data).sort().join(',')!=='certificateEvidenceIds,identityEvidenceIds'){
+          await reject(400,'BAD_REQUEST');return;
+        }
+        const {certificateEvidenceIds,identityEvidenceIds}=data as Record<string,unknown>;
+        if(!Array.isArray(certificateEvidenceIds)||certificateEvidenceIds.length<1||
+           certificateEvidenceIds.length>8||
+           !Array.isArray(identityEvidenceIds)||identityEvidenceIds.length<1||
+           identityEvidenceIds.length>2||
+           [...certificateEvidenceIds,...identityEvidenceIds].some(id=>
+             typeof id!=='string'||!UUID.test(id))||
+           new Set([...certificateEvidenceIds,...identityEvidenceIds]).size!==
+             certificateEvidenceIds.length+identityEvidenceIds.length){
+          await reject(400,'BAD_REQUEST');return;
+        }
+        const caseId=pair![1]!;
+        if(!UUID.test(caseId)){await reject(400,'BAD_REQUEST');return;}
+        let report:PrivatePairReport;
+        try {
+          report=await deps.analyzeOwnerPair({bearerToken,caseId,
+            certificateEvidenceIds,identityEvidenceIds});
+        } catch(err) {
+          await reject(err instanceof PrivatePairAccessDenied?403:503,
+            err instanceof PrivatePairAccessDenied?'FORBIDDEN':'UPSTREAM_UNAVAILABLE');
+          return;
+        }
+        if(report?.access!=='AUTHORIZED_CASE_OWNER_ONLY'||report?.ownershipVerified!==false||
+           report?.identityVerified!==false||report?.mayPublish!==false||
+           report?.comparison?.mayPublish!==false){
+          await reject(503,'UPSTREAM_UNAVAILABLE');return;
+        }
+        json(res,200,{ok:true,report,mayPublish:false,ownershipVerified:false,identityVerified:false});
         return;
       }
       const caseId=(ocrUpload??upload)![1]!;

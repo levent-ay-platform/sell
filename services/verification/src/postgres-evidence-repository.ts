@@ -70,6 +70,11 @@ JOIN sell.evidence_files f ON f.id=r.evidence_id
 WHERE r.case_id=$1::uuid AND r.uploader_user_id=$2::uuid
       AND r.idempotency_key=$3`;
 
+// Read only immutable, attached evidence for the *same* authenticated case owner.
+// No caller-supplied object-key is accepted and no unscoped ID lookup is allowed.
+const GET_PRIVATE_PAIR_EVIDENCE = 
+  FIND_REPLAY.replace('AND r.idempotency_key=$3','AND r.evidence_id=$3::uuid');
+
 export class PostgresIndividualEvidenceRepository implements CaseEvidenceRepository {
   private readonly transaction=new AsyncLocalStorage<SqlClient>();
   private readonly pool:SqlPool;
@@ -127,6 +132,19 @@ export class PostgresIndividualEvidenceRepository implements CaseEvidenceReposit
     const result=await db.query<ReplayRow>(FIND_REPLAY,[caseId,userId,key]);
     const a=result.rows[0];
     if(!a)return null;
+    return {evidenceId:a.evidence_id,caseId:a.case_id,uploadedBy:a.uploader_user_id,
+      objectKey:a.storage_key,digest:a.sha256,mime:a.media_kind,
+      kind:a.evidence_kind,pageNumber:a.page_number,fileSize:a.file_size,
+      wrappedDataKey:a.wrapped_data_key,keyVersion:a.key_version,
+      idempotencyKey:a.idempotency_key};
+  }
+
+  async getPrivateEvidence(caseId:string,userId:string,evidenceId:string):Promise<EvidenceRow|null> {
+    const result=await this.db().query<ReplayRow>(GET_PRIVATE_PAIR_EVIDENCE,[caseId,userId,evidenceId]);
+    if(result.rows.length!==1)return null;
+    const a=result.rows[0]!;
+    if(a.case_id!==caseId||a.uploader_user_id!==userId||a.evidence_id!==evidenceId)
+      return null;
     return {evidenceId:a.evidence_id,caseId:a.case_id,uploadedBy:a.uploader_user_id,
       objectKey:a.storage_key,digest:a.sha256,mime:a.media_kind,
       kind:a.evidence_kind,pageNumber:a.page_number,fileSize:a.file_size,
