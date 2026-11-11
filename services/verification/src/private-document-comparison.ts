@@ -29,6 +29,10 @@ export interface PrivateDocumentComparison {
   readonly identityName:CandidateName|null;
   readonly reasons:readonly string[];
 }
+// If a title mentions other rightsholders or undivided ownership, matching
+// one person's printed name is NOT an agreement about the whole title.
+// OCR evidence is advisory; always route such cases to human review.
+const SHARED_TITLE_CUE=/(?:\bco[\s-]?propri[eé]taire(?:s)?\b|\bpropri[eé]taires\s*[:：\-–]|\bco[\s-]?titulaire(?:s)?\b|\bindivision\b|الملاك|المالكون|المالكين|مالكان|الشياع|مشاع|الملكية\s+المشتركة)/iu;
 const MARKS=/\p{M}/gu;
 function canonical(name:string):string|null {
   const input=name.normalize('NFKD').replace(MARKS,'').replace(/[إأآ]/g,'ا').replace(/ى/g,'ي')
@@ -96,12 +100,18 @@ export function comparePrivateCertificateIdentityOcr(certInput:unknown,idInput:u
   const cert=parseOcrWorkerOutput(certInput),identity=parseOcrWorkerOutput(idInput);
   const a=unique(collect(cert,'CERTIFICATE'));
   const b=unique(collect(identity,'IDENTITY'));
+  const sharedTitle=cert.pages.some(page=>page.lines.some(line=>
+    SHARED_TITLE_CUE.test(line.text.normalize('NFKC'))));
   const issues:string[]=[];
   let assessment:ComparisonAssessment='INSUFFICIENT_OR_AMBIGUOUS';
   if(!a||!b)issues.push('MISSING_OR_AMBIGUOUS_LABELED_NAME');
-  else if((a.confidence!==null&&a.confidence<0.90)||(b.confidence!==null&&b.confidence<0.90))
+  if(sharedTitle)issues.push('MULTIPLE_OWNERS_OR_SHARED_TITLE_NEEDS_REVIEW');
+  if(issues.length) {
+    // Missing or multiple owners must never produce positive text agreement.
+  }
+  else if((a!.confidence!==null&&a!.confidence<0.90)||(b!.confidence!==null&&b!.confidence<0.90))
     issues.push('LOW_OCR_CONFIDENCE');
-  else if(canonical(a.value)===canonical(b.value))
+  else if(canonical(a!.value)===canonical(b!.value))
     assessment='PRELIMINARY_TEXT_AGREEMENT';
   else {
     assessment='TEXT_DIFFERENCE_NEEDS_REVIEW';
