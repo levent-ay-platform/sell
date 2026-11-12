@@ -125,7 +125,9 @@ internal object TunisianNameParser {
     }
     /** Only explicit printed page count; never infer all title pages from one photo. */
     fun declaredPages(text:String):Int? {
-        val ar=Regex("""(?:صفحة|الصفحة)\s*[\d٠-٩]+\s*من\s*([2-8٢-٨])""")
+        // The printed first-page digit is sometimes OCR'd as ! or [ on low DPI
+        // photocopies. The explicit "من N" total must still be legible.
+        val ar=Regex("""(?:صفحة|الصفحة)\s*[\d٠-٩!\[\]|]{1,4}\s*من\s*([2-8٢-٨])""")
         val fr=Regex("""(?iu)\bpage\s*\d+\s*(?:sur|/)\s*([2-8])""")
         val match=ar.find(text)?.groupValues?.get(1)?:fr.find(text)?.groupValues?.get(1)
         return match?.let{if(it.length==1) Character.getNumericValue(it[0]) else null}
