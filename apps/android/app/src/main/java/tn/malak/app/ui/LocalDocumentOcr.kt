@@ -398,6 +398,35 @@ internal object LocalDocumentOcr {
         return output
     }
 
+    /** Preview the front while still on the capture screen. The user sees
+     * unreadable/missing fields immediately, rather than after navigating.
+     */
+    internal data class FrontScan(
+        val surname:String?,val givenName:String?,val fullName:String?,
+        val cinLast4:String?,val birthDate:String?,val confidence:Int
+    ){
+        val readyForReview:Boolean get()=fullName!=null&&confidence>=65
+    }
+
+    suspend fun inspectFront(context:Context,uri:Uri,length:Long,mime:String):FrontScan=
+        withContext(Dispatchers.IO){
+            val engine=TessBaseAPI()
+            try{
+                if(!engine.init(ensureModels(context),"ara+fra"))
+                    throw IllegalStateException("OCR_ENGINE_UNAVAILABLE")
+                val scans=scanInput(context,engine,
+                    listOf(PairEvidenceFile(uri,length,mime)),true)
+                val scan=scans.single()
+                val fields=scan.identityFields
+                val name=oneName(labelCandidates(scans,true))
+                FrontScan(
+                    fields?.surname,fields?.givenName,name?.value,
+                    fields?.cinNumber?.takeLast(4),fields?.dateOfBirth,
+                    name?.confidence?:scan.confidence
+                )
+            }finally{engine.recycle()}
+        }
+
     suspend fun readAndCompare(context:Context,
         certificates:List<PairEvidenceFile>,identity:List<PairEvidenceFile>,
         onProgress:(PairProgress)->Unit={}
