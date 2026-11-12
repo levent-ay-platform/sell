@@ -90,5 +90,35 @@ class DateDecodeTests(unittest.TestCase):
             self.assertIsNone(cin_v5.birth_date(None, [], card, given_name_row=470))
 
 
+    def test_front_number_vote_and_conflict(self):
+        import numpy as np
+        import cin_v5
+        card=np.full((760,1200,3),220,dtype=np.uint8)
+        with patch.object(cin_v5,'recognize',side_effect=[('87654321',.96)]*6) as read:
+            self.assertEqual(cin_v5.cin_number(None,[],card),'5678')
+        self.assertEqual(read.call_count,6)
+        variants=[('87654321',.96)]*2+[('87654322',.96)]*2+[('',.99)]*2
+        with patch.object(cin_v5,'recognize',side_effect=variants):
+            self.assertIsNone(cin_v5.cin_number(None,[],card))
+        with patch.object(cin_v5,'recognize',return_value=('',.99)):
+            self.assertIsNone(cin_v5.cin_number(None,[],card))
+
+    def test_front_dob_enabled_in_extraction(self):
+        import numpy as np
+        import cin_v5
+        card=np.full((760,1200,3),220,dtype=np.uint8)
+        with patch.object(cin_v5,'normalize_card',return_value=card), \
+             patch.object(cin_v5,'find_name_rows',return_value=(400,470)), \
+             patch.object(cin_v5,'consensus_name',
+                          side_effect=[('المهدي',.91),('ياسمين',.92)]), \
+             patch.object(cin_v5,'cin_number',return_value='5678'), \
+             patch.object(cin_v5,'birth_date',return_value='2000-03-13') as dob:
+            result=cin_v5.extract_fields(np.zeros((760,1200,3),dtype=np.uint8),None,[])
+        self.assertEqual(result['cinLast4'],'5678')
+        self.assertEqual(result['birthDate'],'2000-03-13')
+        self.assertEqual(result['confidencePercent'],91)
+        dob.assert_called_once()
+
+
 if __name__ == '__main__':
     unittest.main()

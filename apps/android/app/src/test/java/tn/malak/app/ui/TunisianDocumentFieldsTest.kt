@@ -104,10 +104,12 @@ class TunisianDocumentFieldsTest {
         assertNull(TunisianDocumentFields.labelledBirthDate(
             "تاريخ الولادة\n08 جويلية 1988\nتاريخ الولادة 09 جويلية 1988"))
     }
-    @Test fun cameraFrontMustReadBothIndependentNameFields(){
+    @Test fun cameraFrontMustReadAllFourFields(){
         val ok=LocalDocumentOcr.FrontScan(
-            "المهدي","ياسمين","المهدي ياسمين","3456",null,83)
+            "المهدي","ياسمين","المهدي ياسمين","3456","1988-07-08",83)
         assertTrue(ok.readyForReview)
+        assertFalse(ok.copy(cinLast4=null).readyForReview)
+        assertFalse(ok.copy(birthDate=null).readyForReview)
         assertFalse(ok.copy(surname=null).readyForReview)
         assertFalse(ok.copy(givenName=null).readyForReview)
         assertFalse(ok.copy(fullName="المهدي يسرى").readyForReview)
