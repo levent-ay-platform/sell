@@ -169,7 +169,8 @@ test('explicit CIN mismatch overrides otherwise agreeing owner names; no digits 
     const payload=await original(bytes);
     const id=Buffer.from(bytes).toString('utf8').includes('ID1');
     const label=id?'CIN: 87654321':'CIN: 12345678';
-    payload.pages[0]!.lines.push({text:label,page:1,source:'pdf-text',confidence:null});
+    payload.pages[0]!.lines.push({text:label,page:1,
+      source:id?'ocr-fr':'pdf-text',confidence:id?.98:null});
     return payload;
   };
   const r=await analyze(h.request,h.deps);
