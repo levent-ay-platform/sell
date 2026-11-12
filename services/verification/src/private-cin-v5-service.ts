@@ -64,10 +64,22 @@ function sanitized(fields:CinFields):CinFields {
   if(fields.cinLast4!==null &&
     (typeof fields.cinLast4!=='string'||!/^\d{4}$/.test(fields.cinLast4)))
     throw Error('PRIVATE_CIN_MODEL_INVALID');
-  if(fields.birthDate!==null&&
-    (typeof fields.birthDate!=='string'||fields.birthDate.length>32||
-      !/^[0-9\u0621-\u064a /.-]{8,32}$/u.test(fields.birthDate)))
-    throw Error('PRIVATE_CIN_MODEL_INVALID');
+  // Worker DOB is only a preliminary OCR candidate. Accept a fully real
+  // calendar date (YYYY-MM-DD) or null; no partial/guessed dates or labels.
+  // This is independent of the worker's experimental private QA switch.
+  if(fields.birthDate!==null){
+    if(typeof fields.birthDate!=='string'||
+      !/^(?:19|20)[0-9]{2}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12][0-9]|3[01])$/.test(fields.birthDate))
+      throw Error('PRIVATE_CIN_MODEL_INVALID');
+    const parsed=new Date(fields.birthDate+'T00:00:00.000Z');
+    if(!Number.isFinite(parsed.getTime())||
+      parsed.toISOString().slice(0,10)!==fields.birthDate||
+      parsed.getTime()>Date.now())
+      throw Error('PRIVATE_CIN_MODEL_INVALID');
+  }
+  // A partial result is not enough to attach a date or CIN to someone.
+  if(surname===null||givenName===null)
+    return {surname:null,givenName:null,cinLast4:null,birthDate:null,confidencePercent:0};
   return {surname,givenName,
     cinLast4:fields.cinLast4,birthDate:fields.birthDate,
     confidencePercent:fields.confidencePercent};
