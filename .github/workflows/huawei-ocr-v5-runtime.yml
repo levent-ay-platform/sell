@@ -1,0 +1,49 @@
+name: Malak Huawei v5 isolated runtime acceptance (public model only)
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'services/verification/ocr/cin_v5.py'
+      - 'services/verification/ocr/cin_v5_vote.py'
+      - 'services/verification/docker/HuaweiCinV5.Dockerfile'
+      - '.github/workflows/huawei-ocr-v5-runtime.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: malak-huawei-v5-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  model-cpu-runtime:
+    name: Huawei v5 container CPU / offline inference (synthetic-only)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Build isolated runtime with SHA256-pinned PUBLIC OCR weights only
+        run: |
+          set -euo pipefail
+          docker build -f services/verification/docker/HuaweiCinV5.Dockerfile \
+            -t malak-huawei-v5:synthetic-qa .
+      - name: Offline unprivileged CPU and RAM bounded model inference
+        run: |
+          set -euo pipefail
+          response="$(docker run --rm \
+            --network none --read-only --user 10001:10001 \
+            --security-opt no-new-privileges --cap-drop ALL \
+            --pids-limit 64 --cpus 1 --memory 768m --memory-swap 768m \
+            --tmpfs /work:rw,nosuid,nodev,uid=10001,gid=10001,mode=0700,size=33554432 \
+            malak-huawei-v5:synthetic-qa --self-test)"
+          test "$response" = '{"ok":true,"engine":"arabic-v5","modelReady":true}'
+          echo 'PASS: OFFLINE public v5 ONNX model, no real image, limited CPU/RAM, no network'
+      - name: Check never upload model or personal evidence artifacts
+        run: |
+          set -euo pipefail
+          ! find . -type f \( -name '*.onnx' -o -name '*.traineddata' -o -iname '*cin-sample*' \) \
+            -not -path './.git/*' -print -quit | grep -q .
