@@ -242,16 +242,43 @@ internal object LocalDocumentOcr {
                     if(stableCin!=null)numberBand.text else "",birthBand.text)
                 var text=nameBlock.text
                 var confidence=nameBlock.confidence
-                if(fields.name==null) {
-                    // Single bounded fallback. No guessing from father-name row.
-                    val full=readText(api,bitmap)
-                    val fallback=TunisianDocumentFields.identity(
-                        nameBlock.text+"\n"+full.text,
-                        surnameText,givenText,
-                        if(stableCin!=null)numberBand.text else "",birthBand.text)
-                    fields=fallback
-                    text=full.text+"\n"+nameBlock.text
-                    confidence=minOf(full.confidence,nameBlock.confidence)
+                if(fields.name==null||fields.cinNumber==null||
+                    fields.dateOfBirth==null) {
+                    // On real photographed CINs a fixed crop can miss the
+                    // printed row. Sparse layout is a *conditional* fallback,
+                    // never a new unconstrained owner-name guess.
+                    val sparse=readText(api,bitmap,
+                        TessBaseAPI.PageSegMode.PSM_SPARSE_TEXT)
+                    val rawDate=TunisianDocumentFields.labelledBirthDate(sparse.text)
+                    var sparseCin:String?=null
+                    var sparseText=sparse.text
+                    var fallbackConfidence=sparse.confidence
+                    if(fields.name==null ||
+                        (fields.cinNumber==null &&
+                            TunisianDocumentFields.numberFromCinBand(
+                                sparse.text)!=null)) {
+                        // Two independently rendered passes must agree on CIN.
+                        // Never accept a single 8-digit guess.
+                        val grayscale=region(bitmap,0f,0f,1f,1f)
+                        val graySparse=try {
+                            readText(api,grayscale,
+                                TessBaseAPI.PageSegMode.PSM_SPARSE_TEXT)
+                        }finally{grayscale.recycle()}
+                        sparseText=sparse.text+"\n"+graySparse.text
+                        fallbackConfidence=minOf(fallbackConfidence,
+                            graySparse.confidence)
+                        sparseCin=TunisianDocumentFields.repeatableCin(
+                            sparse.text,graySparse.text)
+                    }
+                    val recovered=TunisianDocumentFields.identity(
+                        sparseText,"","",sparseCin.orEmpty(),
+                        rawDate?:TunisianDocumentFields.labelledBirthDate(
+                            sparseText).orEmpty())
+                    fields=TunisianDocumentFields.reconcileIdentity(
+                        fields,recovered)
+                    text=nameBlock.text+"\n"+sparseText
+                    confidence=minOf(nameBlock.confidence,
+                        fallbackConfidence)
                 }else if(surnameText.isNotEmpty()&&givenText.isNotEmpty()){
                     confidence=minOf(surnameConfidence,givenConfidence)
                 }
