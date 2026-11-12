@@ -288,11 +288,14 @@ def extract_fields(photo,session,letters):
         b,gc=consensus_name(session,letters,card,centers[1])
         if a is None or b is None or min(sc,gc)<.72:
             return dict(OUTPUT_EMPTY)
-        # DOB is advisory and must never interrupt a valid name read.
-        try:
-            dob=birth_date(session,letters,card,centers[1])
-        except (ValueError,cv2.error):
-            dob=None
+        # DOB geometry is not yet accepted on five private originals.
+        # Explicit private QA opt-in only; never imply verified birth date.
+        dob=None
+        if os.getenv("MALAK_V5_DOB_PRIVATE_QA","")=="1":
+            try:
+                dob=birth_date(session,letters,card,centers[1])
+            except (ValueError,cv2.error):
+                dob=None
         return {"surname":a,"givenName":b,
                 "cinLast4":cin_number(session,letters,card),
                 "birthDate":dob,
