@@ -42,13 +42,17 @@ internal object LocalDocumentOcr {
     }
     private fun labelCandidates(pages:List<ScanPage>,identity:Boolean):List<PairNameEvidence> {
         return pages.flatMap { page->
-            val names=if(identity)TunisianNameParser.identity(page.text)
-                else TunisianNameParser.certificate(page.text)
-            // A result from a physically isolated printed field is permitted
-            // alongside explicit label candidates. Contradictions stay visible
-            // to oneName() and force an ambiguous result.
-            (names.map{PairNameEvidence(it,page.page,page.source,page.confidence)}+
-                page.spatialNames).distinctBy{TunisianNameParser.canonical(it.value)}
+            // Spatial parsing can explicitly detect contradictory surname/name
+            // fields and deliberately return null. Never resurrect an unsafe
+            // name from a generic OCR line when structured evidence failed.
+            if((identity&&page.identityFields!=null)||
+                (!identity&&page.certificateFields!=null)) {
+                page.spatialNames
+            } else {
+                val names=if(identity)TunisianNameParser.identity(page.text)
+                    else TunisianNameParser.certificate(page.text)
+                names.map{PairNameEvidence(it,page.page,page.source,page.confidence)}
+            }
         }
     }
     private fun normalized(value:String):String=TunisianNameParser.canonical(value)
