@@ -3,6 +3,8 @@ package tn.malak.app.ui
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Matrix
+import android.media.ExifInterface
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.ColorMatrix
@@ -109,9 +111,29 @@ internal object LocalDocumentOcr {
             }
             inPreferredConfig=Bitmap.Config.ARGB_8888
         }
-        return context.contentResolver.openInputStream(uri)?.use{
+        val decoded=context.contentResolver.openInputStream(uri)?.use{
             BitmapFactory.decodeStream(it,null,opts)
         }?:throw IllegalStateException("OCR_IMAGE_UNAVAILABLE")
+        // SAF gallery JPEGs can store the camera's orientation solely in EXIF.
+        // Pixel cropping/OCR must always receive an upright bitmap.
+        val orientation=runCatching {
+            context.contentResolver.openInputStream(uri)?.use{
+                ExifInterface(it).getAttributeInt(ExifInterface.TAG_ORIENTATION,
+                    ExifInterface.ORIENTATION_NORMAL)
+            }
+        }.getOrNull()?:ExifInterface.ORIENTATION_NORMAL
+        val rotation=when(orientation) {
+            ExifInterface.ORIENTATION_ROTATE_90->90f
+            ExifInterface.ORIENTATION_ROTATE_180->180f
+            ExifInterface.ORIENTATION_ROTATE_270->270f
+            else->0f
+        }
+        if(rotation==0f)return decoded
+        return try {
+            val matrix=Matrix().apply{postRotate(rotation)}
+            Bitmap.createBitmap(decoded,0,0,decoded.width,decoded.height,
+                matrix,true)
+        }finally{decoded.recycle()}
     }
     /** Region templates for an upright Tunisian CIN or CPF page. Read-only
      * in-memory crops, never disk caching. The full-image fallback covers
