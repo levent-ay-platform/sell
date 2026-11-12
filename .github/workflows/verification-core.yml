@@ -24,6 +24,16 @@ jobs:
           node-version: '22'
       - name: Run synthetic no-dependency property + CEV tests
         run: node --experimental-strip-types --test services/verification/test/*.test.ts
+      - name: Check isolated Huawei v5 Python syntax without loading image/model
+        run: |
+          python3 - <<'PY'
+          import ast
+          from pathlib import Path
+          for name in ('cin_v5.py', 'cin_v5_vote.py'):
+              path=Path('services/verification/ocr') / name
+              ast.parse(path.read_text(encoding='utf-8'))
+          print('PASS: public v5 worker syntax, no personal samples')
+          PY
       - name: Benchmark deterministic post-OCR extraction (not image OCR)
         run: node --experimental-strip-types services/verification/scripts/bench-smart-fields.mjs
 
