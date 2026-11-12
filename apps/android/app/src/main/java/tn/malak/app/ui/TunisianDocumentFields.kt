@@ -52,13 +52,26 @@ internal object TunisianDocumentFields {
      * rows. A value must be legible in its OWN row; no father-name fallback.
      */
     private fun row(ocr:String,expected:String):String? {
+        val label=Regex(
+            if(expected=="surname") """(?iu)^(?:اللقب|القب|nom)\s*[:：\-]?\s*"""
+            else """(?iu)^(?:الاسم|اسم|pr[ée]nom)\s*[:：\-]?\s*"""
+        )
+        val forbidden=Regex("""(?:الاسم|اللقب|القب|الولادة|التعريف|العنوان|الجنسية|تاريخ)""")
         val values=mutableListOf<String>()
         for(line in ocr.lineSequence()) {
             val raw=trimmed(line.replace(arDiacritics,""))
             if(raw.isBlank()||invalidChars.containsMatchIn(raw))continue
-            val label=Regex(if(expected=="surname") """(?iu)^(?:اللقب|nom)\s*[:：\-]?\s*"""
-                else """(?iu)^(?:الاسم|pr[ée]nom)\s*[:：\-]?\s*""")
-            val text=label.replaceFirst(raw,"")
+            // A previous bug used label.replaceFirst(raw, "") even when
+            // there was NO label match, accepting unrelated OCR like RATIO.
+            val match=label.find(raw)?:continue
+            if(match.range.first!=0)continue
+            val text=trimmed(raw.substring(match.range.last+1))
+            // This document is the Arabic-script Tunisian CIN front.
+            // A Latin OCR hallucination is not a surname/given name.
+            if(text.any {it in 'A'..'Z'||it in 'a'..'z'||
+                    it in '\u00c0'..'\u024f'} ||
+                !text.any{it in '\u0621'..'\u064a'} ||
+                forbidden.containsMatchIn(text))continue
             val value=component(text)?:continue
             if(value.split(' ').size<=3)values.add(value)
         }
