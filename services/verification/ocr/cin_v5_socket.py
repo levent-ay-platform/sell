@@ -59,19 +59,25 @@ def handle(conn,session,letters):
     if size<20 or size>MAX_BYTES or media not in(1,2):
         raise ValueError("private request rejected")
     source=recv_exact(conn,size)
+    image=None
     try:
         image=decode_image(source,media)
-        # Preview only; AUTH + consent + tenant/case access are checked by
-        # the upstream gateway both BEFORE and AFTER inference.
+        # Preview only; verified case ownership and consent are checked by
+        # the gateway both BEFORE and AFTER this isolated image inference.
         result=extract_fields(image,session,letters)
     finally:
+        if image is not None:
+            image.fill(0)
         source[:]=b"\0"*len(source)
-    answer=json.dumps({"ok":True,**result},ensure_ascii=False,
-                      separators=(",",":")).encode("utf-8")
-    if len(answer)>MAX_RESPONSE:
-        raise ValueError("private output limit exceeded")
-    conn.settimeout(25)
-    conn.sendall(struct.pack(">I",len(answer))+answer)
+    answer=bytearray(json.dumps({"ok":True,**result},ensure_ascii=False,
+                      separators=(",",":")).encode("utf-8"))
+    try:
+        if len(answer)>MAX_RESPONSE:
+            raise ValueError("private output limit exceeded")
+        conn.settimeout(25)
+        conn.sendall(struct.pack(">I",len(answer))+answer)
+    finally:
+        answer[:]=b"\0"*len(answer)
 
 
 def main():
