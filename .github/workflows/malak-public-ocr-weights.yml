@@ -1,0 +1,56 @@
+name: Malak public Arabic OCR models (no private images)
+on:
+  pull_request:
+    paths:
+      - .github/workflows/malak-public-ocr-weights.yml
+  workflow_dispatch:
+jobs:
+  public-model-carrier:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Fetch PUBLIC recognizers only (no ID images or PII)
+        run: |
+          python -m pip -q install "huggingface_hub>=0.32" hf-xet
+          python - <<'PY'
+          from huggingface_hub import hf_hub_download
+          from pathlib import Path
+          downloads=[
+            ("PaddlePaddle/arabic_PP-OCRv5_mobile_rec_onnx","inference.onnx","v5"),
+            ("PaddlePaddle/arabic_PP-OCRv5_mobile_rec_onnx","inference.yml","v5"),
+            ("medyas/arabic_PP-OCRv6_small_rec","inference/inference.json","v6"),
+            ("medyas/arabic_PP-OCRv6_small_rec","inference/inference.pdiparams","v6"),
+            ("medyas/arabic_PP-OCRv6_small_rec","inference/inference.yml","v6"),
+            ("medyas/arabic_PP-OCRv6_small_rec","ppocrv5_arabic_dict.txt","v6"),
+          ]
+          for repo,filename,directory in downloads:
+              path=hf_hub_download(repo,filename,local_dir=f"public_models/{directory}")
+              print("PUBLIC",repo,filename,Path(path).stat().st_size)
+          PY
+      - name: Get Python 3.13 CPU ONNX Runtime wheels for private offline benchmark
+        run: |
+          mkdir -p public_models/wheels
+          python -m pip download -q --only-binary=:all: -d public_models/wheels "onnxruntime==1.31.1"
+      - name: Attempt public v6 PaddleInference-to-ONNX conversion
+        continue-on-error: true
+        run: |
+          python -m pip -q install "paddle2onnx>=2.1.0"
+          paddle2onnx --model_dir public_models/v6/inference \
+            --model_filename inference.json \
+            --params_filename inference.pdiparams \
+            --save_file public_models/v6/v6_rec.onnx \
+            --opset_version 17 \
+            >public_models/v6/convert_stdout.txt 2>public_models/v6/convert_stderr.txt
+          test -s public_models/v6/v6_rec.onnx
+      - uses: actions/upload-artifact@v4
+        with:
+          name: malak-public-models-only-no-PII
+          path: public_models/
+          retention-days: 1
+          if-no-files-found: error
