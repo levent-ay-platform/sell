@@ -240,24 +240,25 @@ def cin_number(session,letters,card):
 
 
 def extract_fields(photo,session,letters):
-    """Read only preliminary OCR fields; no proof of legal identity/ownership.
-
-    The ONNX model stays loaded for a private persistent Huawei socket worker.
-    """
+    """Read preliminary OCR fields only; never verify legal ownership."""
     card=normalize_card(photo)
     if card is None:
         return dict(OUTPUT_EMPTY)
-    centers=find_name_rows(card)
-    if centers is None:
-        return dict(OUTPUT_EMPTY)
-    a,sc=consensus_name(session,letters,card,centers[0])
-    b,gc=consensus_name(session,letters,card,centers[1])
-    if a is None or b is None or min(sc,gc)<.72:
-        return dict(OUTPUT_EMPTY)
-    return {"surname":a,"givenName":b,
-            "cinLast4":cin_number(session,letters,card),
-            "birthDate":None,
-            "confidencePercent":max(0,min(100,int(min(sc,gc)*100)))}
+    try:
+        centers=find_name_rows(card)
+        if centers is None:
+            return dict(OUTPUT_EMPTY)
+        a,sc=consensus_name(session,letters,card,centers[0])
+        b,gc=consensus_name(session,letters,card,centers[1])
+        if a is None or b is None or min(sc,gc)<.72:
+            return dict(OUTPUT_EMPTY)
+        return {"surname":a,"givenName":b,
+                "cinLast4":cin_number(session,letters,card),
+                "birthDate":None,
+                "confidencePercent":max(0,min(100,int(min(sc,gc)*100)))}
+    finally:
+        # This worker stays warm across requests. Clear derived pixel buffers.
+        card.fill(0)
 
 
 def main():
