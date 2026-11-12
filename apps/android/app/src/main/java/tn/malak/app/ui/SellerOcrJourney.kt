@@ -508,7 +508,7 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                                 }
                                 if(preview!=null){
                                     Image(preview.asImageBitmap(),null,
-                                        modifier=Modifier.fillMaxWidth().heightIn(max=210.dp),
+                                        modifier=Modifier.fillMaxWidth().height(188.dp),
                                         contentScale=ContentScale.Fit)
                                 }
                                 if(reviewSide==0){
@@ -897,6 +897,43 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
             if(step==4) Text(s(R.string.draft_local),color=Brand.Muted,fontSize=12.sp)
         }
         Column(Modifier.fillMaxWidth().padding(horizontal=17.dp,vertical=12.dp),verticalArrangement=Arrangement.spacedBy(7.dp)) {
+            // Never show "Continue" under a failed scan: keep retake in reach.
+            if(step==3&&pendingPhoto!=null){
+                Row(Modifier.fillMaxWidth(),
+                    horizontalArrangement=Arrangement.spacedBy(10.dp)){
+                    OutlinedButton(onClick={
+                        pendingPhoto?.let{PrivateCaptureMemory.discard(it.uri)}
+                        pendingPhoto=null
+                        frontRead=null
+                        cameraSide=reviewSide
+                    },modifier=Modifier.weight(1f).heightIn(min=54.dp)){
+                        Text(s(R.string.camera_review_retake))
+                    }
+                    Button(onClick={
+                        val pending=pendingPhoto
+                        if(pending!=null){
+                            if(reviewSide==0){
+                                identityFiles.forEach{
+                                    PrivateCaptureMemory.discard(it.uri)
+                                }
+                                identityFiles.clear()
+                                identityFiles.add(pending)
+                            }else if(identityFiles.size==1&&
+                                identityFiles[0].mime!="application/pdf"){
+                                identityFiles.add(pending)
+                            }
+                            pendingPhoto=null
+                            frontRead=null
+                            identityMessage=R.string.file_selected
+                        }
+                    },enabled=(reviewSide==0&&frontRead?.readyForReview==true&&
+                        !frontReadBusy)||
+                        (reviewSide==1&&identityFiles.size==1),
+                        modifier=Modifier.weight(1f).heightIn(min=54.dp)){
+                        Text(s(R.string.camera_review_accept))
+                    }
+                }
+            }else{
             Button(onClick={
                 if(step==0&&!validFirst)showInvalid=true
                 else if(step==2&&files.isEmpty()){pickMessage=R.string.certificate_required}
@@ -920,6 +957,7 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                     Spacer(Modifier.width(8.dp))
                     Text(s(R.string.save_draft))
                 }
+            }
             }
         }
     }
