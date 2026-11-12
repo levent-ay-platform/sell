@@ -261,6 +261,10 @@ def extract_fields(photo,session,letters):
 
 
 def main():
+    if len(sys.argv)==2 and sys.argv[1]=="--serve":
+        from cin_v5_socket import main as socket_main
+        socket_main()
+        return
     # Public-model-only startup probe; safe in CI and isolated Huawei preflight.
     # No document, filename, field text or user data is used or returned.
     if len(sys.argv)==2 and sys.argv[1]=="--self-test":
