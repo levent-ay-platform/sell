@@ -442,9 +442,9 @@ internal object LocalDocumentOcr {
                 // This check intentionally runs BEFORE loading OCR models.
                 // A low resolution thumbnail cannot be fixed by scaling.
                 val options=BitmapFactory.Options().apply{inJustDecodeBounds=true}
-                context.contentResolver.openInputStream(uri)?.use{
-                    BitmapFactory.decodeStream(it,null,options)
-                }?:throw IllegalStateException("OCR_IMAGE_UNAVAILABLE")
+                val input=context.contentResolver.openInputStream(uri)
+                    ?:throw IllegalStateException("OCR_IMAGE_UNAVAILABLE")
+                input.use{BitmapFactory.decodeStream(it,null,options)}
                 if(minOf(options.outWidth,options.outHeight)<420 ||
                     maxOf(options.outWidth,options.outHeight)<760)
                     return@withContext FrontScan(null,null,null,null,null,0,
