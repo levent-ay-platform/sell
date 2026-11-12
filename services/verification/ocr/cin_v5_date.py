@@ -15,22 +15,23 @@ _MONTHS = {
     'جوان': 6, 'جويلية': 7, 'اوت': 8, 'سبتمبر': 9, 'اكتوبر': 10,
     'نوفمبر': 11, 'ديسمبر': 12,
 }
-_CONFIDENCE_FLOOR = 0.88
+_CONFIDENCE_FLOOR = 0.82
+_NUMERIC_CONFIDENCE_FLOOR = 0.72
 
 
-def _high_confidence(sample):
+def _high_confidence(sample, floor=_CONFIDENCE_FLOOR):
     if not isinstance(sample, (tuple, list)) or len(sample) != 2:
         return None
     text, confidence = sample
     if not isinstance(text, str) or not isinstance(confidence, (int, float)):
         return None
-    if isinstance(confidence, bool) or not math.isfinite(confidence) or confidence < _CONFIDENCE_FLOOR or confidence > 1:
+    if isinstance(confidence, bool) or not math.isfinite(confidence) or confidence < floor or confidence > 1:
         return None
     return text.strip()
 
 
 def _ascii_digits(sample, width):
-    text = _high_confidence(sample)
+    text = _high_confidence(sample, _NUMERIC_CONFIDENCE_FLOOR)
     if text is None:
         return None
     # Disallow labels, slashes, joined dates, OCR substitutions or extra digits.

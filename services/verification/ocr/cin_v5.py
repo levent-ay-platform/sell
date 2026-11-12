@@ -15,6 +15,7 @@ import onnxruntime as ort
 import yaml
 from cin_v5_vote import select_name
 from cin_v5_date import date_from_v5_votes
+from cin_v5_digits import decode_numeric_ctc
 
 MODEL_ROOT=Path("/opt/malak/models/arabic-v5")
 ARABIC=re.compile(r"^[\u0621-\u064a]+(?: [\u0621-\u064a]+){0,3}$")
@@ -205,6 +206,39 @@ def recognize(session,characters,crop):
         sum(confidence)/len(confidence) if confidence else 0.)
 
 
+def recognize_digits(session, characters, crop, centered=False):
+    """Same small v5 model, numeric-only CTC output: no guessed digits.
+
+    A centered, white letterbox improves short year/day exposure while the
+    original left-aligned geometry is retained as a separate vote.
+    Numeric fields must agree across two independent image preparations.
+    """
+    if crop.size == 0:
+        return "", 0.0
+    width=max(1,min(300,int(np.ceil(48*crop.shape[1]/crop.shape[0]))))
+    resized=cv2.resize(crop,(width,48),interpolation=cv2.INTER_CUBIC)
+    if centered:
+        left=(320-width)//2
+        resized=cv2.copyMakeBorder(resized,0,0,left,320-width-left,
+                                  cv2.BORDER_CONSTANT,value=(255,255,255))
+    elif width<320:
+        resized=cv2.copyMakeBorder(resized,0,0,0,320-width,
+                                  cv2.BORDER_CONSTANT,value=(0,0,0))
+    tensor=(resized.astype(np.float32)/255-.5)/.5
+    tensor=tensor.transpose(2,0,1)[None,:,:,:]
+    scores=session.run(None,{session.get_inputs()[0].name:tensor})[0][0]
+    return decode_numeric_ctc(scores,characters)
+
+
+def numeric_pair(session,letters,crop):
+    if crop.size == 0:
+        return [("",0.),("",0.)]
+    gray=cv2.cvtColor(crop,cv2.COLOR_BGR2GRAY)
+    gray=cv2.cvtColor(gray,cv2.COLOR_GRAY2BGR)
+    return [recognize_digits(session,letters,crop,False),
+            recognize_digits(session,letters,gray,True)]
+
+
 def arabic_only(s):
     text=" ".join(s.split())
     if 2<=len(text)<=55 and ARABIC.fullmatch(text) and all(
@@ -224,64 +258,70 @@ def consensus_name(session,letters,card,center):
 
 
 def cin_number(session,letters,card):
-    """Locate the complete eight-digit CIN on the front only.
+    """Eight complete visible digits on the FRONT only; no suffix guessing.
 
-    Overlapping vertical bands tolerate moderate variation in camera position.
-    A hidden or conflicting number stays None; no birth-date inference.
+    The old wide upper band included the emblem, background and ID label.
+    Smaller overlapping crops cover varying perspective/print placement.
+    This is a generic geometry adaptation, never a lookup table of IDs.
     """
     h,w=card.shape[:2]
     votes=set()
-    for top,bottom in ((.15,.30),(.23,.38),(.29,.44)):
-        band=card[int(h*top):int(h*bottom),int(w*.25):int(w*.76)]
-        if band.size==0:
-            continue
-        gray=cv2.cvtColor(cv2.cvtColor(band,cv2.COLOR_BGR2GRAY),
-                          cv2.COLOR_GRAY2BGR)
-        a,qa=recognize(session,letters,band)
-        b,qb=recognize(session,letters,gray)
-        def digits(text,confidence):
-            if confidence<.85:return None
-            number="".join(c for c in text if "0"<=c<="9")[::-1]
-            return number if re.fullmatch(r"[0-9]{8}",number) else None
-        first,second=digits(a,qa),digits(b,qb)
-        if first is not None and first==second:
-            votes.add(first)
+    for top,bottom in ((.28,.42),(.30,.44),(.33,.46),(.26,.40)):
+        for left,right in ((.33,.75),(.38,.73)):
+            crop=card[int(h*top):int(h*bottom),
+                      int(w*left):int(w*right)]
+            if crop.size==0:
+                continue
+            first,second=numeric_pair(session,letters,crop)
+            def complete(sample):
+                text,quality=sample
+                if quality<.72:
+                    return None
+                # Numeric CTC returns the same visual order as v5 text OCR.
+                value=text[::-1]
+                return value if re.fullmatch(r"[0-9]{8}",value) else None
+            a,b=complete(first),complete(second)
+            if a is not None and a==b:
+                votes.add(a)
+            # Never retain multiple conflicting numbers as accepted.
+            if len(votes)>1:
+                return None
     return next(iter(votes))[-4:] if len(votes)==1 else None
 
 
 def birth_date(session,letters,card,given_name_row):
-    """Experimental FRONT-only DOB locator; two matching reads per segment.
+    """Front-only date: separate day / Arabic month / year from three ROIs.
 
-    This uses an isolated fixed-format Tunisian card region rather than
-    guessing dates from arbitrary page numbers. No fuzzy month matching.
-    All ambiguous/low-confidence fields return None for user review.
+    DOB is independently evaluated on every sample, even when its CIN is
+    intentionally hidden. Calendar validity and two image reads for EACH
+    segment are mandatory. Never use issue, expiry or reverse-side dates.
     """
     h,w=card.shape[:2]
-    center=round(given_name_row+h*.175)
-    if not h*.72<=center<=h*.89:
-        return None
-    y0=max(0,round(center-h*.048))
-    y1=min(h,round(center+h*.048))
-    if y1-y0<18:
-        return None
-
-    def read_pair(left,right):
-        x0,x1=round(w*left),round(w*right)
-        crop=card[y0:y1,x0:x1]
-        if crop.size==0:
-            return []
-        gray=cv2.cvtColor(crop,cv2.COLOR_BGR2GRAY)
-        grayscale=cv2.cvtColor(gray,cv2.COLOR_GRAY2BGR)
-        # Neither variation is sufficient on its own: exact agreement
-        # and calendar validation are required by date_from_v5_votes.
-        return [recognize(session,letters,crop),
-                recognize(session,letters,grayscale)]
-
-    year=read_pair(.30,.53)
-    month=read_pair(.49,.75)
-    day=read_pair(.73,.84)
-    return date_from_v5_votes(day,month,year)
-
+    dates=set()
+    for offset in (.145,.175,.205):
+        center=round(given_name_row+h*offset)
+        if not h*.70<=center<=h*.92:
+            continue
+        y0=max(0,round(center-h*.046))
+        y1=min(h,round(center+h*.046))
+        if y1-y0<18:
+            continue
+        def segment(left,right):
+            x0,x1=round(w*left),round(w*right)
+            return card[y0:y1,x0:x1]
+        day=numeric_pair(session,letters,segment(.71,.87))
+        year=numeric_pair(session,letters,segment(.28,.54))
+        month_crop=segment(.47,.76)
+        gray=cv2.cvtColor(month_crop,cv2.COLOR_BGR2GRAY)
+        gray=cv2.cvtColor(gray,cv2.COLOR_GRAY2BGR)
+        month=[recognize(session,letters,month_crop),
+               recognize(session,letters,gray)]
+        value=date_from_v5_votes(day,month,year)
+        if value is not None:
+            dates.add(value)
+        if len(dates)>1:
+            return None
+    return next(iter(dates)) if len(dates)==1 else None
 
 def extract_fields(photo,session,letters):
     """Read preliminary OCR fields only; never verify legal ownership."""
