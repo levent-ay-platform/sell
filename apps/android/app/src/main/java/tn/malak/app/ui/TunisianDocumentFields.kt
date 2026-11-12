@@ -126,6 +126,44 @@ internal object TunisianDocumentFields {
             TunisianNameParser.declaredPages(footer)
                 ?:TunisianNameParser.declaredPages(fullText))
     }
+    /** Accept a field from two distinct OCR passes only when neither pass
+     * contradicts the other. Absent values are never fabricated or fuzzied.
+     */
+    private fun reconcileText(a:String?,b:String?):String? = when {
+        a==null -> b
+        b==null -> a
+        TunisianNameParser.canonical(a)==TunisianNameParser.canonical(b)->a
+        else -> null
+    }
+    fun reconcileIdentity(primary:Identity,sparse:Identity):Identity {
+        val surname=reconcileText(primary.surname,sparse.surname)
+        val given=reconcileText(primary.givenName,sparse.givenName)
+        val name=reconcileText(primary.name,sparse.name)?.takeIf{ whole ->
+            val parts=if(surname!=null&&given!=null)
+                TunisianNameParser.unique(listOf("$surname $given")) else null
+            parts==null || TunisianNameParser.canonical(parts)==
+                TunisianNameParser.canonical(whole)
+        }
+        return Identity(surname,given,name,
+            reconcileText(primary.cinNumber,sparse.cinNumber),
+            reconcileText(primary.dateOfBirth,sparse.dateOfBirth))
+    }
+    /** Use the full-image birth date only if adjacent to an OCR-recognized
+     * birth-date label. Else another date on the card could be substituted.
+     */
+    fun labelledBirthDate(text:String):String? {
+        val rows=text.lineSequence().map{it.trim()}.filter{it.isNotEmpty()}.toList()
+        val label=Regex("""(?iu)(?:تاريخ\s*الولادة|date\s+de\s+naissance)""")
+        val found=mutableListOf<String>()
+        for((i,line) in rows.withIndex()){
+            if(!label.containsMatchIn(line))continue
+            for(segment in listOf(line,rows.getOrNull(i+1).orEmpty())){
+                val value=birthDate(segment)
+                if(value!=null)found.add(value)
+            }
+        }
+        return found.distinct().singleOrNull()
+    }
     fun identity(nameBlock:String,surnameBand:String,givenBand:String,
                  numberBand:String,birthBand:String):Identity {
         val (surname,given)=identityFromRows(surnameBand,givenBand)
