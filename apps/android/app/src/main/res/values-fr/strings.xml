@@ -227,6 +227,11 @@
     <string name="camera_review_cin">CIN (4 derniers chiffres)</string>
     <string name="camera_review_birth">Date de naissance (OCR)</string>
     <string name="camera_review_name">Nom lu par OCR</string>
-    <string name="camera_review_privacy">La photo et l’OCR restent sur ce téléphone. Ce n’est pas une vérification d’identité.</string>
+    <string name="camera_review_privacy">Après votre accord uniquement : envoi chiffré vers Huawei pour OCR. Pas une vérification légale.</string>
     <string name="camera_image_low_resolution">Image trop petite pour une lecture fiable. Rapprochez la carte et reprenez les quatre coins.</string>
+    <string name="camera_huawei_consent">J’autorise le traitement privé et sécurisé de la photo par le service OCR Huawei.</string>
+    <string name="camera_huawei_consent_required">Autorisez le traitement OCR privé ci-dessus pour lire cette photo.</string>
+    <string name="camera_huawei_login_required">Une connexion propriétaire vérifiée est nécessaire avant tout envoi de CIN.</string>
+    <string name="camera_huawei_unavailable">Le service OCR privé Huawei est indisponible. La photo reste ici. Réessayez.</string>
+    <string name="camera_huawei_review_hint">Lecture privée sur Huawei, pas sur le téléphone. Aucune identité n’est certifiée automatiquement.</string>
 </resources>
