@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import {previewOwnerCin,CinPreviewDenied} from '../src/private-cin-v5-service.ts';
+import type {CinFields} from '../src/private-cin-v5-service.ts';
 import type {AuthorizedUploadCase,Authenticator} from '../src/evidence-upload.ts';
 
 const user=randomUUID(),caseId=randomUUID(),token='synthetic-private-verified-owner-token';
@@ -12,17 +13,17 @@ const granted:AuthorizedUploadCase={
     policyVersion:'synthetic_test_only',acceptedAt:'2026-11-12T10:00:00Z',revokedAt:null}
 };
 const request={bearerToken:token,caseId,bytes,mime:'image/jpeg' as const};
-const reading={surname:'المثال',givenName:'سالم',cinLast4:null,
+const reading:CinFields={surname:'المثال',givenName:'سالم',cinLast4:null,
   birthDate:null,confidencePercent:94};
 function harness() {
   let identity=user,caseState:AuthorizedUploadCase|null=granted,run=0;
-  let response={...reading};
+  let response:CinFields={...reading};
   const auth:Authenticator={authenticate:async t=>t===token&&identity?{userId:identity}:null};
   const deps={auth,cases:{getUploadCase:async()=>caseState},
     worker:{readFront:async()=>{run++;return response;}}};
   return {deps,setCase:(c:AuthorizedUploadCase|null)=>{caseState=c;},
     setIdentity:(v:string)=>{identity=v;},
-    setResponse:(v:typeof reading)=>{response=v;},
+    setResponse:(v:CinFields)=>{response=v;},
     get runs(){return run;}};
 }
 test('only consented authenticated natural-person owner may read private Huawei v5 fields',async()=>{
