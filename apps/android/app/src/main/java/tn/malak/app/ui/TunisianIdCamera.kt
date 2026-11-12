@@ -8,6 +8,7 @@ import android.graphics.ImageFormat
 import android.graphics.Matrix
 import android.os.Handler
 import android.os.Looper
+import android.util.Size
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -18,6 +19,8 @@ import androidx.camera.core.ImageCaptureException
 import androidx.camera.core.ImageProxy
 import androidx.camera.core.Preview
 import androidx.camera.core.UseCaseGroup
+import androidx.camera.core.resolutionselector.ResolutionSelector
+import androidx.camera.core.resolutionselector.ResolutionStrategy
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.BorderStroke
@@ -183,6 +186,12 @@ internal fun TunisianIdCamera(
     val capture=remember {
         ImageCapture.Builder()
             .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
+            // Avoid default maximum sensor-size JPEGs and large peak memory.
+            // ~4MP is sufficient for a framed card at a 2400 px OCR ceiling.
+            .setResolutionSelector(ResolutionSelector.Builder()
+                .setResolutionStrategy(ResolutionStrategy(Size(2400,1800),
+                    ResolutionStrategy.FALLBACK_RULE_CLOSEST_LOWER_THEN_HIGHER))
+                .build())
             .build()
     }
     DisposableEffect(lifecycleOwner,permission){
