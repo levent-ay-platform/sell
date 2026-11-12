@@ -36,39 +36,15 @@ jobs:
         run: |
           python3 scripts/check_malak_brand.py
           gradle -p apps/android :app:assembleDebug --no-daemon
-      - name: Enforce strict 60 MiB APK limit (fail closed)
+      - name: Enforce strict 60MB APK and prohibit embedded OCR engines
         run: |
           set -euo pipefail
           apk=apps/android/app/build/outputs/apk/debug/app-debug.apk
           size="$(stat -c %s "$apk")"
-          echo "Malak Android APK bytes: $size (limit 60000000)"
+          echo "Malak APK bytes: $size; hard limit: 60000000"
           test "$size" -le 60000000
-          if unzip -Z1 "$apk" | grep -Ei '(^|/)(inference\.onnx|.*\.traineddata|libonnxruntime.*\.so|libopencv.*\.so|libtesseract.*\.so)
-        run: |
-          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
-          sudo udevadm control --reload-rules
-          sudo udevadm trigger --name-match=kvm
-      - name: Launch emulator and actually tap Add Land
-        uses: reactivecircus/android-emulator-runner@v2
-        with:
-          api-level: 34
-          target: google_apis
-          arch: x86_64
-          profile: pixel_2
-          emulator-boot-timeout: 600
-          script: |
-            adb install -r apps/android/app/build/outputs/apk/debug/app-debug.apk
-            python3 apps/android/scripts/seller-smoke.py
-      - name: Keep synthetic-only screenshot on success/failure
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: malak-seller-smoke-synthetic-screenshot
-          path: /tmp/malak-android-seller-smoke/seller-open.png
-          retention-days: 2
-          if-no-files-found: ignore
-; then
-            echo 'HEAVY_OCR_LIBRARY_LEAKED_IN_APK' >&2
+          if unzip -Z1 "$apk" | grep -Ei '(^|/)(inference\.onnx|.*\.traineddata|libonnxruntime.*\.so|libopencv.*\.so|libtesseract.*\.so)$'; then
+            echo 'HEAVY_OCR_ASSET_IN_APK' >&2
             exit 1
           fi
       - name: Enable KVM on disposable GitHub-hosted runner
