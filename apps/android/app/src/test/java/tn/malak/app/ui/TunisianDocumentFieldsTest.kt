@@ -73,6 +73,37 @@ class TunisianDocumentFieldsTest {
         assertNull(TunisianDocumentFields.confirmedAreaDigits("510 م","510"))
         assertNull(TunisianDocumentFields.confirmedAreaDigits("","510"))
     }
+    @Test fun sparseFallbackRecoversOnlyMissingFieldsWithoutInventingOwners(){
+        val primary=TunisianDocumentFields.Identity(
+            null,null,null,null,null)
+        val sparse=TunisianDocumentFields.Identity(
+            "المهدي","ياسمين","المهدي ياسمين","00123456","08 جويلية 1988")
+        val merged=TunisianDocumentFields.reconcileIdentity(primary,sparse)
+        assertEquals("المهدي ياسمين",merged.name)
+        assertEquals("00123456",merged.cinNumber)
+        assertEquals("08 جويلية 1988",merged.dateOfBirth)
+    }
+    @Test fun twoOcrPassesMustNotHideConflictingPersonalFields(){
+        val a=TunisianDocumentFields.Identity(
+            "المهدي","ياسمين","المهدي ياسمين","00123456","08 جويلية 1988")
+        val b=TunisianDocumentFields.Identity(
+            "المهدي","يسرى","المهدي يسرى","00123458","09 جويلية 1988")
+        val result=TunisianDocumentFields.reconcileIdentity(a,b)
+        assertEquals("المهدي",result.surname)
+        assertNull(result.givenName)
+        assertNull(result.name)
+        assertNull(result.cinNumber)
+        assertNull(result.dateOfBirth)
+    }
+    @Test fun fullImageDateNeedsRecognizedBirthLabel(){
+        assertNull(TunisianDocumentFields.labelledBirthDate(
+            "تاريخ الإصدار\n08 جويلية 1988"))
+        assertEquals("08 جويلية 1988",
+            TunisianDocumentFields.labelledBirthDate(
+                "بطاقة التعريف الوطنية\nتاريخ الولادة\n08 جويلية 1988"))
+        assertNull(TunisianDocumentFields.labelledBirthDate(
+            "تاريخ الولادة\n08 جويلية 1988\nتاريخ الولادة 09 جويلية 1988"))
+    }
     @Test fun noUnlabelledAreaOrTitleGuess(){
         assertNull(TunisianDocumentFields.titleNumber("رقم 654321"))
         assertNull(TunisianDocumentFields.areaM2("150 متر"))
