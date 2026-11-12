@@ -105,7 +105,7 @@ def main():
                 with conn:
                     try:
                         handle(conn,session,letters)
-                    except (OSError,RuntimeError,ValueError,TypeError):
+                    except Exception:
                         # Never send raw OCR content, filenames or exception
                         # messages to the caller, the container or logs.
                         try:
