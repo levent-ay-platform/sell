@@ -240,6 +240,17 @@ def cin_number(session,letters,card):
 
 
 def main():
+    # Public-model-only startup probe; safe in CI and isolated Huawei preflight.
+    # No document, filename, field text or user data is used or returned.
+    if len(sys.argv)==2 and sys.argv[1]=="--self-test":
+        session,characters=recognizer()
+        synthetic=np.full((48,320,3),255,dtype=np.uint8)
+        _ignored,confidence=recognize(session,characters,synthetic)
+        if not isinstance(confidence,float) or not np.isfinite(confidence):
+            raise ValueError("invalid OCR inference")
+        print(json.dumps({"ok":True,"engine":"arabic-v5",
+                          "modelReady":True},separators=(",",":")))
+        return
     if len(sys.argv)!=2 or not sys.argv[1].startswith("/"):
         raise ValueError("private input required")
     photo=image_from_private_file(sys.argv[1])
