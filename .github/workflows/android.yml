@@ -52,22 +52,15 @@ jobs:
           cache-provider: basic
       - name: Test Tunisian OCR name parser and assemble QA APK
         run: gradle -p apps/android :app:testDebugUnitTest :app:assembleDebug --no-daemon --stacktrace
-      - name: Enforce strict 60 MiB APK limit (fail closed)
+      - name: Enforce strict 60MB APK and prohibit embedded OCR engines
         run: |
           set -euo pipefail
           apk=apps/android/app/build/outputs/apk/debug/app-debug.apk
           size="$(stat -c %s "$apk")"
-          echo "Malak Android APK bytes: $size (limit 60000000)"
+          echo "Malak APK bytes: $size; hard limit: 60000000"
           test "$size" -le 60000000
-          if unzip -Z1 "$apk" | grep -Ei '(^|/)(inference\.onnx|.*\.traineddata|libonnxruntime.*\.so|libopencv.*\.so|libtesseract.*\.so)
-        uses: actions/upload-artifact@v4
-        with:
-          name: malak-PROTOTYPE-NOT-VISUALLY-APPROVED-${{ github.sha }}
-          path: apps/android/app/build/outputs/apk/debug/app-debug.apk
-          retention-days: 3
-          if-no-files-found: error
-; then
-            echo 'HEAVY_OCR_LIBRARY_LEAKED_IN_APK' >&2
+          if unzip -Z1 "$apk" | grep -Ei '(^|/)(inference\.onnx|.*\.traineddata|libonnxruntime.*\.so|libopencv.*\.so|libtesseract.*\.so)$'; then
+            echo 'HEAVY_OCR_ASSET_IN_APK' >&2
             exit 1
           fi
       - name: Upload QA APK (no signing keys, no personal data)
