@@ -211,7 +211,7 @@
     <string name="camera_reduce_glare">Évitez les reflets</string>
     <string name="camera_move_closer">Rapprochez la carte et stabilisez le téléphone</string>
     <string name="camera_hold_steady">Restez immobile, puis photographiez</string>
-    <string name="camera_permission_needed">L'appareil photo nécessite une autorisation. Vous pouvez importer une image.</string>
+    <string name="camera_permission_needed">L\'appareil photo nécessite une autorisation. Vous pouvez importer une image.</string>
     <string name="camera_retry_permission">Autoriser l’appareil photo</string>
     <string name="camera_shutter">Prendre la photo</string>
     <string name="camera_capture_error">La photo a échoué. Réessayez.</string>
