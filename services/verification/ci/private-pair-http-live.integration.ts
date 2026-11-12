@@ -93,7 +93,7 @@ function http(port:number,url:string,body:Buffer,headers:Record<string,string>={
    req.on('error',reject);req.end(body);
  });
 }
-test('real two-PDF identity flow over local HTTP: matching, differing, revoked, sealed and cleaned',async()=>{
+test('real certificate PDF and single front image private HTTP/OCR workflow',async()=>{
  const tmpOcr=await mkdtemp(join(tmpdir(),'malak-ocr-pair-ci-'));
  const tmpStore=await mkdtemp(join(tmpdir(),'malak-sealed-pair-ci-'));
  const store=await openPrivateEvidenceStore(tmpStore);
@@ -160,57 +160,40 @@ test('real two-PDF identity flow over local HTTP: matching, differing, revoked, 
  try{
    const certId=await upload(pdf([['Certificat de propriete','Proprietaire: Amira Ben Salem',
      'CIN: 12345678','Titre foncier: 987654']]),'OWNERSHIP_CERTIFICATE');
-   const sameId=await upload(pdf([
-     ['Carte nationale identite','Nom et prenom: Amira Ben Salem','CIN: 12345678'],
-     ['Verso document exemple','Adresse: exemple imaginaire']
-   ]),'IDENTITY');
-   const yes=await compare(certId,sameId);
-   assert.equal(yes.status,200,JSON.stringify({status:yes.status,code:yes.body.code}));
-   assert.equal(yes.body.report.comparison.assessment,'PRELIMINARY_TEXT_AGREEMENT');
-   assert.equal(yes.body.report.cinComparison.status,'SAME_NUMBER_UNVERIFIED');
-   assert.equal(yes.body.report.identitySides,'MULTI_PAGE_UNCONFIRMED');
-   assert.equal(yes.body.report.identityPagesReceived,2);
-   assert.equal(yes.body.report.ownershipVerified,false);
-   assert.equal(yes.body.report.identityVerified,false);
-   assert.equal(yes.body.report.mayPublish,false);
-   assert.ok(!JSON.stringify(yes.body.report.cinComparison).includes('12345678'));
-   // Real two-photo path: HTTP upload -> immutable sealed store -> Python OCR
-   // on each image -> ordered page receipts -> private comparison.
    const front=syntheticPng([
      'CARTE NATIONALE IDENTITE',
      'Nom et prenom: Amira Ben Salem',
      'CIN: 12345678'
    ]);
-   const back=syntheticPng([
-     'VERSO CARTE NATIONALE',
-     'Adresse: Exemple Fictif'
-   ]);
-   const frontId=await upload(front,'IDENTITY','image/png',1);
-   const backId=await upload(back,'IDENTITY','image/png',2);
-   front.fill(0);back.fill(0);
-   const imagePair=await compare(certId,[frontId,backId]);
-   assert.equal(imagePair.status,200,JSON.stringify({status:imagePair.status,
-     code:imagePair.body.code}));
-   assert.equal(imagePair.body.report.identityPagesReceived,2);
-   assert.equal(imagePair.body.report.identitySides,'TWO_FILES_UNCONFIRMED');
-   assert.equal(imagePair.body.report.comparison.assessment,'PRELIMINARY_TEXT_AGREEMENT');
-   assert.equal(imagePair.body.report.cinComparison.status,'SAME_NUMBER_UNVERIFIED');
-   assert.equal(imagePair.body.report.ownershipVerified,false);
-   assert.equal(imagePair.body.report.identityVerified,false);
-   assert.equal(imagePair.body.report.mayPublish,false);
-   const reversed=await compare(certId,[backId,frontId]);
-   assert.equal(reversed.status,403);
-   assert.equal(reversed.body.report,undefined);
-   const duplicate=await compare(certId,[frontId,frontId]);
+   const sameId=await upload(front,'IDENTITY','image/png',1);
+   front.fill(0);
+   const yes=await compare(certId,sameId);
+   assert.equal(yes.status,200,JSON.stringify({status:yes.status,code:yes.body.code}));
+   assert.equal(yes.body.report.comparison.assessment,'PRELIMINARY_TEXT_AGREEMENT');
+   assert.equal(yes.body.report.cinComparison.status,'SAME_NUMBER_UNVERIFIED');
+   assert.equal(yes.body.report.identityCapture,'FRONT_IMAGE_ONLY_UNVERIFIED');
+   assert.equal(yes.body.report.identityPagesReceived,1);
+   assert.equal(yes.body.report.ownershipVerified,false);
+   assert.equal(yes.body.report.identityVerified,false);
+   assert.equal(yes.body.report.mayPublish,false);
+   assert.ok(!JSON.stringify(yes.body.report.cinComparison).includes('12345678'));
+   const duplicate=await compare(certId,[sameId,sameId]);
    assert.equal(duplicate.status,400);
-   const missingBack=await compare(certId,frontId);
-   assert.equal(missingBack.status,200);
-   assert.equal(missingBack.body.report.identitySides,'MISSING_REVERSE');
-   assert.equal(missingBack.body.report.comparison.assessment,'INSUFFICIENT_OR_AMBIGUOUS');
-   const differentId=await upload(pdf([
-     ['Carte nationale identite','Nom et prenom: Amira Ben Salem','CIN: 87654321'],
-     ['Verso document exemple','Adresse: autre exemple']
-   ]),'IDENTITY');
+   const extraPhoto=syntheticPng(['CARTE NATIONALE IDENTITE','CIN: 87654321']);
+   const extra=await http(addr!.port,base+'/upload',extraPhoto,{
+     'X-Idempotency-Key':'synthetic_pair_upload_'+(++serial),
+     'X-Evidence-Kind':'IDENTITY','X-Page-Number':'2',
+     'X-Claimed-Mime':'image/png'
+   });
+   extraPhoto.fill(0);
+   assert.equal(extra.status,422);
+   const differentImage=syntheticPng([
+     'CARTE NATIONALE IDENTITE',
+     'Nom et prenom: Amira Ben Salem',
+     'CIN: 87654321'
+   ]);
+   const differentId=await upload(differentImage,'IDENTITY','image/png',1);
+   differentImage.fill(0);
    const no=await compare(certId,differentId);
    assert.equal(no.status,200);
    assert.equal(no.body.report.comparison.assessment,'TEXT_DIFFERENCE_NEEDS_REVIEW');

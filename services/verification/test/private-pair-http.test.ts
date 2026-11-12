@@ -12,8 +12,8 @@ const bearer='synthetic-secure-session-token-12345';
 const route='/internal/v1/evidence/'+caseId+'/compare-pair';
 const payload={certificateEvidenceIds:[cert],identityEvidenceIds:[identity]};
 const preliminary:PrivatePairReport={
- access:'AUTHORIZED_CASE_OWNER_ONLY',certificatePagesReceived:1,identityPagesReceived:2,
- identitySides:'MULTI_PAGE_UNCONFIRMED',
+ access:'AUTHORIZED_CASE_OWNER_ONLY',certificatePagesReceived:1,identityPagesReceived:1,
+ identityCapture:'FRONT_IMAGE_ONLY_UNVERIFIED',
  comparison:{
    assessment:'PRELIMINARY_TEXT_AGREEMENT',ownershipVerified:false,identityVerified:false,
    mayPublish:false,requiresHumanReview:true,
@@ -62,7 +62,7 @@ test('authenticated pair POST returns private provisional report without publish
   assert.equal(r.status,200);
   assert.equal(r.body.report.comparison.assessment,'PRELIMINARY_TEXT_AGREEMENT');
   assert.equal(r.body.report.comparison.certificateName.value,'Amira Ben Salem');
-  assert.equal(r.body.report.identitySides,'MULTI_PAGE_UNCONFIRMED');
+  assert.equal(r.body.report.identityCapture,'FRONT_IMAGE_ONLY_UNVERIFIED');
   assert.equal(r.body.ownershipVerified,false);
   assert.equal(r.body.identityVerified,false);
   assert.equal(r.body.mayPublish,false);
@@ -85,10 +85,12 @@ test('reject client evidence replay, unexpected keys, body type and missing evid
   assert.equal((await call(port,JSON.stringify({certificateEvidenceIds:[cert],
     identityEvidenceIds:[cert]}))).status,400);
   assert.equal((await call(port,JSON.stringify({...payload,mayPublish:true}))).status,400);
+  assert.equal((await call(port,JSON.stringify({...payload,
+    identityEvidenceIds:[identity,randomUUID()]}))).status,400);
   assert.equal((await call(port,JSON.stringify({certificateEvidenceIds:[],
     identityEvidenceIds:[identity]}))).status,400);
   assert.equal((await call(port,JSON.stringify(payload),bearer,'text/plain')).status,400);
-  assert.equal(seen.length,0);assert.equal(audit.length,4);
+  assert.equal(seen.length,0);assert.equal(audit.length,5);
  });
 });
 test('revocation or forbidden evidence returns 403 and no private OCR fields',async()=>{

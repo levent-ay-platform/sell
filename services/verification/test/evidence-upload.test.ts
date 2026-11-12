@@ -182,3 +182,24 @@ test('scanned images require an explicit 1 to 8 page number',async()=>{
  assert.equal(h.calls.scanner,0);
  assert.equal(h.objects.size,0);
 });
+
+test('identity requires ONE front image: page 1 PNG/JPEG, never PDF or page 2',async()=>{
+ const h=harness();
+ const syntheticImage=Uint8Array.from(Buffer.concat([
+   Buffer.from([137,80,78,71,13,10,26,10]),
+   Buffer.from('SYNTHETIC FRONT PNG MAGIC ONLY')
+ ]));
+ const badPdf=await uploadIndividualEvidence({...defaults,
+   evidenceKind:'IDENTITY',pageNumber:null},h.deps);
+ assert.equal(badPdf.ok,false);
+ const badPage=await uploadIndividualEvidence({...defaults,
+   evidenceKind:'IDENTITY',bytes:syntheticImage,claimedMime:'image/png',pageNumber:2},h.deps);
+ assert.equal(badPage.ok,false);
+ assert.equal(h.calls.scanner,0);
+ const front=await uploadIndividualEvidence({...defaults,
+   evidenceKind:'IDENTITY',bytes:syntheticImage,claimedMime:'image/png',pageNumber:1},h.deps);
+ assert.equal(front.ok,true);
+ assert.equal(h.rows.length,1);
+ assert.equal(h.rows[0]?.kind,'IDENTITY');
+ assert.equal(h.rows[0]?.pageNumber,1);
+});
