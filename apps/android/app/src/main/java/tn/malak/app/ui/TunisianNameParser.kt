@@ -72,15 +72,22 @@ internal object TunisianNameParser {
         val last=mutableListOf<String>()
         for((i,line) in raw.withIndex()) {
             arabicFull.matchEntire(line)?.groupValues?.getOrNull(1)?.let {
-                valid(it,2)?.let(full::add)
+                // Arabic labels cannot silently yield Latin hallucinated names.
+                val arabicLabel=line.firstOrNull()?.let{c->c in '\u0621'..'\u064a'}==true
+                if(!arabicLabel || it.any{c->c in '\u0621'..'\u064a'})
+                    valid(it,2)?.let(full::add)
             }
             fun piece(regex:Regex):String? {
                 val matched=regex.matchEntire(line)?:return null
                 val part=matched.groupValues.getOrNull(1).orEmpty().trim()
+                val candidate=if(part.isNotEmpty())part else
+                    raw.getOrNull(i+1).orEmpty()
+                val arabicLabel=line.firstOrNull()?.let{c->c in '\u0621'..'\u064a'}==true
+                if(arabicLabel&&!candidate.any{c->c in '\u0621'..'\u064a'})
+                    return null
                 // When OCR puts the label and value on separate lines, use
                 // exactly the next unlabelled name line. No father-name jump.
-                return validComponent(if(part.isNotEmpty())part else
-                    raw.getOrNull(i+1).orEmpty())
+                return validComponent(candidate)
             }
             piece(lastLabel)?.let(last::add)
             piece(firstLabel)?.let(first::add)
