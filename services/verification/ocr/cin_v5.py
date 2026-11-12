@@ -1,0 +1,258 @@
+#!/usr/bin/env python3
+"""Huawei-only Arabic PP-OCRv5 CIN-front OCR. Input: private tmpfs file.
+Stdout: bounded JSON fields; no photos, OCR text, or tokens in logs.
+MUST run inside a non-networked unprivileged memory/CPU-limited container.
+"""
+import json
+import os
+from pathlib import Path
+import re
+import sys
+
+import cv2
+import numpy as np
+import onnxruntime as ort
+import yaml
+
+MODEL_ROOT=Path("/opt/malak/models/arabic-v5")
+ARABIC=re.compile(r"^[\u0621-\u064a]+(?: [\u0621-\u064a]+){0,3}$")
+MAX_BYTES=6*1024*1024
+MAX_EDGE=6000
+OUTPUT_EMPTY={"surname":None,"givenName":None,"cinLast4":None,
+              "birthDate":None,"confidencePercent":0}
+cv2.setNumThreads(1)
+
+
+def image_from_private_file(path):
+    fd=os.open(path,os.O_RDONLY|os.O_NOFOLLOW|os.O_CLOEXEC)
+    try:
+        st=os.fstat(fd)
+        if st.st_size<20 or st.st_size>MAX_BYTES:
+            raise ValueError("bad image size")
+        data=bytearray()
+        while len(data)<st.st_size:
+            block=os.read(fd,min(32768,st.st_size-len(data)))
+            if not block:
+                raise ValueError("truncated image")
+            data.extend(block)
+    finally:
+        os.close(fd)
+    try:
+        if not (data[:3]==b"\xff\xd8\xff" or
+                data[:8]==b"\x89PNG\r\n\x1a\n"):
+            raise ValueError("unrecognized image")
+        image=cv2.imdecode(np.frombuffer(data,dtype=np.uint8),
+                           cv2.IMREAD_COLOR)
+        if image is None:
+            raise ValueError("image decode")
+        h,w=image.shape[:2]
+        if not (175<=min(w,h) and max(w,h)<=MAX_EDGE and
+                w*h<=25_000_000):
+            raise ValueError("image dimensions")
+        return image
+    finally:
+        data[:]=b"\0"*len(data)
+
+
+def order_quad(poly):
+    pts=poly.reshape(4,2).astype(np.float32)
+    sums=pts.sum(axis=1)
+    differences=np.diff(pts,axis=1).ravel()
+    return np.stack([pts[np.argmin(sums)],pts[np.argmin(differences)],
+                     pts[np.argmax(sums)],pts[np.argmax(differences)]],axis=0)
+
+
+def normalize_card(image):
+    h,w=image.shape[:2]
+    if h>w*1.13:
+        image=image[:int(.52*h),int(.06*w):int(.96*w)]
+    sh,sw=image.shape[:2]
+    scale=min(1.0,900/max(sh,sw))
+    small=cv2.resize(image,None,fx=scale,fy=scale)
+    gray=cv2.cvtColor(small,cv2.COLOR_BGR2GRAY)
+    blurred=cv2.GaussianBlur(gray,(5,5),0)
+    edges=cv2.Canny(blurred,35,110)
+    edges=cv2.morphologyEx(edges,cv2.MORPH_CLOSE,
+                           cv2.getStructuringElement(cv2.MORPH_RECT,(7,7)))
+    contours,_=cv2.findContours(edges,cv2.RETR_LIST,
+                                 cv2.CHAIN_APPROX_SIMPLE)
+    best=None
+    score=float("-inf")
+    canvas_area=small.shape[0]*small.shape[1]
+    for contour in contours:
+        area=cv2.contourArea(contour)
+        if area < canvas_area*.12:
+            continue
+        perimeter=cv2.arcLength(contour,True)
+        for epsilon in (.014,.025,.04,.06):
+            poly=cv2.approxPolyDP(contour,perimeter*epsilon,True)
+            if len(poly)!=4 or not cv2.isContourConvex(poly):
+                continue
+            p=order_quad(poly)
+            width=(np.linalg.norm(p[0]-p[1])+
+                   np.linalg.norm(p[3]-p[2]))/2
+            height=(np.linalg.norm(p[0]-p[3])+
+                    np.linalg.norm(p[1]-p[2]))/2
+            ratio=width/max(height,1)
+            if not (1.30<=ratio<=2.05):
+                continue
+            rank=2*area/canvas_area-abs(ratio-1.585)*.4
+            if rank>score:
+                best=p/scale
+                score=rank
+    if best is None:
+        ratio=image.shape[1]/image.shape[0]
+        if not 1.25<=ratio<=2.05:
+            return None
+        return cv2.resize(image,(1200,760))
+    target=np.array([[0,0],[1199,0],[1199,759],[0,759]],
+                    dtype=np.float32)
+    matrix=cv2.getPerspectiveTransform(best,target)
+    return cv2.warpPerspective(image,matrix,(1200,760))
+
+
+def find_name_rows(card):
+    h,w=card.shape[:2]
+    x0,x1=int(w*.66),int(w*.88)
+    area=cv2.cvtColor(card[int(h*.43):int(h*.69),x0:x1],
+                      cv2.COLOR_BGR2GRAY)
+    median=np.median(area[::3,::4])
+    threshold=np.clip(median-(40 if median>185 else 25),90,155)
+    ink=cv2.cvtColor(card[:,x0:x1],cv2.COLOR_BGR2GRAY)<threshold
+    density=ink.mean(axis=1)
+    # Gaussian smoothing, equivalent to bounded row density in Android.
+    smooth=cv2.GaussianBlur(density.reshape(-1,1).astype(np.float32),
+                            (1,15),0).ravel()
+    lo,hi=int(h*.43),int(h*.70)
+    peaks=[]
+    for y in range(lo+2,hi-2):
+        if (smooth[y]<.05 or smooth[y]<smooth[y-1] or
+            smooth[y]<=smooth[y+1]):
+            continue
+        margin=max(4,int(.025*h))
+        if smooth[y]-min(smooth[max(lo,y-margin)],
+                         smooth[min(hi,y+margin)])<.01:
+            continue
+        if peaks and y-peaks[-1]<int(.054*h):
+            if smooth[y]>smooth[peaks[-1]]:
+                peaks[-1]=y
+        else:
+            peaks.append(y)
+    best=None
+    score=float("-inf")
+    for index,a in enumerate(peaks):
+        for b in peaks[index+1:]:
+            top,bottom=a/h,b/h
+            gap=bottom-top
+            if not (.46<=top<=.59 and .56<=bottom<=.69 and
+                    .065<=gap<=.125):
+                continue
+            rank=smooth[a]+smooth[b]-2*abs(gap-.092)
+            if rank>score:
+                best=(a,b)
+                score=rank
+    return best
+
+
+def field_crop(card,center):
+    h,w=card.shape[:2]
+    left,right=int(w*.46),int(w*.88)
+    top=max(0,round(center-h*.050))
+    bottom=min(h,round(center+h*.046))
+    if right-left<25 or bottom-top<18:
+        raise ValueError("missing field")
+    return card[top:bottom,left:right]
+
+
+def recognizer():
+    config=yaml.safe_load((MODEL_ROOT/"inference.yml").read_text("utf8"))
+    characters=config["PostProcess"]["character_dict"]
+    if len(characters)!=747:
+        raise ValueError("unverified public dictionary")
+    options=ort.SessionOptions()
+    options.intra_op_num_threads=2
+    options.inter_op_num_threads=1
+    session=ort.InferenceSession(str(MODEL_ROOT/"inference.onnx"),
+                                 sess_options=options,
+                                 providers=["CPUExecutionProvider"])
+    return session,characters+[" "]
+
+
+def recognize(session,characters,crop):
+    if crop.size==0:
+        return "",0.
+    resized_width=max(1,min(320,int(np.ceil(48*crop.shape[1]/crop.shape[0]))))
+    resized=cv2.resize(crop,(resized_width,48))
+    if resized_width<320:
+        resized=cv2.copyMakeBorder(resized,0,0,0,320-resized_width,
+                                   cv2.BORDER_CONSTANT,value=(0,0,0))
+    tensor=(resized.astype(np.float32)/255-.5)/.5
+    tensor=tensor.transpose(2,0,1)[None,:,:,:]
+    scores=session.run(None,{session.get_inputs()[0].name:tensor})[0][0]
+    indices=np.argmax(scores,axis=1)
+    visual=[]
+    confidence=[]
+    last=-1
+    for row,idx in zip(scores,indices):
+        idx=int(idx)
+        if idx!=last and idx>0 and idx-1<len(characters):
+            visual.append(characters[idx-1])
+            confidence.append(float(row[idx]))
+        last=idx
+    return "".join(visual)[::-1].strip(),(
+        sum(confidence)/len(confidence) if confidence else 0.)
+
+
+def arabic_only(s):
+    text=" ".join(s.split())
+    if 2<=len(text)<=55 and ARABIC.fullmatch(text) and all(
+            len(part)>=2 for part in text.split(" ")):
+        return text
+    return None
+
+
+def cin_number(session,letters,card):
+    h,w=card.shape[:2]
+    band=card[int(h*.29):int(h*.44),int(w*.29):int(w*.72)]
+    gray=cv2.cvtColor(band,cv2.COLOR_BGR2GRAY)
+    gray=cv2.cvtColor(gray,cv2.COLOR_GRAY2BGR)
+    first,quality_a=recognize(session,letters,band)
+    second,quality_b=recognize(session,letters,gray)
+    def digits(text,quality):
+        if quality<.85:
+            return None
+        result="".join(c for c in text if "0"<=c<="9")[::-1]
+        return result if re.fullmatch(r"\d{8}",result) else None
+    a=digits(first,quality_a)
+    b=digits(second,quality_b)
+    return a[-4:] if a and b==a else None
+
+
+def main():
+    if len(sys.argv)!=2 or not sys.argv[1].startswith("/"):
+        raise ValueError("private input required")
+    photo=image_from_private_file(sys.argv[1])
+    card=normalize_card(photo)
+    if card is None:
+        print(json.dumps(OUTPUT_EMPTY,separators=(",",":")))
+        return
+    centers=find_name_rows(card)
+    if centers is None:
+        print(json.dumps(OUTPUT_EMPTY,separators=(",",":")))
+        return
+    session,letters=recognizer()
+    surname,sc=recognize(session,letters,field_crop(card,centers[0]))
+    given,gc=recognize(session,letters,field_crop(card,centers[1]))
+    a,b=arabic_only(surname),arabic_only(given)
+    if a is None or b is None or min(sc,gc)<.72:
+        print(json.dumps(OUTPUT_EMPTY,separators=(",",":")))
+        return
+    result={"surname":a,"givenName":b,
+            "cinLast4":cin_number(session,letters,card),
+            "birthDate":None,
+            "confidencePercent":max(0,min(100,int(min(sc,gc)*100)))}
+    print(json.dumps(result,ensure_ascii=False,separators=(",",":")))
+
+
+if __name__=="__main__":
+    main()
