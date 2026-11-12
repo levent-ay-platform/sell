@@ -16,6 +16,7 @@ import yaml
 from cin_v5_vote import select_name
 from cin_v5_date import date_from_v5_votes
 from cin_v5_digits import decode_numeric_ctc
+from cin_v5_region import crop_printed_number
 
 MODEL_ROOT=Path("/opt/malak/models/arabic-v5")
 ARABIC=re.compile(r"^[\u0621-\u064a]+(?: [\u0621-\u064a]+){0,3}$")
@@ -266,10 +267,15 @@ def cin_number(session,letters,card):
     """
     h,w=card.shape[:2]
     votes=set()
+    tight=crop_printed_number(card,(.29,.22,.80,.48),8)
+    # First OCR the isolated digit line; fallback crops remain bounded to
+    # the printed front-CIN band for cards that defeat edge segmentation.
+    candidates=([tight] if tight is not None else [])
     for top,bottom in ((.28,.42),(.30,.44),(.33,.46),(.26,.40)):
         for left,right in ((.33,.75),(.38,.73)):
-            crop=card[int(h*top):int(h*bottom),
-                      int(w*left):int(w*right)]
+            candidates.append(card[int(h*top):int(h*bottom),
+                                   int(w*left):int(w*right)])
+    for crop in candidates:
             if crop.size==0:
                 continue
             first,second=numeric_pair(session,letters,crop)
@@ -309,8 +315,21 @@ def birth_date(session,letters,card,given_name_row):
         def segment(left,right):
             x0,x1=round(w*left),round(w*right)
             return card[y0:y1,x0:x1]
-        day=numeric_pair(session,letters,segment(.71,.87))
-        year=numeric_pair(session,letters,segment(.28,.54))
+        # Segment printed Latin numerals before the v5 CTC recognizer.
+        # If no complete group is visible, retain strict bounded ROI
+        # inference as a fallback; never invent missing characters.
+        date_top=max(.65,y0/h-.025)
+        date_bottom=min(.96,y1/h+.025)
+        day_tight=crop_printed_number(
+            card,(.69,date_top,.90,date_bottom),2)
+        year_tight=crop_printed_number(
+            card,(.29,date_top,.60,date_bottom),4)
+        day=numeric_pair(session,letters,
+                         day_tight if day_tight is not None
+                         else segment(.71,.87))
+        year=numeric_pair(session,letters,
+                          year_tight if year_tight is not None
+                          else segment(.28,.54))
         month_crop=segment(.47,.76)
         gray=cv2.cvtColor(month_crop,cv2.COLOR_BGR2GRAY)
         gray=cv2.cvtColor(gray,cv2.COLOR_GRAY2BGR)
