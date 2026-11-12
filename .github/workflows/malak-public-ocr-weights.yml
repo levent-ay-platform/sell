@@ -37,10 +37,13 @@ jobs:
         run: |
           mkdir -p public_models/wheels
           python -m pip download -q --only-binary=:all: -d public_models/wheels "onnxruntime==1.31.1"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
       - name: Attempt public v6 PaddleInference-to-ONNX conversion
         continue-on-error: true
         run: |
-          python -m pip -q install "paddle2onnx>=2.1.0"
+          python -m pip -q install "paddle2onnx==2.1.0"
           paddle2onnx --model_dir public_models/v6/inference \
             --model_filename inference.json \
             --params_filename inference.pdiparams \
