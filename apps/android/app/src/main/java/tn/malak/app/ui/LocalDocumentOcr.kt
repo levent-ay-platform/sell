@@ -220,7 +220,7 @@ internal object LocalDocumentOcr {
             api.setPageSegMode(previousMode)
         }
     }
-    private fun ocrSingle(api:TessBaseAPI,bitmap:Bitmap,index:Int,
+    private fun ocrSingle(context:Context,api:TessBaseAPI,bitmap:Bitmap,index:Int,
                           identity:Boolean):ScanPage {
         fun readBox(l:Float,t:Float,r:Float,b:Float,gray:Boolean=true):ScanPage {
             val crop=region(bitmap,l,t,r,b,gray)
@@ -240,73 +240,31 @@ internal object LocalDocumentOcr {
         }
         try {
             if(identity){
-                // Labelled surname and given-name field first; if its layout
-                // cannot be read, two narrow rows provide independent evidence.
-                val nameBlock=readBox(.49f,.43f,.98f,.70f)
-                // Always read the two printed fields independently. The old
-                // bands partly covered the CIN number and missed the surname.
-                val surnameRow=readBox(.55f,.46f,.98f,.58f)
-                val givenRow=readBox(.55f,.56f,.98f,.665f)
-                val surnameText=surnameRow.text
-                val givenText=givenRow.text
-                val surnameConfidence=surnameRow.confidence
-                val givenConfidence=givenRow.confidence
-                // Masked CIN is shown only when grayscale and original
-                // colour OCR independently agree. A valid-looking 8-digit
-                // string is otherwise NOT reliable enough to display.
-                val numberBand=readBox(.39f,.31f,.69f,.405f)
-                val numberInColour=readBox(.39f,.31f,.69f,.405f,false)
-                val stableCin=TunisianDocumentFields.repeatableCin(
-                    numberBand.text,numberInColour.text)
-                val birthBand=readBox(.39f,.70f,.90f,.84f)
-                var fields=TunisianDocumentFields.identity(
-                    nameBlock.text,surnameText,givenText,
-                    if(stableCin!=null)numberBand.text else "",birthBand.text)
-                var text=nameBlock.text
-                var confidence=nameBlock.confidence
-                if(fields.name==null||fields.cinNumber==null||
-                    fields.dateOfBirth==null) {
-                    // On real photographed CINs a fixed crop can miss the
-                    // printed row. Sparse layout is a *conditional* fallback,
-                    // never a new unconstrained owner-name guess.
-                    val sparse=readText(api,bitmap,
-                        TessBaseAPI.PageSegMode.PSM_SPARSE_TEXT)
-                    val rawDate=TunisianDocumentFields.labelledBirthDate(sparse.text)
-                    var sparseCin:String?=null
-                    var sparseText=sparse.text
-                    var fallbackConfidence=sparse.confidence
-                    if(fields.name==null ||
-                        (fields.cinNumber==null &&
-                            TunisianDocumentFields.numberFromCinBand(
-                                sparse.text)!=null)) {
-                        // Two independently rendered passes must agree on CIN.
-                        // Never accept a single 8-digit guess.
-                        val grayscale=region(bitmap,0f,0f,1f,1f)
-                        val graySparse=try {
-                            readText(api,grayscale,
-                                TessBaseAPI.PageSegMode.PSM_SPARSE_TEXT)
-                        }finally{grayscale.recycle()}
-                        sparseText=sparse.text+"\n"+graySparse.text
-                        fallbackConfidence=minOf(fallbackConfidence,
-                            graySparse.confidence)
-                        sparseCin=TunisianDocumentFields.repeatableCin(
-                            sparse.text,graySparse.text)
-                    }
-                    val recovered=TunisianDocumentFields.identity(
-                        sparseText,"","",sparseCin.orEmpty(),
-                        rawDate?:TunisianDocumentFields.labelledBirthDate(
-                            sparseText).orEmpty())
-                    fields=TunisianDocumentFields.reconcileIdentity(
-                        fields,recovered)
-                    text=nameBlock.text+"\n"+sparseText
-                    confidence=minOf(nameBlock.confidence,
-                        fallbackConfidence)
-                }else if(surnameText.isNotEmpty()&&givenText.isNotEmpty()){
-                    confidence=minOf(surnameConfidence,givenConfidence)
+                if(index>1) {
+                    // The reverse side is not a substitute for a front name.
+                    return ScanPage(index,"",0,identityFields=
+                        TunisianDocumentFields.Identity(null,null,null,null,null))
                 }
-                val names=fields.name?.let{listOf(PairNameEvidence(
-                    it,index,"ocr-ar",confidence))}.orEmpty()
-                return ScanPage(index,text,confidence,names,identityFields=fields)
+                val v5=runCatching{TunisianCardV5.read(context,bitmap)}.getOrNull()
+                if(v5==null) {
+                    // Never revive the old Tesseract arbitrary-label fallback
+                    // (which displayed "RATIO" on real user photos).
+                    return ScanPage(index,"",0,identityFields=
+                        TunisianDocumentFields.Identity(null,null,null,null,null))
+                }
+                // Numeric fields remain separate from the Arabic recognizer.
+                // Never trust an unlabelled 8-digit number from a full-page scan.
+                val numberBand=readBox(.34f,.30f,.72f,.42f)
+                val numberInColour=readBox(.34f,.30f,.72f,.42f,false)
+                val confirmedCin=TunisianDocumentFields.repeatableCin(
+                    numberBand.text,numberInColour.text)
+                val birth=readBox(.33f,.73f,.93f,.86f)
+                val fields=TunisianDocumentFields.Identity(
+                    v5.surname,v5.given,v5.name,confirmedCin,
+                    TunisianDocumentFields.birthDate(birth.text))
+                val name=PairNameEvidence(v5.name,index,"ocr-ar-v5",v5.confidence)
+                return ScanPage(index,"",v5.confidence,
+                    listOf(name),identityFields=fields)
             }
             // Certificate header, registered-owner area and page footer are
             // much smaller than a whole A4 scan. Query them independently.
@@ -403,7 +361,7 @@ internal object LocalDocumentOcr {
                             Canvas(bmp).drawColor(Color.WHITE)
                             try {
                                 page.render(bmp,null,null,PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
-                                output.add(ocrSingle(api,bmp,i+1,identity))
+                                output.add(ocrSingle(context,api,bmp,i+1,identity))
                             }catch(t:Throwable){
                                 if(!bmp.isRecycled)bmp.recycle()
                                 throw t
@@ -414,7 +372,7 @@ internal object LocalDocumentOcr {
             } else {
                 if(file.mime !in setOf("image/jpeg","image/png","image/tiff")||
                     files.size>MAX_PAGES)throw IllegalStateException("OCR_FILE_TYPE")
-                output.add(ocrSingle(api,decodeImage(context,file.uri),position+1,identity))
+                output.add(ocrSingle(context,api,decodeImage(context,file.uri),position+1,identity))
             }
         }
         return output
@@ -445,8 +403,11 @@ internal object LocalDocumentOcr {
                 val input=context.contentResolver.openInputStream(uri)
                     ?:throw IllegalStateException("OCR_IMAGE_UNAVAILABLE")
                 input.use{BitmapFactory.decodeStream(it,null,options)}
-                if(minOf(options.outWidth,options.outHeight)<420 ||
-                    maxOf(options.outWidth,options.outHeight)<760)
+                // Small photos are not automatically unreadable. Some of
+                // the consented 300px Tunisian samples are readable by v5.
+                // Let field confidence, not an arbitrary pixel cutoff, decide.
+                if(minOf(options.outWidth,options.outHeight)<175 ||
+                    maxOf(options.outWidth,options.outHeight)<260)
                     return@withContext FrontScan(null,null,null,null,null,0,
                         FrontIssue.LOW_RESOLUTION)
             }
