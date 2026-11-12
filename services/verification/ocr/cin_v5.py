@@ -14,6 +14,7 @@ import numpy as np
 import onnxruntime as ort
 import yaml
 from cin_v5_vote import select_name
+from cin_v5_date import date_from_v5_votes
 
 MODEL_ROOT=Path("/opt/malak/models/arabic-v5")
 ARABIC=re.compile(r"^[\u0621-\u064a]+(?: [\u0621-\u064a]+){0,3}$")
@@ -239,6 +240,41 @@ def cin_number(session,letters,card):
     return a[-4:] if a and b==a else None
 
 
+
+def birth_date(session,letters,card,given_name_row):
+    """Experimental FRONT-only DOB locator; two matching reads per segment.
+
+    This uses an isolated fixed-format Tunisian card region rather than
+    guessing dates from arbitrary page numbers. No fuzzy month matching.
+    All ambiguous/low-confidence fields return None for user review.
+    """
+    h,w=card.shape[:2]
+    center=round(given_name_row+h*.175)
+    if not h*.72<=center<=h*.89:
+        return None
+    y0=max(0,round(center-h*.048))
+    y1=min(h,round(center+h*.048))
+    if y1-y0<18:
+        return None
+
+    def read_pair(left,right):
+        x0,x1=round(w*left),round(w*right)
+        crop=card[y0:y1,x0:x1]
+        if crop.size==0:
+            return []
+        gray=cv2.cvtColor(crop,cv2.COLOR_BGR2GRAY)
+        grayscale=cv2.cvtColor(gray,cv2.COLOR_GRAY2BGR)
+        # Neither variation is sufficient on its own: exact agreement
+        # and calendar validation are required by date_from_v5_votes.
+        return [recognize(session,letters,crop),
+                recognize(session,letters,grayscale)]
+
+    year=read_pair(.30,.53)
+    month=read_pair(.49,.75)
+    day=read_pair(.73,.84)
+    return date_from_v5_votes(day,month,year)
+
+
 def extract_fields(photo,session,letters):
     """Read preliminary OCR fields only; never verify legal ownership."""
     card=normalize_card(photo)
@@ -252,9 +288,14 @@ def extract_fields(photo,session,letters):
         b,gc=consensus_name(session,letters,card,centers[1])
         if a is None or b is None or min(sc,gc)<.72:
             return dict(OUTPUT_EMPTY)
+        # DOB is advisory and must never interrupt a valid name read.
+        try:
+            dob=birth_date(session,letters,card,centers[1])
+        except (ValueError,cv2.error):
+            dob=None
         return {"surname":a,"givenName":b,
                 "cinLast4":cin_number(session,letters,card),
-                "birthDate":None,
+                "birthDate":dob,
                 "confidencePercent":max(0,min(100,int(min(sc,gc)*100)))}
     finally:
         # This worker stays warm across requests. Clear derived pixel buffers.
