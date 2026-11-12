@@ -23,8 +23,11 @@ internal object LocalDocumentOcr {
             issue==null&&surname!=null&&givenName!=null&&fullName!=null&&
             confidence>=65&&cinLast4?.matches(Regex("""[0-9]{4}"""))==true&&
             birthDate?.matches(Regex("""[0-9]{4}-[0-9]{2}-[0-9]{2}"""))==true&&
-            runCatching{!java.time.LocalDate.parse(birthDate)
-                .isAfter(java.time.LocalDate.now())}.getOrDefault(false)&&
+            runCatching{
+                val parsed=java.time.LocalDate.parse(birthDate)
+                !parsed.isBefore(java.time.LocalDate.of(1900,1,1))&&
+                    !parsed.isAfter(java.time.LocalDate.now())
+            }.getOrDefault(false)&&
             TunisianNameParser.canonical("$surname $givenName")==
                 TunisianNameParser.canonical(fullName)
     }
@@ -44,7 +47,11 @@ internal object LocalDocumentOcr {
     suspend fun inspectFront(context:Context,uri:Uri,length:Long,mime:String,
         session:OwnerEvidenceSession?):FrontScan=withContext(Dispatchers.IO) {
         if(session==null)return@withContext no(FrontIssue.SESSION_REQUIRED)
-        if(uri.scheme!="content"||mime !in setOf("image/jpeg","image/png")||
+        // Preview uses only an ephemeral image produced by the in-app CameraX
+        // capture, never any gallery, shared provider or external document.
+        if(uri.scheme!="content"||mime!="image/jpeg"||
+            !PrivateCaptureMemory.isPrivate(uri)||
+            PrivateCaptureMemory.length(uri)!=length||
             length !in 20..MAX_IMAGE||!UUID.matches(session.caseId)||
             !TOKEN.matches(session.bearer))
             return@withContext no(FrontIssue.SERVICE_UNAVAILABLE)
@@ -128,8 +135,11 @@ internal object LocalDocumentOcr {
             val birth=if(json.isNull("birthDate"))null
                 else json.optString("birthDate").takeIf{
                     it.matches(Regex("""[0-9]{4}-[0-9]{2}-[0-9]{2}"""))&&
-                    runCatching{!java.time.LocalDate.parse(it)
-                        .isAfter(java.time.LocalDate.now())}.getOrDefault(false)
+                    runCatching{
+                        val parsed=java.time.LocalDate.parse(it)
+                        !parsed.isBefore(java.time.LocalDate.of(1900,1,1))&&
+                            !parsed.isAfter(java.time.LocalDate.now())
+                    }.getOrDefault(false)
                 }
             FrontScan(surname,given,
                 if(surname!=null&&given!=null)"$surname $given" else null,

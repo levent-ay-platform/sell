@@ -14,5 +14,7 @@ class FrontScanCoverageTest {
         assertFalse(scan(last4=null).readyForReview)
         assertFalse(scan(birth=null).readyForReview)
         assertFalse(scan(birth="1991-02-31").readyForReview)
+        assertFalse(scan(birth="1899-12-31").readyForReview)
+        assertFalse(scan(birth="2099-01-01").readyForReview)
     }
 }
