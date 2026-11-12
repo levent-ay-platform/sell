@@ -531,6 +531,9 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                                     Text(s(when {
                                         frontReadBusy->R.string.camera_review_scanning
                                         frontReadFailed->R.string.camera_review_failed
+                                        frontRead?.issue==
+                                            LocalDocumentOcr.FrontIssue.LOW_RESOLUTION->
+                                            R.string.camera_image_low_resolution
                                         frontRead?.readyForReview==true->
                                             R.string.camera_review_ready
                                         else->R.string.camera_review_unreadable
