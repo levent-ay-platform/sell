@@ -239,6 +239,27 @@ def cin_number(session,letters,card):
     return a[-4:] if a and b==a else None
 
 
+def extract_fields(photo,session,letters):
+    """Read only preliminary OCR fields; no proof of legal identity/ownership.
+
+    The ONNX model stays loaded for a private persistent Huawei socket worker.
+    """
+    card=normalize_card(photo)
+    if card is None:
+        return dict(OUTPUT_EMPTY)
+    centers=find_name_rows(card)
+    if centers is None:
+        return dict(OUTPUT_EMPTY)
+    a,sc=consensus_name(session,letters,card,centers[0])
+    b,gc=consensus_name(session,letters,card,centers[1])
+    if a is None or b is None or min(sc,gc)<.72:
+        return dict(OUTPUT_EMPTY)
+    return {"surname":a,"givenName":b,
+            "cinLast4":cin_number(session,letters,card),
+            "birthDate":None,
+            "confidencePercent":max(0,min(100,int(min(sc,gc)*100)))}
+
+
 def main():
     # Public-model-only startup probe; safe in CI and isolated Huawei preflight.
     # No document, filename, field text or user data is used or returned.
@@ -254,24 +275,8 @@ def main():
     if len(sys.argv)!=2 or not sys.argv[1].startswith("/"):
         raise ValueError("private input required")
     photo=image_from_private_file(sys.argv[1])
-    card=normalize_card(photo)
-    if card is None:
-        print(json.dumps(OUTPUT_EMPTY,separators=(",",":")))
-        return
-    centers=find_name_rows(card)
-    if centers is None:
-        print(json.dumps(OUTPUT_EMPTY,separators=(",",":")))
-        return
     session,letters=recognizer()
-    a,sc=consensus_name(session,letters,card,centers[0])
-    b,gc=consensus_name(session,letters,card,centers[1])
-    if a is None or b is None or min(sc,gc)<.72:
-        print(json.dumps(OUTPUT_EMPTY,separators=(",",":")))
-        return
-    result={"surname":a,"givenName":b,
-            "cinLast4":cin_number(session,letters,card),
-            "birthDate":None,
-            "confidencePercent":max(0,min(100,int(min(sc,gc)*100)))}
+    result=extract_fields(photo,session,letters)
     print(json.dumps(result,ensure_ascii=False,separators=(",",":")))
 
 
