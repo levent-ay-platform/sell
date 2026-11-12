@@ -43,7 +43,7 @@ jobs:
       - name: Attempt public v6 PaddleInference-to-ONNX conversion
         continue-on-error: true
         run: |
-          python -m pip -q install "paddle2onnx==2.1.0" packaging "onnx>=1.18"
+          python -m pip -q install "paddle2onnx==2.1.0" packaging
           paddle2onnx --model_dir public_models/v6/inference \
             --model_filename inference.json \
             --params_filename inference.pdiparams \
