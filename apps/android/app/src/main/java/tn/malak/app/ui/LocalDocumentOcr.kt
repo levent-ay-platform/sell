@@ -138,11 +138,65 @@ internal object LocalDocumentOcr {
         }finally{crop.recycle()}
         return output
     }
-    private fun readText(api:TessBaseAPI,bitmap:Bitmap):ScanPage {
-        api.clear()
-        api.setImage(bitmap)
-        return ScanPage(1,api.getUTF8Text().orEmpty().take(60000),
-            api.meanConfidence().coerceIn(0,100))
+    /** Bounded mean-adaptive threshold for tiny printed numeric fields.
+     * Pure Android; only a temporary in-memory bitmap, at most one OCR worker.
+     */
+    private fun adaptiveDigitCrop(input:Bitmap):Bitmap {
+        val w=input.width*5;val h=input.height*5
+        val scaled=Bitmap.createScaledBitmap(input,w,h,true)
+        try {
+            val pixels=IntArray(w*h)
+            scaled.getPixels(pixels,0,w,0,0,w,h)
+            val gray=IntArray(w*h)
+            val sums=LongArray((w+1)*(h+1))
+            for(y in 0 until h) {
+                var row=0L
+                for(x in 0 until w) {
+                    val p=pixels[y*w+x]
+                    val lum=(299*Color.red(p)+587*Color.green(p)+
+                        114*Color.blue(p))/1000
+                    gray[y*w+x]=lum
+                    row+=lum
+                    sums[(y+1)*(w+1)+x+1]=sums[y*(w+1)+x+1]+row
+                }
+            }
+            for(y in 0 until h) {
+                val y0=(y-10).coerceAtLeast(0)
+                val y1=(y+10).coerceAtMost(h-1)
+                for(x in 0 until w) {
+                    val x0=(x-10).coerceAtLeast(0)
+                    val x1=(x+10).coerceAtMost(w-1)
+                    val a=(y1+1)*(w+1)+x1+1
+                    val b=y0*(w+1)+x1+1
+                    val c=(y1+1)*(w+1)+x0
+                    val d=y0*(w+1)+x0
+                    val mean=(sums[a]-sums[b]-sums[c]+sums[d])/
+                        ((x1-x0+1)*(y1-y0+1))
+                    pixels[y*w+x]=if(gray[y*w+x]>mean-6)
+                        Color.WHITE else Color.BLACK
+                }
+            }
+            return Bitmap.createBitmap(w,h,Bitmap.Config.ARGB_8888).also{
+                it.setPixels(pixels,0,w,0,0,w,h)
+            }
+        }finally{scaled.recycle()}
+    }
+    private fun readText(api:TessBaseAPI,bitmap:Bitmap,
+        psm:Int=TessBaseAPI.PageSegMode.PSM_SINGLE_BLOCK,
+        digitsOnly:Boolean=false):ScanPage {
+        val previousMode=api.getPageSegMode()
+        try {
+            api.setPageSegMode(psm)
+            if(digitsOnly)api.setVariable(TessBaseAPI.VAR_CHAR_WHITELIST,
+                "0123456789")
+            api.clear()
+            api.setImage(bitmap)
+            return ScanPage(1,api.getUTF8Text().orEmpty().take(60000),
+                api.meanConfidence().coerceIn(0,100))
+        }finally {
+            if(digitsOnly)api.setVariable(TessBaseAPI.VAR_CHAR_WHITELIST,"")
+            api.setPageSegMode(previousMode)
+        }
     }
     private fun ocrSingle(api:TessBaseAPI,bitmap:Bitmap,index:Int,
                           identity:Boolean):ScanPage {
@@ -150,29 +204,39 @@ internal object LocalDocumentOcr {
             val crop=region(bitmap,l,t,r,b,gray)
             return try{readText(api,crop)}finally{crop.recycle()}
         }
+        fun readDigits(l:Float,t:Float,r:Float,b:Float,
+                       adaptive:Boolean):ScanPage {
+            val crop=region(bitmap,l,t,r,b)
+            val prepared=try {
+                if(adaptive)adaptiveDigitCrop(crop)
+                else Bitmap.createScaledBitmap(crop,crop.width*4,crop.height*4,true)
+            }finally{crop.recycle()}
+            return try {
+                readText(api,prepared,TessBaseAPI.PageSegMode.PSM_SINGLE_BLOCK,
+                    digitsOnly=true)
+            }finally{prepared.recycle()}
+        }
         try {
             if(identity){
                 // Labelled surname and given-name field first; if its layout
                 // cannot be read, two narrow rows provide independent evidence.
-                val nameBlock=readBox(.49f,.35f,.98f,.68f)
-                var surnameText=""
-                var givenText=""
-                var surnameConfidence=0
-                var givenConfidence=0
-                if(TunisianNameParser.identity(nameBlock.text).isEmpty()){
-                    val s=readBox(.55f,.40f,.98f,.55f)
-                    val g=readBox(.55f,.52f,.98f,.66f)
-                    surnameText=s.text;givenText=g.text
-                    surnameConfidence=s.confidence;givenConfidence=g.confidence
-                }
+                val nameBlock=readBox(.49f,.43f,.98f,.70f)
+                // Always read the two printed fields independently. The old
+                // bands partly covered the CIN number and missed the surname.
+                val surnameRow=readBox(.55f,.46f,.98f,.58f)
+                val givenRow=readBox(.55f,.56f,.98f,.665f)
+                val surnameText=surnameRow.text
+                val givenText=givenRow.text
+                val surnameConfidence=surnameRow.confidence
+                val givenConfidence=givenRow.confidence
                 // Masked CIN is shown only when grayscale and original
                 // colour OCR independently agree. A valid-looking 8-digit
                 // string is otherwise NOT reliable enough to display.
-                val numberBand=readBox(.28f,.24f,.77f,.39f)
-                val numberInColour=readBox(.28f,.24f,.77f,.39f,false)
+                val numberBand=readBox(.39f,.31f,.69f,.405f)
+                val numberInColour=readBox(.39f,.31f,.69f,.405f,false)
                 val stableCin=TunisianDocumentFields.repeatableCin(
                     numberBand.text,numberInColour.text)
-                val birthBand=readBox(.37f,.67f,.98f,.83f)
+                val birthBand=readBox(.39f,.70f,.90f,.84f)
                 var fields=TunisianDocumentFields.identity(
                     nameBlock.text,surnameText,givenText,
                     if(stableCin!=null)numberBand.text else "",birthBand.text)
@@ -198,18 +262,65 @@ internal object LocalDocumentOcr {
             // Certificate header, registered-owner area and page footer are
             // much smaller than a whole A4 scan. Query them independently.
             val ownerZone=readBox(.39f,.43f,.98f,.77f)
+            val ownerOnly=readBox(.69f,.576f,.88f,.62f)
             val topFields=readBox(.12f,.15f,.97f,.38f)
             val footer=readBox(.07f,.84f,.97f,.96f)
-            var all=topFields.text+"\n"+ownerZone.text+"\n"+footer.text
+            val pageFooter=readBox(.085f,.867f,.205f,.902f)
+            var all=topFields.text+"\n"+ownerZone.text+"\n"+
+                footer.text+"\n"+pageFooter.text
             var fields=TunisianDocumentFields.certificate(
-                all,ownerZone.text,topFields.text,footer.text)
-            var confidence=ownerZone.confidence
+                all,ownerZone.text,topFields.text,pageFooter.text+"\n"+footer.text)
+            val lineOwner=TunisianDocumentFields.certificateOwnerOnlyBand(
+                ownerOnly.text)
+            fun corroboratedOwner(name:String?,text:String):String? {
+                if(name==null)return null
+                val reported=TunisianNameParser.certificate(text)
+                return name.takeIf { candidate->
+                    reported.all {
+                        TunisianNameParser.canonical(it)==
+                            TunisianNameParser.canonical(candidate)
+                    }
+                }
+            }
+            if(lineOwner!=null) {
+                val safe=corroboratedOwner(lineOwner,all)
+                fields=fields.copy(owner=when {
+                    safe==null -> null
+                    fields.owner!=null&&TunisianNameParser.canonical(fields.owner)!=
+                        TunisianNameParser.canonical(safe)->null
+                    else -> safe
+                })
+            }
+            if(index==1) {
+                // Read the printed area twice: header + independent total line.
+                // Never silently convert a digit misread as S into 5.
+                val areaHead=readDigits(.398f,.279f,.44f,.31f,true)
+                val areaTotal=readDigits(.363f,.693f,.44f,.73f,false)
+                val confirmed=TunisianDocumentFields.confirmedAreaDigits(
+                    areaHead.text,areaTotal.text)
+                val labeled=fields.areaM2
+                fields=fields.copy(areaM2=when {
+                    confirmed!=null&&(labeled==null||labeled==confirmed)->confirmed
+                    confirmed!=null&&labeled!=confirmed->null
+                    else->labeled
+                })
+            }
+            var confidence=if(lineOwner!=null)ownerOnly.confidence
+                else ownerZone.confidence
             if(fields.owner==null){
                 val full=readText(api,bitmap)
                 all=all+"\n"+full.text
-                fields=TunisianDocumentFields.certificate(
+                val recovered=TunisianDocumentFields.certificate(
                     all,ownerZone.text,topFields.text+"\n"+full.text,
-                    footer.text+"\n"+full.text)
+                    pageFooter.text+"\n"+footer.text+"\n"+full.text)
+                val safer=if(lineOwner==null)null else corroboratedOwner(
+                    lineOwner,all)
+                fields=recovered.copy(owner=when {
+                    safer==null -> recovered.owner
+                    recovered.owner!=null&&TunisianNameParser.canonical(
+                        recovered.owner)!=TunisianNameParser.canonical(safer)->null
+                    else -> safer
+                },areaM2=fields.areaM2?:recovered.areaM2)
                 confidence=minOf(confidence,full.confidence)
             }
             val names=fields.owner?.let{listOf(PairNameEvidence(
