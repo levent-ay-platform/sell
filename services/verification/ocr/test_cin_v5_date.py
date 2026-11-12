@@ -1,6 +1,7 @@
 """Synthetic-only examples. Never embed genuine CIN values or dates here."""
 from datetime import date
 import unittest
+from unittest.mock import patch
 from cin_v5_date import date_from_v5_votes
 
 
@@ -58,6 +59,35 @@ class DateDecodeTests(unittest.TestCase):
         self.assertIsNone(self.read(month='جانفي تاريخ'))
         self.assertIsNone(self.read(year='0002السنة'))
         self.assertIsNone(self.read(day='50/'))
+
+    def test_front_roi_passes_six_bounded_crops_to_consensus(self):
+        """Synthetic full-card pixels only; no real OCR or PII."""
+        import numpy as np
+        import cin_v5
+        card = np.full((760, 1200, 3), 230, dtype=np.uint8)
+        reads = [('0002', .97), ('0002', .97),
+                 ('جويلية', .95), ('جويلية', .93),
+                 ('50', .96), ('50', .95)]
+        with patch.object(cin_v5, 'recognize', side_effect=reads) as recognizer:
+            result = cin_v5.birth_date(None, [], card, given_name_row=470)
+        self.assertEqual(result, '2000-07-05')
+        self.assertEqual(recognizer.call_count, 6)
+        for args in [call.args for call in recognizer.call_args_list]:
+            crop = args[2]
+            self.assertTrue(18 <= crop.shape[0] <= 90)
+            self.assertTrue(50 <= crop.shape[1] <= 350)
+        self.assertEqual(card[0, 0, 0], 230)
+
+    def test_front_roi_missing_or_ambiguous_does_not_create_date(self):
+        import numpy as np
+        import cin_v5
+        card = np.full((760, 1200, 3), 220, dtype=np.uint8)
+        with patch.object(cin_v5, 'recognize') as recognizer:
+            self.assertIsNone(cin_v5.birth_date(None, [], card, given_name_row=10))
+            recognizer.assert_not_called()
+        with patch.object(cin_v5, 'recognize',
+                          side_effect=[('0002', .99)] * 6):
+            self.assertIsNone(cin_v5.birth_date(None, [], card, given_name_row=470))
 
 
 if __name__ == '__main__':
