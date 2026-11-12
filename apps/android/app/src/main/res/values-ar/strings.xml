@@ -228,4 +228,5 @@
     <string name="camera_review_birth">تاريخ الولادة (OCR)</string>
     <string name="camera_review_name">الاسم المقروء</string>
     <string name="camera_review_privacy">الصورة والنص داخل هاتفك فقط. هذا ليس تحققاً رسمياً من الهوية.</string>
+    <string name="camera_image_low_resolution">دقة الصورة منخفضة للقراءة الموثوقة. قرّب البطاقة وصوّرها مجدداً مع إظهار الزوايا الأربع.</string>
 </resources>
