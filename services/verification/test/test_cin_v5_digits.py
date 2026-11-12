@@ -1,13 +1,20 @@
 import unittest
 from pathlib import Path
 import sys
-import numpy as np
 
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/"ocr"))
-from cin_v5_digits import decode_numeric_ctc
 from cin_v5_eval_scope import scope_for,score_availability
+# The repository-wide synthetic test runner does not install ONNX/numpy.
+# The isolated OCR image has numpy and runs these numeric decoder tests.
+try:
+    import numpy as np
+    from cin_v5_digits import decode_numeric_ctc
+except ImportError:
+    np=None
+    decode_numeric_ctc=None
 
 
+@unittest.skipUnless(np is not None, "numeric decoder tested in OCR image")
 class DigitDecodeTest(unittest.TestCase):
     def setUp(self):
         self.chars=list("0123456789")+["O","ع"," "]
