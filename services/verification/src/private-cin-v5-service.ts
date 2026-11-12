@@ -5,7 +5,7 @@
  */
 import type {Authenticator,AuthorizedUploadCase,CaseEvidenceRepository} from './evidence-upload.ts';
 
-const ID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{12}$/i;
+const ID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const AR=/^[\u0621-\u064a]+(?: [\u0621-\u064a]+){0,3}$/u;
 const MAX_IMAGE=6*1024*1024;
 export interface CinFields {
