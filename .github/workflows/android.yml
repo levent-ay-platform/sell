@@ -32,26 +32,6 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
-      - name: Bundle pinned official Arabic, French and English OCR models
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-        with:
-          repository: tesseract-ocr/tessdata_fast
-          ref: 87416418657359cb625c412a48b6e1d6d41c29bd
-          path: ci-tessdata
-          sparse-checkout: |
-            ara.traineddata
-            fra.traineddata
-          sparse-checkout-cone-mode: false
-          persist-credentials: false
-      - name: Prepare offline OCR assets for QA APK
-        run: |
-          set -euo pipefail
-          mkdir -p apps/android/app/src/main/assets/tessdata
-          for lang in ara fra; do
-            test -f "ci-tessdata/$lang.traineddata"
-            test "$(wc -c < "ci-tessdata/$lang.traineddata")" -gt 100000
-            cp "ci-tessdata/$lang.traineddata" apps/android/app/src/main/assets/tessdata/
-          done
       - name: Check approved brand
         run: python3 scripts/check_malak_brand.py
       - name: Set up JDK 17
@@ -72,6 +52,24 @@ jobs:
           cache-provider: basic
       - name: Test Tunisian OCR name parser and assemble QA APK
         run: gradle -p apps/android :app:testDebugUnitTest :app:assembleDebug --no-daemon --stacktrace
+      - name: Enforce strict 60 MiB APK limit (fail closed)
+        run: |
+          set -euo pipefail
+          apk=apps/android/app/build/outputs/apk/debug/app-debug.apk
+          size="$(stat -c %s "$apk")"
+          echo "Malak Android APK bytes: $size (limit 62914560)"
+          test "$size" -le 62914560
+          if unzip -Z1 "$apk" | grep -Ei '(^|/)(inference\.onnx|.*\.traineddata|libonnxruntime.*\.so|libopencv.*\.so|libtesseract.*\.so)
+        uses: actions/upload-artifact@v4
+        with:
+          name: malak-PROTOTYPE-NOT-VISUALLY-APPROVED-${{ github.sha }}
+          path: apps/android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 3
+          if-no-files-found: error
+; then
+            echo 'HEAVY_OCR_LIBRARY_LEAKED_IN_APK' >&2
+            exit 1
+          fi
       - name: Upload QA APK (no signing keys, no personal data)
         uses: actions/upload-artifact@v4
         with:
