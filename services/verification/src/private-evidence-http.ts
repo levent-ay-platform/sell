@@ -13,6 +13,8 @@ import type {Authenticator, EvidenceKind, EvidenceUploadRequest, EvidenceUploadR
 import type {ReviewRequest, ReviewInspectionResult} from './evidence-review.ts';
 import type {PrivateOcrPresentation} from './ocr-presentation.ts';
 import {PrivateOcrAccessDenied} from './seller-ocr-service.ts';
+import {CinPreviewDenied} from './private-cin-v5-service.ts';
+import type {CinPreviewRequest,CinFields} from './private-cin-v5-service.ts';
 import {PrivatePairAccessDenied} from './private-pair-service.ts';
 import type {PrivatePairReport,PrivatePairRequest} from './private-pair-service.ts';
 import {OwnerCaseDenied} from './private-owner-case.ts';
@@ -26,13 +28,14 @@ const TOKEN=/^Bearer ([A-Za-z0-9._~+\/-]{20,4096})$/;
 const KINDS=new Set<EvidenceKind>(['IDENTITY','OWNERSHIP_CERTIFICATE','TITLE_EXTRACT','OTHER_LEGAL_PROOF']);
 const UPLOAD=/^\/internal\/v1\/evidence\/([0-9a-f-]{36})\/upload$/i;
 const OCR_UPLOAD=/^\/internal\/v1\/evidence\/([0-9a-f-]{36})\/upload-ocr$/i;
+const CIN_PREVIEW=/^\/internal\/v1\/evidence\/([0-9a-f-]{36})\/preview-cin$/i;
 const PAIR=/^\/internal\/v1\/evidence\/([0-9a-f-]{36})\/compare-pair$/i;
 const REVIEW=/^\/internal\/v1\/review\/([0-9a-f-]{36})\/([0-9a-f-]{36})\/inspect$/i;
 const OWNER_CASE=/^\/internal\/v1\/owner\/cases$/;
 const PILOT_LOGIN=/^\/internal\/v1\/pilot\/login$/;
 const CONSENT_REVOKE=/^\/internal\/v1\/owner\/cases\/([0-9a-f-]{36})\/revoke-consent$/i;
 const MIME=new Set(['application/pdf','image/png','image/jpeg','image/tiff']);
-export type PrivateRoute='UPLOAD'|'INSPECT'|'OCR'|'PAIR'|'OWNER_CASE'|'CONSENT_REVOKE'|'PILOT_LOGIN';
+export type PrivateRoute='UPLOAD'|'INSPECT'|'OCR'|'CIN_PREVIEW'|'PAIR'|'OWNER_CASE'|'CONSENT_REVOKE'|'PILOT_LOGIN';
 export type DenialReason='BAD_ROUTE'|'BAD_REQUEST'|'UNAUTHENTICATED'|'FORBIDDEN'|'RATE_LIMITED'|'FILE_REJECTED'|'REPLAY_CONFLICT'|'UPSTREAM_UNAVAILABLE';
 export interface DenialAuditRecord {route:PrivateRoute|'UNKNOWN';reason:DenialReason;actorUserId:string|null;requestId:string;}
 export interface PrivateEvidenceHttpDeps {
@@ -46,6 +49,8 @@ export interface PrivateEvidenceHttpDeps {
   inspect:(request:ReviewRequest)=>Promise<ReviewInspectionResult>;
   /** Private owner-only field DTO. Called AFTER a successful, scanned and sealed upload. */
   analyzeOwnerUpload?:(request:{bearerToken:string;caseId:string;evidenceId:string;bytes:Uint8Array;mime:'application/pdf'|'image/png'|'image/jpeg'|'image/tiff';declaredArea:string|null})=>Promise<PrivateOcrPresentation>;
+  /** Huawei v5 transient preview; requires verified owner, current case and consent. */
+  previewCin?:(request:CinPreviewRequest)=>Promise<CinFields>;
   /** Explicitly injected, server-only owner comparison of already sealed evidence IDs. */
   analyzeOwnerPair?:(request:PrivatePairRequest)=>Promise<PrivatePairReport>;
   /** Trusted auth, transaction and consent service. No public listener is mounted. */
@@ -130,10 +135,10 @@ export function createPrivateEvidenceHttpHandler(deps:PrivateEvidenceHttpDeps) {
   return async (req:IncomingMessage,res:ServerResponse):Promise<void>=>{
     const requestId=randomUUID();let actor:string|null=null;
     const url=req.url??'';
-    const upload=UPLOAD.exec(url),ocrUpload=OCR_UPLOAD.exec(url),review=REVIEW.exec(url),pair=PAIR.exec(url);
+    const upload=UPLOAD.exec(url),ocrUpload=OCR_UPLOAD.exec(url),cinPreview=CIN_PREVIEW.exec(url),review=REVIEW.exec(url),pair=PAIR.exec(url);
     const caseCreate=OWNER_CASE.test(url),consentRevoke=CONSENT_REVOKE.exec(url);
     const route:PrivateRoute|'UNKNOWN'=PILOT_LOGIN.test(url)?'PILOT_LOGIN':caseCreate?'OWNER_CASE':consentRevoke?'CONSENT_REVOKE':
-      pair?'PAIR':ocrUpload?'OCR':upload?'UPLOAD':review?'INSPECT':'UNKNOWN';
+      pair?'PAIR':cinPreview?'CIN_PREVIEW':ocrUpload?'OCR':upload?'UPLOAD':review?'INSPECT':'UNKNOWN';
     // Do not log/return raw URL, bearer token, file name or document identifiers.
     const reject=async(status:number,reason:DenialReason)=>{
       try {await deps.audit.recordDenied({route,reason,actorUserId:actor,requestId});}
@@ -336,6 +341,44 @@ export function createPrivateEvidenceHttpHandler(deps:PrivateEvidenceHttpDeps) {
         }
         json(res,200,{ok:true,report,mayPublish:false,ownershipVerified:false,identityVerified:false});
         return;
+      }
+      if(route==='CIN_PREVIEW') {
+        if(!deps.previewCin){await reject(503,'UPSTREAM_UNAVAILABLE');return;}
+        if(req.headers['x-evidence-kind']||req.headers['x-page-number']||
+           req.headers['x-idempotency-key']||req.headers['x-declared-area-m2']||
+           single(req,'content-type')!=='application/octet-stream'){
+          await reject(400,'BAD_REQUEST');return;
+        }
+        const mime=single(req,'x-claimed-mime');
+        const sizeHeader=single(req,'content-length');
+        const length=sizeHeader&&/^[0-9]{1,8}$/.test(sizeHeader)?Number(sizeHeader):NaN;
+        if(!UUID.test(cinPreview![1]!)||
+           (mime!=='image/jpeg'&&mime!=='image/png')||
+           !Number.isSafeInteger(length)||length<20){
+          await reject(400,'BAD_REQUEST');return;
+        }
+        if(length>6*1024*1024){await reject(413,'FILE_REJECTED');return;}
+        let bytes:Uint8Array;
+        try {bytes=await limitedBody(req,length);}
+        catch{await reject(400,'FILE_REJECTED');return;}
+        try {
+          let fields:CinFields;
+          try {
+            fields=await deps.previewCin({bearerToken,caseId:cinPreview![1]!,
+              bytes,mime});
+          } catch(err) {
+            await reject(err instanceof CinPreviewDenied?403:503,
+              err instanceof CinPreviewDenied?'FORBIDDEN':'UPSTREAM_UNAVAILABLE');
+            return;
+          }
+          if(!fields||!Number.isInteger(fields.confidencePercent)||
+             fields.confidencePercent<0||fields.confidencePercent>100){
+            await reject(503,'UPSTREAM_UNAVAILABLE');return;
+          }
+          json(res,200,{ok:true,schemaVersion:1,engine:'arabic-v5',
+            ...fields,identityVerified:false,ownershipVerified:false,mayPublish:false});
+          return;
+        } finally {bytes.fill(0);}
       }
       const caseId=(ocrUpload??upload)![1]!;
       if(route==='OCR'&&!deps.analyzeOwnerUpload){await reject(503,'UPSTREAM_UNAVAILABLE');return;}
