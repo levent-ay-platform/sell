@@ -74,7 +74,9 @@ internal object TunisianDocumentFields {
     }
     fun areaM2(text:String):String? {
         val clean=asciiDigits(text)
-        val re=Regex("""(?:المساحة|superficie)\s*[:：]?\s*(\d{1,7}(?:[.,]\d{1,2})?)\s*(?:م\s*[²2]|m\s*[²2])""",RegexOption.IGNORE_CASE)
+        // Tunisian CPF printouts may show square metres simply as "م" rather than "م²".
+        // Only accept that abbreviated unit immediately after an explicit area label.
+        val re=Regex("""(?:المساحة|superficie)\s*[:：]?\s*(\d{1,7}(?:[.,]\d{1,2})?)\s*(?:م|m)(?:\s*[²2])?(?=\s|$|[،؛;:])""",RegexOption.IGNORE_CASE)
         return re.findAll(clean).map{it.groupValues[1]}.distinct().singleOrNull()
     }
     fun numberFromCinBand(text:String):String? {
