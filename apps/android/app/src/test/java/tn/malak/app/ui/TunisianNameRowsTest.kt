@@ -16,18 +16,18 @@ class TunisianNameRowsTest {
     @Test fun fixedFieldsWouldMissShiftedRowsButAdaptivePeaksFollowThem(){
         val a=TunisianNameRows.locate(trace(.520,.614,.715))
         assertNotNull(a)
-        assertEquals(395,a!!.surnameCenter,4)
-        assertEquals(467,a.givenCenter,4)
+        assertTrue(kotlin.math.abs(395-a!!.surnameCenter)<=4)
+        assertTrue(kotlin.math.abs(467-a.givenCenter)<=4)
         val b=TunisianNameRows.locate(trace(.559,.655,.735))
         assertNotNull(b)
-        assertEquals(425,b!!.surnameCenter,4)
-        assertEquals(498,b.givenCenter,4)
+        assertTrue(kotlin.math.abs(425-b!!.surnameCenter)<=4)
+        assertTrue(kotlin.math.abs(498-b.givenCenter)<=4)
     }
     @Test fun ignoreFatherRowAndRejectMissingPrintedGivenName(){
         val a=TunisianNameRows.locate(trace(.512,.597,.682))
         assertNotNull(a)
-        assertEquals(389,a!!.surnameCenter,4)
-        assertEquals(454,a.givenCenter,4)
+        assertTrue(kotlin.math.abs(389-a!!.surnameCenter)<=4)
+        assertTrue(kotlin.math.abs(454-a.givenCenter)<=4)
         assertNull(TunisianNameRows.locate(trace(.52)))
         assertNull(TunisianNameRows.locate(DoubleArray(760)))
     }
