@@ -1,3 +1,6 @@
+import java.security.MessageDigest
+import java.net.URL
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -83,7 +86,7 @@ val preparePublicArabicV5 by tasks.registering {
         for((name,expectedSha) in published){
             val file=dir.resolve(name)
             fun checksum():String {
-                val md=java.security.MessageDigest.getInstance("SHA-256")
+                val md=MessageDigest.getInstance("SHA-256")
                 file.inputStream().use{input->
                     val buf=ByteArray(16384)
                     while(true){
@@ -97,7 +100,7 @@ val preparePublicArabicV5 by tasks.registering {
             if(file.isFile&&checksum().equals(expectedSha,true))continue
             val partial=dir.resolve(name+".partial")
             try {
-                val url=java.net.URL(
+                val url=URL(
                     "https://huggingface.co/PaddlePaddle/arabic_PP-OCRv5_mobile_rec_onnx/resolve/main/$name"
                 )
                 val connection=url.openConnection()
