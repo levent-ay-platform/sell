@@ -98,7 +98,8 @@ private val Capacities = listOf(
 /**
  * Buyer-facing, private land draft wizard. There are no synthetic documents,
  * technical test sessions, manual API/token inputs or fabricated OCR results.
- * Selected documents are held in memory only and never uploaded by this screen.
+ * Photos are submitted only after explicit consent and verified owner authentication;
+ * raw OCR models remain on the isolated private Huawei service.
  */
 @Composable
 fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
