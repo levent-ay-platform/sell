@@ -64,27 +64,6 @@ private fun pairReasonText(code:String):Int=when(code){
     else->R.string.pair_reason_other
 }
 
-private fun readIdentityChoice(context:Context,uri:Uri,isPdf:Boolean):ChosenDocument? {
-    val mime=context.contentResolver.getType(uri)?:return null
-    if(if(isPdf)mime!="application/pdf" else mime !in setOf("image/jpeg","image/png"))
-        return null
-    var label=""
-    var length=0L
-    context.contentResolver.query(
-        uri,arrayOf(OpenableColumns.DISPLAY_NAME,OpenableColumns.SIZE),null,null,null
-    )?.use { cursor->
-        if(cursor.moveToFirst()) {
-            val nameIndex=cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-            val sizeIndex=cursor.getColumnIndex(OpenableColumns.SIZE)
-            if(nameIndex>=0&&!cursor.isNull(nameIndex))
-                label=cursor.getString(nameIndex).take(90)
-            if(sizeIndex>=0&&!cursor.isNull(sizeIndex))
-                length=cursor.getLong(sizeIndex)
-        }
-    }
-    if(length !in 20..MAX_DOC_BYTES)return null
-    return ChosenDocument(uri,label.ifBlank {uri.lastPathSegment?.take(50)?:"Document"},length,mime)
-}
 private enum class ReadingStatus { PENDING, READING, EXTRACTED, REVIEW }
 
 private data class CapacityOption(val code:String, val label:Int)
@@ -268,59 +247,13 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
         }
     }
 
-    // Explicitly bind recto to page 1 and verso to page 2. An unordered
-    // multi-file picker could silently swap sides and mislabel OCR evidence.
-    // None of these URI references are persisted to device preferences.
-    val pickIdentityPdf=rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri->
-        if(uri!=null) {
-            val chosen=runCatching{readIdentityChoice(context,uri,true)}.getOrNull()
-            if(chosen==null)identityMessage=R.string.identity_file_rejected
-            else {
-                identityFiles.forEach{PrivateCaptureMemory.discard(it.uri)}
-                pendingPhoto?.let{PrivateCaptureMemory.discard(it.uri)}
-                pendingPhoto=null
-                identityFiles.clear()
-                identityFiles.add(chosen)
-                identityMessage=R.string.file_selected
-            }
-        }
-    }
-    val pickIdentityFront=rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri->
-        if(uri!=null) {
-            val chosen=runCatching{readIdentityChoice(context,uri,false)}.getOrNull()
-            if(chosen==null)identityMessage=R.string.identity_file_rejected
-            else {
-                // New front invalidates any old back; user must pair them again.
-                pendingPhoto?.let{PrivateCaptureMemory.discard(it.uri)}
-                pendingPhoto=chosen
-                reviewSide=0
-                frontRead=null
-                identityMessage=0
-            }
-        }
-    }
-    val pickIdentityBack=rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri->
-        if(uri!=null) {
-            val chosen=runCatching{readIdentityChoice(context,uri,false)}.getOrNull()
-            if(chosen==null||identityFiles.size!=1||
-               identityFiles[0].mime=="application/pdf"||
-               chosen.uri==identityFiles[0].uri)
-                identityMessage=R.string.identity_file_rejected
-            else {
-                identityFiles.add(chosen)
-                identityMessage=R.string.file_selected
-            }
-        }
-    }
-    // One front-side photograph is sufficient for local *text* comparison.
-    // A complete PDF or a second photograph can still be supplied if needed.
-    val identitySelected=identityFiles.isNotEmpty()&&(
-        (identityFiles.size==1&&identityFiles[0].mime in
-            setOf("application/pdf","image/jpeg","image/png"))||
-        (identityFiles.size==2&&identityFiles.none{it.mime=="application/pdf"}))
-    val identityReadyForRemote=(identityFiles.size==1&&
-        identityFiles[0].mime=="application/pdf")||
-        (identityFiles.size==2&&identityFiles.none{it.mime=="application/pdf"})
+    // Only a freshly captured private in-memory front JPEG is admissible.
+    val identitySelected=identityFiles.size==1&&
+        identityFiles[0].mime=="image/jpeg"&&
+        PrivateCaptureMemory.isPrivate(identityFiles[0].uri)&&
+        PrivateCaptureMemory.length(identityFiles[0].uri)==identityFiles[0].length
+    // Legacy pair endpoint needs both sides; never bypass its validation.
+    val identityReadyForRemote=false
     // Tunisian/French comma is normalized only for numeric validation and API.
     val normalizedArea=area.replace(',', '.')
     val validArea=normalizedArea.matches(ValidLandArea)
@@ -345,12 +278,12 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
 
     if(cameraSide>=0){
         val side=cameraSide
-        TunisianIdCamera(back=side==1,onClose={cameraSide=-1},
+        TunisianIdCamera(back=false,onClose={cameraSide=-1},
             onPhoto={uri,length->
                 if(cameraSide==side){
                     pendingPhoto?.let{PrivateCaptureMemory.discard(it.uri)}
                     pendingPhoto=ChosenDocument(uri,"CIN-camera.jpg",length,"image/jpeg")
-                    reviewSide=side
+                    reviewSide=0
                     cameraSide=-1
                     identityMessage=0
                 }else PrivateCaptureMemory.discard(uri)
@@ -502,37 +435,8 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                                 Spacer(Modifier.width(8.dp))
                                 Text(s(R.string.camera_front_action))
                             }
-                            OutlinedButton(onClick={pickIdentityPdf.launch(arrayOf("application/pdf"))},
-                                modifier=Modifier.fillMaxWidth().heightIn(min=52.dp),shape=RoundedCornerShape(16.dp)) {
-                                Icon(Icons.Outlined.Description,null,Modifier.size(21.dp))
-                                Spacer(Modifier.width(8.dp))
-                                Text(s(R.string.pick_identity_pdf))
-                            }
-                            OutlinedButton(onClick={pickIdentityFront.launch(arrayOf("image/jpeg","image/png"))},
-                                modifier=Modifier.fillMaxWidth().heightIn(min=52.dp),shape=RoundedCornerShape(16.dp)) {
-                                Icon(Icons.Outlined.Badge,null,Modifier.size(21.dp))
-                                Spacer(Modifier.width(8.dp))
-                                Text(s(R.string.pick_identity_front))
-                            }
-                            OutlinedButton(onClick={cameraSide=1},
-                                enabled=identityFiles.size==1&&
-                                    identityFiles[0].mime!="application/pdf",
-                                modifier=Modifier.fillMaxWidth().heightIn(min=52.dp),
-                                shape=RoundedCornerShape(16.dp)){
-                                Icon(Icons.Outlined.CameraAlt,null,Modifier.size(20.dp))
-                                Spacer(Modifier.width(8.dp))
-                                Text(s(R.string.camera_back_action))
-                            }
-                            OutlinedButton(
-                                onClick={pickIdentityBack.launch(arrayOf("image/jpeg","image/png"))},
-                                enabled=identityFiles.size==1&&identityFiles[0].mime!="application/pdf",
-                                modifier=Modifier.fillMaxWidth().heightIn(min=52.dp),
-                                shape=RoundedCornerShape(16.dp)
-                            ) {
-                                Icon(Icons.Outlined.Badge,null,Modifier.size(21.dp))
-                                Spacer(Modifier.width(8.dp))
-                                Text(s(R.string.identity_back_optional))
-                            }
+                            Text(s(R.string.camera_field_guide_note),
+                                color=Brand.Muted,fontSize=12.sp)
                         }
                     }
                     if(pendingPhoto!=null){
@@ -593,8 +497,7 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                                             R.string.camera_review_ready
                                         else->R.string.camera_review_unreadable
                                     }),color=Brand.Muted,fontSize=12.sp)
-                                }else Text(s(R.string.camera_scan_back),
-                                    color=Brand.Muted,fontSize=12.sp)
+                                }
                                 Text(s(R.string.camera_review_privacy),
                                     fontSize=11.sp,color=Brand.Muted)
                             }
@@ -609,12 +512,8 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                                 Row(Modifier.fillMaxWidth().heightIn(min=56.dp).padding(horizontal=11.dp),
                                     verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(10.dp)) {
                                     Icon(Icons.Outlined.InsertDriveFile,null,tint=Brand.Crimson,modifier=Modifier.size(23.dp))
-                                    val faceLabel=when {
-                                        doc.mime=="application/pdf"->R.string.pick_identity_pdf
-                                        index==0->R.string.pick_identity_front
-                                        else->R.string.pick_identity_back
-                                    }
-                                    Text("${s(faceLabel)}: ${doc.displayName}",Modifier.weight(1f),
+                                    val faceLabel=R.string.camera_front_action
+                                     Text("${s(faceLabel)}: ${doc.displayName}",Modifier.weight(1f),
                                         color=Brand.Ink,maxLines=1,overflow=TextOverflow.Ellipsis,fontSize=13.sp)
                                     IconButton(onClick={
                                         identityFiles.forEach{PrivateCaptureMemory.discard(it.uri)}
@@ -628,8 +527,7 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                         }
                     }
                     if(!identitySelected)PlainNotice(Icons.Outlined.Info,s(R.string.identity_required))
-                    else if(identityFiles.size==1&&identityFiles[0].mime!="application/pdf")
-                        PlainNotice(Icons.Outlined.CheckCircle,s(R.string.pair_front_only))
+                    else PlainNotice(Icons.Outlined.CheckCircle,s(R.string.pair_front_only))
                     PlainNotice(Icons.Outlined.Lock,s(R.string.identity_privacy))
                 }
                 else -> {
@@ -884,7 +782,7 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                         pendingPhoto?.let{PrivateCaptureMemory.discard(it.uri)}
                         pendingPhoto=null
                         frontRead=null
-                        cameraSide=reviewSide
+                        cameraSide=0
                     },modifier=Modifier.weight(1f).heightIn(min=54.dp)){
                         Text(s(R.string.camera_review_retake))
                     }
@@ -897,17 +795,12 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                                 }
                                 identityFiles.clear()
                                 identityFiles.add(pending)
-                            }else if(identityFiles.size==1&&
-                                identityFiles[0].mime!="application/pdf"){
-                                identityFiles.add(pending)
                             }
                             pendingPhoto=null
                             frontRead=null
                             identityMessage=R.string.file_selected
                         }
-                    },enabled=(reviewSide==0&&frontRead?.readyForReview==true&&
-                        !frontReadBusy)||
-                        (reviewSide==1&&identityFiles.size==1),
+                    },enabled=frontRead?.readyForReview==true&&!frontReadBusy,
                         modifier=Modifier.weight(1f).heightIn(min=54.dp)){
                         Text(s(R.string.camera_review_accept))
                     }

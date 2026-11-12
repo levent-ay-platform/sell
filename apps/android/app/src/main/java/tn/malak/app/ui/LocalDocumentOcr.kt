@@ -21,7 +21,11 @@ internal object LocalDocumentOcr {
     ) {
         val readyForReview:Boolean get()=
             issue==null&&surname!=null&&givenName!=null&&fullName!=null&&
-            confidence>=65&&TunisianNameParser.canonical("$surname $givenName")==
+            confidence>=65&&cinLast4?.matches(Regex("""[0-9]{4}"""))==true&&
+            birthDate?.matches(Regex("""[0-9]{4}-[0-9]{2}-[0-9]{2}"""))==true&&
+            runCatching{!java.time.LocalDate.parse(birthDate)
+                .isAfter(java.time.LocalDate.now())}.getOrDefault(false)&&
+            TunisianNameParser.canonical("$surname $givenName")==
                 TunisianNameParser.canonical(fullName)
     }
     private const val MAX_IMAGE=6L*1024L*1024L
@@ -122,7 +126,11 @@ internal object LocalDocumentOcr {
             val last4=if(json.isNull("cinLast4"))null
                 else json.optString("cinLast4").takeIf{it.matches(Regex("""\d{4}"""))}
             val birth=if(json.isNull("birthDate"))null
-                else json.optString("birthDate").take(32)
+                else json.optString("birthDate").takeIf{
+                    it.matches(Regex("""[0-9]{4}-[0-9]{2}-[0-9]{2}"""))&&
+                    runCatching{!java.time.LocalDate.parse(it)
+                        .isAfter(java.time.LocalDate.now())}.getOrDefault(false)
+                }
             FrontScan(surname,given,
                 if(surname!=null&&given!=null)"$surname $given" else null,
                 last4,birth,confidence)
