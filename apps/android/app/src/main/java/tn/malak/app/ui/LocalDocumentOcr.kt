@@ -1,497 +1,133 @@
 package tn.malak.app.ui
 
 import android.content.Context
-import android.graphics.Bitmap
 import android.graphics.BitmapFactory
-import android.graphics.Matrix
-import android.media.ExifInterface
-import android.graphics.Canvas
-import android.graphics.Color
-import android.graphics.ColorMatrix
-import android.graphics.ColorMatrixColorFilter
-import android.graphics.Paint
-import android.graphics.pdf.PdfRenderer
 import android.net.Uri
-import com.googlecode.tesseract.android.TessBaseAPI
-import java.io.File
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.currentCoroutineContext
-import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
+import org.json.JSONObject
+import java.io.ByteArrayOutputStream
+import java.net.URI
+import java.net.URL
+import javax.net.ssl.HttpsURLConnection
 
-/**
- * Genuine OFFLINE OCR for the first-loop QA APK. Does not use the pilot token,
- * HTTP, Huawei, or any remote server. Document bytes and recognized names never
- * leave this Android process. No image/text cache is written. Only OCR language
- * models are installed permanently in app-private storage.
- *
- * All comparisons are PRELIMINARY TEXT checks; this does not validate a CIN,
- * a land certificate, current ownership, CPF registry, or authority to sell.
- */
+/** Lightweight Huawei OCR client. No native OCR or model in this APK. */
 internal object LocalDocumentOcr {
-    private const val MAX_BYTES = 12L * 1024L * 1024L
-    private const val MAX_IMAGE_EDGE = 2400
-    private const val MAX_PAGES = 8
-    // Keep document-specific labelled-name extraction independent of OCR
-    // engine details. Never match a father name/date or invented OCR letters.
-    private data class ScanPage(
-        val page:Int,val text:String,val confidence:Int,
-        val spatialNames:List<PairNameEvidence> = emptyList(),
-        val certificateFields:TunisianDocumentFields.Certificate?=null,
-        val identityFields:TunisianDocumentFields.Identity?=null
-    ) {
-        val source:String get() = if(text.any{it in '\u0600'..'\u06ff'}) "ocr-ar" else "ocr-fr"
-    }
-    private fun labelCandidates(pages:List<ScanPage>,identity:Boolean):List<PairNameEvidence> {
-        return pages.flatMap { page->
-            // Spatial parsing can explicitly detect contradictory surname/name
-            // fields and deliberately return null. Never resurrect an unsafe
-            // name from a generic OCR line when structured evidence failed.
-            if((identity&&page.identityFields!=null)||
-                (!identity&&page.certificateFields!=null)) {
-                page.spatialNames
-            } else {
-                val names=if(identity)TunisianNameParser.identity(page.text)
-                    else TunisianNameParser.certificate(page.text)
-                names.map{PairNameEvidence(it,page.page,page.source,page.confidence)}
-            }
-        }
-    }
-    private fun normalized(value:String):String=TunisianNameParser.canonical(value)
-    private fun oneName(candidates:List<PairNameEvidence>):PairNameEvidence? {
-        return candidates.firstOrNull()?.takeIf { first->
-            candidates.all { normalized(it.value)==normalized(first.value) }
-        }
-    }
-
-    private fun ensureModels(context:Context):String {
-        val root=File(context.noBackupFilesDir,"malak-ocr")
-        val folder=File(root,"tessdata")
-        if(!folder.exists() && !folder.mkdirs())throw IllegalStateException("OCR_MODEL_STORAGE")
-        for(lang in listOf("ara","fra")) {
-            val target=File(folder,lang+".traineddata")
-            val asset="tessdata/"+lang+".traineddata"
-            // Recheck every model on each run, never trust an empty or truncated copy.
-            if(!target.exists() || target.length()<100000L) {
-                val pending=File(folder,lang+".staging")
-                try {
-                    context.assets.open(asset).use { source ->
-                        pending.outputStream().use { out ->
-                            val buffer=ByteArray(32768)
-                            var total=0L
-                            while(true){
-                                val n=source.read(buffer)
-                                if(n<0)break
-                                total+=n
-                                if(total>20L*1024L*1024L)throw IllegalStateException("OCR_MODEL_TOO_LARGE")
-                                out.write(buffer,0,n)
-                            }
-                            buffer.fill(0)
-                        }
-                    }
-                    if(pending.length()<100000L || !pending.renameTo(target))
-                        throw IllegalStateException("OCR_MODEL_INVALID")
-                }finally{pending.delete()}
-            }
-        }
-        return root.absolutePath
-    }
-    private fun decodeImage(context:Context,uri:Uri):Bitmap {
-        val bounds=BitmapFactory.Options().apply{inJustDecodeBounds=true}
-        val boundsInput=context.contentResolver.openInputStream(uri)
-            ?:throw IllegalStateException("OCR_IMAGE_UNAVAILABLE")
-        boundsInput.use { BitmapFactory.decodeStream(it,null,bounds) }
-        if(bounds.outWidth !in 40..12000 || bounds.outHeight !in 40..12000 ||
-            bounds.outWidth.toLong()*bounds.outHeight>100000000L)
-            throw IllegalStateException("OCR_IMAGE_DIMENSIONS")
-        val opts=BitmapFactory.Options().apply {
-            inSampleSize=generateSequence(1){it*2}.first {
-                bounds.outWidth/it<=MAX_IMAGE_EDGE &&
-                bounds.outHeight/it<=MAX_IMAGE_EDGE
-            }
-            inPreferredConfig=Bitmap.Config.ARGB_8888
-        }
-        val decoded=context.contentResolver.openInputStream(uri)?.use{
-            BitmapFactory.decodeStream(it,null,opts)
-        }?:throw IllegalStateException("OCR_IMAGE_UNAVAILABLE")
-        // SAF gallery JPEGs can store the camera's orientation solely in EXIF.
-        // Pixel cropping/OCR must always receive an upright bitmap.
-        val orientation=runCatching {
-            context.contentResolver.openInputStream(uri)?.use{
-                ExifInterface(it).getAttributeInt(ExifInterface.TAG_ORIENTATION,
-                    ExifInterface.ORIENTATION_NORMAL)
-            }
-        }.getOrNull()?:ExifInterface.ORIENTATION_NORMAL
-        val rotation=when(orientation) {
-            ExifInterface.ORIENTATION_ROTATE_90->90f
-            ExifInterface.ORIENTATION_ROTATE_180->180f
-            ExifInterface.ORIENTATION_ROTATE_270->270f
-            else->0f
-        }
-        if(rotation==0f)return decoded
-        return try {
-            val matrix=Matrix().apply{postRotate(rotation)}
-            Bitmap.createBitmap(decoded,0,0,decoded.width,decoded.height,
-                matrix,true)
-        }finally{decoded.recycle()}
-    }
-    /** Region templates for an upright Tunisian CIN or CPF page. Read-only
-     * in-memory crops, never disk caching. The full-image fallback covers
-     * unrecognized layouts; it cannot override conflicting field readings.
-     */
-    private fun region(bitmap:Bitmap,left:Float,top:Float,right:Float,
-                       bottom:Float,grayscale:Boolean=true):Bitmap {
-        val x=(bitmap.width*left).toInt().coerceIn(0,bitmap.width-2)
-        val y=(bitmap.height*top).toInt().coerceIn(0,bitmap.height-2)
-        val w=(bitmap.width*right).toInt().minus(x).coerceIn(2,bitmap.width-x)
-        val h=(bitmap.height*bottom).toInt().minus(y).coerceIn(2,bitmap.height-y)
-        val crop=Bitmap.createBitmap(bitmap,x,y,w,h)
-        if(!grayscale)return crop
-        val output=Bitmap.createBitmap(crop.width,crop.height,Bitmap.Config.ARGB_8888)
-        try{
-            val gray=ColorMatrix().apply{setSaturation(0f)}
-            val paint=Paint(Paint.FILTER_BITMAP_FLAG).apply{
-                colorFilter=ColorMatrixColorFilter(gray)
-            }
-            Canvas(output).apply{
-                drawColor(Color.WHITE)
-                drawBitmap(crop,0f,0f,paint)
-            }
-        }finally{crop.recycle()}
-        return output
-    }
-    /** Bounded mean-adaptive threshold for tiny printed numeric fields.
-     * Pure Android; only a temporary in-memory bitmap, at most one OCR worker.
-     */
-    private fun adaptiveDigitCrop(input:Bitmap):Bitmap {
-        val w=input.width*5;val h=input.height*5
-        val scaled=Bitmap.createScaledBitmap(input,w,h,true)
-        try {
-            val pixels=IntArray(w*h)
-            scaled.getPixels(pixels,0,w,0,0,w,h)
-            val gray=IntArray(w*h)
-            val sums=LongArray((w+1)*(h+1))
-            for(y in 0 until h) {
-                var row=0L
-                for(x in 0 until w) {
-                    val p=pixels[y*w+x]
-                    val lum=(299*Color.red(p)+587*Color.green(p)+
-                        114*Color.blue(p))/1000
-                    gray[y*w+x]=lum
-                    row+=lum
-                    sums[(y+1)*(w+1)+x+1]=sums[y*(w+1)+x+1]+row
-                }
-            }
-            for(y in 0 until h) {
-                val y0=(y-7).coerceAtLeast(0)
-                val y1=(y+7).coerceAtMost(h-1)
-                for(x in 0 until w) {
-                    val x0=(x-7).coerceAtLeast(0)
-                    val x1=(x+7).coerceAtMost(w-1)
-                    val a=(y1+1)*(w+1)+x1+1
-                    val b=y0*(w+1)+x1+1
-                    val c=(y1+1)*(w+1)+x0
-                    val d=y0*(w+1)+x0
-                    val mean=(sums[a]-sums[b]-sums[c]+sums[d])/
-                        ((x1-x0+1)*(y1-y0+1))
-                    pixels[y*w+x]=if(gray[y*w+x]>mean-6)
-                        Color.WHITE else Color.BLACK
-                }
-            }
-            return Bitmap.createBitmap(w,h,Bitmap.Config.ARGB_8888).also{
-                it.setPixels(pixels,0,w,0,0,w,h)
-            }
-        }finally{scaled.recycle()}
-    }
-    private fun readText(api:TessBaseAPI,bitmap:Bitmap,
-        psm:Int=TessBaseAPI.PageSegMode.PSM_SINGLE_BLOCK,
-        digitsOnly:Boolean=false):ScanPage {
-        val previousMode=api.getPageSegMode()
-        try {
-            api.setPageSegMode(psm)
-            if(digitsOnly)api.setVariable(TessBaseAPI.VAR_CHAR_WHITELIST,
-                "0123456789")
-            api.clear()
-            api.setImage(bitmap)
-            return ScanPage(1,api.getUTF8Text().orEmpty().take(60000),
-                api.meanConfidence().coerceIn(0,100))
-        }finally {
-            if(digitsOnly)api.setVariable(TessBaseAPI.VAR_CHAR_WHITELIST,"")
-            api.setPageSegMode(previousMode)
-        }
-    }
-    private fun ocrSingle(context:Context,api:TessBaseAPI,bitmap:Bitmap,index:Int,
-                          identity:Boolean):ScanPage {
-        fun readBox(l:Float,t:Float,r:Float,b:Float,gray:Boolean=true):ScanPage {
-            val crop=region(bitmap,l,t,r,b,gray)
-            return try{readText(api,crop)}finally{crop.recycle()}
-        }
-        fun readDigits(l:Float,t:Float,r:Float,b:Float,
-                       adaptive:Boolean):ScanPage {
-            val crop=region(bitmap,l,t,r,b)
-            val prepared=try {
-                if(adaptive)adaptiveDigitCrop(crop)
-                else Bitmap.createScaledBitmap(crop,crop.width*4,crop.height*4,true)
-            }finally{crop.recycle()}
-            return try {
-                readText(api,prepared,TessBaseAPI.PageSegMode.PSM_SINGLE_BLOCK,
-                    digitsOnly=true)
-            }finally{prepared.recycle()}
-        }
-        try {
-            if(identity){
-                if(index>1) {
-                    // The reverse side is not a substitute for a front name.
-                    return ScanPage(index,"",0,identityFields=
-                        TunisianDocumentFields.Identity(null,null,null,null,null))
-                }
-                val v5=runCatching{TunisianCardV5.read(context,bitmap)}.getOrNull()
-                if(v5==null) {
-                    // Never revive the old Tesseract arbitrary-label fallback
-                    // (which displayed "RATIO" on real user photos).
-                    return ScanPage(index,"",0,identityFields=
-                        TunisianDocumentFields.Identity(null,null,null,null,null))
-                }
-                // The v5 numeric crop has been independently confirmed
-                // in color and grayscale (two equal 8-digit readings).
-                // Birth date stays uncertain unless the text is legible.
-                val birth=readBox(.33f,.73f,.93f,.86f)
-                val fields=TunisianDocumentFields.Identity(
-                    v5.surname,v5.given,v5.name,v5.cinNumber,
-                    TunisianDocumentFields.birthDate(birth.text))
-                val name=PairNameEvidence(v5.name,index,"ocr-ar-v5",v5.confidence)
-                return ScanPage(index,"",v5.confidence,
-                    listOf(name),identityFields=fields)
-            }
-            // Certificate header, registered-owner area and page footer are
-            // much smaller than a whole A4 scan. Query them independently.
-            val ownerZone=readBox(.39f,.43f,.98f,.77f)
-            val ownerOnly=readBox(.69f,.576f,.88f,.62f)
-            val topFields=readBox(.12f,.15f,.97f,.38f)
-            val footer=readBox(.07f,.84f,.97f,.96f)
-            val pageFooter=readBox(.085f,.867f,.205f,.902f)
-            var all=topFields.text+"\n"+ownerZone.text+"\n"+
-                footer.text+"\n"+pageFooter.text
-            var fields=TunisianDocumentFields.certificate(
-                all,ownerZone.text,topFields.text,pageFooter.text+"\n"+footer.text)
-            val lineOwner=TunisianDocumentFields.certificateOwnerOnlyBand(
-                ownerOnly.text)
-            fun corroboratedOwner(name:String?,text:String):String? {
-                if(name==null)return null
-                val reported=TunisianNameParser.certificate(text)
-                return name.takeIf { candidate->
-                    reported.all {
-                        TunisianNameParser.canonical(it)==
-                            TunisianNameParser.canonical(candidate)
-                    }
-                }
-            }
-            if(lineOwner!=null) {
-                val safe=corroboratedOwner(lineOwner,all)
-                fields=fields.copy(owner=when {
-                    safe==null -> null
-                    fields.owner!=null&&TunisianNameParser.canonical(fields.owner)!=
-                        TunisianNameParser.canonical(safe)->null
-                    else -> safe
-                })
-            }
-            if(index==1) {
-                // Read the printed area twice: header + independent total line.
-                // Never silently convert a digit misread as S into 5.
-                val areaHead=readDigits(.398f,.279f,.44f,.31f,true)
-                val areaTotal=readDigits(.363f,.693f,.44f,.73f,false)
-                val confirmed=TunisianDocumentFields.confirmedAreaDigits(
-                    areaHead.text,areaTotal.text)
-                val labeled=fields.areaM2
-                fields=fields.copy(areaM2=when {
-                    confirmed!=null&&(labeled==null||labeled==confirmed)->confirmed
-                    confirmed!=null&&labeled!=confirmed->null
-                    else->labeled
-                })
-            }
-            var confidence=if(lineOwner!=null)ownerOnly.confidence
-                else ownerZone.confidence
-            if(fields.owner==null){
-                val full=readText(api,bitmap)
-                all=all+"\n"+full.text
-                val recovered=TunisianDocumentFields.certificate(
-                    all,ownerZone.text,topFields.text+"\n"+full.text,
-                    pageFooter.text+"\n"+footer.text+"\n"+full.text)
-                val safer=if(lineOwner==null)null else corroboratedOwner(
-                    lineOwner,all)
-                fields=recovered.copy(owner=when {
-                    safer==null -> recovered.owner
-                    recovered.owner!=null&&TunisianNameParser.canonical(
-                        recovered.owner)!=TunisianNameParser.canonical(safer)->null
-                    else -> safer
-                },areaM2=fields.areaM2?:recovered.areaM2)
-                confidence=minOf(confidence,full.confidence)
-            }
-            val names=fields.owner?.let{listOf(PairNameEvidence(
-                it,index,"ocr-ar",confidence))}.orEmpty()
-            return ScanPage(index,all,confidence,names,certificateFields=fields)
-        }finally{bitmap.recycle()}
-    }
-    private suspend fun scanInput(context:Context,api:TessBaseAPI,
-        files:List<PairEvidenceFile>,identity:Boolean):List<ScanPage>{
-        val output=mutableListOf<ScanPage>()
-        for((position,file) in files.withIndex()) {
-            currentCoroutineContext().ensureActive()
-            if(file.expectedBytes !in 20..MAX_BYTES ||file.uri.scheme!="content")
-                throw IllegalStateException("OCR_FILE_REJECTED")
-            if(file.mime=="application/pdf") {
-                if(files.size!=1)throw IllegalStateException("OCR_PDF_ORDER")
-                // SAF grants access to this exact URI only; never copy it to a
-                // public folder or try to discover other document locations.
-                val fd=context.contentResolver.openFileDescriptor(file.uri,"r")
-                    ?:throw IllegalStateException("OCR_PDF_UNAVAILABLE")
-                PdfRenderer(fd).use { pdf ->
-                    if(pdf.pageCount !in 1..MAX_PAGES)
-                        throw IllegalStateException("OCR_PDF_PAGES")
-                    for(i in 0 until pdf.pageCount) {
-                        currentCoroutineContext().ensureActive()
-                        pdf.openPage(i).use { page ->
-                            val factor=(MAX_IMAGE_EDGE.toFloat()/maxOf(page.width,page.height)).coerceAtMost(2.0f)
-                            val w=(page.width*factor).toInt().coerceAtLeast(60)
-                            val h=(page.height*factor).toInt().coerceAtLeast(60)
-                            val bmp=Bitmap.createBitmap(w,h,Bitmap.Config.ARGB_8888)
-                            Canvas(bmp).drawColor(Color.WHITE)
-                            try {
-                                page.render(bmp,null,null,PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
-                                output.add(ocrSingle(context,api,bmp,i+1,identity))
-                            }catch(t:Throwable){
-                                if(!bmp.isRecycled)bmp.recycle()
-                                throw t
-                            }
-                        }
-                    }
-                }
-            } else {
-                if(file.mime !in setOf("image/jpeg","image/png","image/tiff")||
-                    files.size>MAX_PAGES)throw IllegalStateException("OCR_FILE_TYPE")
-                output.add(ocrSingle(context,api,decodeImage(context,file.uri),position+1,identity))
-            }
-        }
-        return output
-    }
-
-    /** Preview the front while still on the capture screen. The user sees
-     * unreadable/missing fields immediately, rather than after navigating.
-     */
-    internal enum class FrontIssue { LOW_RESOLUTION }
+    internal enum class FrontIssue { LOW_RESOLUTION, SESSION_REQUIRED, SERVICE_UNAVAILABLE }
     internal data class FrontScan(
         val surname:String?,val givenName:String?,val fullName:String?,
         val cinLast4:String?,val birthDate:String?,val confidence:Int,
         val issue:FrontIssue?=null
-    ){
+    ) {
         val readyForReview:Boolean get()=
-            issue==null&&fullName!=null&&surname!=null&&givenName!=null&&
-                confidence>=65&&
-                TunisianNameParser.canonical("$surname $givenName")==
-                    TunisianNameParser.canonical(fullName)
+            issue==null&&surname!=null&&givenName!=null&&fullName!=null&&
+            confidence>=65&&TunisianNameParser.canonical("$surname $givenName")==
+                TunisianNameParser.canonical(fullName)
     }
-
-    suspend fun inspectFront(context:Context,uri:Uri,length:Long,mime:String):FrontScan=
-        withContext(Dispatchers.IO){
-            if(mime=="image/jpeg"||mime=="image/png"){
-                // This check intentionally runs BEFORE loading OCR models.
-                // A low resolution thumbnail cannot be fixed by scaling.
-                val options=BitmapFactory.Options().apply{inJustDecodeBounds=true}
-                val input=context.contentResolver.openInputStream(uri)
-                    ?:throw IllegalStateException("OCR_IMAGE_UNAVAILABLE")
-                input.use{BitmapFactory.decodeStream(it,null,options)}
-                // Small photos are not automatically unreadable. Some of
-                // the consented 300px Tunisian samples are readable by v5.
-                // Let field confidence, not an arbitrary pixel cutoff, decide.
-                if(minOf(options.outWidth,options.outHeight)<175 ||
-                    maxOf(options.outWidth,options.outHeight)<260)
-                    return@withContext FrontScan(null,null,null,null,null,0,
-                        FrontIssue.LOW_RESOLUTION)
-            }
-            val engine=TessBaseAPI()
-            try{
-                if(!engine.init(ensureModels(context),"ara+fra"))
-                    throw IllegalStateException("OCR_ENGINE_UNAVAILABLE")
-                val scans=scanInput(context,engine,
-                    listOf(PairEvidenceFile(uri,length,mime)),true)
-                val scan=scans.firstOrNull()
-                    ?:throw IllegalStateException("OCR_IMAGE_UNAVAILABLE")
-                val fields=scan.identityFields
-                val name=oneName(labelCandidates(scans.take(1),true))
-                FrontScan(
-                    fields?.surname,fields?.givenName,name?.value,
-                    fields?.cinNumber?.takeLast(4),fields?.dateOfBirth,
-                    name?.confidence?:scan.confidence
-                )
-            }finally{engine.recycle()}
-        }
-
-    suspend fun readAndCompare(context:Context,
-        certificates:List<PairEvidenceFile>,identity:List<PairEvidenceFile>,
-        onProgress:(PairProgress)->Unit={}
-    ):CertificateIdentityReview=withContext(Dispatchers.IO) {
-        if(certificates.isEmpty()||identity.isEmpty()||
-            certificates.size>MAX_PAGES||identity.size>2||
-            (certificates.size>1&&certificates.any{it.mime=="application/pdf"})||
-            (identity.size==2&&identity.any{it.mime=="application/pdf"})||
-            (certificates+identity).map{it.uri}.distinct().size!=certificates.size+identity.size)
-            throw IllegalStateException("OCR_DOCUMENT_SELECTION")
-        val api=TessBaseAPI()
+    private const val MAX_IMAGE=6L*1024L*1024L
+    private val UUID=Regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$")
+    private val TOKEN=Regex("^[A-Za-z0-9._~+/-]{20,4096}$")
+    private val AR=Regex("""^[\u0621-\u064a]+(?: [\u0621-\u064a]+){0,3}$""")
+    private fun no(issue:FrontIssue)=FrontScan(null,null,null,null,null,0,issue)
+    private fun field(json:JSONObject,key:String):String? {
+        if(json.isNull(key))return null
+        val v=json.optString(key).trim().replace(Regex("""\s+""")," ")
+        if(v.isEmpty())return null
+        if(v.length !in 2..55||!AR.matches(v))
+            throw IllegalStateException("HUAWEI_OCR_BAD_FIELD")
+        return v
+    }
+    suspend fun inspectFront(context:Context,uri:Uri,length:Long,mime:String,
+        session:OwnerEvidenceSession?):FrontScan=withContext(Dispatchers.IO) {
+        if(session==null)return@withContext no(FrontIssue.SESSION_REQUIRED)
+        if(uri.scheme!="content"||mime !in setOf("image/jpeg","image/png")||
+            length !in 20..MAX_IMAGE||!UUID.matches(session.caseId)||
+            !TOKEN.matches(session.bearer))
+            return@withContext no(FrontIssue.SERVICE_UNAVAILABLE)
+        val dims=BitmapFactory.Options().apply{inJustDecodeBounds=true}
+        val src=context.contentResolver.openInputStream(uri)
+            ?:return@withContext no(FrontIssue.SERVICE_UNAVAILABLE)
+        src.use{BitmapFactory.decodeStream(it,null,dims)}
+        if(dims.outWidth<175||dims.outHeight<175)
+            return@withContext no(FrontIssue.LOW_RESOLUTION)
+        val base=runCatching{URI(session.httpsBaseUrl.trim())}.getOrNull()
+            ?:return@withContext no(FrontIssue.SERVICE_UNAVAILABLE)
+        if(base.scheme!="https"||base.host.isNullOrBlank()||base.userInfo!=null||
+            base.query!=null||base.fragment!=null||
+            (base.path!=""&&base.path!="/")||base.port !in -1..65535)
+            return@withContext no(FrontIssue.SERVICE_UNAVAILABLE)
+        val address=base.toASCIIString().trimEnd('/')+
+            "/internal/v1/evidence/"+session.caseId+"/preview-cin"
+        val conn=(URL(address).openConnection() as? HttpsURLConnection)
+            ?:return@withContext no(FrontIssue.SERVICE_UNAVAILABLE)
         try {
-            // French OCR includes Latin-script names; two models initialize
-            // faster than running Arabic, French and English simultaneously.
-            if(!api.init(ensureModels(context),"ara+fra"))
-                throw IllegalStateException("OCR_ENGINE_UNAVAILABLE")
-            withContext(Dispatchers.Main){onProgress(PairProgress.CERTIFICATE_UPLOAD)}
-            val cert=scanInput(context,api,certificates,false)
-            withContext(Dispatchers.Main){onProgress(PairProgress.IDENTITY_UPLOAD)}
-            val id=scanInput(context,api,identity,true)
-            withContext(Dispatchers.Main){onProgress(PairProgress.COMPARING)}
-            val certCandidates=labelCandidates(cert,false)
-            val identityCandidates=labelCandidates(id,true)
-            val owner=oneName(certCandidates)
-            val person=oneName(identityCandidates)
-            // A front-facing CIN is enough for this first-stage *text*
-            // comparison. The back is optional and not proof of identity.
-            val enoughImages=id.isNotEmpty() && cert.isNotEmpty()
-            // Whole-image OCR confidence includes watermarks and portraits.
-            // Below 65% we cannot assert a textual mismatch; request review.
-            val minimumConfidence=minOf(owner?.confidence?:0,person?.confidence?:0)
-            val missingCertificatePages=cert.mapNotNull{ page->
-                page.certificateFields?.expectedPages
-                    ?:TunisianNameParser.declaredPages(page.text)
-            }.any{it>cert.size}
-            val ambiguity=(certCandidates.size>1 && owner==null)||
-                (identityCandidates.size>1&&person==null)
-            val assessment=TunisianNameParser.assess(
-                if(!enoughImages||ambiguity)null else owner?.value,
-                person?.value,minimumConfidence,missingCertificatePages)
-            val reasons=mutableListOf("OFFICIAL_CPF_AND_DOCUMENT_AUTHENTICITY_NOT_CHECKED")
-            if(missingCertificatePages)reasons.add("CERTIFICATE_PAGES_MISSING")
-            if(certCandidates.size>1&&owner==null)
-                reasons.add("MULTIPLE_OWNERS_OR_SHARED_TITLE_NEEDS_REVIEW")
-            if(owner==null||person==null||ambiguity)
-                reasons.add("MISSING_OR_AMBIGUOUS_LABELED_NAME")
-            if(minimumConfidence<92 && assessment!="PRELIMINARY_TEXT_AGREEMENT")
-                reasons.add("LOW_OCR_CONFIDENCE")
-            if(assessment=="TEXT_DIFFERENCE_NEEDS_REVIEW")
-                reasons.add("NAME_TEXT_DIFFERS_OR_SCRIPT_MISMATCH")
-            val land=cert.mapNotNull{it.certificateFields}.firstOrNull()
-            val card=id.mapNotNull{it.identityFields}.firstOrNull()
-            val localFields=LocalOcrFields(
-                titleNumber=land?.titleNumber,areaM2=land?.areaM2,
-                expectedCertificatePages=land?.expectedPages,
-                surname=card?.surname,givenName=card?.givenName,
-                cinLast4=card?.cinNumber?.takeLast(4),
-                birthDate=card?.dateOfBirth)
-            CertificateIdentityReview(
-                assessment,owner,person,"NOT_COMPARABLE",reasons,
-                if(identity.size==2)"TWO_FILES_UNCONFIRMED"
-                else if(id.size>=2)"MULTI_PAGE_UNCONFIRMED" else "FRONT_ONLY",
-                cert.size,id.size,
-                ownershipVerified=false,identityVerified=false,mayPublish=false,
-                localFields=localFields
-            )
-        }finally { api.recycle() }
+            conn.requestMethod="POST"
+            conn.instanceFollowRedirects=false
+            conn.connectTimeout=7000
+            conn.readTimeout=35000
+            conn.useCaches=false
+            conn.doOutput=true
+            conn.setRequestProperty("Authorization","Bearer "+session.bearer)
+            conn.setRequestProperty("Cache-Control","no-store")
+            conn.setRequestProperty("Content-Type","application/octet-stream")
+            conn.setRequestProperty("X-Claimed-Mime",mime)
+            conn.setFixedLengthStreamingMode(length.toInt())
+            val input=context.contentResolver.openInputStream(uri)
+                ?:return@withContext no(FrontIssue.SERVICE_UNAVAILABLE)
+            input.use{source->
+                conn.outputStream.use{out->
+                    val buf=ByteArray(32768)
+                    try{
+                        var sent=0L
+                        while(true){
+                            val n=source.read(buf)
+                            if(n<0)break
+                            sent+=n
+                            if(sent>length||sent>MAX_IMAGE)
+                                throw IllegalStateException("HUAWEI_IMAGE_LENGTH")
+                            out.write(buf,0,n)
+                        }
+                        if(sent!=length)throw IllegalStateException("HUAWEI_IMAGE_LENGTH")
+                    }finally{buf.fill(0)}
+                }
+            }
+            if(conn.responseCode!=200)
+                return@withContext no(FrontIssue.SERVICE_UNAVAILABLE)
+            val bytes=conn.inputStream.use{input->
+                val out=ByteArrayOutputStream()
+                val buf=ByteArray(4096)
+                try{
+                    while(true){
+                        val n=input.read(buf)
+                        if(n<0)break
+                        if(out.size()+n>4096)
+                            throw IllegalStateException("HUAWEI_OCR_REPLY_TOO_LARGE")
+                        out.write(buf,0,n)
+                    }
+                    out.toByteArray()
+                }finally{buf.fill(0);out.reset()}
+            }
+            val json=try{JSONObject(String(bytes,Charsets.UTF_8))}
+                finally{bytes.fill(0)}
+            if(!json.optBoolean("ok")||json.optInt("schemaVersion")!=1||
+                json.optBoolean("identityVerified",true)||
+                json.optBoolean("ownershipVerified",true)||
+                json.optBoolean("mayPublish",true)||
+                json.optString("engine")!="arabic-v5")
+                throw IllegalStateException("HUAWEI_OCR_UNSAFE_REPLY")
+            val surname=field(json,"surname")
+            val given=field(json,"givenName")
+            val confidence=json.optInt("confidencePercent",-1)
+            if(confidence !in 0..100)throw IllegalStateException("HUAWEI_OCR_BAD_CONFIDENCE")
+            val last4=if(json.isNull("cinLast4"))null
+                else json.optString("cinLast4").takeIf{it.matches(Regex("""\d{4}"""))}
+            val birth=if(json.isNull("birthDate"))null
+                else json.optString("birthDate").take(32)
+            FrontScan(surname,given,
+                if(surname!=null&&given!=null)"$surname $given" else null,
+                last4,birth,confidence)
+        }catch (cancel:kotlinx.coroutines.CancellationException){throw cancel}
+        catch (_:Exception){no(FrontIssue.SERVICE_UNAVAILABLE)}
+        finally{conn.disconnect()}
     }
 }
