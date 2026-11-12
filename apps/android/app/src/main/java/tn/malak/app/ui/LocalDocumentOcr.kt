@@ -427,7 +427,10 @@ internal object LocalDocumentOcr {
         val surname:String?,val givenName:String?,val fullName:String?,
         val cinLast4:String?,val birthDate:String?,val confidence:Int
     ){
-        val readyForReview:Boolean get()=fullName!=null&&confidence>=65
+        val readyForReview:Boolean get()=
+            fullName!=null&&surname!=null&&givenName!=null&&confidence>=65&&
+                TunisianNameParser.canonical("$surname $givenName")==
+                    TunisianNameParser.canonical(fullName)
     }
 
     suspend fun inspectFront(context:Context,uri:Uri,length:Long,mime:String):FrontScan=
