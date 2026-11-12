@@ -13,7 +13,7 @@ import javax.net.ssl.HttpsURLConnection
 
 /** Lightweight Huawei OCR client. No native OCR or model in this APK. */
 internal object LocalDocumentOcr {
-    internal enum class FrontIssue { LOW_RESOLUTION, SESSION_REQUIRED, SERVICE_UNAVAILABLE }
+    internal enum class FrontIssue { LOW_RESOLUTION, CONSENT_REQUIRED, SESSION_REQUIRED, SERVICE_UNAVAILABLE }
     internal data class FrontScan(
         val surname:String?,val givenName:String?,val fullName:String?,
         val cinLast4:String?,val birthDate:String?,val confidence:Int,
