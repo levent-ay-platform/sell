@@ -252,15 +252,12 @@ internal object LocalDocumentOcr {
                     return ScanPage(index,"",0,identityFields=
                         TunisianDocumentFields.Identity(null,null,null,null,null))
                 }
-                // Numeric fields remain separate from the Arabic recognizer.
-                // Never trust an unlabelled 8-digit number from a full-page scan.
-                val numberBand=readBox(.34f,.30f,.72f,.42f)
-                val numberInColour=readBox(.34f,.30f,.72f,.42f,false)
-                val confirmedCin=TunisianDocumentFields.repeatableCin(
-                    numberBand.text,numberInColour.text)
+                // The v5 numeric crop has been independently confirmed
+                // in color and grayscale (two equal 8-digit readings).
+                // Birth date stays uncertain unless the text is legible.
                 val birth=readBox(.33f,.73f,.93f,.86f)
                 val fields=TunisianDocumentFields.Identity(
-                    v5.surname,v5.given,v5.name,confirmedCin,
+                    v5.surname,v5.given,v5.name,v5.cinNumber,
                     TunisianDocumentFields.birthDate(birth.text))
                 val name=PairNameEvidence(v5.name,index,"ocr-ar-v5",v5.confidence)
                 return ScanPage(index,"",v5.confidence,
