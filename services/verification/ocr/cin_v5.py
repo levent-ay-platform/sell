@@ -13,6 +13,7 @@ import cv2
 import numpy as np
 import onnxruntime as ort
 import yaml
+from cin_v5_vote import select_name
 
 MODEL_ROOT=Path("/opt/malak/models/arabic-v5")
 ARABIC=re.compile(r"^[\u0621-\u064a]+(?: [\u0621-\u064a]+){0,3}$")
@@ -211,32 +212,14 @@ def arabic_only(s):
     return None
 
 
-def normalized_arabic_candidate(text):
-    # This is a COMPARISON KEY only, never a silent correction of a legal name.
-    return " ".join(text.replace("\u0649","\u064a").split())
-
-
 def consensus_name(session,letters,card,center):
-    # Same detected printed row, independently read at three label-safe
-    # horizontal offsets. A single high-confidence hallucination cannot pass.
-    from collections import Counter
-    options=[]
-    for left in (.36,.46,.52):
-        text,score=recognize(session,letters,field_crop(card,center,left))
-        arabic=arabic_only(text)
-        if arabic is not None and score>=.72:
-            options.append((normalized_arabic_candidate(arabic),arabic,score))
-    counts=Counter(key for key,_,__ in options)
-    if not counts:
-        return None,0.
-    winner,agreements=counts.most_common(1)[0]
-    if agreements<2 or (len(counts)>1 and
-                         counts.most_common(2)[1][1]==agreements):
-        return None,0.
-    accepted=[(raw,score) for key,raw,score in options if key==winner]
-    # Display the unmodified script returned by the best agreeing reading.
-    original,confidence=max(accepted,key=lambda item:item[1])
-    return original,min(score for _,score in accepted)
+    # Three independent label-safe horizontal crops; field text must agree
+    # in at least two, never choose by model confidence alone.
+    candidates=[
+        recognize(session,letters,field_crop(card,center,left))
+        for left in (.36,.46,.52)
+    ]
+    return select_name(candidates)
 
 
 def cin_number(session,letters,card):
