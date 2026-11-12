@@ -113,6 +113,38 @@ class TunisianDocumentFieldsTest {
         assertFalse(ok.copy(fullName="المهدي يسرى").readyForReview)
         assertFalse(ok.copy(confidence=45).readyForReview)
     }
+    @Test fun screenshotRatioCannotBecomeANameOrSurname() {
+        val hallucinated=TunisianDocumentFields.identity(
+            "بطاقة التعريف الوطنية",
+            "RATIO",
+            "RATIO",
+            "",
+            "")
+        assertNull(hallucinated.surname)
+        assertNull(hallucinated.givenName)
+        assertNull(hallucinated.name)
+        val labelled=TunisianDocumentFields.identity(
+            "اللقب: RATIO\nالاسم: RATIO",
+            "اللقب: RATIO",
+            "الاسم: RATIO",
+            "",
+            "")
+        assertNull(labelled.surname)
+        assertNull(labelled.givenName)
+        assertNull(labelled.name)
+        assertTrue(TunisianNameParser.identity(
+            "اللقب: RATIO\nالاسم: RATIO").isEmpty())
+    }
+    @Test fun tunisiaArabicLabelsStillAcceptRealArabicComponents(){
+        val card=TunisianDocumentFields.identity(
+            "بيانات التعريف","اللقب: بن المثال",
+            "الاسم: عبد المالك","","")
+        assertEquals("بن المثال",card.surname)
+        assertEquals("عبد المالك",card.givenName)
+        assertEquals("بن المثال عبد المالك",card.name)
+        assertNull(TunisianDocumentFields.identity(
+            "","اللقب","الاسم","", "").name)
+    }
     @Test fun noUnlabelledAreaOrTitleGuess(){
         assertNull(TunisianDocumentFields.titleNumber("رقم 654321"))
         assertNull(TunisianDocumentFields.areaM2("150 متر"))
