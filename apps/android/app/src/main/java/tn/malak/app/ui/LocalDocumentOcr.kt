@@ -161,11 +161,11 @@ internal object LocalDocumentOcr {
                 }
             }
             for(y in 0 until h) {
-                val y0=(y-10).coerceAtLeast(0)
-                val y1=(y+10).coerceAtMost(h-1)
+                val y0=(y-7).coerceAtLeast(0)
+                val y1=(y+7).coerceAtMost(h-1)
                 for(x in 0 until w) {
-                    val x0=(x-10).coerceAtLeast(0)
-                    val x1=(x+10).coerceAtMost(w-1)
+                    val x0=(x-7).coerceAtLeast(0)
+                    val x1=(x+7).coerceAtMost(w-1)
                     val a=(y1+1)*(w+1)+x1+1
                     val b=y0*(w+1)+x1+1
                     val c=(y1+1)*(w+1)+x0
