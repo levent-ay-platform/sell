@@ -65,7 +65,7 @@ def order_quad(poly):
 def normalize_card(image):
     h,w=image.shape[:2]
     if h>w*1.13:
-        image=image[:int(.52*h),int(.06*w):int(.96*w)]
+        image=image[12:round(.49*h),round(.06*w):round(.96*w)]
     sh,sw=image.shape[:2]
     scale=min(1.0,900/max(sh,sw))
     small=cv2.resize(image,None,fx=scale,fy=scale)
@@ -154,9 +154,9 @@ def find_name_rows(card):
     return best
 
 
-def field_crop(card,center):
+def field_crop(card,center,left_fraction=.46):
     h,w=card.shape[:2]
-    left,right=int(w*.46),int(w*.88)
+    left,right=int(w*left_fraction),int(w*.88)
     top=max(0,round(center-h*.050))
     bottom=min(h,round(center+h*.046))
     if right-left<25 or bottom-top<18:
@@ -211,6 +211,34 @@ def arabic_only(s):
     return None
 
 
+def normalized_arabic_candidate(text):
+    # This is a COMPARISON KEY only, never a silent correction of a legal name.
+    return " ".join(text.replace("\u0649","\u064a").split())
+
+
+def consensus_name(session,letters,card,center):
+    # Same detected printed row, independently read at three label-safe
+    # horizontal offsets. A single high-confidence hallucination cannot pass.
+    from collections import Counter
+    options=[]
+    for left in (.36,.46,.52):
+        text,score=recognize(session,letters,field_crop(card,center,left))
+        arabic=arabic_only(text)
+        if arabic is not None and score>=.72:
+            options.append((normalized_arabic_candidate(arabic),arabic,score))
+    counts=Counter(key for key,_,__ in options)
+    if not counts:
+        return None,0.
+    winner,agreements=counts.most_common(1)[0]
+    if agreements<2 or (len(counts)>1 and
+                         counts.most_common(2)[1][1]==agreements):
+        return None,0.
+    accepted=[(raw,score) for key,raw,score in options if key==winner]
+    # Display the unmodified script returned by the best agreeing reading.
+    original,confidence=max(accepted,key=lambda item:item[1])
+    return original,min(score for _,score in accepted)
+
+
 def cin_number(session,letters,card):
     h,w=card.shape[:2]
     band=card[int(h*.29):int(h*.44),int(w*.29):int(w*.72)]
@@ -241,9 +269,8 @@ def main():
         print(json.dumps(OUTPUT_EMPTY,separators=(",",":")))
         return
     session,letters=recognizer()
-    surname,sc=recognize(session,letters,field_crop(card,centers[0]))
-    given,gc=recognize(session,letters,field_crop(card,centers[1]))
-    a,b=arabic_only(surname),arabic_only(given)
+    a,sc=consensus_name(session,letters,card,centers[0])
+    b,gc=consensus_name(session,letters,card,centers[1])
     if a is None or b is None or min(sc,gc)<.72:
         print(json.dumps(OUTPUT_EMPTY,separators=(",",":")))
         return
