@@ -79,6 +79,25 @@ internal object TunisianDocumentFields {
         val re=Regex("""(?:المساحة|superficie)\s*[:：]?\s*(\d{1,7}(?:[.,]\d{1,2})?)\s*(?:م|m)(?:\s*[²2])?(?=\s|$|[،؛;:])""",RegexOption.IGNORE_CASE)
         return re.findAll(clean).map{it.groupValues[1]}.distinct().singleOrNull()
     }
+    /** Name ONLY from the isolated printed owner-name line of a CPF table.
+     * Never apply to the table body, where residences and relatives occur.
+     */
+    fun certificateOwnerOnlyBand(text:String):String? {
+        val lines=text.lineSequence().map{trimmed(it.replace(arDiacritics,""))}
+            .filter{it.isNotBlank()}.toList()
+        if(lines.size!=1)return null
+        val name=TunisianNameParser.unique(lines)?:return null
+        return name.takeIf{it.split(' ').size in 2..4}
+    }
+    /** No inferred square metres: independently read header digits must agree
+     * with the total printed in a *different* CPF zone.
+     */
+    fun confirmedAreaDigits(headerDigits:String,totalDigits:String):String? {
+        val number=Regex("""[1-9]\d{0,6}""")
+        val h=asciiDigits(headerDigits).trim()
+        val t=asciiDigits(totalDigits).trim()
+        return h.takeIf{number.matches(it)&&it==t}
+    }
     fun numberFromCinBand(text:String):String? {
         val clean=asciiDigits(text)
         val re=Regex("""(?<!\d)\d{8}(?!\d)""")
