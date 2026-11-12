@@ -17,6 +17,7 @@ import androidx.camera.core.ImageCapture
 import androidx.camera.core.ImageCaptureException
 import androidx.camera.core.ImageProxy
 import androidx.camera.core.Preview
+import androidx.camera.core.UseCaseGroup
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.BorderStroke
@@ -83,38 +84,66 @@ private fun checkLight(frame:ImageProxy):LightCheck {
 }
 
 private fun rotateAndEncode(image:ImageProxy):ByteArray {
-    if(image.format!=ImageFormat.JPEG)
+    if(image.format!=ImageFormat.JPEG &&
+        !(android.os.Build.VERSION.SDK_INT>=34 &&
+            image.format==ImageFormat.JPEG_R))
         throw IllegalStateException("UNSUPPORTED_CAMERA_FRAME")
     val source=image.planes[0].buffer
     val raw=ByteArray(source.remaining())
     source.get(raw)
-    val decoded=BitmapFactory.decodeByteArray(raw,0,raw.size)
-        ?:throw IllegalStateException("CAMERA_DECODE")
-    raw.fill(0)
-    var oriented=decoded
-    try {
-        val rotation=image.imageInfo.rotationDegrees
-        if(rotation!=0){
-            val m=Matrix().apply{postRotate(rotation.toFloat())}
-            oriented=Bitmap.createBitmap(decoded,0,0,decoded.width,decoded.height,m,true)
-        }
-        val maxEdge=maxOf(oriented.width,oriented.height)
+    val allocated=mutableListOf<Bitmap>()
+    try{
+        val decoded=try{BitmapFactory.decodeByteArray(raw,0,raw.size)}
+            finally{raw.fill(0)}
+            ?:throw IllegalStateException("CAMERA_DECODE")
+        allocated.add(decoded)
+        // CameraX ViewPort ensures the capture and PreviewView share a field
+        // of view; in-memory JPEG can still include uncropped sensor pixels.
+        val rect=image.cropRect
+        val left=rect.left.coerceIn(0,decoded.width-1)
+        val top=rect.top.coerceIn(0,decoded.height-1)
+        val cropW=rect.width().coerceAtMost(decoded.width-left)
+        val cropH=rect.height().coerceAtMost(decoded.height-top)
+        val field=if(cropW>32&&cropH>32&&
+            (left!=0||top!=0||cropW!=decoded.width||cropH!=decoded.height)){
+            Bitmap.createBitmap(decoded,left,top,cropW,cropH).also{allocated.add(it)}
+        }else decoded
+        val degrees=image.imageInfo.rotationDegrees
+        val oriented=if(degrees!=0){
+            val m=Matrix().apply{postRotate(degrees.toFloat())}
+            Bitmap.createBitmap(field,0,0,field.width,field.height,m,true).also{
+                allocated.add(it)
+            }
+        }else field
+        // The overlay is centered and 91% of the visible preview width.
+        // Add a small margin so document corners remain visible to OCR.
+        val width=minOf((oriented.width*.96f).toInt(),
+            (oriented.height*.96f*1.585f).toInt()).coerceAtLeast(40)
+        val height=(width/1.585f).toInt().coerceAtLeast(25)
+        val framed=Bitmap.createBitmap(oriented,
+            ((oriented.width-width)/2).coerceAtLeast(0),
+            ((oriented.height-height)/2).coerceAtLeast(0),
+            width.coerceAtMost(oriented.width),
+            height.coerceAtMost(oriented.height)).also{allocated.add(it)}
+        val maxEdge=maxOf(framed.width,framed.height)
         val resized=if(maxEdge>2400) {
             val factor=2400f/maxEdge
-            Bitmap.createScaledBitmap(oriented,
-                (oriented.width*factor).toInt().coerceAtLeast(1),
-                (oriented.height*factor).toInt().coerceAtLeast(1),true)
-        }else oriented
-        try{
-            val out=ByteArrayOutputStream()
-            check(resized.compress(Bitmap.CompressFormat.JPEG,86,out))
-            val bytes=out.toByteArray()
-            require(bytes.size in 20..12*1024*1024)
-            return bytes
-        }finally{if(resized!==oriented)resized.recycle()}
+            Bitmap.createScaledBitmap(framed,
+                (framed.width*factor).toInt().coerceAtLeast(1),
+                (framed.height*factor).toInt().coerceAtLeast(1),true).also{
+                allocated.add(it)
+            }
+        }else framed
+        val out=ByteArrayOutputStream()
+        check(resized.compress(Bitmap.CompressFormat.JPEG,86,out))
+        val bytes=out.toByteArray()
+        require(bytes.size in 20..12*1024*1024)
+        return bytes
     }finally{
-        if(oriented!==decoded)oriented.recycle()
-        decoded.recycle()
+        raw.fill(0)
+        allocated.asReversed().distinct().forEach{
+            if(!it.isRecycled)it.recycle()
+        }
     }
 }
 
@@ -182,10 +211,18 @@ internal fun TunisianIdCamera(
                             }
                         }finally{frame.close()}
                     }
-                    provider?.unbindAll()
-                    provider?.bindToLifecycle(lifecycleOwner,
-                        CameraSelector.DEFAULT_BACK_CAMERA,preview,capture,analyzer)
-                    ready=true
+                    previewView.post {
+                        if(valid.get())try {
+                            provider?.unbindAll()
+                            val group=UseCaseGroup.Builder()
+                                .addUseCase(preview).addUseCase(capture)
+                                .addUseCase(analyzer)
+                            previewView.viewPort?.let{group.setViewPort(it)}
+                            provider?.bindToLifecycle(lifecycleOwner,
+                                CameraSelector.DEFAULT_BACK_CAMERA,group.build())
+                            ready=true
+                        }catch (_:Exception){cameraError=true}
+                    }
                 }catch (_:Exception){cameraError=true}
             },context.mainExecutor)
         }
@@ -207,9 +244,9 @@ internal fun TunisianIdCamera(
     Box(Modifier.fillMaxSize().background(Color(0xFF10151C))){
         if(permission){
             AndroidView(factory={previewView},modifier=Modifier.fillMaxSize())
-            Column(Modifier.fillMaxSize(),verticalArrangement=Arrangement.SpaceBetween,
-                horizontalAlignment=Alignment.CenterHorizontally){
-                Row(Modifier.fillMaxWidth().padding(20.dp),
+            Box(Modifier.fillMaxSize()){
+                Row(Modifier.align(Alignment.TopStart).fillMaxWidth()
+                    .background(Color.Black.copy(alpha=.40f)).padding(20.dp),
                     verticalAlignment=Alignment.CenterVertically){
                     IconButton(onClick=onClose){
                         Icon(Icons.Outlined.Close,s(R.string.back),tint=Color.White)
@@ -217,7 +254,8 @@ internal fun TunisianIdCamera(
                     Text(s(if(back)R.string.camera_scan_back else R.string.camera_scan_front),
                         color=Color.White,fontSize=19.sp)
                 }
-                Box(Modifier.fillMaxWidth(.91f).aspectRatio(1.585f)
+                Box(Modifier.align(Alignment.Center)
+                    .fillMaxWidth(.91f).aspectRatio(1.585f)
                     .border(BorderStroke(3.dp,if(lighting==LightCheck.GOOD)
                         Color(0xFF5AD3A2) else Color.White),
                         RoundedCornerShape(19.dp))){
@@ -228,7 +266,8 @@ internal fun TunisianIdCamera(
                         Text(s(R.string.camera_align_hint),color=Color.White,fontSize=12.sp)
                     }
                 }
-                Column(Modifier.fillMaxWidth().background(Color.Black.copy(alpha=.76f))
+                Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth()
+                    .background(Color.Black.copy(alpha=.76f))
                     .padding(20.dp),horizontalAlignment=Alignment.CenterHorizontally){
                     Text(s(hint),color=Color.White,fontSize=15.sp)
                     Spacer(Modifier.height(17.dp))
