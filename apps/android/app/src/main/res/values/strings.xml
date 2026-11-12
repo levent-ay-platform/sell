@@ -227,6 +227,11 @@
     <string name="camera_review_cin">CIN (last four digits)</string>
     <string name="camera_review_birth">Birth date (OCR)</string>
     <string name="camera_review_name">OCR name</string>
-    <string name="camera_review_privacy">Photo and OCR stay on this device. This is not identity verification.</string>
+    <string name="camera_review_privacy">Only after your consent: encrypted upload to Huawei for OCR. Not a legal identity check.</string>
     <string name="camera_image_low_resolution">Image too small for reliable reading. Photograph the card closer and keep all four corners visible.</string>
+    <string name="camera_huawei_consent">I agree to have this photo processed securely by the private Huawei OCR service to read its fields.</string>
+    <string name="camera_huawei_consent_required">Allow private Huawei OCR processing above to read this photo.</string>
+    <string name="camera_huawei_login_required">Verified owner sign-in is required before sending any identity photo.</string>
+    <string name="camera_huawei_unavailable">The private Huawei OCR service is unavailable. The photo stays here; retry later.</string>
+    <string name="camera_huawei_review_hint">Reading is performed privately on Huawei, not on the phone. No verification is automatic.</string>
 </resources>
