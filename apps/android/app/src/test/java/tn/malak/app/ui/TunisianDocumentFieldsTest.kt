@@ -104,6 +104,15 @@ class TunisianDocumentFieldsTest {
         assertNull(TunisianDocumentFields.labelledBirthDate(
             "تاريخ الولادة\n08 جويلية 1988\nتاريخ الولادة 09 جويلية 1988"))
     }
+    @Test fun cameraFrontMustReadBothIndependentNameFields(){
+        val ok=LocalDocumentOcr.FrontScan(
+            "المهدي","ياسمين","المهدي ياسمين","3456",null,83)
+        assertTrue(ok.readyForReview)
+        assertFalse(ok.copy(surname=null).readyForReview)
+        assertFalse(ok.copy(givenName=null).readyForReview)
+        assertFalse(ok.copy(fullName="المهدي يسرى").readyForReview)
+        assertFalse(ok.copy(confidence=45).readyForReview)
+    }
     @Test fun noUnlabelledAreaOrTitleGuess(){
         assertNull(TunisianDocumentFields.titleNumber("رقم 654321"))
         assertNull(TunisianDocumentFields.areaM2("150 متر"))
