@@ -99,15 +99,10 @@
     <string name="step_identity">Identité</string>
     <string name="identity_section">Carte d’identité</string>
     <string name="identity_hint">Photographiez le recto en direct. Nom, prénom, CIN et naissance doivent être lisibles.</string>
-    <string name="identity_two_sides">Le recto suffit. Photographiez-le directement avec l’appareil photo.</string>
-    <string name="pick_identity_pdf">Choisir un PDF (recto et verso)</string>
-    <string name="pick_identity_front">Choisir le recto de la carte</string>
-    <string name="pick_identity_back">Choisir le verso de la carte</string>
-    <string name="pick_identity">Choisir la pièce d’identité</string>
+    <string name="identity_front_only">Le recto suffit. Photographiez-le directement avec l’appareil photo.</string>
     <string name="identity_none">Aucune pièce d’identité choisie</string>
     <string name="identity_selected">Pièce d’identité sélectionnée</string>
     <string name="identity_required">Photographiez le recto et confirmez les quatre champs.</string>
-    <string name="identity_file_rejected">Certains fichiers sont non pris en charge ou trop volumineux.</string>
     <string name="identity_privacy">La pièce d’identité reste sur votre téléphone jusqu’à votre accord pour l’envoi sécurisé.</string>
     <string name="certificate_required">Choisissez le certificat de propriété pour continuer.</string>
     <string name="summary_identity">Identité</string>
@@ -131,9 +126,7 @@
     <string name="pair_cin_diff">Numéros différents, examen nécessaire</string>
     <string name="pair_cin_uncertain">Numéro incertain ou contradictoire</string>
     <string name="pair_cin_missing">Impossible de comparer</string>
-    <string name="pair_identity_coverage">Faces de la carte d’identité</string>
-    <string name="pair_reverse_missing">Verso non reçu</string>
-    <string name="pair_reverse_unconfirmed">Pages reçues, authenticité des deux faces non établie</string>
+    <string name="pair_identity_coverage">Source de la CIN</string>
     <string name="pair_source_page">Page source</string>
     <string name="pair_source_pdf">Texte PDF (signature non vérifiée)</string>
     <string name="pair_source_ocr">Lecture OCR de l’image</string>
@@ -148,7 +141,6 @@
     <string name="pair_reason_name_diff">Les noms écrits diffèrent ou les écritures ne peuvent être comparées de manière sûre.</string>
     <string name="pair_reason_cin_diff">Un numéro CIN mentionné dans le certificat diffère de celui de la carte.</string>
     <string name="pair_reason_cin_uncertain">Le numéro CIN extrait est incertain ou contradictoire.</string>
-    <string name="pair_reason_missing_back">Le verso de la carte d’identité est manquant.</string>
     <string name="pair_reason_not_official">Les droits actuels au registre et l’authenticité du document n’ont pas été vérifiés.</string>
     <string name="pair_reason_other">Une autre incohérence nécessite un examen manuel.</string>
     <string name="certificate_page_order_hint">Pour les photos, ajoutez chaque page séparément dans l’ordre imprimé. Sinon, sélectionnez un seul PDF complet.</string>
@@ -168,7 +160,6 @@
     <string name="local_ocr_failed">Lecture impossible. Réessayez avec des photos JPG/PNG plus nettes ou un PDF lisible.</string>
     <string name="local_ocr_server_later">La vérification serveur n’est pas encore connectée. L’OCR local fonctionne indépendamment.</string>
     <string name="pair_front_only">Recto photographié en direct. Lecture provisoire, sans vérification légale.</string>
-    <string name="identity_back_optional">Ajouter le verso (facultatif)</string>
     <string name="local_title_ref">Référence du titre foncier (OCR)</string>
     <string name="local_area_m2">Superficie imprimée (OCR)</string>
     <string name="local_expected_pages">Nombre total de pages déclaré</string>
@@ -205,7 +196,6 @@
     <string name="pilot_session_badge">Accès pilote — numéro non vérifié</string>
     <string name="pilot_sign_out">Déconnexion</string>
     <string name="camera_scan_front">Photographier le recto de la CIN</string>
-    <string name="camera_scan_back">Photographier le verso de la CIN</string>
     <string name="camera_field_guide_note">Caméra uniquement. Reprenez la photo si un champ est illisible.</string>
     <string name="camera_move_back">Éloignez la carte pour montrer les quatre coins</string>
     <string name="camera_stabilize">Stabilisez la carte et le téléphone</string>
@@ -219,7 +209,6 @@
     <string name="camera_shutter">Prendre la photo</string>
     <string name="camera_capture_error">La photo a échoué. Réessayez.</string>
     <string name="camera_front_action">Scanner le recto avec l’appareil photo</string>
-    <string name="camera_back_action">Photographier le verso</string>
     <string name="camera_review_title">Vérifiez la lecture avant de continuer</string>
     <string name="camera_review_scanning">Lecture sécurisée des champs de la CIN…</string>
     <string name="camera_review_unreadable">Un ou plusieurs champs sont illisibles. Reprenez le recto.</string>

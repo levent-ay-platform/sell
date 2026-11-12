@@ -33,7 +33,7 @@ internal data class LocalOcrFields(
 )
 internal data class CertificateIdentityReview(
     val assessment:String,val certificateName:PairNameEvidence?,val identityName:PairNameEvidence?,
-    val cinStatus:String,val reasons:List<String>,val identityCoverage:String,
+    val cinStatus:String,val reasons:List<String>,val identityCapture:String,
     val certificatePages:Int,val identityPages:Int,
     val ownershipVerified:Boolean=false,val identityVerified:Boolean=false,
     val mayPublish:Boolean=false,val localFields:LocalOcrFields?=null)
@@ -47,7 +47,7 @@ private val TOKEN=Regex("^[A-Za-z0-9._~+/-]{20,4096}$")
 private val MIME=setOf("application/pdf","image/jpeg","image/png","image/tiff")
 private val ASSESSMENTS=setOf("PRELIMINARY_TEXT_AGREEMENT","TEXT_DIFFERENCE_NEEDS_REVIEW","INSUFFICIENT_OR_AMBIGUOUS")
 private val CIN=setOf("SAME_NUMBER_UNVERIFIED","NUMBER_DIFFERS_NEEDS_REVIEW","NOT_COMPARABLE","AMBIGUOUS_OR_LOW_CONFIDENCE")
-private val COVERAGE=setOf("MISSING_REVERSE","MULTI_PAGE_UNCONFIRMED","TWO_FILES_UNCONFIRMED")
+private const val FRONT_CAPTURE="FRONT_IMAGE_ONLY_UNVERIFIED"
 
 private fun validateSession(session:OwnerEvidenceSession):String {
     if(!ID.matches(session.caseId)||!TOKEN.matches(session.bearer))throw OwnerPairException(401)
@@ -58,15 +58,16 @@ private fun validateSession(session:OwnerEvidenceSession):String {
     return uri.toASCIIString().trimEnd('/')
 }
 private fun validateFiles(cert:List<PairEvidenceFile>,identity:List<PairEvidenceFile>) {
-    if(cert.isEmpty()||cert.size>8||identity.isEmpty()||identity.size>2)throw OwnerPairException(400)
+    if(cert.isEmpty()||cert.size>8||identity.size!=1)throw OwnerPairException(400)
     val all=cert+identity
     if(all.any{it.expectedBytes !in 20..DOC_LIMIT||it.mime !in MIME||
         it.uri.scheme!="content"||!KEY.matches(it.idempotencyKey)}||
         all.map{it.uri}.distinct().size!=all.size||
         all.map{it.idempotencyKey}.distinct().size!=all.size||
         (cert.size>1&&cert.any{it.mime=="application/pdf"})||
-        (identity.size==1&&identity[0].mime!="application/pdf")||
-        (identity.size==2&&identity.any{it.mime=="application/pdf"}))
+        identity[0].mime!="image/jpeg"||
+        !PrivateCaptureMemory.isPrivate(identity[0].uri)||
+        PrivateCaptureMemory.length(identity[0].uri)!=identity[0].expectedBytes)
         throw OwnerPairException(400)
 }
 private fun conn(base:String,session:OwnerEvidenceSession,path:String):HttpsURLConnection {
@@ -166,13 +167,12 @@ private fun parseReview(body:JSONObject):CertificateIdentityReview {
     val assessment=comparison.optString("assessment")
     val cin=report.optJSONObject("cinComparison")?:throw OwnerPairException(502)
     val cinStatus=cin.optString("status")
-    val coverage=report.optString("identitySides")
+    val capture=report.optString("identityCapture")
     val certPages=report.optInt("certificatePagesReceived")
     val idPages=report.optInt("identityPagesReceived")
-    if(assessment !in ASSESSMENTS||cinStatus !in CIN||coverage !in COVERAGE||
+    if(assessment !in ASSESSMENTS||cinStatus !in CIN||capture!=FRONT_CAPTURE||
        cin.optBoolean("mayVerifyIdentity",true)||cin.has("number")||cin.has("value")||
-       certPages !in 1..8||idPages !in 1..8||
-       (coverage=="MISSING_REVERSE"&&assessment=="PRELIMINARY_TEXT_AGREEMENT")||
+       certPages !in 1..8||idPages!=1||
        (cinStatus=="NUMBER_DIFFERS_NEEDS_REVIEW"&&assessment!="TEXT_DIFFERENCE_NEEDS_REVIEW"))
         throw OwnerPairException(502)
     val rawReasons=comparison.optJSONArray("reasons")?:throw OwnerPairException(502)
@@ -183,7 +183,7 @@ private fun parseReview(body:JSONObject):CertificateIdentityReview {
         v
     }
     return CertificateIdentityReview(assessment,nameOf(comparison,"certificateName"),
-        nameOf(comparison,"identityName"),cinStatus,reasons,coverage,certPages,idPages)
+        nameOf(comparison,"identityName"),cinStatus,reasons,capture,certPages,idPages)
 }
 /**
  * Only explicit user action uploads files. Server-owned case/consent required.
@@ -203,11 +203,8 @@ internal suspend fun compareOwnerCertificateAndIdentity(
         certIds.add(upload(context,session,base,file,"OWNERSHIP_CERTIFICATE",
             if(file.mime=="application/pdf")null else i+1))
     }
-    for((i,file) in identities.withIndex()){
-        withContext(Dispatchers.Main){onProgress(PairProgress.IDENTITY_UPLOAD)}
-        identityIds.add(upload(context,session,base,file,"IDENTITY",
-            if(file.mime=="application/pdf")null else i+1))
-    }
+    withContext(Dispatchers.Main){onProgress(PairProgress.IDENTITY_UPLOAD)}
+    identityIds.add(upload(context,session,base,identities.single(),"IDENTITY",1))
     withContext(Dispatchers.Main){onProgress(PairProgress.COMPARING)}
     val payload=JSONObject().put("certificateEvidenceIds",JSONArray(certIds))
         .put("identityEvidenceIds",JSONArray(identityIds))

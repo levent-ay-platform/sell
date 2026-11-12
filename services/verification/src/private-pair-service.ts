@@ -47,7 +47,7 @@ export interface PrivatePairReport {
   readonly access:'AUTHORIZED_CASE_OWNER_ONLY';
   readonly identityPagesReceived:number;
   readonly certificatePagesReceived:number;
-  readonly identitySides:'MISSING_REVERSE'|'MULTI_PAGE_UNCONFIRMED'|'TWO_FILES_UNCONFIRMED';
+  readonly identityCapture:'FRONT_IMAGE_ONLY_UNVERIFIED';
   readonly comparison:PrivateDocumentComparison;
   /** Number values are NEVER returned; document-level review remains mandatory. */
   readonly cinComparison:PrivateCinComparison;
@@ -68,7 +68,7 @@ function checkIds(req:PrivatePairRequest):void {
     !ID.test(req.caseId)||!Array.isArray(req.certificateEvidenceIds)||
     !Array.isArray(req.identityEvidenceIds)||req.certificateEvidenceIds.length<1||
     req.certificateEvidenceIds.length>8||req.identityEvidenceIds.length<1||
-    req.identityEvidenceIds.length>2)throw new PrivatePairAccessDenied();
+    req.identityEvidenceIds.length!==1)throw new PrivatePairAccessDenied();
   const all=[...req.certificateEvidenceIds,...req.identityEvidenceIds];
   if(all.some(id=>typeof id!=='string'||!ID.test(id))||new Set(all).size!==all.length)
     throw new PrivatePairAccessDenied();
@@ -77,7 +77,9 @@ function rowAllowed(row:EvidenceRow|null,kind:Kind,req:PrivatePairRequest,userId
   return !!row&&row.evidenceId===evidenceId&&row.caseId===req.caseId&&
     row.uploadedBy===userId&&row.kind===kind&&SHA.test(row.digest)&&
     Number.isSafeInteger(row.fileSize)&&row.fileSize>=20&&row.fileSize<=MAX_BYTES&&
-    ['application/pdf','image/jpeg','image/png','image/tiff'].includes(row.mime);
+    (kind==='IDENTITY'
+      ?row.pageNumber===1&&['image/jpeg','image/png'].includes(row.mime)
+      :['application/pdf','image/jpeg','image/png','image/tiff'].includes(row.mime));
 }
 function decryptEvidence(sealed:Uint8Array,key:Uint8Array,row:EvidenceRow):Buffer {
   if(!(sealed instanceof Uint8Array)||!(key instanceof Uint8Array)||key.byteLength!==32||
@@ -158,10 +160,8 @@ export async function analyzeAuthorizedPrivateEvidencePair(
   };
   const certRows=await fetchRows(req.certificateEvidenceIds,'OWNERSHIP_CERTIFICATE');
   const idRows=await fetchRows(req.identityEvidenceIds,'IDENTITY');
-  // Certificates and identity cards are exactly one complete PDF, or image
-  // receipts numbered from page one in explicit selection order. Even a lone
-  // image labelled page 2/3 is not a valid page-one comparison source.
-  // Never silently renumber a malicious or stale receipt before OCR.
+  // Certificates may be multi-page; the CIN is exactly one front image
+  // numbered page 1. Never silently renumber evidence before OCR.
   const ordered=(rows:readonly EvidenceRow[])=>rows.every((row,i)=>
     row.mime==='application/pdf'
       ?rows.length===1&&row.pageNumber===null
@@ -178,9 +178,6 @@ export async function analyzeAuthorizedPrivateEvidencePair(
   for(const row of idRows){checkBudget();identityDocs.push(await readOne(row,deps));checkBudget();}
   const cert=joinPages(certDocs),identity=joinPages(identityDocs);
   const cinComparison=compareCertificateIdentityCinText(cert,identity);
-  const coverage:PrivatePairReport['identitySides']=idRows.length===2?
-    'TWO_FILES_UNCONFIRMED':identity.pages.length>=2?
-    'MULTI_PAGE_UNCONFIRMED':'MISSING_REVERSE';
   let comparison:PrivateDocumentComparison;
   try {comparison=comparePrivateCertificateIdentityOcr(cert,identity);}
   catch {throw new PrivatePairUnavailable();}
@@ -191,10 +188,6 @@ export async function analyzeAuthorizedPrivateEvidencePair(
            comparison.assessment==='PRELIMINARY_TEXT_AGREEMENT'){
     comparison={...comparison,assessment:'INSUFFICIENT_OR_AMBIGUOUS',
       reasons:[...comparison.reasons,'CIN_NUMBER_UNCERTAIN']};
-  }
-  if(coverage==='MISSING_REVERSE'&&comparison.assessment==='PRELIMINARY_TEXT_AGREEMENT'){
-    comparison={...comparison,assessment:'INSUFFICIENT_OR_AMBIGUOUS',
-      reasons:[...comparison.reasons,'IDENTITY_REVERSE_MISSING']};
   }
   try {
     const [identityNow,caseNow]=await Promise.all([
@@ -208,6 +201,7 @@ export async function analyzeAuthorizedPrivateEvidencePair(
     throw new PrivatePairUnavailable();
   }
   return {access:'AUTHORIZED_CASE_OWNER_ONLY',certificatePagesReceived:cert.pages.length,
-    identityPagesReceived:identity.pages.length,identitySides:coverage,comparison,cinComparison,
+    identityPagesReceived:identity.pages.length,
+    identityCapture:'FRONT_IMAGE_ONLY_UNVERIFIED',comparison,cinComparison,
     ownershipVerified:false,identityVerified:false,mayPublish:false,requiresHumanReview:true};
 }

@@ -99,15 +99,10 @@
     <string name="step_identity">الهوية</string>
     <string name="identity_section">بطاقة الهوية</string>
     <string name="identity_hint">صوّر وجه الهوية الأمامي مباشرة. يجب أن يكون الاسم واللقب وCIN والميلاد واضحين.</string>
-    <string name="identity_two_sides">الوجه الأمامي وحده يكفي. صوّره مباشرة بكاميرا الهاتف.</string>
-    <string name="pick_identity_pdf">اختيار ملف PDF للوجهين</string>
-    <string name="pick_identity_front">اختيار الوجه الأمامي للبطاقة</string>
-    <string name="pick_identity_back">اختيار الوجه الخلفي للبطاقة</string>
-    <string name="pick_identity">اختيار صور الهوية أو PDF</string>
+    <string name="identity_front_only">الوجه الأمامي وحده يكفي. صوّره مباشرة بكاميرا الهاتف.</string>
     <string name="identity_none">لم تُضف الهوية بعد</string>
     <string name="identity_selected">ملفات الهوية المختارة</string>
     <string name="identity_required">صوّر الوجه الأمامي بالكاميرا وتأكد من قراءة الحقول الأربعة.</string>
-    <string name="identity_file_rejected">بعض ملفات الهوية غير مدعومة أو حجمها كبير.</string>
     <string name="identity_privacy">الهوية تبقى على هاتفك حتى توافق على إرسالها بأمان؛ لا تُحفظ ضمن المسودة.</string>
     <string name="certificate_required">اختر شهادة الملكية قبل المتابعة.</string>
     <string name="summary_identity">الهوية</string>
@@ -131,9 +126,7 @@
     <string name="pair_cin_diff">الرقمان مختلفان ويحتاجان مراجعة</string>
     <string name="pair_cin_uncertain">الرقم غير واضح أو متضارب</string>
     <string name="pair_cin_missing">غير متاح للمقارنة</string>
-    <string name="pair_identity_coverage">وجها بطاقة الهوية</string>
-    <string name="pair_reverse_missing">الوجه الخلفي غير ظاهر</string>
-    <string name="pair_reverse_unconfirmed">تم استلام الصفحات، لم تُثبت صحة الوجهين</string>
+    <string name="pair_identity_coverage">مصدر صورة الهوية</string>
     <string name="pair_source_page">صفحة المصدر</string>
     <string name="pair_source_pdf">نص PDF (التوقيع غير مفحوص)</string>
     <string name="pair_source_ocr">قراءة OCR من الصورة</string>
@@ -148,7 +141,6 @@
     <string name="pair_reason_name_diff">الاسمان المكتوبان مختلفان، أو لا يمكن مقارنة الكتابتين بأمان.</string>
     <string name="pair_reason_cin_diff">رقم بطاقة التعريف المذكور في الشهادة يختلف عن الرقم على البطاقة.</string>
     <string name="pair_reason_cin_uncertain">رقم بطاقة التعريف المقروء غير واضح أو متضارب.</string>
-    <string name="pair_reason_missing_back">الوجه الخلفي لبطاقة التعريف غير موجود.</string>
     <string name="pair_reason_not_official">لم يتم فحص الحقوق الحالية بالسجل العقاري أو أصالة الوثيقة.</string>
     <string name="pair_reason_other">يوجد تعارض إضافي في الوثائق يتطلب مراجعة بشرية.</string>
     <string name="certificate_page_order_hint">إذا عندك صور، أضف كل صفحة على حدة وبالترتيب المطبوع. أو اختر ملف PDF واحداً يشمل كل الصفحات.</string>
@@ -168,7 +160,6 @@
     <string name="local_ocr_failed">تعذرت قراءة الملفات. اختر صور JPG أو PNG أو ملف PDF واضحاً ثم أعد المحاولة.</string>
     <string name="local_ocr_server_later">التحقق عبر الخادم غير متصل حالياً، لكن زر OCR المحلي يعمل بدونه.</string>
     <string name="pair_front_only">صُوّر الوجه الأمامي مباشرة. القراءة أولية ولا تثبت الهوية قانونياً.</string>
-    <string name="identity_back_optional">إضافة الوجه الخلفي (اختياري)</string>
     <string name="local_title_ref">معرّف الرسم العقاري (قراءة OCR)</string>
     <string name="local_area_m2">المساحة المطبوعة في الشهادة (OCR)</string>
     <string name="local_expected_pages">عدد صفحات الشهادة المذكور</string>
@@ -205,7 +196,6 @@
     <string name="pilot_session_badge">دخول تجريبي — الرقم غير متحقق منه</string>
     <string name="pilot_sign_out">تسجيل الخروج</string>
     <string name="camera_scan_front">تصوير وجه بطاقة التعريف</string>
-    <string name="camera_scan_back">تصوير ظهر بطاقة التعريف</string>
     <string name="camera_field_guide_note">التصوير المباشر فقط. أي حقل غير واضح يتطلب إعادة الالتقاط.</string>
     <string name="camera_move_back">بعّد البطاقة لتظهر الزوايا الأربع</string>
     <string name="camera_stabilize">ثبّت البطاقة والهاتف</string>
@@ -219,7 +209,6 @@
     <string name="camera_shutter">التقاط</string>
     <string name="camera_capture_error">تعذّر التصوير. حاول مجدداً.</string>
     <string name="camera_front_action">تصوير وجه الهوية بالكاميرا</string>
-    <string name="camera_back_action">تصوير ظهر الهوية بالكاميرا</string>
     <string name="camera_review_title">راجع القراءة قبل المتابعة</string>
     <string name="camera_review_scanning">جارٍ قراءة الحقول عبر خدمة OCR الخاصة…</string>
     <string name="camera_review_unreadable">حقل واحد أو أكثر ناقص أو غير واضح. أعد تصوير الوجه الأمامي.</string>

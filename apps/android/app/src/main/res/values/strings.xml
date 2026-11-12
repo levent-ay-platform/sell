@@ -99,15 +99,10 @@
     <string name="step_identity">Identity</string>
     <string name="identity_section">Identity card</string>
     <string name="identity_hint">Photograph the card front live. Surname, given name, CIN and birth date must all be readable.</string>
-    <string name="identity_two_sides">Only the front is needed. Capture it directly with the camera.</string>
-    <string name="pick_identity_pdf">Choose one PDF (front and back)</string>
-    <string name="pick_identity_front">Choose card front</string>
-    <string name="pick_identity_back">Choose card back</string>
-    <string name="pick_identity">Select identity photos / PDF</string>
+    <string name="identity_front_only">Only the front is needed. Capture it directly with the camera.</string>
     <string name="identity_none">No identity document selected</string>
     <string name="identity_selected">Identity document selected</string>
     <string name="identity_required">Capture the front with the camera and confirm all four fields.</string>
-    <string name="identity_file_rejected">Invalid identity file or file too large.</string>
     <string name="identity_privacy">Your identity stays on your phone until you agree to a secure upload.</string>
     <string name="certificate_required">Select your property certificate before continuing.</string>
     <string name="summary_identity">Identity</string>
@@ -131,9 +126,7 @@
     <string name="pair_cin_diff">Numbers differ and need review</string>
     <string name="pair_cin_uncertain">Number unclear or conflicting</string>
     <string name="pair_cin_missing">Not comparable</string>
-    <string name="pair_identity_coverage">Identity card sides</string>
-    <string name="pair_reverse_missing">Reverse side missing</string>
-    <string name="pair_reverse_unconfirmed">Pages received; sides not authenticated</string>
+    <string name="pair_identity_coverage">Identity image source</string>
     <string name="pair_source_page">Source page</string>
     <string name="pair_source_pdf">PDF text (not signature verified)</string>
     <string name="pair_source_ocr">OCR image reading</string>
@@ -148,7 +141,6 @@
     <string name="pair_reason_name_diff">The printed names differ, or their scripts cannot be safely compared.</string>
     <string name="pair_reason_cin_diff">A CIN number written on the certificate differs from the card.</string>
     <string name="pair_reason_cin_uncertain">The extracted CIN number is uncertain or conflicting.</string>
-    <string name="pair_reason_missing_back">The reverse side of the identity card has not been received.</string>
     <string name="pair_reason_not_official">Current registry rights and document authenticity have not been checked.</string>
     <string name="pair_reason_other">Another document inconsistency requires manual review.</string>
     <string name="certificate_page_order_hint">For photos, add each page separately in the printed order. Use one PDF if all pages are already included.</string>
@@ -168,7 +160,6 @@
     <string name="local_ocr_failed">Could not read these documents. Choose clearer JPG/PNG images or a readable PDF and try again.</string>
     <string name="local_ocr_server_later">Server verification is not connected yet. The local OCR button above works without it.</string>
     <string name="pair_front_only">Front captured directly. Preliminary text extraction, not legal verification.</string>
-    <string name="identity_back_optional">Add the back (optional)</string>
     <string name="local_title_ref">Land title reference (OCR)</string>
     <string name="local_area_m2">Area printed on certificate (OCR)</string>
     <string name="local_expected_pages">Total pages stated on certificate</string>
@@ -205,7 +196,6 @@
     <string name="pilot_session_badge">Pilot access — phone unverified</string>
     <string name="pilot_sign_out">Sign out</string>
     <string name="camera_scan_front">Photograph CIN front</string>
-    <string name="camera_scan_back">Photograph CIN back</string>
     <string name="camera_field_guide_note">Live camera only. Retake the photo when any required field is unclear.</string>
     <string name="camera_move_back">Move the card farther away so all corners are visible</string>
     <string name="camera_stabilize">Hold the card and phone steady</string>
@@ -219,7 +209,6 @@
     <string name="camera_shutter">Capture</string>
     <string name="camera_capture_error">Could not take the photo. Please try again.</string>
     <string name="camera_front_action">Scan front with camera</string>
-    <string name="camera_back_action">Photograph back with camera</string>
     <string name="camera_review_title">Check the scan before continuing</string>
     <string name="camera_review_scanning">Reading identity fields with the private OCR service…</string>
     <string name="camera_review_unreadable">One or more fields are missing or unclear. Retake the front photograph.</string>

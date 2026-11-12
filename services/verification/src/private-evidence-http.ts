@@ -316,7 +316,7 @@ export function createPrivateEvidenceHttpHandler(deps:PrivateEvidenceHttpDeps) {
         if(!Array.isArray(certificateEvidenceIds)||certificateEvidenceIds.length<1||
            certificateEvidenceIds.length>8||
            !Array.isArray(identityEvidenceIds)||identityEvidenceIds.length<1||
-           identityEvidenceIds.length>2||
+           identityEvidenceIds.length!==1||
            [...certificateEvidenceIds,...identityEvidenceIds].some(id=>
              typeof id!=='string'||!UUID.test(id))||
            new Set([...certificateEvidenceIds,...identityEvidenceIds]).size!==
@@ -336,7 +336,9 @@ export function createPrivateEvidenceHttpHandler(deps:PrivateEvidenceHttpDeps) {
         }
         if(report?.access!=='AUTHORIZED_CASE_OWNER_ONLY'||report?.ownershipVerified!==false||
            report?.identityVerified!==false||report?.mayPublish!==false||
-           report?.comparison?.mayPublish!==false){
+           report?.comparison?.mayPublish!==false||
+           report?.identityCapture!=='FRONT_IMAGE_ONLY_UNVERIFIED'||
+           report?.identityPagesReceived!==1){
           await reject(503,'UPSTREAM_UNAVAILABLE');return;
         }
         json(res,200,{ok:true,report,mayPublish:false,ownershipVerified:false,identityVerified:false});

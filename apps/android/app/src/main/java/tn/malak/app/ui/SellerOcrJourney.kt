@@ -59,7 +59,6 @@ private fun pairReasonText(code:String):Int=when(code){
     "NAME_TEXT_DIFFERS_OR_SCRIPT_MISMATCH"->R.string.pair_reason_name_diff
     "CIN_NUMBER_TEXT_DIFFERS"->R.string.pair_reason_cin_diff
     "CIN_NUMBER_UNCERTAIN"->R.string.pair_reason_cin_uncertain
-    "IDENTITY_REVERSE_MISSING"->R.string.pair_reason_missing_back
     "OFFICIAL_CPF_AND_DOCUMENT_AUTHENTICITY_NOT_CHECKED"->R.string.pair_reason_not_official
     else->R.string.pair_reason_other
 }
@@ -126,10 +125,11 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
     var pickMessage by remember(draftFile) {mutableIntStateOf(0)}
     val files=remember(draftFile) {mutableStateListOf<ChosenDocument>()}
     val identityFiles=remember(draftFile) {mutableStateListOf<ChosenDocument>()}
+    var acceptedFrontKey by remember(draftFile){mutableStateOf<String?>(null)}
     var identityMessage by remember(draftFile) {mutableIntStateOf(0)}
     // Private in-memory picture gets scanned on this step before acceptance.
-    var cameraSide by remember(draftFile){mutableIntStateOf(-1)}
-    var reviewSide by remember(draftFile){mutableIntStateOf(0)}
+    var cameraVisible by remember(draftFile){mutableStateOf(false)}
+
     var pendingPhoto by remember(draftFile){mutableStateOf<ChosenDocument?>(null)}
     var frontRead by remember(draftFile){
         mutableStateOf<LocalDocumentOcr.FrontScan?>(null)
@@ -137,11 +137,11 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
     var frontReadBusy by remember(draftFile){mutableStateOf(false)}
     var frontReadFailed by remember(draftFile){mutableStateOf(false)}
     var captureOcrConsent by remember(draftFile){mutableStateOf(false)}
-    LaunchedEffect(draftFile,pendingPhoto?.uploadKey,reviewSide,
+    LaunchedEffect(draftFile,pendingPhoto?.uploadKey,
         captureOcrConsent,ownerSession,authenticatedOwnerSession){
         val pending=pendingPhoto
         frontRead=null;frontReadFailed=false;frontReadBusy=false
-        if(pending!=null&&reviewSide==0){
+        if(pending!=null){
             if(!captureOcrConsent){
                 frontRead=LocalDocumentOcr.FrontScan(null,null,null,null,null,0,
                     LocalDocumentOcr.FrontIssue.CONSENT_REQUIRED)
@@ -249,11 +249,12 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
 
     // Only a freshly captured private in-memory front JPEG is admissible.
     val identitySelected=identityFiles.size==1&&
+        acceptedFrontKey==identityFiles[0].uploadKey&&
         identityFiles[0].mime=="image/jpeg"&&
         PrivateCaptureMemory.isPrivate(identityFiles[0].uri)&&
         PrivateCaptureMemory.length(identityFiles[0].uri)==identityFiles[0].length
-    // Legacy pair endpoint needs both sides; never bypass its validation.
-    val identityReadyForRemote=false
+    // Front-only secure comparison requires explicit consent and genuine login.
+    val identityReadyForRemote=identitySelected
     // Tunisian/French comma is normalized only for numeric validation and API.
     val normalizedArea=area.replace(',', '.')
     val validArea=normalizedArea.matches(ValidLandArea)
@@ -276,15 +277,13 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
     val stepLabels=listOf(R.string.step_property,R.string.step_capacity,R.string.step_certificate,
         R.string.step_identity,R.string.step_summary)
 
-    if(cameraSide>=0){
-        val side=cameraSide
-        TunisianIdCamera(onClose={cameraSide=-1},
+    if(cameraVisible){
+        TunisianIdCamera(onClose={cameraVisible=false},
             onPhoto={uri,length->
-                if(cameraSide==side){
+                if(cameraVisible){
                     pendingPhoto?.let{PrivateCaptureMemory.discard(it.uri)}
                     pendingPhoto=ChosenDocument(uri,"CIN-camera.jpg",length,"image/jpeg")
-                    reviewSide=0
-                    cameraSide=-1
+                    cameraVisible=false
                     identityMessage=0
                 }else PrivateCaptureMemory.discard(uri)
             })
@@ -426,8 +425,8 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                     Surface(color=Color.White,shape=RoundedCornerShape(21.dp),border=BorderStroke(1.dp,CardBorder)) {
                         Column(Modifier.fillMaxWidth().padding(20.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
                             Icon(Icons.Outlined.Badge,null,Modifier.size(34.dp),tint=Brand.Crimson)
-                            Text(s(R.string.identity_two_sides),color=Brand.Ink,fontSize=13.sp)
-                            Button(onClick={cameraSide=0},
+                            Text(s(R.string.identity_front_only),color=Brand.Ink,fontSize=13.sp)
+                            Button(onClick={cameraVisible=true},
                                 modifier=Modifier.fillMaxWidth().heightIn(min=55.dp),
                                 shape=RoundedCornerShape(16.dp),
                                 colors=ButtonDefaults.buttonColors(containerColor=Brand.Crimson)){
@@ -461,7 +460,7 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                                         modifier=Modifier.fillMaxWidth().height(188.dp),
                                         contentScale=ContentScale.Fit)
                                 }
-                                if(reviewSide==0){
+                                run {
                                     if(frontReadBusy)
                                         LinearProgressIndicator(Modifier.fillMaxWidth())
                                     if(frontRead!=null) {
@@ -518,6 +517,7 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                                     IconButton(onClick={
                                         identityFiles.forEach{PrivateCaptureMemory.discard(it.uri)}
                                         identityFiles.clear()
+                                        acceptedFrontKey=null
                                         identityMessage=0
                                     },modifier=Modifier.size(48.dp)) {
                                         Icon(Icons.Outlined.DeleteOutline,s(R.string.remove),tint=Brand.Muted)
@@ -631,11 +631,7 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                                 else->R.string.pair_cin_missing
                             }))
                         SummaryFact(s(R.string.pair_identity_coverage),
-                            s(when(result.identityCoverage){
-                                "MISSING_REVERSE"->R.string.pair_reverse_missing
-                                "FRONT_ONLY"->R.string.pair_front_only
-                                else->R.string.pair_reverse_unconfirmed
-                            }))
+                            s(R.string.pair_front_only))
                         if(result.reasons.isNotEmpty()) {
                             Text(s(R.string.pair_reasons_title),color=Brand.Ink,
                                 fontSize=15.sp,fontWeight=FontWeight.SemiBold)
@@ -782,19 +778,20 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                         pendingPhoto?.let{PrivateCaptureMemory.discard(it.uri)}
                         pendingPhoto=null
                         frontRead=null
-                        cameraSide=0
+                        cameraVisible=true
                     },modifier=Modifier.weight(1f).heightIn(min=54.dp)){
                         Text(s(R.string.camera_review_retake))
                     }
                     Button(onClick={
                         val pending=pendingPhoto
                         if(pending!=null){
-                            if(reviewSide==0){
+                            if(frontRead?.readyForReview==true){
                                 identityFiles.forEach{
                                     PrivateCaptureMemory.discard(it.uri)
                                 }
                                 identityFiles.clear()
                                 identityFiles.add(pending)
+                                acceptedFrontKey=pending.uploadKey
                             }
                             pendingPhoto=null
                             frontRead=null
