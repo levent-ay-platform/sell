@@ -6,6 +6,8 @@ on:
     paths:
       - 'services/verification/ocr/cin_v5.py'
       - 'services/verification/ocr/cin_v5_vote.py'
+      - 'services/verification/ocr/cin_v5_date.py'
+      - 'services/verification/ocr/test_cin_v5_date.py'
       - 'services/verification/ocr/cin_v5_socket.py'
       - 'services/verification/docker/HuaweiCinV5.Dockerfile'
       - 'services/verification/scripts/install-huawei-v5-canary.sh'
