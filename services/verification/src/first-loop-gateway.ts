@@ -17,6 +17,8 @@ import {PostgresPrivateEvidenceDenialAudit} from './postgres-evidence-denial-aud
 import {createPrivateEvidenceHttpHandler} from './private-evidence-http.ts';
 import type {PrivateCiphertextReader} from './local-private-store.ts';
 import type {PrivateOcrWorker} from './seller-ocr-service.ts';
+import type {CinV5Worker} from './private-cin-v5-service.ts';
+import {previewOwnerCin} from './private-cin-v5-service.ts';
 import type {PrivatePairDependencies} from './private-pair-service.ts';
 import {analyzeAuthorizedPrivateEvidencePair} from './private-pair-service.ts';
 import {provisionIndividualOwnerCase,revokeIndividualOwnerConsent} from './private-owner-case.ts';
@@ -76,6 +78,8 @@ export interface UnboundFirstLoopGatewayDeps {
   readonly keys:Pick<PrivatePairDependencies['keys'],'unwrapDataKey'> &
     {generateDataKey:UploadDependencies['generateDataKey']};
   readonly worker:PrivateOcrWorker;
+  /** Optional Huawei-only v5 recognizer, injected after private host acceptance. */
+  readonly cinWorker?:CinV5Worker;
   readonly rateLimitHmacSecret:Uint8Array;
   readonly policyVersion:string;
   /** Optional deterministic clock for isolated synthetic-only tests. */
@@ -104,6 +108,9 @@ export function composeUnboundMalakFirstLoop(deps:UnboundFirstLoopGatewayDeps) {
     }),
     inspect:async()=>({ok:false as const,code:'ACCESS_DENIED' as const,
       ownershipVerified:false as const,mayPublish:false as const}),
+    previewCin:deps.cinWorker?request=>previewOwnerCin(request,{
+      auth,cases,worker:deps.cinWorker!
+    }):undefined,
     analyzeOwnerPair:request=>analyzeAuthorizedPrivateEvidencePair(request,{
       auth,cases,objects:deps.objects,worker:deps.worker,
       keys:{unwrapDataKey:key=>deps.keys.unwrapDataKey(key)}
