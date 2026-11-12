@@ -504,21 +504,21 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                         SummaryFact(s(R.string.pair_certificate_pages),result.certificatePages.toString())
                         SummaryFact(s(R.string.pair_identity_pages),result.identityPages.toString())
                         result.localFields?.let{ local->
-                            local.titleNumber?.let{
-                                SummaryFact(s(R.string.local_title_ref),it)
-                            }
-                            local.areaM2?.let{
-                                SummaryFact(s(R.string.local_area_m2),it+" m²")
-                            }
-                            local.expectedCertificatePages?.let{
-                                SummaryFact(s(R.string.local_expected_pages),it.toString())
-                            }
-                            local.cinLast4?.let{
-                                SummaryFact(s(R.string.local_cin_masked),"••••"+it)
-                            }
-                            local.birthDate?.let{
-                                SummaryFact(s(R.string.local_birth_date),it)
-                            }
+                            SummaryFact(s(R.string.local_title_ref),
+                                local.titleNumber?:s(R.string.pair_unreadable))
+                            SummaryFact(s(R.string.local_area_m2),
+                                local.areaM2?.let{it+" m²"}?:s(R.string.pair_unreadable))
+                            SummaryFact(s(R.string.local_expected_pages),
+                                local.expectedCertificatePages?.toString()
+                                    ?:s(R.string.pair_unreadable))
+                            SummaryFact(s(R.string.local_surname),
+                                local.surname?:s(R.string.pair_unreadable))
+                            SummaryFact(s(R.string.local_given_name),
+                                local.givenName?:s(R.string.pair_unreadable))
+                            SummaryFact(s(R.string.local_cin_masked),
+                                local.cinLast4?.let{"••••"+it}?:s(R.string.pair_unreadable))
+                            SummaryFact(s(R.string.local_birth_date),
+                                local.birthDate?:s(R.string.pair_unreadable))
                         }
                         SummaryFact(s(R.string.pair_certificate_owner),
                             result.certificateName?.value?:s(R.string.pair_unreadable))

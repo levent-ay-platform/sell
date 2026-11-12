@@ -174,6 +174,8 @@
     <string name="local_expected_pages">Total pages stated on certificate</string>
     <string name="local_cin_masked">CIN number (last 4 digits)</string>
     <string name="local_birth_date">Date of birth (OCR, not verified)</string>
+    <string name="local_surname">Surname from CIN (OCR)</string>
+    <string name="local_given_name">Given name from CIN (OCR)</string>
     <string name="pair_preliminary_only">OCR does not verify identity or title ownership, and does not permit publication. Independent review required.</string>
     <string name="pair_creating_case">Creating private verification request…</string>
     <string name="pair_upload_cert">Securely uploading certificate…</string>

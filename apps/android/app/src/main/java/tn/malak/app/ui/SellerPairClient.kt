@@ -28,7 +28,8 @@ internal data class PairNameEvidence(val value:String,val page:Int,val source:St
 /** PII is shown only in the user's local screen and never persisted or logged. */
 internal data class LocalOcrFields(
     val titleNumber:String?,val areaM2:String?,val expectedCertificatePages:Int?,
-    val cinLast4:String?,val birthDate:String?
+    val surname:String?,val givenName:String?,val cinLast4:String?,
+    val birthDate:String?
 )
 internal data class CertificateIdentityReview(
     val assessment:String,val certificateName:PairNameEvidence?,val identityName:PairNameEvidence?,

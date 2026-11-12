@@ -304,6 +304,7 @@ internal object LocalDocumentOcr {
             val localFields=LocalOcrFields(
                 titleNumber=land?.titleNumber,areaM2=land?.areaM2,
                 expectedCertificatePages=land?.expectedPages,
+                surname=card?.surname,givenName=card?.givenName,
                 cinLast4=card?.cinNumber?.takeLast(4),
                 birthDate=card?.dateOfBirth)
             CertificateIdentityReview(
