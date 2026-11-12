@@ -20,26 +20,6 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
-      - name: Bundle pinned official Arabic, French and English OCR models
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-        with:
-          repository: tesseract-ocr/tessdata_fast
-          ref: 87416418657359cb625c412a48b6e1d6d41c29bd
-          path: ci-tessdata
-          sparse-checkout: |
-            ara.traineddata
-            fra.traineddata
-          sparse-checkout-cone-mode: false
-          persist-credentials: false
-      - name: Prepare offline OCR assets for QA APK
-        run: |
-          set -euo pipefail
-          mkdir -p apps/android/app/src/main/assets/tessdata
-          for lang in ara fra; do
-            test -f "ci-tessdata/$lang.traineddata"
-            test "$(wc -c < "ci-tessdata/$lang.traineddata")" -gt 100000
-            cp "ci-tessdata/$lang.traineddata" apps/android/app/src/main/assets/tessdata/
-          done
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
@@ -56,6 +36,41 @@ jobs:
         run: |
           python3 scripts/check_malak_brand.py
           gradle -p apps/android :app:assembleDebug --no-daemon
+      - name: Enforce strict 60 MiB APK limit (fail closed)
+        run: |
+          set -euo pipefail
+          apk=apps/android/app/build/outputs/apk/debug/app-debug.apk
+          size="$(stat -c %s "$apk")"
+          echo "Malak Android APK bytes: $size (limit 62914560)"
+          test "$size" -le 62914560
+          if unzip -Z1 "$apk" | grep -Ei '(^|/)(inference\.onnx|.*\.traineddata|libonnxruntime.*\.so|libopencv.*\.so|libtesseract.*\.so)
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Launch emulator and actually tap Add Land
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          profile: pixel_2
+          emulator-boot-timeout: 600
+          script: |
+            adb install -r apps/android/app/build/outputs/apk/debug/app-debug.apk
+            python3 apps/android/scripts/seller-smoke.py
+      - name: Keep synthetic-only screenshot on success/failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: malak-seller-smoke-synthetic-screenshot
+          path: /tmp/malak-android-seller-smoke/seller-open.png
+          retention-days: 2
+          if-no-files-found: ignore
+; then
+            echo 'HEAVY_OCR_LIBRARY_LEAKED_IN_APK' >&2
+            exit 1
+          fi
       - name: Enable KVM on disposable GitHub-hosted runner
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
