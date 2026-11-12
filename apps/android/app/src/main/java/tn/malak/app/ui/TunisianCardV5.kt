@@ -6,6 +6,10 @@ import ai.onnxruntime.OrtSession
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Color
+import android.graphics.Canvas
+import android.graphics.Paint
+import android.graphics.ColorMatrix
+import android.graphics.ColorMatrixColorFilter
 import org.opencv.android.OpenCVLoader
 import org.opencv.android.Utils
 import org.opencv.core.Core
@@ -37,7 +41,7 @@ import kotlin.math.min
  */
 internal object TunisianCardV5 {
     internal data class Person(
-        val surname:String,val given:String,val confidence:Int
+        val surname:String,val given:String,val confidence:Int,val cinNumber:String?
     ){
         val name:String get()="$surname $given"
     }
@@ -280,6 +284,37 @@ internal object TunisianCardV5 {
             }
         }finally{if(resized!==crop)resized.recycle()}
     }
+    private fun verifiedCin(card:Bitmap):String? {
+        // This front band has the printed 8-digit CIN on newer cards.
+        // Some real older fronts omit it: never infer it from date or reverse.
+        val x=(card.width*.29).toInt()
+        val y=(card.height*.29).toInt()
+        val endX=(card.width*.72).toInt()
+        val endY=(card.height*.44).toInt()
+        val band=Bitmap.createBitmap(card,x,y,endX-x,endY-y)
+        try {
+            val gray=Bitmap.createBitmap(band.width,band.height,
+                Bitmap.Config.ARGB_8888)
+            try {
+                Canvas(gray).drawBitmap(band,0f,0f,
+                    Paint(Paint.FILTER_BITMAP_FLAG).apply{
+                        colorFilter=ColorMatrixColorFilter(
+                            ColorMatrix().apply{setSaturation(0f)})
+                    })
+                val primary=recognize(band)
+                val secondary=recognize(gray)
+                fun digits(w:Word):String? {
+                    if(w.confidence<.85f)return null
+                    // Paddle Arabic model decodes its visual RTL sequence
+                    // reversed; printed Latin digits must be restored LTR.
+                    val printed=w.text.filter{it in '0'..'9'}.reversed()
+                    return printed.takeIf{it.matches(Regex("""\d{8}"""))}
+                }
+                val a=digits(primary)
+                return a?.takeIf{it==digits(secondary)}
+            }finally{gray.recycle()}
+        }finally{band.recycle()}
+    }
     private fun validArabic(text:String):String? {
         val trimmed=text.replace(Regex("""\s+""")," ").trim()
         if(trimmed.length !in 2..55)return null
@@ -302,7 +337,7 @@ internal object TunisianCardV5 {
                 val a=validArabic(surname.text)?:return@synchronized null
                 val b=validArabic(given.text)?:return@synchronized null
                 Person(a,b,(min(surname.confidence,given.confidence)*100)
-                    .toInt().coerceIn(0,100))
+                    .toInt().coerceIn(0,100),verifiedCin(card))
             }finally{surnameCrop.recycle();givenCrop.recycle()}
         }finally{card.recycle()}
     }
