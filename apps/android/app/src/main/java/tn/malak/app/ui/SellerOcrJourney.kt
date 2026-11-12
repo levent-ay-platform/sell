@@ -278,7 +278,7 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
 
     if(cameraSide>=0){
         val side=cameraSide
-        TunisianIdCamera(back=false,onClose={cameraSide=-1},
+        TunisianIdCamera(onClose={cameraSide=-1},
             onPhoto={uri,length->
                 if(cameraSide==side){
                     pendingPhoto?.let{PrivateCaptureMemory.discard(it.uri)}

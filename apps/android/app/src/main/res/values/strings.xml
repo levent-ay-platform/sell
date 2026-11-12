@@ -207,6 +207,8 @@
     <string name="camera_scan_front">Photograph CIN front</string>
     <string name="camera_scan_back">Photograph CIN back</string>
     <string name="camera_field_guide_note">Live camera only. Retake the photo when any required field is unclear.</string>
+    <string name="camera_move_back">Move the card farther away so all corners are visible</string>
+    <string name="camera_stabilize">Hold the card and phone steady</string>
     <string name="camera_align_hint">Fit all four corners inside the frame</string>
     <string name="camera_more_light">Move to brighter light</string>
     <string name="camera_reduce_glare">Avoid reflections and direct glare</string>

@@ -224,21 +224,29 @@ def consensus_name(session,letters,card,center):
 
 
 def cin_number(session,letters,card):
-    h,w=card.shape[:2]
-    band=card[int(h*.29):int(h*.44),int(w*.29):int(w*.72)]
-    gray=cv2.cvtColor(band,cv2.COLOR_BGR2GRAY)
-    gray=cv2.cvtColor(gray,cv2.COLOR_GRAY2BGR)
-    first,quality_a=recognize(session,letters,band)
-    second,quality_b=recognize(session,letters,gray)
-    def digits(text,quality):
-        if quality<.85:
-            return None
-        result="".join(c for c in text if "0"<=c<="9")[::-1]
-        return result if re.fullmatch(r"\d{8}",result) else None
-    a=digits(first,quality_a)
-    b=digits(second,quality_b)
-    return a[-4:] if a and b==a else None
+    """Locate the complete eight-digit CIN on the front only.
 
+    Overlapping vertical bands tolerate moderate variation in camera position.
+    A hidden or conflicting number stays None; no birth-date inference.
+    """
+    h,w=card.shape[:2]
+    votes=set()
+    for top,bottom in ((.15,.30),(.23,.38),(.29,.44)):
+        band=card[int(h*top):int(h*bottom),int(w*.25):int(w*.76)]
+        if band.size==0:
+            continue
+        gray=cv2.cvtColor(cv2.cvtColor(band,cv2.COLOR_BGR2GRAY),
+                          cv2.COLOR_GRAY2BGR)
+        a,qa=recognize(session,letters,band)
+        b,qb=recognize(session,letters,gray)
+        def digits(text,confidence):
+            if confidence<.85:return None
+            number="".join(c for c in text if "0"<=c<="9")[::-1]
+            return number if re.fullmatch(r"[0-9]{8}",number) else None
+        first,second=digits(a,qa),digits(b,qb)
+        if first is not None and first==second:
+            votes.add(first)
+    return next(iter(votes))[-4:] if len(votes)==1 else None
 
 
 def birth_date(session,letters,card,given_name_row):
@@ -288,14 +296,12 @@ def extract_fields(photo,session,letters):
         b,gc=consensus_name(session,letters,card,centers[1])
         if a is None or b is None or min(sc,gc)<.72:
             return dict(OUTPUT_EMPTY)
-        # DOB geometry is not yet accepted on five private originals.
-        # Explicit private QA opt-in only; never imply verified birth date.
-        dob=None
-        if os.getenv("MALAK_V5_DOB_PRIVATE_QA","")=="1":
-            try:
-                dob=birth_date(session,letters,card,centers[1])
-            except (ValueError,cv2.error):
-                dob=None
+        # Two matching reads, known Tunisian month and a real calendar date.
+        # Hidden or ambiguous dates remain None. No automatic identity approval.
+        try:
+            dob=birth_date(session,letters,card,centers[1])
+        except (ValueError,cv2.error):
+            dob=None
         return {"surname":a,"givenName":b,
                 "cinLast4":cin_number(session,letters,card),
                 "birthDate":dob,
