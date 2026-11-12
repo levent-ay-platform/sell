@@ -32,14 +32,23 @@ internal object LocalDocumentOcr {
     private const val MAX_PAGES = 8
     // Keep document-specific labelled-name extraction independent of OCR
     // engine details. Never match a father name/date or invented OCR letters.
-    private data class ScanPage(val page:Int,val text:String,val confidence:Int) {
+    private data class ScanPage(
+        val page:Int,val text:String,val confidence:Int,
+        val spatialNames:List<PairNameEvidence> = emptyList(),
+        val certificateFields:TunisianDocumentFields.Certificate?=null,
+        val identityFields:TunisianDocumentFields.Identity?=null
+    ) {
         val source:String get() = if(text.any{it in '\u0600'..'\u06ff'}) "ocr-ar" else "ocr-fr"
     }
     private fun labelCandidates(pages:List<ScanPage>,identity:Boolean):List<PairNameEvidence> {
         return pages.flatMap { page->
             val names=if(identity)TunisianNameParser.identity(page.text)
                 else TunisianNameParser.certificate(page.text)
-            names.map{PairNameEvidence(it,page.page,page.source,page.confidence)}
+            // A result from a physically isolated printed field is permitted
+            // alongside explicit label candidates. Contradictions stay visible
+            // to oneName() and force an ambiguous result.
+            (names.map{PairNameEvidence(it,page.page,page.source,page.confidence)}+
+                page.spatialNames).distinctBy{TunisianNameParser.canonical(it.value)}
         }
     }
     private fun normalized(value:String):String=TunisianNameParser.canonical(value)
@@ -100,30 +109,30 @@ internal object LocalDocumentOcr {
             BitmapFactory.decodeStream(it,null,opts)
         }?:throw IllegalStateException("OCR_IMAGE_UNAVAILABLE")
     }
-    /** Preprocess only the name region of a CIN; document pixels stay in RAM.
-     * This is much smaller than an entire photo and avoids the portrait,
-     * watermark and unrelated birth/father data confusing Arabic OCR.
+    /** Region templates for an upright Tunisian CIN or CPF page. Read-only
+     * in-memory crops, never disk caching. The full-image fallback covers
+     * unrecognized layouts; it cannot override conflicting field readings.
      */
-    private fun nameRegion(bitmap:Bitmap,isIdentity:Boolean):Bitmap {
-        val left=(bitmap.width*(if(isIdentity)0.50f else 0.40f)).toInt()
-        val top=(bitmap.height*(if(isIdentity)0.32f else 0.40f)).toInt()
-        val right=(bitmap.width*0.97f).toInt()
-        val bottom=(bitmap.height*(if(isIdentity)0.72f else 0.78f)).toInt()
-        val cropped=Bitmap.createBitmap(bitmap,left,top,
-            (right-left).coerceAtLeast(1),(bottom-top).coerceAtLeast(1))
-        val prepared=Bitmap.createBitmap(cropped.width,cropped.height,
-            Bitmap.Config.ARGB_8888)
-        try {
-            val mono=ColorMatrix().apply{setSaturation(0f)}
-            val paint=Paint(Paint.FILTER_BITMAP_FLAG).apply {
-                colorFilter=ColorMatrixColorFilter(mono)
+    private fun region(bitmap:Bitmap,left:Float,top:Float,right:Float,
+                       bottom:Float,grayscale:Boolean=true):Bitmap {
+        val x=(bitmap.width*left).toInt().coerceIn(0,bitmap.width-2)
+        val y=(bitmap.height*top).toInt().coerceIn(0,bitmap.height-2)
+        val w=(bitmap.width*right).toInt().minus(x).coerceIn(2,bitmap.width-x)
+        val h=(bitmap.height*bottom).toInt().minus(y).coerceIn(2,bitmap.height-y)
+        val crop=Bitmap.createBitmap(bitmap,x,y,w,h)
+        if(!grayscale)return crop
+        val output=Bitmap.createBitmap(crop.width,crop.height,Bitmap.Config.ARGB_8888)
+        try{
+            val gray=ColorMatrix().apply{setSaturation(0f)}
+            val paint=Paint(Paint.FILTER_BITMAP_FLAG).apply{
+                colorFilter=ColorMatrixColorFilter(gray)
             }
-            Canvas(prepared).apply{
+            Canvas(output).apply{
                 drawColor(Color.WHITE)
-                drawBitmap(cropped,0f,0f,paint)
+                drawBitmap(crop,0f,0f,paint)
             }
-        }finally{cropped.recycle()}
-        return prepared
+        }finally{crop.recycle()}
+        return output
     }
     private fun readText(api:TessBaseAPI,bitmap:Bitmap):ScanPage {
         api.clear()
@@ -133,27 +142,68 @@ internal object LocalDocumentOcr {
     }
     private fun ocrSingle(api:TessBaseAPI,bitmap:Bitmap,index:Int,
                           identity:Boolean):ScanPage {
+        fun readBox(l:Float,t:Float,r:Float,b:Float,gray:Boolean=true):ScanPage {
+            val crop=region(bitmap,l,t,r,b,gray)
+            return try{readText(api,crop)}finally{crop.recycle()}
+        }
         try {
-            // For title certificates, start with full text to preserve page
-            // counts and joint-owner warnings. For CIN, scan only printed
-            // owner-name area first. Retry full image only if labels were lost.
             if(identity){
-                val crop=nameRegion(bitmap,true)
-                val first=try{readText(api,crop)}finally{crop.recycle()}
-                if(TunisianNameParser.identity(first.text).isNotEmpty())
-                    return first.copy(page=index)
-                val full=readText(api,bitmap)
-                val merged=if(full.text.length+first.text.length<60000)
-                    first.text+"\n"+full.text else full.text
-                return ScanPage(index,merged,minOf(first.confidence,full.confidence))
+                // Labelled surname and given-name field first; if its layout
+                // cannot be read, two narrow rows provide independent evidence.
+                val nameBlock=readBox(.49f,.35f,.98f,.68f)
+                var surnameText=""
+                var givenText=""
+                var surnameConfidence=0
+                var givenConfidence=0
+                if(TunisianNameParser.identity(nameBlock.text).isEmpty()){
+                    val s=readBox(.55f,.40f,.98f,.55f)
+                    val g=readBox(.55f,.52f,.98f,.66f)
+                    surnameText=s.text;givenText=g.text
+                    surnameConfidence=s.confidence;givenConfidence=g.confidence
+                }
+                val numberBand=readBox(.28f,.24f,.77f,.39f)
+                val birthBand=readBox(.37f,.67f,.98f,.83f)
+                var fields=TunisianDocumentFields.identity(
+                    nameBlock.text,surnameText,givenText,
+                    numberBand.text,birthBand.text)
+                var text=nameBlock.text
+                var confidence=nameBlock.confidence
+                if(fields.name==null) {
+                    // Single bounded fallback. No guessing from father-name row.
+                    val full=readText(api,bitmap)
+                    val fallback=TunisianDocumentFields.identity(
+                        nameBlock.text+"\n"+full.text,
+                        surnameText,givenText,numberBand.text,birthBand.text)
+                    fields=fallback
+                    text=full.text+"\n"+nameBlock.text
+                    confidence=minOf(full.confidence,nameBlock.confidence)
+                }else if(surnameText.isNotEmpty()&&givenText.isNotEmpty()){
+                    confidence=minOf(surnameConfidence,givenConfidence)
+                }
+                val names=fields.name?.let{listOf(PairNameEvidence(
+                    it,index,"ocr-ar",confidence))}.orEmpty()
+                return ScanPage(index,text,confidence,names,identityFields=fields)
             }
-            val full=readText(api,bitmap)
-            if(TunisianNameParser.certificate(full.text).isNotEmpty())
-                return full.copy(page=index)
-            val crop=nameRegion(bitmap,false)
-            val focus=try{readText(api,crop)}finally{crop.recycle()}
-            return ScanPage(index,full.text+"\n"+focus.text,
-                minOf(full.confidence,focus.confidence))
+            // Certificate header, registered-owner area and page footer are
+            // much smaller than a whole A4 scan. Query them independently.
+            val ownerZone=readBox(.39f,.43f,.98f,.77f)
+            val topFields=readBox(.12f,.15f,.97f,.38f)
+            val footer=readBox(.07f,.84f,.97f,.96f)
+            var all=topFields.text+"\n"+ownerZone.text+"\n"+footer.text
+            var fields=TunisianDocumentFields.certificate(
+                all,ownerZone.text,topFields.text,footer.text)
+            var confidence=ownerZone.confidence
+            if(fields.owner==null){
+                val full=readText(api,bitmap)
+                all=all+"\n"+full.text
+                fields=TunisianDocumentFields.certificate(
+                    all,ownerZone.text,topFields.text+"\n"+full.text,
+                    footer.text+"\n"+full.text)
+                confidence=minOf(confidence,full.confidence)
+            }
+            val names=fields.owner?.let{listOf(PairNameEvidence(
+                it,index,"ocr-ar",confidence))}.orEmpty()
+            return ScanPage(index,all,confidence,names,certificateFields=fields)
         }finally{bitmap.recycle()}
     }
     private suspend fun scanInput(context:Context,api:TessBaseAPI,
@@ -230,8 +280,10 @@ internal object LocalDocumentOcr {
             // Whole-image OCR confidence includes watermarks and portraits.
             // Below 65% we cannot assert a textual mismatch; request review.
             val minimumConfidence=minOf(owner?.confidence?:0,person?.confidence?:0)
-            val missingCertificatePages=cert.mapNotNull{
-                TunisianNameParser.declaredPages(it.text)}.any{it>cert.size}
+            val missingCertificatePages=cert.mapNotNull{ page->
+                page.certificateFields?.expectedPages
+                    ?:TunisianNameParser.declaredPages(page.text)
+            }.any{it>cert.size}
             val ambiguity=(certCandidates.size>1 && owner==null)||
                 (identityCandidates.size>1&&person==null)
             val assessment=TunisianNameParser.assess(
@@ -247,12 +299,20 @@ internal object LocalDocumentOcr {
                 reasons.add("LOW_OCR_CONFIDENCE")
             if(assessment=="TEXT_DIFFERENCE_NEEDS_REVIEW")
                 reasons.add("NAME_TEXT_DIFFERS_OR_SCRIPT_MISMATCH")
+            val land=cert.mapNotNull{it.certificateFields}.firstOrNull()
+            val card=id.mapNotNull{it.identityFields}.firstOrNull()
+            val localFields=LocalOcrFields(
+                titleNumber=land?.titleNumber,areaM2=land?.areaM2,
+                expectedCertificatePages=land?.expectedPages,
+                cinLast4=card?.cinNumber?.takeLast(4),
+                birthDate=card?.dateOfBirth)
             CertificateIdentityReview(
                 assessment,owner,person,"NOT_COMPARABLE",reasons,
                 if(identity.size==2)"TWO_FILES_UNCONFIRMED"
                 else if(id.size>=2)"MULTI_PAGE_UNCONFIRMED" else "FRONT_ONLY",
                 cert.size,id.size,
-                ownershipVerified=false,identityVerified=false,mayPublish=false
+                ownershipVerified=false,identityVerified=false,mayPublish=false,
+                localFields=localFields
             )
         }finally { api.recycle() }
     }
