@@ -66,3 +66,24 @@ test('conflicted or partial Arabic name fails closed, never invents a verified I
   assert.equal(result.surname,null);assert.equal(result.givenName,null);
   assert.equal(result.confidencePercent,0);
 });
+
+
+test('strict DOB gate accepts real calendar date and blocks malformed or future OCR',async()=>{
+  const h=harness();
+  h.setResponse({...reading,birthDate:'2000-02-29'});
+  assert.equal((await previewOwnerCin(request,h.deps)).birthDate,'2000-02-29');
+  for(const invalid of ['2001-02-29','2000-04-31','2099-01-01',
+                        '2000/02/29','2000-2-29','2000-02-00',
+                        '2000-13-01','تاريخ 2000-02-29','']){
+    h.setResponse({...reading,birthDate:invalid});
+    await assert.rejects(previewOwnerCin(request,h.deps),
+      /PRIVATE_CIN_MODEL_INVALID/);
+  }
+});
+test('DOB and CIN never survive without both readable name fields',async()=>{
+  const h=harness();
+  h.setResponse({...reading,surname:null,givenName:null,
+    cinLast4:'1234',birthDate:'2000-02-29',confidencePercent:97});
+  assert.deepEqual(await previewOwnerCin(request,h.deps),
+    {surname:null,givenName:null,cinLast4:null,birthDate:null,confidencePercent:0});
+});
