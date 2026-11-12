@@ -423,27 +423,43 @@ internal object LocalDocumentOcr {
     /** Preview the front while still on the capture screen. The user sees
      * unreadable/missing fields immediately, rather than after navigating.
      */
+    internal enum class FrontIssue { LOW_RESOLUTION }
     internal data class FrontScan(
         val surname:String?,val givenName:String?,val fullName:String?,
-        val cinLast4:String?,val birthDate:String?,val confidence:Int
+        val cinLast4:String?,val birthDate:String?,val confidence:Int,
+        val issue:FrontIssue?=null
     ){
         val readyForReview:Boolean get()=
-            fullName!=null&&surname!=null&&givenName!=null&&confidence>=65&&
+            issue==null&&fullName!=null&&surname!=null&&givenName!=null&&
+                confidence>=65&&
                 TunisianNameParser.canonical("$surname $givenName")==
                     TunisianNameParser.canonical(fullName)
     }
 
     suspend fun inspectFront(context:Context,uri:Uri,length:Long,mime:String):FrontScan=
         withContext(Dispatchers.IO){
+            if(mime=="image/jpeg"||mime=="image/png"){
+                // This check intentionally runs BEFORE loading OCR models.
+                // A low resolution thumbnail cannot be fixed by scaling.
+                val options=BitmapFactory.Options().apply{inJustDecodeBounds=true}
+                context.contentResolver.openInputStream(uri)?.use{
+                    BitmapFactory.decodeStream(it,null,options)
+                }?:throw IllegalStateException("OCR_IMAGE_UNAVAILABLE")
+                if(minOf(options.outWidth,options.outHeight)<420 ||
+                    maxOf(options.outWidth,options.outHeight)<760)
+                    return@withContext FrontScan(null,null,null,null,null,0,
+                        FrontIssue.LOW_RESOLUTION)
+            }
             val engine=TessBaseAPI()
             try{
                 if(!engine.init(ensureModels(context),"ara+fra"))
                     throw IllegalStateException("OCR_ENGINE_UNAVAILABLE")
                 val scans=scanInput(context,engine,
                     listOf(PairEvidenceFile(uri,length,mime)),true)
-                val scan=scans.single()
+                val scan=scans.firstOrNull()
+                    ?:throw IllegalStateException("OCR_IMAGE_UNAVAILABLE")
                 val fields=scan.identityFields
-                val name=oneName(labelCandidates(scans,true))
+                val name=oneName(labelCandidates(scans.take(1),true))
                 FrontScan(
                     fields?.surname,fields?.givenName,name?.value,
                     fields?.cinNumber?.takeLast(4),fields?.dateOfBirth,
