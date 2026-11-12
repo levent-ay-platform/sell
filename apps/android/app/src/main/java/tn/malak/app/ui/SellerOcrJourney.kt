@@ -486,6 +486,90 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                             }
                         }
                     }
+                    if(pendingPhoto!=null){
+                        val pending=pendingPhoto!!
+                        Surface(color=Color.White,shape=RoundedCornerShape(20.dp),
+                            border=BorderStroke(1.dp,CardBorder)){
+                            Column(Modifier.fillMaxWidth().padding(14.dp),
+                                verticalArrangement=Arrangement.spacedBy(10.dp)){
+                                Text(s(R.string.camera_review_title),
+                                    color=Brand.Ink,fontSize=17.sp,
+                                    fontWeight=FontWeight.SemiBold)
+                                val preview=remember(pending.uri){
+                                    runCatching{
+                                        val opts=BitmapFactory.Options().apply{inSampleSize=4}
+                                        context.contentResolver.openInputStream(pending.uri)?.use{
+                                            BitmapFactory.decodeStream(it,null,opts)
+                                        }
+                                    }.getOrNull()
+                                }
+                                if(preview!=null){
+                                    Image(preview.asImageBitmap(),null,
+                                        modifier=Modifier.fillMaxWidth().heightIn(max=210.dp),
+                                        contentScale=ContentScale.Fit)
+                                }
+                                if(reviewSide==0){
+                                    if(frontReadBusy)
+                                        LinearProgressIndicator(Modifier.fillMaxWidth())
+                                    if(frontRead!=null) {
+                                        val scan=frontRead!!
+                                        SummaryFact(s(R.string.camera_review_name),
+                                            scan.fullName?:s(R.string.pair_unreadable))
+                                        SummaryFact(s(R.string.local_surname),
+                                            scan.surname?:s(R.string.pair_unreadable))
+                                        SummaryFact(s(R.string.local_given_name),
+                                            scan.givenName?:s(R.string.pair_unreadable))
+                                        SummaryFact(s(R.string.camera_review_cin),
+                                            scan.cinLast4?.let{"••••"+it}
+                                                ?:s(R.string.pair_unreadable))
+                                        SummaryFact(s(R.string.camera_review_birth),
+                                            scan.birthDate?:s(R.string.pair_unreadable))
+                                    }
+                                    Text(s(when {
+                                        frontReadBusy->R.string.camera_review_scanning
+                                        frontReadFailed->R.string.camera_review_failed
+                                        frontRead?.readyForReview==true->
+                                            R.string.camera_review_ready
+                                        else->R.string.camera_review_unreadable
+                                    }),color=Brand.Muted,fontSize=12.sp)
+                                }else Text(s(R.string.camera_scan_back),
+                                    color=Brand.Muted,fontSize=12.sp)
+                                Row(Modifier.fillMaxWidth(),
+                                    horizontalArrangement=Arrangement.spacedBy(8.dp)){
+                                    OutlinedButton(onClick={
+                                        PrivateCaptureMemory.discard(pending.uri)
+                                        pendingPhoto=null
+                                        frontRead=null
+                                        cameraSide=reviewSide
+                                    },modifier=Modifier.weight(1f)){
+                                        Text(s(R.string.camera_review_retake))
+                                    }
+                                    Button(onClick={
+                                        if(reviewSide==0){
+                                            identityFiles.forEach{
+                                                PrivateCaptureMemory.discard(it.uri)
+                                            }
+                                            identityFiles.clear()
+                                            identityFiles.add(pending)
+                                        }else if(identityFiles.size==1&&
+                                            identityFiles[0].mime!="application/pdf"){
+                                            identityFiles.add(pending)
+                                        }
+                                        pendingPhoto=null
+                                        frontRead=null
+                                        identityMessage=R.string.file_selected
+                                    },enabled=(reviewSide==1&&identityFiles.size==1)||
+                                        (reviewSide==0&&frontRead?.readyForReview==true &&
+                                            !frontReadBusy),
+                                        modifier=Modifier.weight(1f)){
+                                        Text(s(R.string.camera_review_accept))
+                                    }
+                                }
+                                Text(s(R.string.camera_review_privacy),
+                                    fontSize=11.sp,color=Brand.Muted)
+                            }
+                        }
+                    }
                     if(identityMessage!=0)Text(s(identityMessage),color=Brand.Muted,fontSize=12.sp)
                     if(identityFiles.isEmpty())PlainNotice(Icons.Outlined.Badge,s(R.string.identity_none))
                     else {
