@@ -82,6 +82,14 @@ internal object TunisianDocumentFields {
         val re=Regex("""(?<!\d)\d{8}(?!\d)""")
         return re.findAll(clean).map{it.value}.distinct().singleOrNull()
     }
+    /** Two independent image renderings must agree on every digit.
+     * Agreement still means OCR consistency only, not an authentic CIN.
+     */
+    fun repeatableCin(primary:String,secondary:String):String? {
+        val first=numberFromCinBand(primary)
+        val second=numberFromCinBand(secondary)
+        return first?.takeIf{it==second}
+    }
     fun birthDate(text:String):String? {
         val clean=asciiDigits(text)
         val re=Regex("""(?:[0-3]?\d[/.\-\s]+[0-1]?\d[/.\-\s]+(?:19|20)\d{2}|[0-3]?\d\s+(?:جانفي|فيفري|مارس|أفريل|ماي|جوان|جويلية|أوت|سبتمبر|أكتوبر|نوفمبر|ديسمبر|janvier|février|mars|avril|mai|juin|juillet|août|septembre|octobre|novembre|décembre)\s+(?:19|20)\d{2})""",RegexOption.IGNORE_CASE)

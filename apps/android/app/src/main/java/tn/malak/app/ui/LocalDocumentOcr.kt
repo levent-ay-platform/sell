@@ -165,11 +165,17 @@ internal object LocalDocumentOcr {
                     surnameText=s.text;givenText=g.text
                     surnameConfidence=s.confidence;givenConfidence=g.confidence
                 }
+                // Masked CIN is shown only when grayscale and original
+                // colour OCR independently agree. A valid-looking 8-digit
+                // string is otherwise NOT reliable enough to display.
                 val numberBand=readBox(.28f,.24f,.77f,.39f)
+                val numberInColour=readBox(.28f,.24f,.77f,.39f,false)
+                val stableCin=TunisianDocumentFields.repeatableCin(
+                    numberBand.text,numberInColour.text)
                 val birthBand=readBox(.37f,.67f,.98f,.83f)
                 var fields=TunisianDocumentFields.identity(
                     nameBlock.text,surnameText,givenText,
-                    numberBand.text,birthBand.text)
+                    if(stableCin!=null)numberBand.text else "",birthBand.text)
                 var text=nameBlock.text
                 var confidence=nameBlock.confidence
                 if(fields.name==null) {
@@ -177,7 +183,8 @@ internal object LocalDocumentOcr {
                     val full=readText(api,bitmap)
                     val fallback=TunisianDocumentFields.identity(
                         nameBlock.text+"\n"+full.text,
-                        surnameText,givenText,numberBand.text,birthBand.text)
+                        surnameText,givenText,
+                        if(stableCin!=null)numberBand.text else "",birthBand.text)
                     fields=fallback
                     text=full.text+"\n"+nameBlock.text
                     confidence=minOf(full.confidence,nameBlock.confidence)

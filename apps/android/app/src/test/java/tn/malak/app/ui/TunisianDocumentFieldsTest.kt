@@ -52,4 +52,11 @@ class TunisianDocumentFieldsTest {
         assertNull(TunisianDocumentFields.titleNumber("رقم 654321"))
         assertNull(TunisianDocumentFields.areaM2("150 متر"))
     }
+    @Test fun cinDigitDisagreementMustNotBeDisplayedAsReliable() {
+        assertEquals("01234567",TunisianDocumentFields.repeatableCin("01234567","01234567"))
+        assertNull(TunisianDocumentFields.repeatableCin("01234567","01234587"))
+        assertNull(TunisianDocumentFields.repeatableCin("01234567","0I234567"))
+        assertNull(TunisianDocumentFields.repeatableCin("01234567",""))
+    }
+
 }
