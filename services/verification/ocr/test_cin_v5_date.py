@@ -60,47 +60,53 @@ class DateDecodeTests(unittest.TestCase):
         self.assertIsNone(self.read(year='0002السنة'))
         self.assertIsNone(self.read(day='50/'))
 
-    def test_front_roi_passes_six_bounded_crops_to_consensus(self):
-        """Synthetic full-card pixels only; no real OCR or PII."""
+    def test_front_roi_passes_separate_field_crops_to_consensus(self):
+        """Only synthetic pixels: date uses 3 positions and two readings each."""
         import numpy as np
         import cin_v5
-        card = np.full((760, 1200, 3), 230, dtype=np.uint8)
-        reads = [('0002', .97), ('0002', .97),
-                 ('جويلية', .95), ('جويلية', .93),
-                 ('50', .96), ('50', .95)]
-        with patch.object(cin_v5, 'recognize', side_effect=reads) as recognizer:
-            result = cin_v5.birth_date(None, [], card, given_name_row=470)
-        self.assertEqual(result, '2000-07-05')
-        self.assertEqual(recognizer.call_count, 6)
-        for args in [call.args for call in recognizer.call_args_list]:
-            crop = args[2]
-            self.assertTrue(18 <= crop.shape[0] <= 90)
-            self.assertTrue(50 <= crop.shape[1] <= 350)
-        self.assertEqual(card[0, 0, 0], 230)
+        card=np.full((760,1200,3),230,dtype=np.uint8)
+        def numeric(_session,_letters,crop):
+            # Approximate ROI size, never substitute actual test card data.
+            value="50" if crop.shape[1]<250 else "0002"
+            return [(value,.97),(value,.96)]
+        with patch.object(cin_v5,'numeric_pair',side_effect=numeric) as read, \
+             patch.object(cin_v5,'recognize',return_value=('جويلية',.95)) as month:
+            value=cin_v5.birth_date(None,[],card,given_name_row=470)
+        self.assertEqual(value,'2000-07-05')
+        self.assertEqual(read.call_count,6)
+        self.assertEqual(month.call_count,6)
+        for args in [call.args for call in read.call_args_list]:
+            crop=args[2]
+            self.assertTrue(18<=crop.shape[0]<=90)
+            self.assertTrue(50<=crop.shape[1]<=350)
+        self.assertEqual(card[0,0,0],230)
 
     def test_front_roi_missing_or_ambiguous_does_not_create_date(self):
         import numpy as np
         import cin_v5
-        card = np.full((760, 1200, 3), 220, dtype=np.uint8)
-        with patch.object(cin_v5, 'recognize') as recognizer:
-            self.assertIsNone(cin_v5.birth_date(None, [], card, given_name_row=10))
-            recognizer.assert_not_called()
-        with patch.object(cin_v5, 'recognize',
-                          side_effect=[('0002', .99)] * 6):
-            self.assertIsNone(cin_v5.birth_date(None, [], card, given_name_row=470))
-
+        card=np.full((760,1200,3),220,dtype=np.uint8)
+        with patch.object(cin_v5,'numeric_pair') as read:
+            self.assertIsNone(cin_v5.birth_date(None,[],card,given_name_row=10))
+            read.assert_not_called()
+        with patch.object(cin_v5,'numeric_pair',
+                          return_value=[("0002",.99)]*2), \
+             patch.object(cin_v5,'recognize',return_value=("جويلية",.99)):
+            self.assertIsNone(cin_v5.birth_date(None,[],card,given_name_row=470))
 
     def test_front_number_vote_and_conflict(self):
         import numpy as np
         import cin_v5
         card=np.full((760,1200,3),220,dtype=np.uint8)
-        with patch.object(cin_v5,'recognize',side_effect=[('87654321',.96)]*6) as read:
+        with patch.object(cin_v5,'numeric_pair',
+                          return_value=[("87654321",.96)]*2) as read:
             self.assertEqual(cin_v5.cin_number(None,[],card),'5678')
-        self.assertEqual(read.call_count,6)
-        variants=[('87654321',.96)]*2+[('87654322',.96)]*2+[('',.99)]*2
-        with patch.object(cin_v5,'recognize',side_effect=variants):
+        self.assertEqual(read.call_count,8)
+        with patch.object(cin_v5,'numeric_pair',side_effect=[
+                [("87654321",.96)]*2,
+                [("87654322",.96)]*2]):
             self.assertIsNone(cin_v5.cin_number(None,[],card))
-        with patch.object(cin_v5,'recognize',return_value=('',.99)):
+        with patch.object(cin_v5,'numeric_pair',
+                          return_value=[("",.99)]*2):
             self.assertIsNone(cin_v5.cin_number(None,[],card))
 
     def test_front_dob_enabled_in_extraction(self):
