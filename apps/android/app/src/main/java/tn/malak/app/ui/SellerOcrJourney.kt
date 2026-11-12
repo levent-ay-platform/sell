@@ -237,6 +237,9 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
             val chosen=runCatching{readIdentityChoice(context,uri,true)}.getOrNull()
             if(chosen==null)identityMessage=R.string.identity_file_rejected
             else {
+                identityFiles.forEach{PrivateCaptureMemory.discard(it.uri)}
+                pendingPhoto?.let{PrivateCaptureMemory.discard(it.uri)}
+                pendingPhoto=null
                 identityFiles.clear()
                 identityFiles.add(chosen)
                 identityMessage=R.string.file_selected
