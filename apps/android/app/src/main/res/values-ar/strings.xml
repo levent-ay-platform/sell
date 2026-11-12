@@ -199,6 +199,9 @@
     <string name="camera_field_guide_note">التصوير المباشر فقط. أي حقل غير واضح يتطلب إعادة الالتقاط.</string>
     <string name="camera_move_back">بعّد البطاقة لتظهر الزوايا الأربع</string>
     <string name="camera_stabilize">ثبّت البطاقة والهاتف</string>
+    <string name="camera_focus_fields">ثبّت الهاتف ووضّح مناطق الحقول الأربعة</string>
+    <string name="camera_correct_angle">عدّل ميلان البطاقة لتصبح مستقيمة</string>
+    <string name="camera_preview_quality_only">حدود البطاقة والوضوح تقديرية، قراءة البيانات بعد الالتقاط.</string>
     <string name="camera_align_hint">خلّي زوايا البطاقة الأربع داخل الإطار</string>
     <string name="camera_more_light">قرّب البطاقة من ضوء أفضل</string>
     <string name="camera_reduce_glare">أبعد انعكاس الضوء عن البطاقة</string>

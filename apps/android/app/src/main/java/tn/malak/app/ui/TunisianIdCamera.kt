@@ -23,6 +23,7 @@ import androidx.camera.core.resolutionselector.ResolutionSelector
 import androidx.camera.core.resolutionselector.ResolutionStrategy
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -38,6 +39,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -55,17 +59,17 @@ import kotlin.math.sqrt
 /** Rotated center-frame luminance sample for fast, private capture guidance.
  * These statistics cannot by themselves prove an ID or text is legible.
  */
-private fun checkLight(frame:ImageProxy,previous:IntArray?):Pair<CaptureHint,IntArray> {
-    val plane=frame.planes.firstOrNull()?:return CaptureHint.WAIT to IntArray(0)
+private fun checkLight(frame:ImageProxy,previous:IntArray?):Pair<FrameAssessment,IntArray> {
+    val plane=frame.planes.firstOrNull()?:return FrameAssessment(CaptureHint.WAIT) to IntArray(0)
     val buffer=plane.buffer
     val rot=frame.imageInfo.rotationDegrees
     val width=if(rot%180==0)frame.width else frame.height
     val height=if(rot%180==0)frame.height else frame.width
-    if(width<64||height<64)return CaptureHint.WAIT to IntArray(0)
-    val roiW=(width*.86).toInt()
-    val roiH=minOf((roiW/1.585f).toInt(),(height*.74).toInt())
+    if(width<64||height<64)return FrameAssessment(CaptureHint.WAIT) to IntArray(0)
+    val roiW=(width*.99).toInt()
+    val roiH=minOf((roiW/1.38f).toInt(),(height*.74).toInt())
     val left=(width-roiW)/2;val top=(height-roiH)/2
-    val cols=60;val rows=38
+    val cols=160;val rows=112
     val samples=IntArray(cols*rows)
     for(r in 0 until rows)for(c in 0 until cols){
         val u=left+(c*roiW+roiW/2)/cols
@@ -79,10 +83,10 @@ private fun checkLight(frame:ImageProxy,previous:IntArray?):Pair<CaptureHint,Int
         val offset=y*plane.rowStride+x*plane.pixelStride
         if(x<0||y<0||x>=frame.width||y>=frame.height||
             offset !in 0 until buffer.limit())
-            return CaptureHint.WAIT to IntArray(0)
+            return FrameAssessment(CaptureHint.WAIT) to IntArray(0)
         samples[r*cols+c]=buffer.get(offset).toInt() and 255
     }
-    return CaptureFrameAssessment.evaluate(samples,cols,rows,previous) to samples
+    return CaptureFrameAssessment.inspect(samples,cols,rows,previous) to samples
 }
 
 private fun rotateAndEncode(image:ImageProxy):ByteArray {
@@ -171,7 +175,7 @@ internal fun TunisianIdCamera(
     LaunchedEffect(Unit){
         if(!permission)requestPermission.launch(Manifest.permission.CAMERA)
     }
-    var lighting by remember {mutableStateOf(CaptureHint.WAIT)}
+    var pictureQuality by remember {mutableStateOf(FrameAssessment(CaptureHint.WAIT))}
     var ready by remember {mutableStateOf(false)}
     var capturing by remember {mutableStateOf(false)}
     var cameraError by remember {mutableStateOf(false)}
@@ -215,12 +219,13 @@ internal fun TunisianIdCamera(
                             if(frames%5==0){
                                 val (measure,pixels)=checkLight(frame,previous)
                                 previous=pixels.takeIf{it.isNotEmpty()}
-                                stable=if(measure==CaptureHint.GOOD)
+                                stable=if(measure.hint==CaptureHint.GOOD)
                                     (stable+1).coerceAtMost(3) else 0
-                                val hint=if(measure==CaptureHint.GOOD&&stable<2)
-                                    CaptureHint.WAIT else measure
+                                // Require two matching stable analyzer samples.
+                                val result=if(measure.hint==CaptureHint.GOOD&&stable<2)
+                                    measure.copy(hint=CaptureHint.WAIT) else measure
                                 handler.post {
-                                    if(active.get()&&valid.get())lighting=hint
+                                    if(active.get()&&valid.get())pictureQuality=result
                                 }
                             }
                         }finally{frame.close()}
@@ -248,12 +253,14 @@ internal fun TunisianIdCamera(
     }
     DisposableEffect(Unit){onDispose{active.set(false);executor.shutdown()}}
     BackHandler{onClose()}
-    val hint=when(lighting){
+    val hint=when(pictureQuality.hint){
         CaptureHint.DARK->R.string.camera_more_light
         CaptureHint.GLARE->R.string.camera_reduce_glare
         CaptureHint.TOO_FAR->R.string.camera_move_closer
         CaptureHint.MOVE_BACK->R.string.camera_move_back
         CaptureHint.MOVING->R.string.camera_stabilize
+        CaptureHint.FOCUS->R.string.camera_focus_fields
+        CaptureHint.TILT->R.string.camera_correct_angle
         CaptureHint.GOOD->R.string.camera_hold_steady
         CaptureHint.WAIT->R.string.camera_align_hint
     }
@@ -271,9 +278,8 @@ internal fun TunisianIdCamera(
                         color=Color.White,fontSize=19.sp)
                 }
                 Box(Modifier.align(Alignment.Center)
-                    .fillMaxWidth(.91f).aspectRatio(1.585f)
-                    .border(BorderStroke(3.dp,if(lighting==CaptureHint.GOOD)
-                        Color(0xFF5AD3A2) else Color.White),
+                    .fillMaxWidth(.84f).aspectRatio(1.585f)
+                    .border(BorderStroke(2.dp,Color.White.copy(alpha=.55f)),
                         RoundedCornerShape(19.dp))){
                     // Guides approximate printed zones; green does NOT mean OCR passed.
                     Box(Modifier.align(Alignment.TopCenter).padding(top=10.dp)
@@ -297,10 +303,42 @@ internal fun TunisianIdCamera(
                         }
                     }
                 }
+                Canvas(Modifier.align(Alignment.Center)
+                    .fillMaxWidth(.99f).aspectRatio(1.38f)){
+                    val b=pictureQuality.bounds
+                    if(b!=null){
+                        val green=Color(0xFF5AD3A2)
+                        val outline=if(pictureQuality.hint==CaptureHint.GOOD)
+                            green else Color(0xFFFFD37C)
+                        val x0=b.left*size.width
+                        val y0=b.top*size.height
+                        val x1=b.right*size.width
+                        val y1=b.bottom*size.height
+                        val path=Path().apply{
+                            moveTo(x0,y0);lineTo(x1,y0);lineTo(x1,y1)
+                            lineTo(x0,y1);close()
+                        }
+                        drawPath(path,outline,style=Stroke(width=3.dp.toPx()))
+                        for(zoneIndex in CaptureFrameAssessment.zones.indices){
+                            val z=CaptureFrameAssessment.zones[zoneIndex]
+                            val good=pictureQuality.zones.getOrNull(zoneIndex)==true
+                            val color=if(good) green else Color(0xFFFFD37C)
+                            val zl=x0+(x1-x0)*z.x0;val zr=x0+(x1-x0)*z.x1
+                            val zt=y0+(y1-y0)*z.y0;val zb=y0+(y1-y0)*z.y1
+                            val fieldPath=Path().apply{
+                                moveTo(zl,zt);lineTo(zr,zt);lineTo(zr,zb)
+                                lineTo(zl,zb);close()
+                            }
+                            drawPath(fieldPath,color,style=Stroke(width=1.dp.toPx()))
+                        }
+                    }
+                }
                 Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth()
                     .background(Color.Black.copy(alpha=.76f))
                     .padding(20.dp),horizontalAlignment=Alignment.CenterHorizontally){
                     Text(s(hint),color=Color.White,fontSize=15.sp)
+                    Text(s(R.string.camera_preview_quality_only),
+                        color=Color.White.copy(alpha=.72f),fontSize=11.sp)
                     Spacer(Modifier.height(17.dp))
                     if(capturing)CircularProgressIndicator(color=Color.White)
                     else Button(onClick={
@@ -329,7 +367,7 @@ internal fun TunisianIdCamera(
                                 }}
                             }
                         })
-                    },enabled=ready&&!capturing&&lighting==CaptureHint.GOOD,
+                    },enabled=ready&&!capturing&&pictureQuality.hint==CaptureHint.GOOD,
                         colors=ButtonDefaults.buttonColors(containerColor=Color.White),
                         shape=CircleShape,modifier=Modifier.size(76.dp),
                         contentPadding=PaddingValues(0.dp)){
