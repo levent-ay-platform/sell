@@ -25,11 +25,17 @@ internal data class PairEvidenceFile(val uri:Uri,val expectedBytes:Long,val mime
     val idempotencyKey:String=UUID.randomUUID().toString())
 internal enum class PairProgress { CASE_PROVISION,CERTIFICATE_UPLOAD,IDENTITY_UPLOAD,COMPARING }
 internal data class PairNameEvidence(val value:String,val page:Int,val source:String,val confidence:Int?)
+/** PII is shown only in the user's local screen and never persisted or logged. */
+internal data class LocalOcrFields(
+    val titleNumber:String?,val areaM2:String?,val expectedCertificatePages:Int?,
+    val cinLast4:String?,val birthDate:String?
+)
 internal data class CertificateIdentityReview(
     val assessment:String,val certificateName:PairNameEvidence?,val identityName:PairNameEvidence?,
     val cinStatus:String,val reasons:List<String>,val identityCoverage:String,
     val certificatePages:Int,val identityPages:Int,
-    val ownershipVerified:Boolean=false,val identityVerified:Boolean=false,val mayPublish:Boolean=false)
+    val ownershipVerified:Boolean=false,val identityVerified:Boolean=false,
+    val mayPublish:Boolean=false,val localFields:LocalOcrFields?=null)
 internal class OwnerPairException(val statusCode:Int):Exception("PRIVATE_PAIR_UNAVAILABLE")
 
 private const val DOC_LIMIT=12L*1024L*1024L

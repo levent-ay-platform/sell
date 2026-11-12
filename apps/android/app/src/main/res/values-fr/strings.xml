@@ -169,6 +169,11 @@
     <string name="local_ocr_server_later">La vérification serveur n’est pas encore connectée. L’OCR local fonctionne indépendamment.</string>
     <string name="pair_front_only">Le recto suffit pour la comparaison textuelle provisoire du nom.</string>
     <string name="identity_back_optional">Ajouter le verso (facultatif)</string>
+    <string name="local_title_ref">Référence du titre foncier (OCR)</string>
+    <string name="local_area_m2">Superficie imprimée (OCR)</string>
+    <string name="local_expected_pages">Nombre total de pages déclaré</string>
+    <string name="local_cin_masked">CIN (4 derniers chiffres)</string>
+    <string name="local_birth_date">Date de naissance (OCR, non vérifiée)</string>
     <string name="pair_preliminary_only">L’OCR ne vérifie ni l’identité ni la propriété et n’autorise pas une publication. Contrôle indépendant obligatoire.</string>
     <string name="pair_creating_case">Création de la demande de vérification privée…</string>
     <string name="pair_upload_cert">Envoi sécurisé du certificat…</string>

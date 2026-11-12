@@ -169,6 +169,11 @@
     <string name="local_ocr_server_later">التحقق عبر الخادم غير متصل حالياً، لكن زر OCR المحلي يعمل بدونه.</string>
     <string name="pair_front_only">الوجه الأمامي كافٍ لمقارنة الاسم الأولية، من دون إثبات صحة الهوية.</string>
     <string name="identity_back_optional">إضافة الوجه الخلفي (اختياري)</string>
+    <string name="local_title_ref">معرّف الرسم العقاري (قراءة OCR)</string>
+    <string name="local_area_m2">المساحة المطبوعة في الشهادة (OCR)</string>
+    <string name="local_expected_pages">عدد صفحات الشهادة المذكور</string>
+    <string name="local_cin_masked">رقم بطاقة التعريف (آخر 4 أرقام)</string>
+    <string name="local_birth_date">تاريخ الولادة (قراءة OCR غير موثّقة)</string>
     <string name="pair_preliminary_only">نتيجة OCR لا تثبت صحة الهوية أو ملكية العقار ولا تسمح بالنشر. يلزم تدقيق مستقل.</string>
     <string name="pair_creating_case">جارٍ إنشاء طلب التحقق الخاص…</string>
     <string name="pair_upload_cert">جارٍ إرسال شهادة الملكية بأمان…</string>
