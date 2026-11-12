@@ -48,6 +48,17 @@ class TunisianDocumentFieldsTest {
         assertNull(TunisianDocumentFields.numberFromCinBand("01234567 07654321"))
         assertNull(TunisianDocumentFields.numberFromCinBand("0001234"))
     }
+    @Test fun printedTunisianAreaAllowsBareMetreUnitOnlyAfterAreaLabel(){
+        // Fictional CPF-like header: no user image or identifier in CI.
+        val cert=TunisianDocumentFields.certificate(
+            "معرف الرسم العقاري: 745219 نابل\nالمساحة: 510 م\nالتجزئة: 510 جزء",
+            "", "", "صفحة 1 من 2")
+        assertEquals("745219",cert.titleNumber)
+        assertEquals("510",cert.areaM2)
+        assertEquals(2,cert.expectedPages)
+        assertNull(TunisianDocumentFields.areaM2("التجزئة: 510 جزء"))
+        assertNull(TunisianDocumentFields.areaM2("مجموع 510 م"))
+    }
     @Test fun noUnlabelledAreaOrTitleGuess(){
         assertNull(TunisianDocumentFields.titleNumber("رقم 654321"))
         assertNull(TunisianDocumentFields.areaM2("150 متر"))
