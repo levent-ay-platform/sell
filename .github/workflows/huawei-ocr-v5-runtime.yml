@@ -6,6 +6,7 @@ on:
     paths:
       - 'services/verification/ocr/cin_v5.py'
       - 'services/verification/ocr/cin_v5_vote.py'
+      - 'services/verification/ocr/cin_v5_socket.py'
       - 'services/verification/docker/HuaweiCinV5.Dockerfile'
       - '.github/workflows/huawei-ocr-v5-runtime.yml'
   workflow_dispatch:
@@ -42,6 +43,53 @@ jobs:
             malak-huawei-v5:synthetic-qa --self-test)"
           test "$response" = '{"ok":true,"engine":"arabic-v5","modelReady":true}'
           echo 'PASS: OFFLINE public v5 ONNX model, no real image, limited CPU/RAM, no network'
+      - name: Exercise warm Unix socket with TWO synthetic images, without network
+        run: |
+          set -euo pipefail
+          docker run -d --name malak-warm-v5-test \
+            --network none --read-only --user 10001:10001 \
+            --security-opt no-new-privileges --cap-drop ALL \
+            --pids-limit 64 --cpus 1 --memory 768m --memory-swap 768m \
+            --tmpfs /work:rw,nosuid,nodev,uid=10001,gid=10001,mode=0700,size=33554432 \
+            --tmpfs /run/malak-ocr:rw,nosuid,nodev,uid=10001,gid=10001,mode=0700,size=1048576 \
+            malak-huawei-v5:synthetic-qa --serve >/dev/null
+          trap 'docker rm -f malak-warm-v5-test >/dev/null 2>&1 || true' EXIT
+          ready=0
+          for i in $(seq 1 20); do
+            if docker exec malak-warm-v5-test test -S /run/malak-ocr/ocr-v5.sock; then
+              ready=1; break
+            fi
+            sleep 1
+          done
+          test "$ready" -eq 1
+          docker exec -i malak-warm-v5-test python -E -s - <<'PY'
+          import json, socket, struct
+          import cv2, numpy as np
+          frame=np.full((760,1200,3),255,dtype=np.uint8)
+          success,buf=cv2.imencode('.png',frame)
+          assert success
+          data=buf.tobytes()
+          def read_exact(s,n):
+              result=bytearray()
+              while len(result)<n:
+                  part=s.recv(n-len(result))
+                  if not part: raise AssertionError('early socket close')
+                  result.extend(part)
+              return bytes(result)
+          for _ in range(2):
+              with socket.socket(socket.AF_UNIX,socket.SOCK_STREAM) as client:
+                  client.settimeout(15)
+                  client.connect('/run/malak-ocr/ocr-v5.sock')
+                  client.sendall(struct.pack('>IB',len(data),2)+data)
+                  length=struct.unpack('>I',read_exact(client,4))[0]
+                  assert 12<=length<=4096
+                  response=json.loads(read_exact(client,length))
+                  assert response['ok'] is True
+                  assert response['surname'] is None
+                  assert response['givenName'] is None
+                  assert response['confidencePercent']==0
+          print('PASS: two offline AF_UNIX synthetic requests, one warm model, no PII')
+          PY
       - name: Check never upload model or personal evidence artifacts
         run: |
           set -euo pipefail
