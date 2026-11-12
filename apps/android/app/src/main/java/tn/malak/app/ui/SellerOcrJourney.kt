@@ -156,20 +156,58 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
     }
     var frontReadBusy by remember(draftFile){mutableStateOf(false)}
     var frontReadFailed by remember(draftFile){mutableStateOf(false)}
-    LaunchedEffect(draftFile,pendingPhoto?.uploadKey,reviewSide){
+    var captureOcrConsent by remember(draftFile){mutableStateOf(false)}
+    LaunchedEffect(draftFile,pendingPhoto?.uploadKey,reviewSide,
+        captureOcrConsent,ownerSession,authenticatedOwnerSession){
         val pending=pendingPhoto
         frontRead=null;frontReadFailed=false;frontReadBusy=false
         if(pending!=null&&reviewSide==0){
-            frontReadBusy=true
-            try{
-                val result=LocalDocumentOcr.inspectFront(
-                    context,pending.uri,pending.length,pending.mime)
-                if(pendingPhoto?.uploadKey==pending.uploadKey)frontRead=result
-            }catch(cancel:CancellationException){throw cancel}
-            catch (_:Exception){
-                if(pendingPhoto?.uploadKey==pending.uploadKey)frontReadFailed=true
-            }finally{
-                if(pendingPhoto?.uploadKey==pending.uploadKey)frontReadBusy=false
+            if(!captureOcrConsent){
+                frontRead=LocalDocumentOcr.FrontScan(null,null,null,null,null,0,
+                    LocalDocumentOcr.FrontIssue.CONSENT_REQUIRED)
+            }else{
+                frontReadBusy=true
+                try{
+                    val activeCase=ownerSession?:provisionedCase?:run {
+                        val auth=authenticatedOwnerSession
+                        if(auth==null){
+                            frontRead=LocalDocumentOcr.FrontScan(
+                                null,null,null,null,null,0,
+                                LocalDocumentOcr.FrontIssue.SESSION_REQUIRED)
+                            null
+                        }else{
+                            val normalized=area.replace(',', '.')
+                            val values=listOf(name.trim(),region.trim(),normalized,price,capacity)
+                            val material=values.joinToString(""){it.length.toString()+":"+it}
+                            val fp=java.security.MessageDigest.getInstance("SHA-256")
+                                .digest(material.toByteArray(Charsets.UTF_8))
+                                .joinToString(""){"%02x".format(it.toInt() and 255)}
+                            val known=prefs.getString("pending_case_key",null)
+                            val k=if(prefs.getString("pending_case_fingerprint",null)==fp &&
+                                known!=null && Regex("^[0-9a-fA-F-]{36}$").matches(known))
+                                known else UUID.randomUUID().toString()
+                            if(!prefs.edit().putString("pending_case_fingerprint",fp)
+                                .putString("pending_case_key",k).commit())
+                                throw IllegalStateException("CASE_INTENT_NOT_DURABLE")
+                            provisionOwnerEvidenceCase(auth,NewOwnerCaseDraft(
+                                k,name.trim(),region.trim(),normalized,price,capacity))
+                                .also{provisionedCase=it}
+                        }
+                    }
+                    if(activeCase!=null){
+                        val result=LocalDocumentOcr.inspectFront(
+                            context,pending.uri,pending.length,pending.mime,activeCase)
+                        if(pendingPhoto?.uploadKey==pending.uploadKey)frontRead=result
+                    }
+                }catch(cancel:CancellationException){throw cancel}
+                catch (_:Exception){
+                    if(pendingPhoto?.uploadKey==pending.uploadKey) {
+                        frontRead=LocalDocumentOcr.FrontScan(null,null,null,null,null,0,
+                            LocalDocumentOcr.FrontIssue.SERVICE_UNAVAILABLE)
+                    }
+                }finally{
+                    if(pendingPhoto?.uploadKey==pending.uploadKey)frontReadBusy=false
+                }
             }
         }
     }
@@ -444,6 +482,13 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                 }
                 3 -> {
                     SectionHeading(s(R.string.identity_section),s(R.string.identity_hint))
+                    Row(Modifier.fillMaxWidth(),
+                        verticalAlignment=Alignment.CenterVertically){
+                        Checkbox(checked=captureOcrConsent,
+                            onCheckedChange={captureOcrConsent=it})
+                        Text(s(R.string.camera_huawei_consent),Modifier.weight(1f),
+                            color=Brand.Ink,fontSize=12.sp,lineHeight=19.sp)
+                    }
                     Surface(color=Color.White,shape=RoundedCornerShape(21.dp),border=BorderStroke(1.dp,CardBorder)) {
                         Column(Modifier.fillMaxWidth().padding(20.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
                             Icon(Icons.Outlined.Badge,null,Modifier.size(34.dp),tint=Brand.Crimson)
@@ -531,6 +576,15 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                                     Text(s(when {
                                         frontReadBusy->R.string.camera_review_scanning
                                         frontReadFailed->R.string.camera_review_failed
+                                        frontRead?.issue==
+                                            LocalDocumentOcr.FrontIssue.CONSENT_REQUIRED->
+                                            R.string.camera_huawei_consent_required
+                                        frontRead?.issue==
+                                            LocalDocumentOcr.FrontIssue.SESSION_REQUIRED->
+                                            R.string.camera_huawei_login_required
+                                        frontRead?.issue==
+                                            LocalDocumentOcr.FrontIssue.SERVICE_UNAVAILABLE->
+                                            R.string.camera_huawei_unavailable
                                         frontRead?.issue==
                                             LocalDocumentOcr.FrontIssue.LOW_RESOLUTION->
                                             R.string.camera_image_low_resolution
@@ -704,53 +758,8 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                             }))
                     }
                     if(pairError!=0)PlainNotice(Icons.Outlined.Info,s(pairError))
-                    // Real offline OCR always works without a trusted online session.
-                    // The fixed 1234 pilot code remains prohibited from server uploads.
-                    PlainNotice(Icons.Outlined.Smartphone,s(R.string.local_ocr_hint))
-                    Button(onClick={
-                        if(pairProgress!=null||files.isEmpty()||!identitySelected)return@Button
-                        val selectedCert=files.toList().map{
-                            PairEvidenceFile(it.uri,it.length,it.mime,it.uploadKey)
-                        }
-                        val selectedId=identityFiles.toList().map{
-                            PairEvidenceFile(it.uri,it.length,it.mime,it.uploadKey)
-                        }
-                        pairReport=null
-                        pairError=0
-                        localOcrResult=false
-                        localOcrRunning=true
-                        pairProgress=PairProgress.CERTIFICATE_UPLOAD
-                        val thisRequest=++requestEpoch
-                        requestJob=scope.launch {
-                            try {
-                                val report=LocalDocumentOcr.readAndCompare(
-                                    context,selectedCert,selectedId){ progress->
-                                    if(requestEpoch==thisRequest)pairProgress=progress
-                                }
-                                if(requestEpoch==thisRequest &&
-                                    files.map{it.uploadKey}==selectedCert.map{it.idempotencyKey} &&
-                                    identityFiles.map{it.uploadKey}==selectedId.map{it.idempotencyKey}){
-                                    pairReport=report
-                                    localOcrResult=true
-                                }
-                            }catch(cancel:CancellationException){throw cancel}
-                            catch(_:Exception){
-                                if(requestEpoch==thisRequest)pairError=R.string.local_ocr_failed
-                            }finally {
-                                if(requestEpoch==thisRequest){
-                                    pairProgress=null
-                                    localOcrRunning=false
-                                }
-                            }
-                        }
-                    },
-                        enabled=pairProgress==null&&files.isNotEmpty()&&identitySelected,
-                        modifier=Modifier.fillMaxWidth().heightIn(min=54.dp),
-                        shape=RoundedCornerShape(16.dp)) {
-                        Icon(Icons.Outlined.DocumentScanner,null,Modifier.size(21.dp))
-                        Spacer(Modifier.width(8.dp))
-                        Text(s(R.string.local_ocr_button))
-                    }
+                    PlainNotice(Icons.Outlined.Cloud,
+                        s(R.string.camera_huawei_review_hint))
                     if(ownerSession==null&&authenticatedOwnerSession==null) {
                         Text(s(R.string.local_ocr_server_later),color=Brand.Muted,fontSize=12.sp)
                     }else{
