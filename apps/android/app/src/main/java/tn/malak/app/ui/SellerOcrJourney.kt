@@ -540,37 +540,6 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                                     }),color=Brand.Muted,fontSize=12.sp)
                                 }else Text(s(R.string.camera_scan_back),
                                     color=Brand.Muted,fontSize=12.sp)
-                                Row(Modifier.fillMaxWidth(),
-                                    horizontalArrangement=Arrangement.spacedBy(8.dp)){
-                                    OutlinedButton(onClick={
-                                        PrivateCaptureMemory.discard(pending.uri)
-                                        pendingPhoto=null
-                                        frontRead=null
-                                        cameraSide=reviewSide
-                                    },modifier=Modifier.weight(1f)){
-                                        Text(s(R.string.camera_review_retake))
-                                    }
-                                    Button(onClick={
-                                        if(reviewSide==0){
-                                            identityFiles.forEach{
-                                                PrivateCaptureMemory.discard(it.uri)
-                                            }
-                                            identityFiles.clear()
-                                            identityFiles.add(pending)
-                                        }else if(identityFiles.size==1&&
-                                            identityFiles[0].mime!="application/pdf"){
-                                            identityFiles.add(pending)
-                                        }
-                                        pendingPhoto=null
-                                        frontRead=null
-                                        identityMessage=R.string.file_selected
-                                    },enabled=(reviewSide==1&&identityFiles.size==1)||
-                                        (reviewSide==0&&frontRead?.readyForReview==true &&
-                                            !frontReadBusy),
-                                        modifier=Modifier.weight(1f)){
-                                        Text(s(R.string.camera_review_accept))
-                                    }
-                                }
                                 Text(s(R.string.camera_review_privacy),
                                     fontSize=11.sp,color=Brand.Muted)
                             }
