@@ -1,6 +1,7 @@
 package tn.malak.app.ui
 
 import android.content.Context
+import android.graphics.BitmapFactory
 import android.net.Uri
 import android.provider.OpenableColumns
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -21,6 +22,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -144,6 +147,32 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
     val files=remember(draftFile) {mutableStateListOf<ChosenDocument>()}
     val identityFiles=remember(draftFile) {mutableStateListOf<ChosenDocument>()}
     var identityMessage by remember(draftFile) {mutableIntStateOf(0)}
+    // Private in-memory picture gets scanned on this step before acceptance.
+    var cameraSide by remember(draftFile){mutableIntStateOf(-1)}
+    var reviewSide by remember(draftFile){mutableIntStateOf(0)}
+    var pendingPhoto by remember(draftFile){mutableStateOf<ChosenDocument?>(null)}
+    var frontRead by remember(draftFile){
+        mutableStateOf<LocalDocumentOcr.FrontScan?>(null)
+    }
+    var frontReadBusy by remember(draftFile){mutableStateOf(false)}
+    var frontReadFailed by remember(draftFile){mutableStateOf(false)}
+    LaunchedEffect(draftFile,pendingPhoto?.uploadKey,reviewSide){
+        val pending=pendingPhoto
+        frontRead=null;frontReadFailed=false;frontReadBusy=false
+        if(pending!=null&&reviewSide==0){
+            frontReadBusy=true
+            try{
+                val result=LocalDocumentOcr.inspectFront(
+                    context,pending.uri,pending.length,pending.mime)
+                if(pendingPhoto?.uploadKey==pending.uploadKey)frontRead=result
+            }catch(cancel:CancellationException){throw cancel}
+            catch (_:Exception){
+                if(pendingPhoto?.uploadKey==pending.uploadKey)frontReadFailed=true
+            }finally{
+                if(pendingPhoto?.uploadKey==pending.uploadKey)frontReadBusy=false
+            }
+        }
+    }
     // Never let a stale comparison be displayed after selecting other documents,
     // navigation, account or case changes. Private report is memory-only.
     LaunchedEffect(draftFile,files.toList(),identityFiles.toList(),ownerSession,authenticatedOwnerSession,
@@ -162,6 +191,8 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
         onDispose {
             requestEpoch++
             requestJob?.cancel()
+            pendingPhoto?.let{PrivateCaptureMemory.discard(it.uri)}
+            identityFiles.forEach{PrivateCaptureMemory.discard(it.uri)}
         }
     }
 
@@ -218,9 +249,11 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
             if(chosen==null)identityMessage=R.string.identity_file_rejected
             else {
                 // New front invalidates any old back; user must pair them again.
-                identityFiles.clear()
-                identityFiles.add(chosen)
-                identityMessage=R.string.file_selected
+                pendingPhoto?.let{PrivateCaptureMemory.discard(it.uri)}
+                pendingPhoto=chosen
+                reviewSide=0
+                frontRead=null
+                identityMessage=0
             }
         }
     }
@@ -267,6 +300,21 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
     }
     val stepLabels=listOf(R.string.step_property,R.string.step_capacity,R.string.step_certificate,
         R.string.step_identity,R.string.step_summary)
+
+    if(cameraSide>=0){
+        val side=cameraSide
+        TunisianIdCamera(back=side==1,onClose={cameraSide=-1},
+            onPhoto={uri,length->
+                if(cameraSide==side){
+                    pendingPhoto?.let{PrivateCaptureMemory.discard(it.uri)}
+                    pendingPhoto=ChosenDocument(uri,"CIN-camera.jpg",length,"image/jpeg")
+                    reviewSide=side
+                    cameraSide=-1
+                    identityMessage=0
+                }else PrivateCaptureMemory.discard(uri)
+            })
+        return
+    }
 
     Column(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth().padding(horizontal=16.dp,vertical=12.dp),
@@ -397,6 +445,14 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                         Column(Modifier.fillMaxWidth().padding(20.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
                             Icon(Icons.Outlined.Badge,null,Modifier.size(34.dp),tint=Brand.Crimson)
                             Text(s(R.string.identity_two_sides),color=Brand.Ink,fontSize=13.sp)
+                            Button(onClick={cameraSide=0},
+                                modifier=Modifier.fillMaxWidth().heightIn(min=55.dp),
+                                shape=RoundedCornerShape(16.dp),
+                                colors=ButtonDefaults.buttonColors(containerColor=Brand.Crimson)){
+                                Icon(Icons.Outlined.CameraAlt,null,Modifier.size(22.dp))
+                                Spacer(Modifier.width(8.dp))
+                                Text(s(R.string.camera_front_action))
+                            }
                             OutlinedButton(onClick={pickIdentityPdf.launch(arrayOf("application/pdf"))},
                                 modifier=Modifier.fillMaxWidth().heightIn(min=52.dp),shape=RoundedCornerShape(16.dp)) {
                                 Icon(Icons.Outlined.Description,null,Modifier.size(21.dp))
@@ -408,6 +464,15 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                                 Icon(Icons.Outlined.Badge,null,Modifier.size(21.dp))
                                 Spacer(Modifier.width(8.dp))
                                 Text(s(R.string.pick_identity_front))
+                            }
+                            OutlinedButton(onClick={cameraSide=1},
+                                enabled=identityFiles.size==1&&
+                                    identityFiles[0].mime!="application/pdf",
+                                modifier=Modifier.fillMaxWidth().heightIn(min=52.dp),
+                                shape=RoundedCornerShape(16.dp)){
+                                Icon(Icons.Outlined.CameraAlt,null,Modifier.size(20.dp))
+                                Spacer(Modifier.width(8.dp))
+                                Text(s(R.string.camera_back_action))
                             }
                             OutlinedButton(
                                 onClick={pickIdentityBack.launch(arrayOf("image/jpeg","image/png"))},
@@ -437,7 +502,11 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                                     }
                                     Text("${s(faceLabel)}: ${doc.displayName}",Modifier.weight(1f),
                                         color=Brand.Ink,maxLines=1,overflow=TextOverflow.Ellipsis,fontSize=13.sp)
-                                    IconButton(onClick={identityFiles.clear();identityMessage=0},modifier=Modifier.size(48.dp)) {
+                                    IconButton(onClick={
+                                        identityFiles.forEach{PrivateCaptureMemory.discard(it.uri)}
+                                        identityFiles.clear()
+                                        identityMessage=0
+                                    },modifier=Modifier.size(48.dp)) {
                                         Icon(Icons.Outlined.DeleteOutline,s(R.string.remove),tint=Brand.Muted)
                                     }
                                 }
@@ -741,7 +810,9 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
             Button(onClick={
                 if(step==0&&!validFirst)showInvalid=true
                 else if(step==2&&files.isEmpty()){pickMessage=R.string.certificate_required}
-                else if(step==3&&!identitySelected){identityMessage=R.string.identity_required}
+                else if(step==3&&(!identitySelected||pendingPhoto!=null)){
+                    identityMessage=R.string.identity_required
+                }
                 else if(step<4){step++;showInvalid=false;saveMessage=0}
                 else saveLocalDraft()
             }, modifier=Modifier.fillMaxWidth().heightIn(min=54.dp),
