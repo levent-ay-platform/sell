@@ -228,4 +228,5 @@
     <string name="camera_review_birth">Date de naissance (OCR)</string>
     <string name="camera_review_name">Nom lu par OCR</string>
     <string name="camera_review_privacy">La photo et l’OCR restent sur ce téléphone. Ce n’est pas une vérification d’identité.</string>
+    <string name="camera_image_low_resolution">Image trop petite pour une lecture fiable. Rapprochez la carte et reprenez les quatre coins.</string>
 </resources>
