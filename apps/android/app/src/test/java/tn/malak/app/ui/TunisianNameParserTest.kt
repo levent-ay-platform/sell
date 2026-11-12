@@ -45,6 +45,8 @@ class TunisianNameParserTest {
     }
     @Test fun pageCountFromVisibleFooterRequestsMissingTitlePage() {
         assertEquals(2,TunisianNameParser.declaredPages("صفحة 1 من 2"))
+        assertEquals(2,TunisianNameParser.declaredPages("صفحة ![ من 2"))
+        assertNull(TunisianNameParser.declaredPages("صفحة [ من ؟"))
         assertEquals(2,TunisianNameParser.declaredPages("Page 1 sur 2"))
     }
     @Test fun frenchSurnameAndGivenNameUsePrintedCINOrderOnly() {
