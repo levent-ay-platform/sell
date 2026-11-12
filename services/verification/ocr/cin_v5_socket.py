@@ -75,8 +75,8 @@ def handle(conn,session,letters):
 
 
 def main():
-    if len(sys.argv)!=1:
-        raise ValueError("No variable socket paths or identities allowed")
+    if len(sys.argv)!=2 or sys.argv[1]!="--serve":
+        raise ValueError("Only private fixed-path socket mode is allowed")
     parent=os.path.dirname(SOCKET_PATH)
     st=os.lstat(parent)
     if not stat.S_ISDIR(st.st_mode) or st.st_uid!=os.geteuid() or \
