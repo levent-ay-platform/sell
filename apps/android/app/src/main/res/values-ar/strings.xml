@@ -227,6 +227,11 @@
     <string name="camera_review_cin">رقم الهوية (آخر 4 أرقام)</string>
     <string name="camera_review_birth">تاريخ الولادة (OCR)</string>
     <string name="camera_review_name">الاسم المقروء</string>
-    <string name="camera_review_privacy">الصورة والنص داخل هاتفك فقط. هذا ليس تحققاً رسمياً من الهوية.</string>
+    <string name="camera_review_privacy">بعد موافقتك فقط: إرسال مشفر إلى Huawei لقراءة الحقول. ليس تحققاً قانونياً من الهوية.</string>
     <string name="camera_image_low_resolution">دقة الصورة منخفضة للقراءة الموثوقة. قرّب البطاقة وصوّرها مجدداً مع إظهار الزوايا الأربع.</string>
+    <string name="camera_huawei_consent">أوافق على معالجة صورة هويتي بشكل خاص وآمن عبر خدمة OCR على Huawei لاستخراج البيانات.</string>
+    <string name="camera_huawei_consent_required">وافق على معالجة الصورة الخاصة أعلاه حتى تبدأ القراءة.</string>
+    <string name="camera_huawei_login_required">يلزم تسجيل دخول موثّق قبل إرسال أي صورة هوية.</string>
+    <string name="camera_huawei_unavailable">خدمة OCR الخاصة على Huawei غير متاحة. الصورة بقيت هنا، ويمكن إعادة المحاولة.</string>
+    <string name="camera_huawei_review_hint">قراءة الهوية تتم بشكل خاص على Huawei، وليست تحققاً قانونياً من الهوية.</string>
 </resources>
