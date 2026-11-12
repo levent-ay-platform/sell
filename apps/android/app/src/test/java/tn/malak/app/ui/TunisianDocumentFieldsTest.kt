@@ -59,6 +59,20 @@ class TunisianDocumentFieldsTest {
         assertNull(TunisianDocumentFields.areaM2("التجزئة: 510 جزء"))
         assertNull(TunisianDocumentFields.areaM2("مجموع 510 م"))
     }
+    @Test fun printedCpfOwnerOnlyBandAcceptsOneIsolatedNameButNoOtherPerson(){
+        assertEquals("المنصوري سلمى",
+            TunisianDocumentFields.certificateOwnerOnlyBand("المنصوري سلمى"))
+        assertNull(TunisianDocumentFields.certificateOwnerOnlyBand(
+            "المنصوري سلمى\nتقــطن بضاحية أخرى"))
+        assertNull(TunisianDocumentFields.certificateOwnerOnlyBand("بن فلان بن فلان 1970"))
+    }
+    @Test fun printedAreaHeaderAndTotalMustAgree(){
+        assertEquals("510",TunisianDocumentFields.confirmedAreaDigits("510","510"))
+        assertNull(TunisianDocumentFields.confirmedAreaDigits("510","150"))
+        assertNull(TunisianDocumentFields.confirmedAreaDigits("S10","510"))
+        assertNull(TunisianDocumentFields.confirmedAreaDigits("510 م","510"))
+        assertNull(TunisianDocumentFields.confirmedAreaDigits("","510"))
+    }
     @Test fun noUnlabelledAreaOrTitleGuess(){
         assertNull(TunisianDocumentFields.titleNumber("رقم 654321"))
         assertNull(TunisianDocumentFields.areaM2("150 متر"))
