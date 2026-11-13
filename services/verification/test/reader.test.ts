@@ -179,3 +179,24 @@ test('financial receipt never becomes transferrable or verified title',()=>{
  assert.equal(r.privateFamilyFields.mayPublish,false);
  assert.equal(r.privateFamilyFields.facts.some(f=>f.key==='registerReference'),false);
 });
+
+
+test('service-request fee receipt is supporting review evidence, not title approval',()=>{
+ const result=readUntrustedOcrDocument({
+   format:'image',mayApproveOwnership:false,pages:[{
+     page:1,method:'ocr',lines:[
+       {page:1,text:'وصل تسلم مطلب خدمة واستخلاص معاليم',source:'ocr-ar',confidence:.97},
+       {page:1,text:'العدد: 44551',source:'ocr-ar',confidence:.96},
+       {page:1,text:'التاريخ: 2022/05/13',source:'ocr-ar',confidence:.96},
+       {page:1,text:'معرف الرسم العقاري: 998177 نابل',source:'ocr-ar',confidence:.94}
+     ]
+   }]
+ });
+ assert.equal(result.documentFamilyCandidate.kind,'PROPERTY_SERVICE_RECEIPT');
+ assert.equal(result.privateFamilyFields.facts.find(f=>f.key==='serviceRequestNumber')?.value,'44551');
+ assert.equal(result.privateEvidenceReadiness.documentSupportLevel,1);
+ assert.equal(result.privateEvidenceReadiness.intakeDecision,'ACCEPT_FOR_PRIVATE_REVIEW');
+ assert.equal(result.privateEvidenceReadiness.officialOwnershipVerified,false);
+ assert.equal(result.privateEvidenceReadiness.displayAsVerifiedSeller,false);
+ assert.equal(result.mayPublish,false);
+});

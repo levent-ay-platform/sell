@@ -15,7 +15,8 @@ export type LandFactKey=
   'soldAreaM2'|'possessedAreaM2'|'transferredAreaM2'|
   'registeredPlotNumber'|'soldPlotNumber'|'possessedPlotNumber'|
   'rightsDenominator'|'seller'|'buyer'|'transferor'|'transferee'|
-  'salePriceTnd'|'receiptAmountTnd'|'receiptNumber'|'transferReference';
+  'salePriceTnd'|'receiptAmountTnd'|'receiptNumber'|'transferReference'|
+  'serviceRequestNumber'|'serviceRequestDate'|'serviceApplicant';
 export type LandFactStatus='CANDIDATE'|'LOW_CONFIDENCE'|'CONFLICT'|'MASKED'|'ABSENT';
 export interface PrivateLandFactEvidence {
   readonly page:number;
@@ -36,7 +37,7 @@ export interface PrivateLandFacts {
   readonly facts:readonly PrivateLandFact[];
   readonly issues:readonly (
     'UNKNOWN_OR_AMBIGUOUS_FAMILY'|'UNTESTED_TRANSFER_TEMPLATE'|
-    'SUPPORTING_RECEIPT_NOT_TITLE'|'CONFLICTING_CRITICAL_FIELDS'|
+    'SUPPORTING_RECEIPT_NOT_TITLE'|'SUPPORTING_SERVICE_RECEIPT_NOT_TITLE'|'CONFLICTING_CRITICAL_FIELDS'|
     'LOW_CONFIDENCE_CRITICAL_FIELDS'
   )[];
   readonly access:'AUTHORIZED_SELLER_OR_REVIEWER_ONLY';
@@ -44,7 +45,7 @@ export interface PrivateLandFacts {
   readonly ownershipVerified:false;
   readonly mayPublish:false;
 }
-type Shape='title'|'area'|'parts'|'plot'|'money'|'actor'|'reference';
+type Shape='title'|'area'|'parts'|'plot'|'money'|'actor'|'reference'|'date';
 interface Rule {key:LandFactKey;pattern:RegExp;shape:Shape;}
 const commonTitle:Rule={
  key:'registerReference',
@@ -128,6 +129,26 @@ const transferRef:Rule={
  pattern:/^(?:مرجع\s+(?:عملي[ةه]\s+)?النقل|r[eé]f[eé]rence\s+de\s+mutation)[\s:#：-]*([A-Za-z0-9/-]{2,30})\s*$/iu,
  shape:'reference'
 };
+const serviceRequestNumber:Rule={
+ key:'serviceRequestNumber',
+ pattern:/^(?:العدد|رقم\s+(?:ال)?مطلب|مطلب\s+عدد|num[eé]ro\s+de\s+demande)[\s:#：-]*([0-9]{1,12})\s*$/iu,
+ shape:'reference'
+};
+const serviceRequestDate:Rule={
+ key:'serviceRequestDate',
+ pattern:/^(?:التاريخ|تاريخ\s+(?:المطلب|الخدم[ةه])|date\s+de\s+demande)[\s:#：-]*([0-9]{4}[/.-][0-9]{2}[/.-][0-9]{2}|[0-9]{2}[/.-][0-9]{2}[/.-][0-9]{4})\s*$/iu,
+ shape:'date'
+};
+const serviceApplicant:Rule={
+ key:'serviceApplicant',
+ pattern:/^(?:طالب\s+الخدم[ةه]|اسم\s+طالب\s+الخدم[ةه]|demandeur)[\s:#：-]*(.{2,100})$/iu,
+ shape:'actor'
+};
+const serviceReceiptAmount:Rule={
+ key:'receiptAmountTnd',
+ pattern:/^(?:المبلغ\s+(?:الجملي|المستخلص)|المبلغ|total\s+g[eé]n[eé]ral|montant\s+per[cç]u)[\s:#：-]*([0-9]{1,12}(?:[.,][0-9]{1,3})?)\s*(?:dt|tnd|دينار(?:ا)?)?\s*$/iu,
+ shape:'money'
+};
 const RULES:Readonly<Record<LandPaperKind,readonly Rule[]>>={
  OWNERSHIP_CERTIFICATE:[commonTitle,parent,totalArea,registeredPlot,denominator],
  SHARED_OWNERSHIP_CERTIFICATE:[commonTitle,parent,totalArea,registeredPlot,denominator],
@@ -135,6 +156,8 @@ const RULES:Readonly<Record<LandPaperKind,readonly Rule[]>>={
  POSSESSION_REPORT:[commonTitle,parent,possessedPlot,possessedArea],
  TRANSFER_CARD:[commonTitle,parent,transferredArea,transferor,transferee,transferRef],
  FINANCIAL_RECEIPT:[receiptNumber,receiptAmount],
+ PROPERTY_SERVICE_RECEIPT:[commonTitle,serviceRequestNumber,serviceRequestDate,
+   serviceApplicant,serviceReceiptAmount],
  UNKNOWN:[]
 };
 function normalize(s:string):string {
@@ -162,6 +185,21 @@ function parseValue(raw:string,shape:Shape):{value:string|null;uncertain:boolean
    if(!/^\d{1,12}$/u.test(v)||Number(v)<=0)return {value:null,uncertain:false,masked:false};
    return {value:v,uncertain:false,masked:false};
  }
+ if(shape==='date'){
+   const tokens=v.split(/[\/.-]/u).map(Number);
+   let year:number,month:number,day:number;
+   if(tokens.length!==3)return {value:null,uncertain:false,masked:false};
+   const first=tokens[0]!,second=tokens[1]!,third=tokens[2]!;
+   if(first>999){year=first;month=second;day=third;}
+   else{day=first;month=second;year=third;}
+   if(year<1900||year>2100||month<1||month>12||day<1||day>31)
+     return {value:null,uncertain:false,masked:false};
+   const d=new Date(Date.UTC(year,month-1,day));
+   if(d.getUTCFullYear()!==year||d.getUTCMonth()!==month-1||
+      d.getUTCDate()!==day)return {value:null,uncertain:false,masked:false};
+   return {value:String(year).padStart(4,'0')+'-'+String(month).padStart(2,'0')+
+     '-'+String(day).padStart(2,'0'),uncertain:false,masked:false};
+ }
  if(shape==='reference'){
    if(!/^[A-Za-z0-9/-]{2,30}$/u.test(v))return {value:null,uncertain:false,masked:false};
    return {value:v,uncertain:false,masked:false};
@@ -172,7 +210,7 @@ function parseValue(raw:string,shape:Shape):{value:string|null;uncertain:boolean
  if(!Number.isFinite(n)||n<=0||n>1e12)return {value:null,uncertain:false,masked:false};
  // 42,910 can be a decimal in Tunisian formatting OR grouping elsewhere.
  // Preserve exact text and flag any 3-digit comma suffix for review.
- const uncertain=/,\d{3}$/u.test(v);
+ const uncertain=/[,.]\d{3}$/u.test(v);
  return {value:normalized,uncertain,masked:false};
 }
 interface Candidate {value:string|null;status:LandFactStatus;evidence:PrivateLandFactEvidence;}
@@ -188,6 +226,8 @@ export function extractPrivateLandDocumentFacts(
  if(blocked)issues.push('UNKNOWN_OR_AMBIGUOUS_FAMILY');
  if(classification.kind==='TRANSFER_CARD')issues.push('UNTESTED_TRANSFER_TEMPLATE');
  if(classification.kind==='FINANCIAL_RECEIPT')issues.push('SUPPORTING_RECEIPT_NOT_TITLE');
+ if(classification.kind==='PROPERTY_SERVICE_RECEIPT')
+   issues.push('SUPPORTING_SERVICE_RECEIPT_NOT_TITLE');
  const rules=blocked?[]:RULES[classification.kind];
  const collections=new Map<LandFactKey,Candidate[]>(rules.map(r=>[r.key,[]]));
  for(let i=0;i<lines.length;i++){

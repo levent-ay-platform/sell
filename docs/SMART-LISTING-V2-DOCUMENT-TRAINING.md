@@ -102,3 +102,18 @@ The private document-family-fields-v2.ts module adds conservative exact-label so
 **Deliberate limits:** current rules extract only explicit standalone labels. They do not parse free legal prose, legal names in multi-column table without a layout candidate, or unlabelled sums/dates. OCR confidence is not official CPF verification. Real-document benchmark, authenticated UI review/source highlight and party-role adjudication are next gates.
 
 QA consists of wholly fictional fixtures only; no real identity or document data is committed.
+
+
+## Stage 5 — accepting safe administrative service receipts + numeric private evidence progress (2026-11-13)
+
+**User product decision:** recognize every uploaded document as supporting private evidence when it passes the existing malware/MIME/consent controls. Do not reject solely for being a receipt or an unrecognized title; instead classify, privately extract source-linked data, optionally compare the applicant/registry evidence with independent identity documents, and ask for stronger evidence when required. This is a **policy/domain contract**; existing evidence upload API kind allowlists have NOT yet been migrated to accept all classes.
+
+**Seventh class**: PROPERTY_SERVICE_RECEIPT detects CPF regional paper titled "وصل تسلم مطلب خدمة واستخلاص معاليم". Separate from FINANCIAL_RECEIPT (QUITTANCE), TRANSFER_CARD and the five primary classes. Initial exact-label extraction targets request number, request date, applicant (private PII), land register reference, and fee amount. The original example is held privately; its source image, numbers, names and raw OCR are never committed. Dates are validated and attached to page evidence. Never presume the person who paid an administrative fee owns the property.
+
+**Two distinct numeric product signals:**
+1. Document evidence support level from 0 to 5 (product-level editorial ranking, not a legal conclusion): registered ownership certificate 5, shared certificate 4, sale deed and genuine transfer card 3, possession record 2, administrative service receipt and financial payment receipt 1, unknown 0.
+2. Private *evidence-review progress* up to **75** (not a probability of fraud/ownership): type signal at most 40, source-readable critical fields at most 10, preliminary identity-text agreement 15 and land-reference alignment 10. The remaining **25 points are never automatically awarded** and represent a separate future official registry/legal review gate; this module does not implement that gate.
+
+**Hard constraints:** all classes and unknown intake output ACCEPT_FOR_PRIVATE_REVIEW for file-type policy, but security/malware/consent checks remain mandatory. A mere photo, name/CIN match or numeric score NEVER sets a verified-seller badge, legal ownership, title clearance or publication permission. The score is PRIVATE until product/legal review of fairness and misuse. Differences in ID/parcel references, incomplete/low-quality OCR and conflicting values need human review. Repeating multiple low-quality receipts must not inflate score. Service receipts are not title deeds.
+
+**Current stage limitations:** no real-world accuracy calibration, no actual image-based model training for the new service-receipt specimen, no production allowance for all document upload kinds, no end-user UI change to show this private score yet. Do not publicize as “seller confidence percentage”.

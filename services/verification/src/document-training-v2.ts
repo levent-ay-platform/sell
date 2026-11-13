@@ -15,6 +15,7 @@ export type LandPaperKind =
   | 'SALE_DEED'
   | 'POSSESSION_REPORT'
   | 'FINANCIAL_RECEIPT'
+  | 'PROPERTY_SERVICE_RECEIPT'
   | 'UNKNOWN';
 export type ClassificationStatus='CANDIDATE'|'LOW_CONFIDENCE'|'AMBIGUOUS'|'UNKNOWN';
 export type FieldPriority='REQUIRED'|'IMPORTANT'|'OPTIONAL';
@@ -39,7 +40,7 @@ export interface DocumentTrainingCandidate {
   readonly fieldsToExtract:readonly DocumentFieldRule[];
   readonly warnings:readonly (
     'NO_SUPPORTED_TITLE'|'AMBIGUOUS_DOCUMENT_FAMILY'|'LOW_TITLE_CONFIDENCE'|
-    'SUPPORTING_RECEIPT_ONLY'|'TRANSFER_TEMPLATE_NOT_EVALUATED'
+    'SUPPORTING_RECEIPT_ONLY'|'SUPPORTING_SERVICE_RECEIPT_ONLY'|'TRANSFER_TEMPLATE_NOT_EVALUATED'
   )[];
   /** This is a classification hint only; it cannot approve a property listing. */
   readonly mayVerifyOwnership:false;
@@ -124,6 +125,14 @@ export const LAND_DOCUMENT_FIELD_RULES:Readonly<Record<LandPaperKind,readonly Do
     {key:'amount_millimes_and_payment_method',priority:'REQUIRED'},
     {key:'payment_date_and_stamp',priority:'IMPORTANT'},
   ],
+  PROPERTY_SERVICE_RECEIPT:[
+    {key:'service_request_number_and_date',priority:'REQUIRED'},
+    {key:'service_applicant',priority:'IMPORTANT',note:'Applicant is not necessarily a registered owner'},
+    {key:'land_register_references',priority:'IMPORTANT',note:'References are supporting context, not ownership'},
+    {key:'service_requested',priority:'IMPORTANT'},
+    {key:'fee_amount_and_payment_method',priority:'REQUIRED'},
+    {key:'issuing_office_and_receipt_stamp',priority:'IMPORTANT'},
+  ],
   UNKNOWN:[],
 };
 
@@ -135,6 +144,7 @@ const TITLES:readonly {kind:SupportedKind;rule:string;pattern:RegExp}[]=[
   {kind:'SALE_DEED',rule:'SALE_DEED_HEADING',pattern:/(?:انجاز|اشهاد|عقد)\s+(?:ال)?بيع|acte\s+de\s+vente/iu},
   {kind:'POSSESSION_REPORT',rule:'POSSESSION_REPORT_HEADING',pattern:/محضر\s+(?:معاين[ةه]\s+)?تحويز|proc[eè]s.verbal\s+de\s+prise\s+de\s+possession/iu},
   {kind:'FINANCIAL_RECEIPT',rule:'QUITTANCE_HEADING',pattern:/quittance\s*(?:n[°o.]|num[eé]ro)?|وصل\s+قبض/iu},
+  {kind:'PROPERTY_SERVICE_RECEIPT',rule:'CPF_SERVICE_RECEIPT_HEADING',pattern:/وصل\s+تسلم\s+مطلب\s+خدم[ةه]\s+و\s+استخلاص\s+معاليم/iu},
 ];
 function normalizeTitle(s:string):string {
   return s.normalize('NFKC')
@@ -193,6 +203,7 @@ export function classifyLandPaper(lines:readonly RecognizedLine[]):DocumentTrain
   const warnings:DocumentTrainingCandidate['warnings'][number][]=[];
   if(low)warnings.push('LOW_TITLE_CONFIDENCE');
   if(kind==='FINANCIAL_RECEIPT')warnings.push('SUPPORTING_RECEIPT_ONLY');
+  if(kind==='PROPERTY_SERVICE_RECEIPT')warnings.push('SUPPORTING_SERVICE_RECEIPT_ONLY');
   if(kind==='TRANSFER_CARD')warnings.push('TRANSFER_TEMPLATE_NOT_EVALUATED');
   return {kind,status:low?'LOW_CONFIDENCE':'CANDIDATE',evidence,
     fieldsToExtract:LAND_DOCUMENT_FIELD_RULES[kind],warnings,
