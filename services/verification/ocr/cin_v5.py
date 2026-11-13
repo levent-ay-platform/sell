@@ -23,7 +23,7 @@ ARABIC=re.compile(r"^[\u0621-\u064a]+(?: [\u0621-\u064a]+){0,3}$")
 MAX_BYTES=6*1024*1024
 MAX_EDGE=6000
 OUTPUT_EMPTY={"surname":None,"givenName":None,"cinLast4":None,
-              "birthDate":None,"confidencePercent":0}
+              "cinFull":None,"birthDate":None,"confidencePercent":0}
 cv2.setNumThreads(1)
 
 
@@ -371,8 +371,12 @@ def extract_fields(photo,session,letters):
             dob=birth_date(session,letters,card,centers[1])
         except (ValueError,cv2.error):
             dob=None
+        # Unverified candidate, exposed only via a case/QA-session scoped
+        # ephemeral response. Never infer missing digits or persist the ID.
+        full_cin=_cin_full_front(session,letters,card)
         return {"surname":a,"givenName":b,
-                "cinLast4":cin_number(session,letters,card),
+                "cinLast4":full_cin[-4:] if full_cin is not None else None,
+                "cinFull":full_cin,
                 "birthDate":dob,
                 "confidencePercent":max(0,min(100,int(min(sc,gc)*100)))}
     finally:

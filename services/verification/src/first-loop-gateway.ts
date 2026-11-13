@@ -135,7 +135,7 @@ export function composeUnboundMalakFirstLoop(deps:UnboundFirstLoopGatewayDeps) {
         const after=await pilotAuth.authenticate(bearer);
         if(!after?.userId||after.pilotUnverified!==true||
            after.userId!==before.userId)throw Error('PILOT_OCR_EXPIRED');
-        return sanitizeCinFields(fields);
+        return sanitizeCinFields(fields,true);
       }:undefined,
     analyzeOwnerPair:request=>analyzeAuthorizedPrivateEvidencePair(request,{
       auth,cases,objects:deps.objects,worker:deps.worker,

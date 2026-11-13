@@ -12,6 +12,8 @@ export interface CinFields {
   surname:string|null;
   givenName:string|null;
   cinLast4:string|null;
+  /** Optional full eight-digit candidate; private transient preview only. */
+  cinFull?:string|null;
   birthDate:string|null;
   confidencePercent:number;
 }
@@ -54,7 +56,7 @@ function safeWord(raw:unknown):string|null {
   if(n.length>55||!AR.test(n))throw Error('PRIVATE_CIN_MODEL_INVALID');
   return n;
 }
-export function sanitizeCinFields(fields:CinFields):CinFields {
+export function sanitizeCinFields(fields:CinFields,revealFullCin=false):CinFields {
   if(!fields||typeof fields!=='object'||
     !Number.isInteger(fields.confidencePercent)||
     fields.confidencePercent<0||fields.confidencePercent>100)throw Error('PRIVATE_CIN_MODEL_INVALID');
@@ -63,6 +65,13 @@ export function sanitizeCinFields(fields:CinFields):CinFields {
     return {surname:null,givenName:null,cinLast4:null,birthDate:null,confidencePercent:0};
   if(fields.cinLast4!==null &&
     (typeof fields.cinLast4!=='string'||!/^\d{4}$/.test(fields.cinLast4)))
+    throw Error('PRIVATE_CIN_MODEL_INVALID');
+  const full=fields.cinFull;
+  if(full!==undefined&&full!==null&&
+    (typeof full!=='string'||!/^[0-9]{8}$/.test(full)))
+    throw Error('PRIVATE_CIN_MODEL_INVALID');
+  if(full!==undefined&&full!==null&&
+    (fields.cinLast4===null||full.slice(-4)!==fields.cinLast4))
     throw Error('PRIVATE_CIN_MODEL_INVALID');
   // Worker DOB is only a preliminary OCR candidate. Accept a fully real
   // calendar date (YYYY-MM-DD) or null; no partial/guessed dates or labels.
@@ -81,7 +90,9 @@ export function sanitizeCinFields(fields:CinFields):CinFields {
   if(surname===null||givenName===null)
     return {surname:null,givenName:null,cinLast4:null,birthDate:null,confidencePercent:0};
   return {surname,givenName,
-    cinLast4:fields.cinLast4,birthDate:fields.birthDate,
+    cinLast4:fields.cinLast4,
+    ...(revealFullCin&&full!==undefined?{cinFull:full}:{}),
+    birthDate:fields.birthDate,
     confidencePercent:fields.confidencePercent};
 }
 export async function previewOwnerCin(
@@ -107,5 +118,6 @@ export async function previewOwnerCin(
     second.pilotUnverified===true)throw new CinPreviewDenied();
   const after=await deps.cases.getUploadCase(request.caseId,first.userId);
   if(!permitted(after,request.caseId,first.userId))throw new CinPreviewDenied();
-  return sanitizeCinFields(result);
+  // Only after session and case-consent rechecks; never persisted.
+  return sanitizeCinFields(result,true);
 }

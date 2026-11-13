@@ -87,3 +87,15 @@ test('DOB and CIN never survive without both readable name fields',async()=>{
   assert.deepEqual(await previewOwnerCin(request,h.deps),
     {surname:null,givenName:null,cinLast4:null,birthDate:null,confidencePercent:0});
 });
+
+test('eight-digit candidate is owner-scoped and must match its suffix',async()=>{
+  const h=harness();
+  h.setResponse({...reading,cinFull:'00005678',cinLast4:'5678'});
+  const result=await previewOwnerCin(request,h.deps);
+  assert.equal(result.cinFull,'00005678');
+  assert.equal(result.cinLast4,'5678');
+  h.setResponse({...reading,cinFull:'00005678',cinLast4:'8765'});
+  await assert.rejects(previewOwnerCin(request,h.deps),/PRIVATE_CIN_MODEL_INVALID/);
+  h.setResponse({...reading,cinFull:'1234',cinLast4:'1234'});
+  await assert.rejects(previewOwnerCin(request,h.deps),/PRIVATE_CIN_MODEL_INVALID/);
+});

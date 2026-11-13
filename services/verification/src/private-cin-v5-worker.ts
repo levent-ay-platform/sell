@@ -14,7 +14,7 @@ export function createHuaweiPrivateCinV5Worker(config:PrivateOcrWorkerConfig):Ci
       throw Error('PRIVATE_CIN_V5_INVALID_OUTPUT');
     const obj=raw as Record<string,unknown>;
     if(Object.keys(obj).some(k=>![
-      'surname','givenName','cinLast4','birthDate','confidencePercent'
+      'surname','givenName','cinLast4','cinFull','birthDate','confidencePercent'
     ].includes(k)))throw Error('PRIVATE_CIN_V5_INVALID_OUTPUT');
     if(!Number.isInteger(obj.confidencePercent))
       throw Error('PRIVATE_CIN_V5_INVALID_OUTPUT');
@@ -22,6 +22,7 @@ export function createHuaweiPrivateCinV5Worker(config:PrivateOcrWorkerConfig):Ci
       surname:obj.surname as string|null,
       givenName:obj.givenName as string|null,
       cinLast4:obj.cinLast4 as string|null,
+      ...(Object.prototype.hasOwnProperty.call(obj,'cinFull')?{cinFull:obj.cinFull as string|null}:{}),
       birthDate:obj.birthDate as string|null,
       confidencePercent:obj.confidencePercent as number
     };

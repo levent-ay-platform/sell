@@ -10,7 +10,7 @@ const ownerToken='synthetic-owner-token-with-sufficient-length';
 const image=Buffer.concat([Buffer.from([0xff,0xd8,0xff,0xe0]),Buffer.alloc(50,0x55)]);
 const path='/internal/v1/pilot/preview-cin';
 const newFields={surname:'بن مثال',givenName:'سالم',cinLast4:'5678',
-  birthDate:'2001-03-06',confidencePercent:89};
+  cinFull:'00005678',birthDate:'2001-03-06',confidencePercent:89};
 
 async function withGateway(action:(base:string,state:{scans:number;denials:number})=>Promise<void>,
  config:{disable?:boolean;wrongAssurance?:boolean;expireOnReplay?:boolean}={}){
@@ -68,6 +68,7 @@ test('server-issued pilot may read transient front fields without case or legal 
    assert.equal(parsed.engine,'arabic-v5');
    assert.equal(parsed.surname,newFields.surname);
    assert.equal(parsed.cinLast4,newFields.cinLast4);
+   assert.equal(parsed.cinFull,newFields.cinFull);
    assert.equal(parsed.identityVerified,false);
    assert.equal(parsed.ownershipVerified,false);
    assert.equal(parsed.mayPublish,false);

@@ -19,13 +19,15 @@ export interface HuaweiV5SocketConfig {
 function isFields(data:unknown):data is CinFields&{ok:true} {
   if(!data || typeof data!=='object'||Array.isArray(data))return false;
   const fields=data as Record<string,unknown>;
-  const allowed=new Set(['ok','surname','givenName','cinLast4','birthDate','confidencePercent']);
-  return Object.keys(fields).length===6 &&
+  const allowed=new Set(['ok','surname','givenName','cinLast4','cinFull','birthDate','confidencePercent']);
+  return Object.keys(fields).length===(Object.prototype.hasOwnProperty.call(fields,'cinFull')?7:6) &&
     Object.keys(fields).every(k=>allowed.has(k))&&
     fields.ok===true&&
     (fields.surname===null||typeof fields.surname==='string')&&
     (fields.givenName===null||typeof fields.givenName==='string')&&
     (fields.cinLast4===null||typeof fields.cinLast4==='string')&&
+    (!Object.prototype.hasOwnProperty.call(fields,'cinFull')||
+      fields.cinFull===null||typeof fields.cinFull==='string')&&
     (fields.birthDate===null||typeof fields.birthDate==='string')&&
     Number.isInteger(fields.confidencePercent)&&
     Number(fields.confidencePercent)>=0&&Number(fields.confidencePercent)<=100;
@@ -79,7 +81,9 @@ export function createHuaweiV5SocketWorker(config:HuaweiV5SocketConfig):CinV5Wor
               const fields=parsed as CinFields;
               resolve({
                 surname:fields.surname,givenName:fields.givenName,
-                cinLast4:fields.cinLast4,birthDate:fields.birthDate,
+                cinLast4:fields.cinLast4,
+                ...('cinFull' in fields?{cinFull:fields.cinFull}:{}),
+                birthDate:fields.birthDate,
                 confidencePercent:fields.confidencePercent
               });
             }
