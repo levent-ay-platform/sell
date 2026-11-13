@@ -346,6 +346,17 @@ def birth_date(session,letters,card,given_name_row):
         month=[recognize(session,letters,month_crop),
                recognize(session,letters,gray)]
         value=date_from_v5_votes(day,month,year)
+        if value is None:
+            # On printed CINs the broad month ROI can include the date
+            # label or adjacent name. Retry a narrower MIDDATE region;
+            # still require exact two-view agreement and both numeric
+            # votes, never fabricate a date.
+            alt=segment(.50,.70)
+            alt_gray=cv2.cvtColor(alt,cv2.COLOR_BGR2GRAY)
+            alt_gray=cv2.cvtColor(alt_gray,cv2.COLOR_GRAY2BGR)
+            month_alt=[recognize(session,letters,alt),
+                       recognize(session,letters,alt_gray)]
+            value=date_from_v5_votes(day,month_alt,year)
         if value is not None:
             dates.add(value)
         if len(dates)>1:

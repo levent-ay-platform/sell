@@ -30,6 +30,12 @@ class DateDecodeTests(unittest.TestCase):
             [('أوت', .95), ('اوت', .92)], pair('0002'), today=date(2026, 11, 12)),
             '2000-08-05')
 
+    def test_month_with_adjacent_printed_day_year_tokens(self):
+        self.assertEqual(self.read(day='80', month='08 ديسمبر 1962', year='2691'),
+                         '1962-12-08')
+        self.assertIsNone(self.read(month='جانفي ديسمبر'))
+        self.assertIsNone(self.read(month='ديسمبر تاريخ'))
+
     def test_blank_or_missing_is_not_guessed(self):
         for field in ('day', 'month', 'year'):
             choices = dict(day=pair('50'), month=pair('مارس'), year=pair('0002'))
@@ -117,10 +123,11 @@ class DateDecodeTests(unittest.TestCase):
              patch.object(cin_v5,'find_name_rows',return_value=(400,470)), \
              patch.object(cin_v5,'consensus_name',
                           side_effect=[('المهدي',.91),('ياسمين',.92)]), \
-             patch.object(cin_v5,'cin_number',return_value='5678'), \
+             patch.object(cin_v5,'_cin_full_front',return_value='00005678'), \
              patch.object(cin_v5,'birth_date',return_value='2000-03-13') as dob:
             result=cin_v5.extract_fields(np.zeros((760,1200,3),dtype=np.uint8),None,[])
         self.assertEqual(result['cinLast4'],'5678')
+        self.assertEqual(result['cinFull'],'00005678')
         self.assertEqual(result['birthDate'],'2000-03-13')
         self.assertEqual(result['confidencePercent'],91)
         dob.assert_called_once()

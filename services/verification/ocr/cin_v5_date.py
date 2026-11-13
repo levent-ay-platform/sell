@@ -45,13 +45,26 @@ def _arabic_month(sample):
     text = _high_confidence(sample)
     if text is None:
         return None
-    # Normalize only common Arabic hamza/alef glyphs and the OCR ى/ي pair.
+    # Only normalize known Arabic glyph variants. A tightly cropped
+    # printed month can still include an adjacent ASCII day/year token.
+    # Permit digits + EXACTLY one known month, no other Arabic words or
+    # fuzzy spelling; both independent recognizer views must agree.
     normalized = (text.replace('أ', 'ا').replace('إ', 'ا')
                   .replace('آ', 'ا').replace('ى', 'ي').replace('ـ', ''))
-    if not re.fullmatch(r'[\u0621-\u064a]{2,12}', normalized):
+    parts = normalized.split()
+    if not 1 <= len(parts) <= 3:
         return None
-    return _MONTHS.get(normalized)
-
+    months = []
+    for part in parts:
+        if re.fullmatch(r'[0-9]{1,4}', part):
+            continue
+        if not re.fullmatch(r'[\u0621-\u064a]{2,12}', part):
+            return None
+        month = _MONTHS.get(part)
+        if month is None:
+            return None
+        months.append(month)
+    return months[0] if len(months) == 1 else None
 
 def _two_agree(samples, decoder):
     if not isinstance(samples, (tuple, list)) or len(samples) != 2:
