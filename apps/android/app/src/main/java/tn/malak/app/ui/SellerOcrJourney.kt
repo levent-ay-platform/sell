@@ -307,10 +307,13 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
     val identityReadyForRemote=identitySelected
     // Existing private pair engine only understands OWNERSHIP_CERTIFICATE.
     // Do not silently pass receipts, contracts or unknown documents as title.
-    val canRunCertificatePair=files.size==1 &&
-        familyReadings.size==1 &&
-        familyReadings[0].status=="READY" &&
-        familyReadings[0].familyKind=="OWNERSHIP_CERTIFICATE"
+    val canRunCertificatePair=files.isNotEmpty()&&
+        familyReadings.size==files.size &&
+        familyReadings.all{it.status=="READY"&&
+            it.familyKind in setOf("OWNERSHIP_CERTIFICATE","UNKNOWN")}&&
+        familyReadings.any{it.familyKind=="OWNERSHIP_CERTIFICATE"}
+    // Unknown continuation pages are allowed after a recognized certificate;
+    // a conflicting second legal-document type is never auto-compared.
     // Tunisian/French comma is normalized only for numeric validation and API.
     val normalizedArea=area.replace(',', '.')
     val validArea=normalizedArea.matches(ValidLandArea)
