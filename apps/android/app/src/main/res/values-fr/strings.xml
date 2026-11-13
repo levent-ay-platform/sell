@@ -214,6 +214,7 @@
     <string name="camera_front_action">Scanner le recto avec l’appareil photo</string>
     <string name="camera_cin_manual_hint">CIN illisible : prise de vue autorisée pour examen humain</string>
     <string name="camera_review_manual">Nom et naissance lus, mais CIN illisible. Le recto peut être transmis pour examen humain, sans validation automatique.</string>
+    <string name="camera_pilot_no_ocr">Le code pilote ne donne pas accès à la lecture de la CIN. Vous pouvez examiner la photo, mais l’extraction nécessite une connexion vérifiée et le service OCR privé.</string>
     <string name="camera_review_title">Vérifiez la lecture avant de continuer</string>
     <string name="camera_review_scanning">Lecture sécurisée des champs de la CIN…</string>
     <string name="camera_review_unreadable">Un ou plusieurs champs sont illisibles. Reprenez le recto.</string>

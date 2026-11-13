@@ -214,6 +214,7 @@
     <string name="camera_front_action">Scan front with camera</string>
     <string name="camera_cin_manual_hint">CIN unclear; capture allowed for human review only</string>
     <string name="camera_review_manual">Name and birth date read, but CIN is unclear. You can send the front photo for human review; no automatic verification.</string>
+    <string name="camera_pilot_no_ocr">A test phone/PIN does not authenticate identity OCR. The photo can be reviewed locally, but fields cannot be read until verified owner login and a connected private OCR service.</string>
     <string name="camera_review_title">Check the scan before continuing</string>
     <string name="camera_review_scanning">Reading identity fields with the private OCR service…</string>
     <string name="camera_review_unreadable">One or more fields are missing or unclear. Retake the front photograph.</string>

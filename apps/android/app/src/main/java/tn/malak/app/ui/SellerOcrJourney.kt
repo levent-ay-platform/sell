@@ -84,6 +84,8 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
     val context=LocalContext.current
     val ownerSession=LocalOwnerEvidenceSession.current
     val authenticatedOwnerSession=LocalAuthenticatedOwnerSession.current
+    // The pilot phone/PIN is not a verified owner OCR session.
+    val canReadPrivateId=ownerSession!=null||authenticatedOwnerSession!=null
     val scope=rememberCoroutineScope()
     var requestJob by remember {mutableStateOf<Job?>(null)}
     // Invalidate old asynchronous work whenever fields, documents, consented
@@ -138,11 +140,14 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
     var frontReadFailed by remember(draftFile){mutableStateOf(false)}
     var captureOcrConsent by remember(draftFile){mutableStateOf(false)}
     LaunchedEffect(draftFile,pendingPhoto?.uploadKey,
-        captureOcrConsent,ownerSession,authenticatedOwnerSession){
+        captureOcrConsent,ownerSession,authenticatedOwnerSession,canReadPrivateId){
         val pending=pendingPhoto
         frontRead=null;frontReadFailed=false;frontReadBusy=false
         if(pending!=null){
-            if(!captureOcrConsent){
+            if(!canReadPrivateId){
+                frontRead=LocalDocumentOcr.FrontScan(null,null,null,null,null,0,
+                    LocalDocumentOcr.FrontIssue.SESSION_REQUIRED)
+            }else if(!captureOcrConsent){
                 frontRead=LocalDocumentOcr.FrontScan(null,null,null,null,null,0,
                     LocalDocumentOcr.FrontIssue.CONSENT_REQUIRED)
             }else{
@@ -415,12 +420,17 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                 }
                 3 -> {
                     SectionHeading(s(R.string.identity_section),s(R.string.identity_hint))
-                    Row(Modifier.fillMaxWidth(),
-                        verticalAlignment=Alignment.CenterVertically){
-                        Checkbox(checked=captureOcrConsent,
-                            onCheckedChange={captureOcrConsent=it})
-                        Text(s(R.string.camera_huawei_consent),Modifier.weight(1f),
-                            color=Brand.Ink,fontSize=12.sp,lineHeight=19.sp)
+                    if(canReadPrivateId){
+                        Row(Modifier.fillMaxWidth(),
+                            verticalAlignment=Alignment.CenterVertically){
+                            Checkbox(checked=captureOcrConsent,
+                                onCheckedChange={captureOcrConsent=it})
+                            Text(s(R.string.camera_huawei_consent),Modifier.weight(1f),
+                                color=Brand.Ink,fontSize=12.sp,lineHeight=19.sp)
+                        }
+                    }else{
+                        PlainNotice(Icons.Outlined.Info,
+                            s(R.string.camera_pilot_no_ocr))
                     }
                     Surface(color=Color.White,shape=RoundedCornerShape(21.dp),border=BorderStroke(1.dp,CardBorder)) {
                         Column(Modifier.fillMaxWidth().padding(20.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
@@ -456,51 +466,58 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                                     }.getOrNull()
                                 }
                                 if(preview!=null){
+                                    // Whole photo, letterboxed; no extra crop
+                                    // after CameraX's capture orientation.
                                     Image(preview.asImageBitmap(),null,
-                                        modifier=Modifier.fillMaxWidth().height(188.dp),
+                                        modifier=Modifier.fillMaxWidth().height(270.dp),
                                         contentScale=ContentScale.Fit)
                                 }
-                                run {
-                                    if(frontReadBusy)
-                                        LinearProgressIndicator(Modifier.fillMaxWidth())
-                                    if(frontRead!=null) {
-                                        val scan=frontRead!!
+                                if(frontReadBusy)
+                                    LinearProgressIndicator(Modifier.fillMaxWidth())
+                                // Show fields only for an actual authorized OCR
+                                // response, not for pilot/consent/network errors.
+                                val hasOcr=FrontReviewPolicy.showFields(
+                                    canReadPrivateId,captureOcrConsent,frontReadBusy,
+                                    frontRead!=null,frontRead?.issue==null)
+                                if(hasOcr){
+                                    val scan=frontRead!!
+                                    if(scan.fullName!=null)
                                         SummaryFact(s(R.string.camera_review_name),
-                                            scan.fullName?:s(R.string.pair_unreadable))
-                                        SummaryFact(s(R.string.local_surname),
-                                            scan.surname?:s(R.string.pair_unreadable))
-                                        SummaryFact(s(R.string.local_given_name),
-                                            scan.givenName?:s(R.string.pair_unreadable))
+                                            scan.fullName)
+                                    if(scan.cinLast4!=null)
                                         SummaryFact(s(R.string.camera_review_cin),
-                                            scan.cinLast4?.let{"••••"+it}
-                                                ?:s(R.string.pair_unreadable))
+                                            "••••"+scan.cinLast4)
+                                    if(scan.birthDate!=null)
                                         SummaryFact(s(R.string.camera_review_birth),
-                                            scan.birthDate?:s(R.string.pair_unreadable))
-                                    }
-                                    Text(s(when {
-                                        frontReadBusy->R.string.camera_review_scanning
-                                        frontReadFailed->R.string.camera_review_failed
-                                        frontRead?.issue==
-                                            LocalDocumentOcr.FrontIssue.CONSENT_REQUIRED->
-                                            R.string.camera_huawei_consent_required
-                                        frontRead?.issue==
-                                            LocalDocumentOcr.FrontIssue.SESSION_REQUIRED->
-                                            R.string.camera_huawei_login_required
-                                        frontRead?.issue==
-                                            LocalDocumentOcr.FrontIssue.SERVICE_UNAVAILABLE->
-                                            R.string.camera_huawei_unavailable
-                                        frontRead?.issue==
-                                            LocalDocumentOcr.FrontIssue.LOW_RESOLUTION->
-                                            R.string.camera_image_low_resolution
-                                        frontRead?.readyForReview==true->
-                                            R.string.camera_review_ready
-                                        frontRead?.readyForManualReview==true->
-                                            R.string.camera_review_manual
-                                        else->R.string.camera_review_unreadable
-                                    }),color=Brand.Muted,fontSize=12.sp)
+                                            scan.birthDate)
                                 }
-                                Text(s(R.string.camera_review_privacy),
-                                    fontSize=11.sp,color=Brand.Muted)
+                                val reviewMessage=when{
+                                    !canReadPrivateId->R.string.camera_pilot_no_ocr
+                                    frontReadBusy->R.string.camera_review_scanning
+                                    frontRead?.issue==
+                                        LocalDocumentOcr.FrontIssue.CONSENT_REQUIRED->
+                                        R.string.camera_huawei_consent_required
+                                    frontRead?.issue==
+                                        LocalDocumentOcr.FrontIssue.SESSION_REQUIRED->
+                                        R.string.camera_huawei_login_required
+                                    frontRead?.issue==
+                                        LocalDocumentOcr.FrontIssue.SERVICE_UNAVAILABLE->
+                                        R.string.camera_huawei_unavailable
+                                    frontRead?.issue==
+                                        LocalDocumentOcr.FrontIssue.LOW_RESOLUTION->
+                                        R.string.camera_image_low_resolution
+                                    frontRead?.readyForReview==true->
+                                        R.string.camera_review_ready
+                                    frontRead?.readyForManualReview==true->
+                                        R.string.camera_review_manual
+                                    frontRead!=null->R.string.camera_review_unreadable
+                                    else->R.string.camera_review_scanning
+                                }
+                                Text(s(reviewMessage),fontSize=13.sp,
+                                    lineHeight=20.sp,color=Brand.Muted)
+                                if(canReadPrivateId)
+                                    Text(s(R.string.camera_review_privacy),
+                                        fontSize=11.sp,color=Brand.Muted)
                             }
                         }
                     }
