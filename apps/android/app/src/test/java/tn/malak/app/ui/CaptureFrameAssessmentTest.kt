@@ -7,12 +7,13 @@ class CaptureFrameAssessmentTest {
     private val cols=160
     private val rows=112
     private fun plain(value:Int)=IntArray(cols*rows){value}
-    private fun card(clearFields:Boolean=true,left:Int=16,right:Int=144,
+    private fun card(clearFields:Boolean=true,missingCin:Boolean=false,left:Int=16,right:Int=144,
                      top:Int=17,bottom:Int=96):IntArray {
         val p=plain(40)
         for(y in top..bottom)for(x in left..right)p[y*cols+x]=215
         if(clearFields) {
-            for(zone in CaptureFrameAssessment.zones){
+            for((index,zone) in CaptureFrameAssessment.zones.withIndex()){
+                if(missingCin&&index==0)continue
                 val x0=(left+(right-left)*zone.x0).toInt()+2
                 val x1=(left+(right-left)*zone.x1).toInt()-2
                 val y0=(top+(bottom-top)*zone.y0).toInt()+2
@@ -42,6 +43,13 @@ class CaptureFrameAssessmentTest {
         assertEquals(4,quality.zones.size)
         assertTrue(quality.zones.all{it})
         assertEquals(1,quality.bounds!!.let{ if(it.left<it.right&&it.top<it.bottom) 1 else 0 })
+    }
+    @Test fun obscuredCinCanBeCapturedForManualReviewOnly(){
+        val sample=card(missingCin=true)
+        val assessment=result(sample,sample.copyOf())
+        assertEquals(CaptureHint.CIN_UNCLEAR,assessment.hint)
+        assertEquals(false,assessment.zones[0])
+        assertTrue(assessment.zones.drop(1).all{it})
     }
     @Test fun rectangleWithoutTextStillRequiresFocus(){
         val sample=card(clearFields=false)

@@ -212,6 +212,8 @@
     <string name="camera_shutter">التقاط</string>
     <string name="camera_capture_error">تعذّر التصوير. حاول مجدداً.</string>
     <string name="camera_front_action">تصوير وجه الهوية بالكاميرا</string>
+    <string name="camera_cin_manual_hint">رقم الهوية غير واضح؛ يمكن التصوير للمراجعة البشرية فقط</string>
+    <string name="camera_review_manual">تمت قراءة الاسم والميلاد، لكن رقم الهوية غير واضح. يمكن إرسال صورة الوجه الأمامي للمراجعة البشرية فقط دون تحقق آلي.</string>
     <string name="camera_review_title">راجع القراءة قبل المتابعة</string>
     <string name="camera_review_scanning">جارٍ قراءة الحقول عبر خدمة OCR الخاصة…</string>
     <string name="camera_review_unreadable">حقل واحد أو أكثر ناقص أو غير واضح. أعد تصوير الوجه الأمامي.</string>

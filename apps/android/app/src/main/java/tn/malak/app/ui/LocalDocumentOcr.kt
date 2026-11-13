@@ -19,9 +19,9 @@ internal object LocalDocumentOcr {
         val cinLast4:String?,val birthDate:String?,val confidence:Int,
         val issue:FrontIssue?=null
     ) {
-        val readyForReview:Boolean get()=
+        private val readableCore:Boolean get()=
             issue==null&&surname!=null&&givenName!=null&&fullName!=null&&
-            confidence>=65&&cinLast4?.matches(Regex("""[0-9]{4}"""))==true&&
+            confidence>=65&&
             birthDate?.matches(Regex("""[0-9]{4}-[0-9]{2}-[0-9]{2}"""))==true&&
             runCatching{
                 val parsed=java.time.LocalDate.parse(birthDate)
@@ -30,6 +30,11 @@ internal object LocalDocumentOcr {
             }.getOrDefault(false)&&
             TunisianNameParser.canonical("$surname $givenName")==
                 TunisianNameParser.canonical(fullName)
+        // Both outcomes are preliminary and require server-side human review.
+        // A deliberately hidden CIN may be submitted for review, never approved.
+        val readyForReview:Boolean get()=
+            readableCore&&cinLast4?.matches(Regex("""[0-9]{4}"""))==true
+        val readyForManualReview:Boolean get()=readableCore&&cinLast4==null
     }
     private const val MAX_IMAGE=6L*1024L*1024L
     private val UUID=Regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$")

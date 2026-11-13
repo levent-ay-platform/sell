@@ -494,6 +494,8 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                                             R.string.camera_image_low_resolution
                                         frontRead?.readyForReview==true->
                                             R.string.camera_review_ready
+                                        frontRead?.readyForManualReview==true->
+                                            R.string.camera_review_manual
                                         else->R.string.camera_review_unreadable
                                     }),color=Brand.Muted,fontSize=12.sp)
                                 }
@@ -785,7 +787,8 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                     Button(onClick={
                         val pending=pendingPhoto
                         if(pending!=null){
-                            if(frontRead?.readyForReview==true){
+                            if(frontRead?.readyForReview==true||
+                                frontRead?.readyForManualReview==true){
                                 identityFiles.forEach{
                                     PrivateCaptureMemory.discard(it.uri)
                                 }
@@ -797,7 +800,8 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                             frontRead=null
                             identityMessage=R.string.file_selected
                         }
-                    },enabled=frontRead?.readyForReview==true&&!frontReadBusy,
+                    },enabled=(frontRead?.readyForReview==true||
+                        frontRead?.readyForManualReview==true)&&!frontReadBusy,
                         modifier=Modifier.weight(1f).heightIn(min=54.dp)){
                         Text(s(R.string.camera_review_accept))
                     }

@@ -219,10 +219,12 @@ internal fun TunisianIdCamera(
                             if(frames%5==0){
                                 val (measure,pixels)=checkLight(frame,previous)
                                 previous=pixels.takeIf{it.isNotEmpty()}
-                                stable=if(measure.hint==CaptureHint.GOOD)
+                                stable=if(measure.hint==CaptureHint.GOOD||
+                                    measure.hint==CaptureHint.CIN_UNCLEAR)
                                     (stable+1).coerceAtMost(3) else 0
                                 // Require two matching stable analyzer samples.
-                                val result=if(measure.hint==CaptureHint.GOOD&&stable<2)
+                                val result=if((measure.hint==CaptureHint.GOOD||
+                                        measure.hint==CaptureHint.CIN_UNCLEAR)&&stable<2)
                                     measure.copy(hint=CaptureHint.WAIT) else measure
                                 handler.post {
                                     if(active.get()&&valid.get())pictureQuality=result
@@ -262,6 +264,7 @@ internal fun TunisianIdCamera(
         CaptureHint.FOCUS->R.string.camera_focus_fields
         CaptureHint.TILT->R.string.camera_correct_angle
         CaptureHint.GOOD->R.string.camera_hold_steady
+        CaptureHint.CIN_UNCLEAR->R.string.camera_cin_manual_hint
         CaptureHint.WAIT->R.string.camera_align_hint
     }
     Box(Modifier.fillMaxSize().background(Color(0xFF10151C))){
@@ -367,7 +370,8 @@ internal fun TunisianIdCamera(
                                 }}
                             }
                         })
-                    },enabled=ready&&!capturing&&pictureQuality.hint==CaptureHint.GOOD,
+                    },enabled=ready&&!capturing&&
+                        pictureQuality.hint in setOf(CaptureHint.GOOD,CaptureHint.CIN_UNCLEAR),
                         colors=ButtonDefaults.buttonColors(containerColor=Color.White),
                         shape=CircleShape,modifier=Modifier.size(76.dp),
                         contentPadding=PaddingValues(0.dp)){

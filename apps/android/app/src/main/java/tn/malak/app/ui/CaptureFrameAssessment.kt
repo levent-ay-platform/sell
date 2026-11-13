@@ -7,7 +7,7 @@ import kotlin.math.sqrt
  * Detected bounds and texture are guidance, NOT real-time OCR or authenticity.
  */
 internal enum class CaptureHint {
-    WAIT, GOOD, DARK, GLARE, TOO_FAR, MOVE_BACK, MOVING, TILT, FOCUS
+    WAIT, GOOD, CIN_UNCLEAR, DARK, GLARE, TOO_FAR, MOVE_BACK, MOVING, TILT, FOCUS
 }
 internal data class CardBounds(
     val left:Float,val top:Float,val right:Float,val bottom:Float
@@ -115,8 +115,13 @@ internal object CaptureFrameAssessment {
             return FrameAssessment(CaptureHint.MOVE_BACK,bounds)
         if(width<.61f||height<.52f)return FrameAssessment(CaptureHint.TOO_FAR,bounds)
         val quality=zones.map{fieldSharp(pixels,cols,rows,bounds,it)}
-        return FrameAssessment(if(quality.all{it})CaptureHint.GOOD else CaptureHint.FOCUS,
-            bounds,quality)
+        val labelAndBirthClear=quality.drop(1).all{it}
+        val hint=when {
+            quality.all{it}->CaptureHint.GOOD
+            labelAndBirthClear->CaptureHint.CIN_UNCLEAR
+            else->CaptureHint.FOCUS
+        }
+        return FrameAssessment(hint,bounds,quality)
     }
     fun evaluate(pixels:IntArray,cols:Int,rows:Int,previous:IntArray?):CaptureHint =
         inspect(pixels,cols,rows,previous).hint
