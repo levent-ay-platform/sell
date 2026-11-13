@@ -46,6 +46,12 @@ export interface OwnerCaseInput {
   readonly capacity:'owner'|'partner'|'heir'|'mandate';
   readonly consentAccepted:true;
 }
+export interface EvidenceIntakeOnlyInput {
+  /** Identity and property documents can be reviewed BEFORE listing facts. */
+  readonly mode:'EVIDENCE_ONLY';
+  readonly idempotencyKey:string;
+  readonly consentAccepted:true;
+}
 export interface OwnerCaseResult {
   readonly caseId:string;
   readonly reused:boolean;
@@ -55,10 +61,20 @@ export interface OwnerCaseResult {
   readonly mayPublish:false;
 }
 
-function validate(input:unknown):Omit<OwnerCaseInput,'bearerToken'> {
+function validate(input:unknown):
+  Omit<OwnerCaseInput,'bearerToken'>|EvidenceIntakeOnlyInput {
   if(!input||typeof input!=='object'||Array.isArray(input))
     throw new OwnerCaseDenied('INVALID_REQUEST');
   const row=input as Record<string,unknown>;
+  if(row.mode==='EVIDENCE_ONLY'){
+    if(Object.keys(row).sort().join(',')!==
+       ['consentAccepted','idempotencyKey','mode'].join(',')||
+       row.consentAccepted!==true||typeof row.idempotencyKey!=='string'||
+       !KEY.test(row.idempotencyKey))
+      throw new OwnerCaseDenied('INVALID_REQUEST');
+    return {mode:'EVIDENCE_ONLY',idempotencyKey:row.idempotencyKey,
+      consentAccepted:true};
+  }
   const expected=['areaSquareMetres','capacity','consentAccepted','idempotencyKey','priceTnd','region','title'];
   if(Object.keys(row).sort().join(',')!==expected.join(',')||
      row.consentAccepted!==true||typeof row.idempotencyKey!=='string'||
@@ -125,10 +141,10 @@ export async function provisionIndividualOwnerCase(
   if(!POLICY.test(deps.policyVersion))throw new OwnerCaseUnavailable();
   const actor=await requireUser(deps.auth,bearerToken);
   const data=validate(input);
-  const intent=JSON.stringify([
-    data.title,data.region,data.areaSquareMetres,data.priceTnd,
-    data.capacity,deps.policyVersion
-  ]);
+  const intent='mode' in data?
+    JSON.stringify(['EVIDENCE_ONLY',deps.policyVersion]):
+    JSON.stringify([data.title,data.region,data.areaSquareMetres,
+      data.priceTnd,data.capacity,deps.policyVersion]);
   const digest=createHash('sha256').update(intent).digest('hex');
   return transaction(deps.pool,async db=>{
     // User row is provisioned by the REAL identity service, not by this endpoint.
@@ -162,15 +178,19 @@ export async function provisionIndividualOwnerCase(
       [party,actor]);
     const property=one((await db.query<{id:string}>(
       "INSERT INTO sell.properties(kind,country_code) VALUES('LAND','TN') RETURNING id::text AS id")).rows);
-    const snapshot=JSON.stringify({title:data.title,region:data.region,
-      areaSquareMetres:data.areaSquareMetres,priceTnd:data.priceTnd,
-      declaredCapacity:CAPACITY[data.capacity]});
+    // An evidence-only case has NO fabricated address, size, price or legal
+    // capacity. It can NEVER become a verified title or be published.
+    const snapshot=JSON.stringify('mode' in data?
+      {intakeMode:'EVIDENCE_ONLY',propertyFactsPending:true}:
+      {title:data.title,region:data.region,
+       areaSquareMetres:data.areaSquareMetres,priceTnd:data.priceTnd,
+       declaredCapacity:CAPACITY[data.capacity]});
     const revision=one((await db.query<{id:string}>(
       'INSERT INTO sell.property_revisions(property_id,revision_number,snapshot) VALUES($1::uuid,1,$2::jsonb) RETURNING id::text AS id',
       [property,snapshot])).rows);
     const claim=one((await db.query<{id:string}>(
       'INSERT INTO sell.ownership_claims(property_id,claimant_party_id,declared_capacity) VALUES($1::uuid,$2::uuid,$3) RETURNING id::text AS id',
-      [property,party,CAPACITY[data.capacity]])).rows);
+      [property,party,'mode' in data?'UNDECLARED':CAPACITY[data.capacity]])).rows);
     const caseId=one((await db.query<{id:string}>(
       "INSERT INTO sell.verification_cases(property_revision_id,ownership_claim_id,status) VALUES($1::uuid,$2::uuid,'PENDING') RETURNING id::text AS id",
       [revision,claim])).rows);

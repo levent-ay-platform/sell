@@ -56,6 +56,34 @@ test('disposable PostgreSQL: create once, authorize case, reject conflicts, revo
   assert.equal(row.rows[0].allowed,true);
   assert.equal(row.rows[0].declared_capacity,'SOLE_OWNER');
   assert.equal(row.rows[0].status,'PENDING');
+  // Document -> front identity BEFORE title/area/price are available.
+  // The intake claim is explicitly UNDECLARED and cannot be VERIFIED.
+  const pendingIntake={mode:'EVIDENCE_ONLY',consentAccepted:true,
+    idempotencyKey:'synthetic-intake-key-001'};
+  const initial=await provisionIndividualOwnerCase(ownerToken,pendingIntake,deps);
+  const replayIntake=await provisionIndividualOwnerCase(ownerToken,pendingIntake,deps);
+  assert.equal(initial.caseId,replayIntake.caseId);
+  assert.equal(replayIntake.reused,true);
+  assert.equal(initial.ownershipVerified,false);
+  assert.equal(initial.mayPublish,false);
+  const state=await pool.query(`SELECT c.status,oc.declared_capacity,r.snapshot
+    FROM sell.verification_cases c
+    JOIN sell.ownership_claims oc ON oc.id=c.ownership_claim_id
+    JOIN sell.property_revisions r ON r.id=c.property_revision_id
+    WHERE c.id=$1::uuid`,[initial.caseId]);
+  assert.equal(state.rows.length,1);
+  assert.equal(state.rows[0].status,'PENDING');
+  assert.equal(state.rows[0].declared_capacity,'UNDECLARED');
+  assert.equal(state.rows[0].snapshot.intakeMode,'EVIDENCE_ONLY');
+  assert.equal(state.rows[0].snapshot.title,undefined);
+  assert.equal(state.rows[0].snapshot.areaSquareMetres,undefined);
+  assert.equal(state.rows[0].snapshot.priceTnd,undefined);
+  await assert.rejects(pool.query(
+    "UPDATE sell.verification_cases SET status='VERIFIED' WHERE id=$1::uuid",
+    [initial.caseId]));
+  await assert.rejects(provisionIndividualOwnerCase(ownerToken,
+    {...pendingIntake,title:'fake'},deps),
+    (e:unknown)=>e instanceof OwnerCaseDenied&&e.code==='INVALID_REQUEST');
   const strangerMayRead=await pool.query(
     'SELECT sell.case_accepts_individual_evidence($1::uuid,$2::uuid) AS allowed',
     [first.caseId,stranger]);

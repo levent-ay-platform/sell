@@ -114,3 +114,17 @@ test('compromised case adapter cannot claim verified ownership',async()=>{
   assert.equal(audit[0].reason,'UPSTREAM_UNAVAILABLE');
  },{evil:true});
 });
+
+test('document-first intake is explicitly UNDECLARED without title, size or price',async()=>{
+ await withServer(async(port,{seen})=>{
+   const payload={mode:'EVIDENCE_ONLY',idempotencyKey:'private-intake-case-001',
+      consentAccepted:true};
+   const result=await post(port,casePath,JSON.stringify(payload));
+   assert.equal(result.status,201);
+   assert.equal(result.json.mayPublish,false);
+   assert.equal(result.json.ownershipVerified,false);
+   assert.deepEqual(seen,[{bearer:token,body:payload}]);
+   assert.equal(JSON.stringify(payload).includes('capacity'),false);
+   assert.equal(JSON.stringify(payload).includes('priceTnd'),false);
+ });
+});
