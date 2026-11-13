@@ -239,4 +239,12 @@
     <string name="camera_capture_disclosure">عند التصوير تُرسل الصورة بأمان لاستخراج البيانات فقط، دون إثبات تلقائي للهوية أو الملكية.</string>
     <string name="review_auth_needed">صورة الهوية محفوظة بشكل خاص. مطابقة مستندات الملكية متاحة بعد توثيق الحساب.</string>
     <string name="review_send_disclosure">بالضغط على «مقارنة المستندات» توافق على إرسال الوثائق المحددة بأمان للمراجعة، دون إثبات تلقائي للملكية.</string>
+    <string name="smart_step_documents">الوثائق</string>
+    <string name="smart_land_title_prefix">أرض للبيع في</string>
+    <string name="smart_area_unit">م²</string>
+    <string name="smart_title_use">استخدام عنوان مقترح</string>
+    <string name="smart_unit_price">السعر لكل متر مربع من السعر المدخل</string>
+    <string name="smart_preview_heading">معاينة إعلانك</string>
+    <string name="smart_preview_disclosure">المعاينة مبنية على بياناتك فقط. لا يعني ذلك اعتماد الملكية أو نشر الإعلان.</string>
+    <string name="smart_autosave_hint">تُحفظ بيانات الإعلان تلقائياً على هذا الهاتف. صور الهوية والشهادة لا تُحفظ في المسودة.</string>
 </resources>
