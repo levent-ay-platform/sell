@@ -57,3 +57,39 @@ test('OCR Arabic bidi page order is recoverable as untrusted candidate',()=>{
   assert.deepEqual(r.extraction.missingPages,[2]);
   assert.equal(r.mayPublish,false);
 });
+
+
+test('private OCR field evidence keeps pixel box for source highlighting',()=>{
+  const synthetic={format:'image',mayApproveOwnership:false,pages:[{
+    page:1,method:'ocr',lines:[
+      {text:'شهادة ملكية',page:1,confidence:0.98,source:'ocr-ar',
+       bbox:{left:15,top:10,right:220,bottom:45}},
+      {text:'معرف الرسم العقاري: 123789',page:1,confidence:0.98,source:'ocr-ar',
+       bbox:{left:110,top:160,right:550,bottom:204}}
+    ]
+  }]};
+  const result=readUntrustedOcrDocument(synthetic);
+  assert.equal(result.extraction.fields.registryReference.value,'123789');
+  assert.deepEqual(result.extraction.fields.registryReference.evidence[0].bbox,
+    {left:110,top:160,right:550,bottom:204});
+  assert.equal(result.mayPublish,false);
+});
+test('malformed or non-raster OCR bounding boxes fail closed',()=>{
+  const common={format:'image',mayApproveOwnership:false};
+  const entry=(bbox:unknown)=>({page:1,method:'ocr',lines:[{
+    text:'شهادة ملكية',page:1,confidence:0.9,source:'ocr-ar',bbox
+  }]});
+  for(const bounds of [
+    {left:10,top:10,right:10,bottom:30},
+    {left:-3,top:10,right:30,bottom:40},
+    {left:0.2,top:10,right:30,bottom:40},
+    {left:0,top:10,right:Infinity,bottom:40},
+    'fake-box'
+  ]){
+    assert.throws(()=>parseOcrWorkerOutput({...common,pages:[entry(bounds)]}),/INVALID_OCR_LINE/);
+  }
+  const native={...document,pages:[{...document.pages[0],lines:[
+    {...document.pages[0].lines[0],bbox:{left:1,top:1,right:2,bottom:2}}
+  ]}]};
+  assert.throws(()=>parseOcrWorkerOutput(native),/INVALID_OCR_LINE/);
+});
