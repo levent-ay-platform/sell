@@ -250,4 +250,5 @@
     <string name="smart_title_auto">عنوان الإعلان يُجهَّز تلقائياً</string>
     <string name="smart_title_pending">حدّد المنطقة والمساحة ليظهر عنوان إعلانك</string>
     <string name="smart_title_edit">تعديل</string>
+    <string name="smart_title_done">تم</string>
 </resources>
