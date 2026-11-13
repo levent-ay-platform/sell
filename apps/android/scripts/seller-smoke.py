@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
-"""Synthetic Android emulator smoke: fixed pilot PIN enters app and seller navigation stays alive.
+"""Synthetic Android emulator smoke for the OFFLINE QA configuration.
 
-Run only in disposable GitHub-hosted emulator; no real documents, sessions or data.
+A fixed pilot PIN must NOT invent a bearer/session or grant app entry
+unless a real private HTTPS Malak gateway issues a scoped OCR token.
+The connected-seller flow needs a separate private endpoint E2E run.
 """
 import subprocess
 import time
@@ -69,15 +71,14 @@ def enter_pilot(phone="29500000",check_bad_code=True):
     time.sleep(2)
     visible=texts(dump_nodes())
     print("After pilot login:",visible[:40])
-    if not any(x in visible for x in [
-            "Accès pilote — numéro non vérifié",
-            "دخول تجريبي — الرقم غير متحقق منه",
-            "Pilot access — phone unverified"]):
-        raise AssertionError("Correct pilot code did not enter clearly labelled unverified pilot mode")
-    # The Add Land button is below the fold on small emulators; validate the
-    # home route here, then let click_text scroll to the actual button.
-    if "MALAK / ملاك" not in visible:
-        raise AssertionError("Correct pilot code did not open normal Malak home")
+    if not any("Service OCR pilote indisponible" in x or
+               "تعذّر الاتصال بخدمة OCR التجريبية" in x or
+               "Pilot OCR service unavailable" in x for x in visible):
+        raise AssertionError("Offline QA failed to explain real server is required")
+    if "MALAK / ملاك" in visible or any(
+            "Accès pilote — numéro non vérifié" in x or
+            "جلسة OCR تجريبية" in x for x in visible):
+        raise AssertionError("Offline pilot PIN created a fake server session")
 
 def crash_log():
     result=adb("logcat","-d","-b","crash","-v","brief",check=False)
@@ -109,36 +110,19 @@ def assert_draft_value(expected,should_exist=True):
         )
 
 def main():
+    # Hosted CI has no configured private gateway. It must test the actual
+    # fail-closed login UI, not assert that 1234 bypasses server auth.
     print(adb("shell","am","start","-W","-n",PACKAGE+"/.MainActivity").stdout)
     time.sleep(3)
     enter_pilot()
-    click_text(["Déposer un terrain","أضف أرضك"])
-    time.sleep(2)
-    assert_alive_and_seller()
+    if not adb("shell","pidof",PACKAGE,check=False).stdout.strip():
+        raise AssertionError("Pilot login error crashed Android")
     with open(TMP/"seller-open.png","wb") as out:
-        shot=subprocess.run(["adb","exec-out","screencap","-p"],stdout=out,stderr=subprocess.PIPE,timeout=30)
-        if shot.returncode: print("Screen capture unavailable (nonblocking)")
-    # Synthetic draft must be durable on a process restart, but must never
-    # appear under a different pilot phone on the same emulator installation.
-    click_text(["Titre de l’annonce","عنوان الإعلان"])
-    adb("shell","input","text","TerrainAlpha")
-    adb("shell","input","keyevent","KEYCODE_BACK")
-    click_text(["Région / délégation","المنطقة / المعتمدية"])
-    adb("shell","input","text","Kelibia")
-    adb("shell","input","keyevent","KEYCODE_BACK")
-    click_text(["Enregistrer le brouillon","حفظ المسودة"])
-    time.sleep(1)
-    relaunch()
-    enter_pilot(phone="55500001",check_bad_code=False)
-    click_text(["Déposer un terrain","أضف أرضك"])
-    time.sleep(1)
-    assert_draft_value("TerrainAlpha",should_exist=False)
-    relaunch()
-    enter_pilot(phone="29500000",check_bad_code=False)
-    click_text(["Déposer un terrain","أضف أرضك"])
-    time.sleep(1)
-    assert_draft_value("TerrainAlpha",should_exist=True)
-    print("PASS: 1234 pilot seller navigation, durable draft and cross-account isolation on disposable emulator")
+        shot=subprocess.run(["adb","exec-out","screencap","-p"],
+            stdout=out,stderr=subprocess.PIPE,timeout=30)
+        if shot.returncode:print("Screenshot unavailable")
+    print("PASS: offline 1234 cannot create a fake OCR session; Android remains alive")
+
 if __name__=="__main__":
     try:main()
     except Exception:
