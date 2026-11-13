@@ -50,15 +50,30 @@ internal object LocalDocumentOcr {
         return v
     }
     suspend fun inspectFront(context:Context,uri:Uri,length:Long,mime:String,
-        session:OwnerEvidenceSession?):FrontScan=withContext(Dispatchers.IO) {
-        if(session==null)return@withContext no(FrontIssue.SESSION_REQUIRED)
+        session:OwnerEvidenceSession?):FrontScan {
+        if(session==null)return no(FrontIssue.SESSION_REQUIRED)
+        if(!UUID.matches(session.caseId))return no(FrontIssue.SERVICE_UNAVAILABLE)
+        return inspectAnyFront(context,uri,length,mime,session.httpsBaseUrl,
+            session.bearer,"/internal/v1/evidence/"+session.caseId+"/preview-cin",false)
+    }
+    suspend fun inspectPilotFront(context:Context,uri:Uri,length:Long,mime:String,
+        session:PilotOcrSession?):FrontScan {
+        if(session==null)return no(FrontIssue.SESSION_REQUIRED)
+        if(session.expiresAtMs<=System.currentTimeMillis())
+            return no(FrontIssue.SESSION_REQUIRED)
+        return inspectAnyFront(context,uri,length,mime,session.httpsBaseUrl,
+            session.bearer,"/internal/v1/pilot/preview-cin",true)
+    }
+
+    private suspend fun inspectAnyFront(context:Context,uri:Uri,length:Long,
+        mime:String,httpsBaseUrl:String,bearer:String,endpoint:String,
+        pilot:Boolean):FrontScan=withContext(Dispatchers.IO) {
         // Preview uses only an ephemeral image produced by the in-app CameraX
         // capture, never any gallery, shared provider or external document.
         if(uri.scheme!="content"||mime!="image/jpeg"||
             !PrivateCaptureMemory.isPrivate(uri)||
             PrivateCaptureMemory.length(uri)!=length||
-            length !in 20..MAX_IMAGE||!UUID.matches(session.caseId)||
-            !TOKEN.matches(session.bearer))
+            length !in 20..MAX_IMAGE||!TOKEN.matches(bearer))
             return@withContext no(FrontIssue.SERVICE_UNAVAILABLE)
         val dims=BitmapFactory.Options().apply{inJustDecodeBounds=true}
         val src=context.contentResolver.openInputStream(uri)
@@ -66,14 +81,13 @@ internal object LocalDocumentOcr {
         src.use{BitmapFactory.decodeStream(it,null,dims)}
         if(dims.outWidth<175||dims.outHeight<175)
             return@withContext no(FrontIssue.LOW_RESOLUTION)
-        val base=runCatching{URI(session.httpsBaseUrl.trim())}.getOrNull()
+        val base=runCatching{URI(httpsBaseUrl.trim())}.getOrNull()
             ?:return@withContext no(FrontIssue.SERVICE_UNAVAILABLE)
         if(base.scheme!="https"||base.host.isNullOrBlank()||base.userInfo!=null||
             base.query!=null||base.fragment!=null||
             (base.path!=""&&base.path!="/")||base.port !in -1..65535)
             return@withContext no(FrontIssue.SERVICE_UNAVAILABLE)
-        val address=base.toASCIIString().trimEnd('/')+
-            "/internal/v1/evidence/"+session.caseId+"/preview-cin"
+        val address=base.toASCIIString().trimEnd('/')+endpoint
         val conn=(URL(address).openConnection() as? HttpsURLConnection)
             ?:return@withContext no(FrontIssue.SERVICE_UNAVAILABLE)
         try {
@@ -83,7 +97,8 @@ internal object LocalDocumentOcr {
             conn.readTimeout=35000
             conn.useCaches=false
             conn.doOutput=true
-            conn.setRequestProperty("Authorization","Bearer "+session.bearer)
+            conn.setRequestProperty("Authorization","Bearer "+bearer)
+            if(pilot)conn.setRequestProperty("X-Pilot-Ocr-Consent","1")
             conn.setRequestProperty("Cache-Control","no-store")
             conn.setRequestProperty("Content-Type","application/octet-stream")
             conn.setRequestProperty("X-Claimed-Mime",mime)
@@ -126,6 +141,8 @@ internal object LocalDocumentOcr {
             val json=try{JSONObject(String(bytes,Charsets.UTF_8))}
                 finally{bytes.fill(0)}
             if(!json.optBoolean("ok")||json.optInt("schemaVersion")!=1||
+                (pilot && json.optBoolean("pilotOcr")!=true)||
+                (!pilot && json.has("pilotOcr"))||
                 json.optBoolean("identityVerified",true)||
                 json.optBoolean("ownershipVerified",true)||
                 json.optBoolean("mayPublish",true)||
