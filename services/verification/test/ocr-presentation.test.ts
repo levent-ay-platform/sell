@@ -53,3 +53,23 @@ test('authorized private field card carries the same bounded OCR rectangle',()=>
  assert.equal(view.ownershipVerified,false);
  assert.equal(view.mayPublish,false);
 });
+
+
+test('private review gets labelled family facts with evidence but no automatic verification',()=>{
+ const sample={format:'image',mayApproveOwnership:false,pages:[{
+   page:1,method:'ocr',lines:[
+     {page:1,text:'عقد بيع',source:'ocr-ar',confidence:.98},
+     {page:1,text:'المساحة المبيعة: 185.25 م²',source:'ocr-ar',confidence:.98,
+       bbox:{left:15,top:115,right:280,bottom:143}},
+     {page:1,text:'البائع: شخص افتراضي',source:'ocr-ar',confidence:.96}
+   ]
+ }]};
+ const r=presentPrivateCpfReading(readUntrustedOcrDocument(sample),null);
+ assert.equal(r.familyKind,'SALE_DEED');
+ assert.equal(r.familyFacts.find(f=>f.id==='soldAreaM2')?.value,'185.25');
+ assert.deepEqual(r.familyFacts.find(f=>f.id==='soldAreaM2')?.bbox,
+   {left:15,top:115,right:280,bottom:143});
+ assert.equal(r.documentSupportLevel,3);
+ assert.equal(r.ownershipVerified,false);
+ assert.equal(r.mayPublish,false);
+});

@@ -6,6 +6,8 @@
  */
 import type {ReadDocumentResult} from './reader.ts';
 import type {FieldName, ExtractedField, SmartExtraction, OcrPixelBox} from './smart-fields.ts';
+import type {LandPaperKind,ClassificationStatus} from './document-training-v2.ts';
+import type {LandFactKey,LandFactStatus} from './document-family-fields-v2.ts';
 
 const LABELS: Record<FieldName,{ar:string;fr:string}>={
   registryReference:{ar:'مرجع الرسم العقاري',fr:'Référence du titre foncier'},
@@ -37,6 +39,14 @@ export interface PrivateOcrFact {
   /** Rectangle of source OCR text on private page; null for PDF without coordinates. */
   readonly bbox:OcrPixelBox|null;
 }
+export interface PrivateDocumentFamilyFact {
+  readonly id:LandFactKey;
+  readonly value:string|null;
+  readonly status:LandFactStatus;
+  readonly page:number|null;
+  readonly confidencePercent:number|null;
+  readonly bbox:OcrPixelBox|null;
+}
 export interface PrivateOcrPresentation {
   readonly schemaVersion:1;
   readonly access:'AUTHORIZED_OWNER_OR_REVIEWER_ONLY';
@@ -45,6 +55,12 @@ export interface PrivateOcrPresentation {
   readonly missingPages:readonly number[];
   readonly qualityReviewPages:readonly number[];
   readonly facts:readonly PrivateOcrFact[];
+  /** Seven-family document candidate, never legal classification or public facts. */
+  readonly familyKind:LandPaperKind;
+  readonly familyStatus:ClassificationStatus;
+  readonly familyFacts:readonly PrivateDocumentFamilyFact[];
+  readonly documentSupportLevel:number;
+  readonly provisionalReviewPoints:number;
   readonly declaredAreaComparison:'SAME_NUMBER_UNVERIFIED'|'DIFFERENT_NUMBER_REVIEW'|'NOT_COMPARABLE';
   readonly ownerIdentityMatch:'NOT_STARTED';
   readonly officialCpfOwnershipCheck:'NOT_STARTED';
@@ -85,6 +101,17 @@ export function presentPrivateCpfReading(read:ReadDocumentResult,declaredArea:un
       bbox:source?.bbox??null
     } satisfies PrivateOcrFact;
   });
+  const familyFacts=read.privateFamilyFields.facts.map(f=>{
+    const source=f.evidence[0];
+    return {id:f.key,
+      value:f.status==='CANDIDATE'||f.status==='LOW_CONFIDENCE'?
+        f.value?.slice(0,100)??null:null,
+      status:f.status,page:source?.page??null,
+      confidencePercent:source?.confidence===null||
+        source?.confidence===undefined?null:Math.round(source.confidence*100),
+      bbox:source?.bbox??null
+    } satisfies PrivateDocumentFamilyFact;
+  }).slice(0,24);
   const documentArea=read.extraction.fields.areaSquareMetres;
   const declared=safeArea(declaredArea);
   const extracted=documentArea.status==='CANDIDATE'?safeArea(documentArea.value):null;
@@ -96,7 +123,11 @@ export function presentPrivateCpfReading(read:ReadDocumentResult,declaredArea:un
     pagesReceived:read.pagesReceived,
     missingPages:[...read.extraction.missingPages],
     qualityReviewPages:[...read.qualityReviewPages],
-    facts,declaredAreaComparison:comparison,
+    facts,familyKind:read.documentFamilyCandidate.kind,
+    familyStatus:read.documentFamilyCandidate.status,familyFacts,
+    documentSupportLevel:read.privateEvidenceReadiness.documentSupportLevel,
+    provisionalReviewPoints:read.privateEvidenceReadiness.provisionalProgressPoints,
+    declaredAreaComparison:comparison,
     ownerIdentityMatch:'NOT_STARTED',officialCpfOwnershipCheck:'NOT_STARTED',
     requiresIndependentReview:true,ownershipVerified:false,mayPublish:false
   };
