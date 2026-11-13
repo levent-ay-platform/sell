@@ -2,6 +2,8 @@ import {extractCpfSmartFields} from './smart-fields.ts';
 import type {RecognizedLine, SmartExtraction} from './smart-fields.ts';
 import {classifyLandPaper} from './document-training-v2.ts';
 import type {DocumentTrainingCandidate} from './document-training-v2.ts';
+import {locateOwnerTableFromWords} from './owner-table-layout-v2.ts';
+import type {SpatialPage, SpatialWord, SpatialTableCandidate} from './owner-table-layout-v2.ts';
 import type {QualityWarning} from './capture.ts';
 
 /**
@@ -13,6 +15,9 @@ export interface IngestedPage {
   method:'pdf-text'|'ocr';
   lines:readonly RecognizedLine[];
   qualityWarnings?:readonly QualityWarning[];
+  /** Only generated on securely rasterized/decoded OCR pages. */
+  privateSpatialPage?:SpatialPage;
+  spatialWordsTruncated?:boolean;
 }
 export interface IngestedDocument {
   format:'pdf'|'image';
@@ -23,6 +28,8 @@ export interface ReadDocumentResult {
   extraction:SmartExtraction;
   /** Non-authoritative, zero-PII document-family hint for later private review. */
   documentFamilyCandidate:DocumentTrainingCandidate;
+  /** Private, unreviewed candidates; never expose through a public listing. */
+  ownerTableLayout:SpatialTableCandidate|null;
   pagesReceived:number;
   extractionMethods:readonly ('pdf-text'|'ocr')[];
   qualityReviewPages:readonly number[];
@@ -46,6 +53,7 @@ export function parseOcrWorkerOutput(input:unknown):IngestedDocument {
      input.pages.length<1 || input.pages.length>8) throw new TypeError('INVALID_OCR_PAYLOAD');
   const seen=new Set<number>();
   let count=0;
+  let spatialCount=0;
   const pages:IngestedPage[]=[];
   for(const item of input.pages){
     if(!isObject(item) || !Number.isSafeInteger(item.page) ||
@@ -57,6 +65,36 @@ export function parseOcrWorkerOutput(input:unknown):IngestedDocument {
          item.qualityWarnings.some((x:unknown)=>!QUALITY_WARNINGS.has(x as QualityWarning))))
        throw new TypeError('INVALID_OCR_QUALITY');
     const page=Number(item.page);seen.add(page);
+    const spatialMetadata=[
+      item.ocrWords,item.pageImageWidth,item.pageImageHeight,
+      item.spatialWordsTruncated
+    ];
+    const hasSpatial=spatialMetadata.some(x=>x!==undefined);
+    if(hasSpatial&&(
+      item.method!=='ocr'||!Number.isSafeInteger(item.pageImageWidth)||
+      !Number.isSafeInteger(item.pageImageHeight)||
+      Number(item.pageImageWidth)<200||Number(item.pageImageWidth)>10000||
+      Number(item.pageImageHeight)<300||Number(item.pageImageHeight)>10000||
+      !Array.isArray(item.ocrWords)||item.ocrWords.length>1000||
+      typeof item.spatialWordsTruncated!=='boolean'))
+      throw new TypeError('INVALID_SPATIAL_OCR_METADATA');
+    const spatialWords:SpatialWord[]=[];
+    if(hasSpatial){
+      for(const w of item.ocrWords as unknown[]){
+        if(!isObject(w)||w.page!==page||typeof w.text!=='string'||
+          w.text.length<1||w.text.length>120||
+          typeof w.confidence!=='number'||!Number.isFinite(w.confidence)||
+          w.confidence<0||w.confidence>1||!validRasterBox(w.bbox)||
+          w.bbox.right>Number(item.pageImageWidth)||
+          w.bbox.bottom>Number(item.pageImageHeight))
+          throw new TypeError('INVALID_SPATIAL_OCR_WORD');
+        spatialWords.push({page,text:w.text,confidence:w.confidence,
+          bbox:{left:w.bbox.left,top:w.bbox.top,
+                right:w.bbox.right,bottom:w.bbox.bottom}});
+      }
+      spatialCount+=spatialWords.length;
+      if(spatialCount>2500)throw new RangeError('SPATIAL_OCR_TOO_LARGE');
+    }
     const lines:RecognizedLine[]=[];
     for(const line of item.lines){
       if(!isObject(line) || typeof line.text!=='string' ||
@@ -79,7 +117,13 @@ export function parseOcrWorkerOutput(input:unknown):IngestedDocument {
                     bottom:(line.bbox as {bottom:number}).bottom}}:{})});
     }
     pages.push({page,method:item.method as IngestedPage['method'],lines,
-      ...(item.qualityWarnings!==undefined ? {qualityWarnings:item.qualityWarnings as QualityWarning[]} : {})});
+      ...(hasSpatial?{
+        privateSpatialPage:{page,width:Number(item.pageImageWidth),
+          height:Number(item.pageImageHeight),words:spatialWords},
+        spatialWordsTruncated:item.spatialWordsTruncated as boolean
+      }:{}),
+      ...(item.qualityWarnings!==undefined ?
+        {qualityWarnings:item.qualityWarnings as QualityWarning[]} : {})});
   }
   // Never silently lose scanned PDF pages between worker and domain parser.
   if(pages.some((_pg,i)=>!seen.has(i+1))) throw new TypeError('OCR_PAGE_GAP');
@@ -91,7 +135,14 @@ export function readUntrustedOcrDocument(payload:unknown):ReadDocumentResult {
   const lines=parsed.pages.flatMap(pg=>pg.lines);
   const extraction=extractCpfSmartFields(lines);
   const documentFamilyCandidate=classifyLandPaper(lines);
-  return {extraction,documentFamilyCandidate,pagesReceived:parsed.pages.length,
+  // Table association is safe only if EVERY page has complete original
+  // raster-page word geometry. Partial/ROI/native-PDF words never count.
+  const spatialReady=parsed.pages.every(pg=>pg.privateSpatialPage!==undefined&&
+    !pg.spatialWordsTruncated&&pg.privateSpatialPage.words.length>0);
+  const ownerTableLayout=spatialReady?
+    locateOwnerTableFromWords(parsed.pages.map(pg=>pg.privateSpatialPage!)):null;
+  return {extraction,documentFamilyCandidate,ownerTableLayout,
+    pagesReceived:parsed.pages.length,
     extractionMethods:parsed.pages.map(pg=>pg.method),
     qualityReviewPages:parsed.pages.filter(pg=>pg.qualityWarnings?.length).map(pg=>pg.page),
     requiresIndependentOwnershipReview:true,mayPublish:false};

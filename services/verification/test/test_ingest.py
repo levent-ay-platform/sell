@@ -67,6 +67,17 @@ class TestMalakOcr(unittest.TestCase):
             t=time.perf_counter();out=extract_document(str(f));dt=round((time.perf_counter()-t)*1000,2)
             self.assertEqual(out['pages'][0]['method'],'ocr')
             self.assertGreater(len(out['pages'][0]['lines']),0)
+            page=out['pages'][0]
+            self.assertFalse(page['spatialWordsTruncated'])
+            self.assertGreater(len(page['ocrWords']),0)
+            self.assertLessEqual(len(page['ocrWords']),1000)
+            self.assertGreater(page['pageImageWidth'],200)
+            self.assertGreater(page['pageImageHeight'],300)
+            for word in page['ocrWords']:
+                box=word['bbox']
+                self.assertTrue(0<=box['left']<box['right']<=page['pageImageWidth'])
+                self.assertTrue(0<=box['top']<box['bottom']<=page['pageImageHeight'])
+                self.assertEqual(word['page'],1)
             full_text=' '.join(x['text'] for x in out['pages'][0]['lines'])
             self.assertIn('987654', full_text, 'clear synthetic title reference should survive OCR')
             self.assertIn('843', full_text, 'clear synthetic area should survive OCR')

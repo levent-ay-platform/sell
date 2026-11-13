@@ -68,3 +68,18 @@ Implemented on the **Draft branch only**:
 
 Verification: GitHub-hosted `Malak F1 individual verification core` targeted Node tests and synthetic PDF/OCR integration passed at corrected head `053c89ae`. Recheck final head if additional changes are made. Android real-device visual acceptance and measured classifier recall on genuine, permissioned documents remain open.
 
+
+
+## Stage 3 — private word-geometry and layout candidates (2026-11-13)
+
+The private Python document OCR worker may now attach bounded Tesseract **word** rectangles with original page pixel dimensions (up to 1000 words/page and 2500/document). If truncated, it explicitly marks the spatial view unusable while preserving the ordinary text-OCR result. This is sensitive material and must never enter public telemetry, logs, artifacts or listing APIs.
+
+The private TypeScript reader validates each word's page, coordinates, dimensions, confidence and output size, and invokes the **deterministic** `owner-table-layout-v2.ts` candidate finder **only when all pages have untruncated raster word geometry**. The finder uses printed column headings and numbered `1/n` rows; it refuses absent or ambiguous headings, duplicated indices, multiple share candidates, and shares without an adjacent printed `جزء`. It emits a *private candidate observation set* for `analyzeOwnerTable` but DOES NOT verify identity, ownership, property boundaries or sale authority.
+
+Critical caveats:
+- This is **synthetic geometry/rule acceptance, not a trained image model**. It is not guaranteed to segment dense real Tunisian legal tables until separately benchmarked on consented, privately held documents.
+- Word tokens from raster OCR can have unreliable Arabic ordering. Candidate person names are therefore always subject to human correction, and a missing name remains unresolved.
+- Header geometry may differ across editions and office layouts. No permanent fixed pixel column locations are assumed. Real-paper QA must measure false association of owners and parts, including owner tables spilling onto a second page.
+- No genuine source files or legal/identity person data are placed in GitHub. No paid model, CRM changes or production deployment.
+
+**Private QA gate before enabling customer autofill:** on each real certificate, verify document family, detected page count, every printed ordinal, all rights sums, correct source bounding boxes and separation of **physical estate area**, **ownership parts**, **subparcel sold area** and **possession area**. Fail closed on ambiguous evidence.

@@ -22,6 +22,8 @@ MAX_TEXT_CHARS = 100_000
 MAX_PIXELS = 12_000_000
 MAX_PDF_PAGE_WIDTH_PT = 16000
 MAX_LINES_PER_PAGE = 600
+MAX_WORD_BOXES_PER_PAGE = 1000
+MAX_WORD_BOXES_PER_DOCUMENT = 2500
 
 class InvalidDocument(ValueError):
     pass
@@ -116,6 +118,9 @@ def _tesseract_lines(path: Path, page: int, *, lang: str = 'ara+fra',
         raise InvalidDocument('UNEXPECTED_OCR_FORMAT') from exc
     groups: dict[tuple[int,int,int],list[tuple[str,float,int,int,int,int]]] = {}
     area_anchors: list[tuple[int,int]] = []
+    # Private OCR word geometry, not a public JSON response or an ownership fact.
+    spatial_words: list[dict] = []
+    spatial_truncated = False
     for row in rows[1:]:
         cols=row.split('\t')
         if len(cols)<=max(indexes.values()):
@@ -148,6 +153,14 @@ def _tesseract_lines(path: Path, page: int, *, lang: str = 'ara+fra',
             continue
         groups.setdefault(key,[]).append((word,confidence,left,top,
                                           left+box_width,top+box_height))
+        if with_area_anchors:
+            if len(spatial_words)<MAX_WORD_BOXES_PER_PAGE:
+                spatial_words.append(dict(
+                    page=page,text=word[:120],confidence=round(confidence/100,4),
+                    bbox=dict(left=left,top=top,
+                              right=left+box_width,bottom=top+box_height)))
+            else:
+                spatial_truncated=True
     lines=[]
     for words in groups.values():
         joined=' '.join(word[0] for word in words).strip()
@@ -165,7 +178,7 @@ def _tesseract_lines(path: Path, page: int, *, lang: str = 'ara+fra',
                               bbox=bounds))
         if len(lines)>=MAX_LINES_PER_PAGE:
             break
-    return (lines, area_anchors) if with_area_anchors else lines
+    return (lines, area_anchors, spatial_words, spatial_truncated) if with_area_anchors else lines
 
 
 def _focused_area_lines(path: Path, page: int, anchors: list[tuple[int,int]]) -> list[dict]:
@@ -202,7 +215,7 @@ def _focused_area_lines(path: Path, page: int, anchors: list[tuple[int,int]]) ->
 
 
 def _ocr_page(path: Path, page: int) -> list[dict]:
-    first, anchors=_tesseract_lines(path,page,psm='3',with_area_anchors=True)
+    first, anchors, spatial_words, spatial_truncated=_tesseract_lines(path,page,psm='3',with_area_anchors=True)
     focused=_focused_area_lines(path,page,anchors)
     # Sparse layout is a fallback only. Common Tesseract typo شهعادة is
     # incomplete legal evidence but enough to avoid re-OCR of entire page.
@@ -216,7 +229,7 @@ def _ocr_page(path: Path, page: int) -> list[dict]:
         if key not in seen:
             seen.add(key)
             combined.append(line)
-    return combined[:MAX_LINES_PER_PAGE]
+    return combined[:MAX_LINES_PER_PAGE], spatial_words, spatial_truncated
 
 
 def extract_document(path: str, *, mode: str = 'auto') -> dict:
@@ -230,9 +243,13 @@ def extract_document(path: str, *, mode: str = 'auto') -> dict:
         raise InvalidDocument('INVALID_MODE')
     result={'format':kind, 'pages':[], 'ocrEngine':'tesseract', 'mayApproveOwnership':False}
     if kind=='image':
+        word_lines, spatial_words, truncated=_ocr_page(file,1)
+        width,height=_png_size(file)
         result['pages'].append({'page':1,'method':'ocr',
+                                'pageImageWidth':width,'pageImageHeight':height,
+                                'ocrWords':spatial_words,'spatialWordsTruncated':truncated,
                                 'qualityWarnings':inspect_photo_quality(file)['flags'],
-                                'lines':_ocr_page(file,1)})
+                                'lines':word_lines})
     else:
         count=_pdf_page_count(file)
         text=b''
@@ -253,11 +270,24 @@ def extract_document(path: str, *, mode: str = 'auto') -> dict:
                 # DPI bounded; avoid rendering 8 pages at once and storing real docs.
                 _cmd(['pdftoppm','-f',str(index),'-l',str(index),'-r','160',
                      '-singlefile','-png',str(file),str(work/f'page-{index}')],timeout=30)
+                word_lines, spatial_words, truncated=_ocr_page(image,index)
+                width,height=_png_size(image)
                 result['pages'].append({'page':index,'method':'ocr',
+                                        'pageImageWidth':width,'pageImageHeight':height,
+                                        'ocrWords':spatial_words,
+                                        'spatialWordsTruncated':truncated,
                                         'qualityWarnings':inspect_photo_quality(image)['flags'],
-                                        'lines':_ocr_page(image,index)})
+                                        'lines':word_lines})
     if sum(len(ln['text']) for pg in result['pages'] for ln in pg['lines'])>MAX_TEXT_CHARS:
         raise InvalidDocument('EXTRACTED_TEXT_TOO_LARGE')
+    # Preserve OCR availability for long documents: disable spatial layout
+    # rather than silently processing a partial set of owner-table words.
+    word_total=sum(len(pg.get('ocrWords',[])) for pg in result['pages'])
+    if word_total>MAX_WORD_BOXES_PER_DOCUMENT:
+        for pg in result['pages']:
+            if 'ocrWords' in pg:
+                pg['ocrWords']=[]
+                pg['spatialWordsTruncated']=True
     return result
 
 

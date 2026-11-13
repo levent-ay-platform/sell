@@ -93,3 +93,54 @@ test('malformed or non-raster OCR bounding boxes fail closed',()=>{
   ]}]};
   assert.throws(()=>parseOcrWorkerOutput(native),/INVALID_OCR_LINE/);
 });
+
+test('private reader attaches spatial owner-table candidates only to complete OCR pages',()=>{
+ const word=(text:string,page:number,x:number,y:number)=>({
+   text,page,confidence:.98,
+   bbox:{left:x-20,top:y-10,right:x+20,bottom:y+10}
+ });
+ const words=[
+   word('موضوع',1,580,260),word('هوية',1,800,260),
+   word('العدد',1,945,260),
+   word('1/1',1,945,450),
+   word('500',1,580,480),word('جزء',1,580,505),
+   word('آمنة',1,833,480),word('بنت',1,793,480),
+   word('سالم',1,753,480),
+   word('1/2',1,945,700),
+   word('500',1,580,730),word('جزء',1,580,755),
+   word('فاطمة',1,833,730),word('بنت',1,793,730),
+   word('خالد',1,753,730)
+ ];
+ const input={format:'image',mayApproveOwnership:false,pages:[{
+   page:1,method:'ocr',pageImageWidth:1000,pageImageHeight:1500,
+   spatialWordsTruncated:false,ocrWords:words,
+   lines:[{page:1,source:'ocr-ar',confidence:.99,text:'شهادة ملكية'},
+     {page:1,source:'ocr-ar',confidence:.99,text:'معرف الرسم العقاري: 987321'},
+     {page:1,source:'ocr-ar',confidence:.99,text:'صفحة 1 من 1'}]
+ }]};
+ const r=readUntrustedOcrDocument(input);
+ assert.equal(r.ownerTableLayout?.ownerOrdinals.length,2);
+ assert.equal(r.ownerTableLayout?.cells.length,4);
+ assert.equal(r.ownerTableLayout?.mayPublish,false);
+ assert.equal(r.mayPublish,false);
+ const missing=readUntrustedOcrDocument({...input,pages:[
+   {...input.pages[0],spatialWordsTruncated:true}]});
+ assert.equal(missing.ownerTableLayout,null);
+});
+test('missing or malformed page geometry refuses spatial owner lookup',()=>{
+ const source={format:'image',mayApproveOwnership:false,
+   pages:[{page:1,method:'ocr',pageImageWidth:1000,pageImageHeight:1500,
+     spatialWordsTruncated:false,ocrWords:[{
+       page:1,text:'شهادة',confidence:.8,
+       bbox:{left:4,top:3,right:20,bottom:28}}],
+     lines:[{page:1,source:'ocr-ar',confidence:.8,text:'شهادة ملكية'}]}]};
+ assert.equal(readUntrustedOcrDocument(source).ownerTableLayout?.findings[0],
+   'HEADER_NOT_FOUND');
+ const bad={...source,pages:[{...source.pages[0],ocrWords:[{
+    ...source.pages[0].ocrWords[0],
+    bbox:{left:900,top:120,right:1100,bottom:140}
+ }]}]};
+ assert.throws(()=>parseOcrWorkerOutput(bad),/INVALID_SPATIAL_OCR_WORD/);
+ const incomplete={...source,pages:[{...source.pages[0],ocrWords:[]}]};
+ assert.equal(readUntrustedOcrDocument(incomplete).ownerTableLayout,null);
+});
