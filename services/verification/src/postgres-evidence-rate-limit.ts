@@ -9,7 +9,7 @@ import {isIP} from 'node:net';
 import type {SqlPool} from './postgres-evidence-repository.ts';
 import type {PrivateRoute} from './private-evidence-http.ts';
 
-const ROUTES=new Set(['UPLOAD','INSPECT','OCR','CIN_PREVIEW','PAIR','OWNER_CASE','CONSENT_REVOKE','PILOT_LOGIN','UNKNOWN']);
+const ROUTES=new Set(['UPLOAD','INSPECT','OCR','CIN_PREVIEW','PAIR','OWNER_CASE','CONSENT_REVOKE','PILOT_LOGIN','PILOT_CIN_PREVIEW','UNKNOWN']);
 export class PostgresPrivateEvidenceRateLimiter {
   private readonly pool:SqlPool;
   private readonly secret:Buffer;

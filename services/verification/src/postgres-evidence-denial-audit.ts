@@ -5,7 +5,7 @@
 import type {SqlPool} from './postgres-evidence-repository.ts';
 import type {DenialAuditRecord} from './private-evidence-http.ts';
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const ROUTES=new Set(['UPLOAD','INSPECT','OCR','PAIR','OWNER_CASE','CONSENT_REVOKE','PILOT_LOGIN','UNKNOWN']);
+const ROUTES=new Set(['UPLOAD','INSPECT','OCR','PAIR','OWNER_CASE','CONSENT_REVOKE','PILOT_LOGIN','PILOT_CIN_PREVIEW','UNKNOWN']);
 const REASONS=new Set(['BAD_ROUTE','BAD_REQUEST','UNAUTHENTICATED','FORBIDDEN','RATE_LIMITED','FILE_REJECTED','REPLAY_CONFLICT','UPSTREAM_UNAVAILABLE']);
 export class PostgresPrivateEvidenceDenialAudit {
   private readonly pool:SqlPool;
