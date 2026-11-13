@@ -59,14 +59,18 @@ private fun checkLight(frame:ImageProxy,previous:IntArray?):Pair<FrameAssessment
     val plane=frame.planes.firstOrNull()?:return FrameAssessment(CaptureHint.WAIT) to IntArray(0)
     val buffer=plane.buffer
     val rot=frame.imageInfo.rotationDegrees
-    val width=if(rot%180==0)frame.width else frame.height
-    val height=if(rot%180==0)frame.height else frame.width
-    if(width<64||height<64)return FrameAssessment(CaptureHint.WAIT) to IntArray(0)
-    // The sampled camera guidance and drawn card outline share the
-    // same landscape CIN proportions, independent of layout direction.
-    val roiW=(width*.84f).toInt()
-    val roiH=minOf((roiW/1.585f).toInt(),(height*.70f).toInt())
-    val left=(width-roiW)/2;val top=(height-roiH)/2
+    val viewport=CameraGuideTransform.rotatedViewport(
+        frame.width,frame.height,rot,PixelRect(
+            frame.cropRect.left,frame.cropRect.top,
+            frame.cropRect.right,frame.cropRect.bottom))
+        ?:return FrameAssessment(CaptureHint.WAIT) to IntArray(0)
+    // CameraX ViewPort crops Preview, Analysis and Capture into the
+    // same FOV. Sample the actual rotated viewport, never full sensor
+    // pixels that PreviewView FILL_CENTER doesn't display.
+    val guide=CameraGuideTransform.guideRect(viewport)
+        ?:return FrameAssessment(CaptureHint.WAIT) to IntArray(0)
+    val roiW=guide.width;val roiH=guide.height
+    val left=guide.left;val top=guide.top
     val cols=160;val rows=112
     val samples=IntArray(cols*rows)
     for(r in 0 until rows)for(c in 0 until cols){
