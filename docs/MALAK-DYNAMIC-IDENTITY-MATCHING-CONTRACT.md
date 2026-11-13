@@ -43,3 +43,14 @@ The six originally **planned kinds** were OWNERSHIP_CERTIFICATE, SHARED_OWNERSHI
 ## Acceptance proof to build
 
 For EACH of the seven kinds, run fabricated positive/negative/ambiguous contract tests and consented private real-document field-level benchmarks: correct kind, exact relevant actors and labels, CIN-present vs absent, no false owner status, exact register/lot distinction, correct only-one-person display, page/box provenance, edit/retake. Report accuracy by field and kind (including UNKNOWN), not a single model "confidence" percentage. Test the full Android app on an authorized real account and actual phone. No merge/deploy or public badge until accepted.
+
+
+## Implementation checkpoint — draft-only (2026-11-13)
+
+Backend now derives a **per-family role-specific CIN** only from explicit qualified labels (buyer, seller, transferor/transferee, possession requester, payment payer, service applicant). It cannot use an unrelated title, payment or plain "CIN" number. It returns `ROLE_TEXT_MATCH_ONLY` for name + role-bound CIN text equality; `NAME_ONLY_REVIEW` when the named role matches but document CIN is genuinely **not printed or masked**; `CONFLICT_REVIEW` for a direct, source-bound CIN contradiction; `NO_PERSON_IDENTIFIED` only when no role-labelled person exists; otherwise `INSUFFICIENT_EVIDENCE` or `ROLE_AMBIGUOUS`. Masked fields are non-evaluable, NOT failure of optical reading.
+
+The private shared-ownership path still requires page set/source geometry validity and compares **only the user ID-holder's unique numbered row**, never the full roster. A readable share on that row may be shown as abstract rights parts, even if other owners are unreadable; if missing the target share, show "needs correction", not a fabricated physical area. An unlabeled eight-digit token in the row blocks name-only promotion to prevent using a hidden/ambiguous CIN as absent.
+
+Android now displays only the uniquely matching role and its own abstract rights parts (if present); if uncertain or ambiguous it shows a review message without exposing names/roles of other persons. Default capacity declaration is blank ("not declared"), not "sole owner". No report contains other owners' names/CIN. All statuses remain private and `identityVerified=false`, `legalOwnershipVerified=false`, `mayPublish=false`.
+
+These synthetic-contract and app UI changes are **not real-image model acceptance**. A future legal registry check is still needed for any verified-seller claim; live Huawei app/service + database migration not deployed by this Draft PR.

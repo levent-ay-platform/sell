@@ -121,7 +121,9 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
     var region by rememberSaveable(draftFile) {mutableStateOf(prefs.getString("region","") ?: "")}
     var area by rememberSaveable(draftFile) {mutableStateOf(prefs.getString("area","") ?: "")}
     var price by rememberSaveable(draftFile) {mutableStateOf(prefs.getString("price","") ?: "")}
-    var capacity by rememberSaveable(draftFile) {mutableStateOf(prefs.getString("capacity","owner") ?: "owner")}
+    var capacity by rememberSaveable(draftFile) {mutableStateOf(prefs.getString("capacity","")?.takeIf{saved->
+        Capacities.any{it.code==saved}
+    } ?: "")}
     // A public listing title can be composed from facts; the seller only
     // types one when they choose to personalize it.
     var editTitle by rememberSaveable(draftFile) {mutableStateOf(name.isNotBlank())}
@@ -533,6 +535,9 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                         s(R.string.match_status),
                         s(when(pairReport?.unifiedAssessment?:pairReport?.assessment){
                             "ROLE_TEXT_MATCH_ONLY"->R.string.unified_role_match
+                            "NAME_ONLY_REVIEW"->R.string.malak_name_only_review
+                            "CONFLICT_REVIEW"->R.string.malak_role_cin_conflict
+                            "NO_PERSON_IDENTIFIED"->R.string.malak_no_named_actor
                             "ROLE_TEXT_DIFFERENCE"->R.string.unified_role_difference
                             "ROLE_AMBIGUOUS"->R.string.unified_role_ambiguous
                             "INSUFFICIENT_EVIDENCE"->R.string.unified_role_inconclusive
@@ -542,8 +547,10 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                             else->R.string.match_pending
                         }),
                         when(pairReport?.unifiedAssessment?:pairReport?.assessment){
-                            "ROLE_TEXT_MATCH_ONLY","ROLE_TEXT_DIFFERENCE",
-                            "ROLE_AMBIGUOUS","INSUFFICIENT_EVIDENCE"->ReadingStatus.REVIEW
+                            "ROLE_TEXT_MATCH_ONLY","NAME_ONLY_REVIEW",
+                            "CONFLICT_REVIEW","NO_PERSON_IDENTIFIED",
+                            "ROLE_TEXT_DIFFERENCE","ROLE_AMBIGUOUS",
+                            "INSUFFICIENT_EVIDENCE"->ReadingStatus.REVIEW
                             "PRELIMINARY_TEXT_AGREEMENT"->ReadingStatus.EXTRACTED
                             "TEXT_DIFFERENCE_NEEDS_REVIEW",
                             "INSUFFICIENT_OR_AMBIGUOUS"->ReadingStatus.REVIEW
@@ -555,26 +562,52 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                         Surface(shape=RoundedCornerShape(18.dp),
                             color=Color.White,border=BorderStroke(1.dp,CardBorder)){
                             Column(Modifier.fillMaxWidth().padding(14.dp)){
-                                if(result.unifiedAssessment!=null&&
-                                    result.detectedKind!="OWNERSHIP_CERTIFICATE"){
+                                if(result.unifiedAssessment!=null){
                                     OcrDataRow(s(R.string.unified_document_kind),
                                         s(documentFamilyLabel(result.detectedKind?:"UNKNOWN")))
-                                    result.unifiedRoles.forEach{role->
+                                    val safeMatch=result.unifiedAssessment in
+                                        setOf("ROLE_TEXT_MATCH_ONLY","NAME_ONLY_REVIEW")
+                                    // Never show seller, buyer or coowner records that
+                                    // belong to someone OTHER than the captured ID holder.
+                                    val matched=if(safeMatch)
+                                        result.unifiedRoles.filter{
+                                            it.assessment=="PRELIMINARY_TEXT_AGREEMENT"}
+                                    else emptyList()
+                                    if(matched.size==1){
+                                        val role=matched.single()
                                         HorizontalDivider(color=CardBorder)
-                                        OcrDataRow(s(unifiedRoleLabel(role.role)),
-                                            s(unifiedRoleAssessmentLabel(role.assessment)))
+                                        OcrDataRow(s(R.string.malak_matched_document_role),
+                                            s(unifiedRoleLabel(role.role)))
+                                        HorizontalDivider(color=CardBorder)
+                                        OcrDataRow(s(R.string.malak_document_cin_status),
+                                            s(when(role.documentCinStatus){
+                                                "SAME_NUMBER_UNVERIFIED"->
+                                                    R.string.malak_cin_text_only
+                                                "NOT_PRINTED"->
+                                                    R.string.malak_cin_not_printed
+                                                "MASKED_IN_SOURCE"->
+                                                    R.string.malak_cin_masked
+                                                "NUMBER_DIFFERS_NEEDS_REVIEW"->
+                                                    R.string.malak_role_cin_conflict
+                                                else->R.string.malak_cin_unreadable
+                                            }))
+                                    }else{
+                                        Text(s(R.string.malak_no_auto_identity_association),
+                                            fontSize=12.sp,color=Brand.Muted,lineHeight=18.sp)
                                     }
-                                    result.matchedRightsHolder?.let{matched->
-                                        HorizontalDivider(color=CardBorder)
-                                        OcrDataRow(s(R.string.malak_holder_parts),matched.parts,numeric=true)
-                                        HorizontalDivider(color=CardBorder)
-                                        OcrDataRow(s(R.string.malak_holder_row),
-                                            matched.rowOrdinal.toString(),numeric=true)
-                                        HorizontalDivider(color=CardBorder)
-                                        OcrDataRow(s(R.string.smart_read_page),
-                                            matched.page.toString(),numeric=true)
-                                        Text(s(R.string.malak_holder_preliminary),
-                                            fontSize=12.sp,color=Brand.Muted,lineHeight=17.sp)
+                                    if(matched.size==1){
+                                        result.matchedRightsHolder?.let{holder->
+                                            HorizontalDivider(color=CardBorder)
+                                            OcrDataRow(s(R.string.malak_holder_parts),
+                                                holder.parts?:s(R.string.malak_parts_missing),
+                                                numeric=holder.parts!=null)
+                                            HorizontalDivider(color=CardBorder)
+                                            OcrDataRow(s(R.string.malak_holder_row),
+                                                holder.rowOrdinal.toString(),numeric=true)
+                                            HorizontalDivider(color=CardBorder)
+                                            OcrDataRow(s(R.string.smart_read_page),
+                                                holder.page.toString(),numeric=true)
+                                        }
                                     }
                                     Text(s(R.string.unified_not_ownership),
                                         fontSize=12.sp,color=Brand.Muted,lineHeight=18.sp)
@@ -947,7 +980,7 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                             HorizontalDivider(color=CardBorder)
                             OcrDataRow(s(R.string.summary_capacity),
                                 s(Capacities.firstOrNull{it.code==capacity}?.label
-                                    ?:R.string.capacity_owner))
+                                    ?:R.string.malak_capacity_not_declared))
                             HorizontalDivider(color=CardBorder)
                             OcrDataRow(s(R.string.summary_docs),
                                 if(files.isNotEmpty())files.size.toString() else

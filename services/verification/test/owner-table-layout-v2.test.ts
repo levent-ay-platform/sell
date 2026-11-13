@@ -108,7 +108,10 @@ test('unlabelled eight-digit title register cannot count as a row CIN',()=>{
  const first={...pages[0],words:[...pages[0].words,
   word('00001122',1,810,594)]};
  const x=locateOwnerTableFromWords([first,pages[1]]);
- assert.equal(x.cells.filter(c=>c.field==='cin').length,0);
+ const cells=x.cells.filter(c=>c.field==='cin');
+ assert.equal(cells.length,1);
+ assert.equal(cells[0]?.value,null);
+ assert.equal(cells[0]?.state,'UNREADABLE');
 });
 test('competing same-row labelled CIN digits produce no CIN cell',()=>{
  const pages=sample();

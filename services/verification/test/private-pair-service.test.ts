@@ -281,7 +281,7 @@ test('financial receipt with no person role stays inconclusive',async()=>{
  const h=harness('FINANCIAL_RECEIPT');
  const result=await analyze(h.request,h.deps);
  assert.equal(result.unifiedComparison?.detectedKind,'FINANCIAL_RECEIPT');
- assert.equal(result.unifiedComparison?.assessment,'INSUFFICIENT_EVIDENCE');
+ assert.equal(result.unifiedComparison?.assessment,'NO_PERSON_IDENTIFIED');
  assert.equal(result.unifiedComparison?.roles[0]?.role,'PAYMENT_PAYER');
  assert.equal(result.unifiedComparison?.roles[0]?.assessment,
   'INSUFFICIENT_OR_AMBIGUOUS');

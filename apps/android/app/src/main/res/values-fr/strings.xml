@@ -322,4 +322,16 @@
     <string name="malak_holder_preliminary">Votre part apparaît sur la ligne associée à votre nom et votre CIN. Correspondance textuelle préliminaire uniquement.</string>
     <string name="camera_review_required_fields">Photo non validable : le nom, le prénom, le CIN complet (8 chiffres) et la date de naissance doivent être lisibles. Rapprochez la carte et reprenez la photo.</string>
     <string name="smart_read_pilot_only">Votre session OCR pilote permet seulement de tester la lecture du recto. Pour lire et comparer les titres, il faut une session propriétaire autorisée et un serveur de vérification actif.</string>
+    <string name="malak_name_only_review">Concordance provisoire du nom uniquement — à vérifier</string>
+    <string name="malak_role_cin_conflict">Conflit de CIN avec le rôle déclaré — vérification requise</string>
+    <string name="malak_no_named_actor">Aucune personne clairement identifiée par ce document</string>
+    <string name="malak_matched_document_role">Mon rôle indiqué sur le document</string>
+    <string name="malak_document_cin_status">CIN mentionné dans le document</string>
+    <string name="malak_cin_text_only">Même CIN textuel — pas une vérification officielle</string>
+    <string name="malak_cin_not_printed">CIN absent — nom et rôle seulement</string>
+    <string name="malak_cin_masked">CIN masqué dans ce document — non évaluable</string>
+    <string name="malak_cin_unreadable">CIN illisible — révision requise</string>
+    <string name="malak_no_auto_identity_association">Aucun lien personnel fiable établi. Les autres parties restent masquées.</string>
+    <string name="malak_parts_missing">Quote-part illisible — à corriger depuis la source</string>
+    <string name="malak_capacity_not_declared">Non déclarée — en attente de revue du document</string>
 </resources>

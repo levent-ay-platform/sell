@@ -349,9 +349,16 @@ export function compareUnifiedPrivateDocumentIdentity(
   }else if(roles.length>0&&roles.every(r=>
       r.assessment==='TEXT_DIFFERENCE_NEEDS_REVIEW')){
     assessment='ROLE_TEXT_DIFFERENCE';
-  }else if(roles.length>0&&roles.every(r=>
-      r.assessment==='INSUFFICIENT_OR_AMBIGUOUS' &&
-      r.documentCinStatus==='NOT_PRINTED')){
+  }else if(kind!=='SHARED_OWNERSHIP_CERTIFICATE'&&
+           kind!=='OWNERSHIP_CERTIFICATE'&&
+           (ROLE_KEYS[kind]??[]).length>0&&
+           (ROLE_KEYS[kind]??[]).every(t=>{
+             const f=read.privateFamilyFields.facts.find(x=>x.key===t.key);
+             return !f||f.status==='ABSENT';
+           })){
+    // Only say "no named person" when this type truly has NO role field.
+    // A masked, low-confidence, conflicting or incomplete role is review,
+    // never evidence that no party was printed in the document.
     assessment='NO_PERSON_IDENTIFIED';
     reasons.add('NO_ROLE_LABELED_PERSON');
   }

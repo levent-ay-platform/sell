@@ -29,7 +29,7 @@ test('single parser classifies ownership certificate before private name and CIN
 test('certificate with explicit CIN disagreement never gains role agreement',()=>{
  const doc=wrap(['شهادة ملكية','Propriétaire: Leila Ben Salem','CIN: 12345678']);
  const r=compareUnifiedPrivateDocumentIdentity(doc,identity,['OWNERSHIP_CERTIFICATE']);
- assert.equal(r.assessment,'ROLE_TEXT_DIFFERENCE');
+ assert.equal(r.assessment,'CONFLICT_REVIEW');
  assert.ok(r.reasons.includes('CIN_TEXT_DIFFERS'));
  assert.equal(r.mayPublish,false);
 });
@@ -236,7 +236,7 @@ test('shared certificate cannot search ANY CIN from unrelated row',()=>{
  const r=compareUnifiedPrivateDocumentIdentity(sharedAcrossTwoPages({
   firstRowCin:'00009988',secondRowCin:'00001122'
  }),arabicFront,['SHARED_OWNERSHIP_CERTIFICATE']);
- assert.equal(r.assessment,'INSUFFICIENT_EVIDENCE');
+ assert.equal(r.assessment,'CONFLICT_REVIEW');
  assert.notEqual(r.roles[0]?.assessment,'PRELIMINARY_TEXT_AGREEMENT');
 });
 test('unlabelled 8-digit number cannot be guessed as a CIN on shared title',()=>{
@@ -472,7 +472,7 @@ test('two CIN-role candidates on separate unrelated buyer/seller pages cannot be
   'عقد بيع','المشتري: Leila Ben Salem',
   'البائع: Karim Ben Ahmed','رقم بطاقة تعريف البائع: 00001122'
  ]),identity,['SALE_DEED']);
- assert.equal(r.assessment,'NAME_ONLY_REVIEW');
+ assert.equal(r.assessment,'CONFLICT_REVIEW');
  assert.equal(r.roles.find(x=>x.role==='BUYER')?.documentCinStatus,'NOT_PRINTED');
  assert.equal(r.legalOwnershipVerified,false);
 });

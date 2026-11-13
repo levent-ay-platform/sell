@@ -322,4 +322,16 @@
     <string name="malak_holder_preliminary">Your share was found in the row associated with your name and CIN. This is preliminary text agreement only.</string>
     <string name="camera_review_required_fields">This photo cannot be accepted: surname, given name, full 8-digit CIN and date of birth must all be clearly extracted. Move closer and retake.</string>
     <string name="smart_read_pilot_only">You are signed into the ID OCR pilot only. Reading and matching title documents requires an authorized owner session and deployed verification service; pilot access does not grant those permissions.</string>
+    <string name="malak_name_only_review">Preliminary name-only agreement — review required</string>
+    <string name="malak_role_cin_conflict">Role-specific CIN conflict — review required</string>
+    <string name="malak_no_named_actor">No clearly identified person in this document</string>
+    <string name="malak_matched_document_role">My role stated in the document</string>
+    <string name="malak_document_cin_status">CIN on the document</string>
+    <string name="malak_cin_text_only">CIN text agrees — not official verification</string>
+    <string name="malak_cin_not_printed">Not printed — comparing role and name only</string>
+    <string name="malak_cin_masked">Masked in the document — not evaluable</string>
+    <string name="malak_cin_unreadable">Unreadable — manual review required</string>
+    <string name="malak_no_auto_identity_association">No reliable personal match found. Other parties\' data remain hidden.</string>
+    <string name="malak_parts_missing">Share unreadable — correct from source</string>
+    <string name="malak_capacity_not_declared">Not declared — document review pending</string>
 </resources>

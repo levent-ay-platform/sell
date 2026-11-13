@@ -32,8 +32,12 @@ internal data class LocalOcrFields(
     val surname:String?,val givenName:String?,val cinLast4:String?,
     val birthDate:String?
 )
-internal data class UnifiedRoleStatus(val role:String,val assessment:String,val page:Int?)
-internal data class MatchedRightsHolder(val rowOrdinal:Int,val parts:String,val page:Int)
+internal data class UnifiedRoleStatus(
+    val role:String,val assessment:String,val page:Int?,val documentCinStatus:String
+)
+internal data class MatchedRightsHolder(
+    val rowOrdinal:Int,val parts:String?,val page:Int,val status:String
+)
 internal data class CertificateIdentityReview(
     val assessment:String,val certificateName:PairNameEvidence?,val identityName:PairNameEvidence?,
     val cinStatus:String,val reasons:List<String>,val identityCapture:String,
@@ -58,8 +62,11 @@ private val DOCUMENT_KINDS=setOf("OWNERSHIP_CERTIFICATE","SHARED_OWNERSHIP_CERTI
     "PROPERTY_SERVICE_RECEIPT","OTHER_LEGAL_PROOF","TITLE_EXTRACT")
 private val DETECTED_KINDS=(DOCUMENT_KINDS-setOf("OTHER_LEGAL_PROOF","TITLE_EXTRACT"))+
     setOf("UNKNOWN")
-private val UNIFIED_ASSESSMENTS=setOf("ROLE_TEXT_MATCH_ONLY","ROLE_TEXT_DIFFERENCE",
-    "ROLE_AMBIGUOUS","INSUFFICIENT_EVIDENCE")
+private val UNIFIED_ASSESSMENTS=setOf("ROLE_TEXT_MATCH_ONLY","NAME_ONLY_REVIEW",
+    "ROLE_TEXT_DIFFERENCE","ROLE_AMBIGUOUS","CONFLICT_REVIEW",
+    "NO_PERSON_IDENTIFIED","INSUFFICIENT_EVIDENCE")
+private val DOCUMENT_CIN_STATUSES=setOf("NOT_PRINTED","SAME_NUMBER_UNVERIFIED",
+    "NUMBER_DIFFERS_NEEDS_REVIEW","AMBIGUOUS_OR_LOW_CONFIDENCE","MASKED_IN_SOURCE")
 private val ROLE_NAMES=setOf("REGISTERED_HOLDER","SHARED_RIGHTS_HOLDER",
     "BUYER","SELLER","TRANSFEREE","TRANSFEROR","SERVICE_APPLICANT",
     "POSSESSION_REQUESTER","PAYMENT_PAYER")
@@ -224,25 +231,33 @@ private fun parseReview(body:JSONObject):CertificateIdentityReview {
             val status=item.optString("assessment")
             val page=if(item.isNull("documentPage"))null
                 else item.optInt("documentPage").takeIf{it in 1..8}
+            val roleCin=item.optString("documentCinStatus")
             if(role !in ROLE_NAMES||status !in ASSESSMENTS||
+                roleCin !in DOCUMENT_CIN_STATUSES||
                 (!item.isNull("documentPage")&&page==null))
                 throw OwnerPairException(502)
-            UnifiedRoleStatus(role,status,page)
+            UnifiedRoleStatus(role,status,page,roleCin)
         }
         val matched=unified.optJSONObject("matchedRightsHolder")
         if(matched!=null){
             val row=matched.optInt("printedRowOrdinal",-1)
             val page=matched.optInt("documentPage",-1)
-            val parts=matched.optString("rightsParts")
+            val parts=if(matched.isNull("rightsParts"))null
+                else matched.optString("rightsParts")
+            val status=matched.optString("status")
             val keys=matched.keys().asSequence().toSet()
             if(kind!="SHARED_OWNERSHIP_CERTIFICATE"||
-                unifiedStatus!="ROLE_TEXT_MATCH_ONLY"||
-                matched.optString("status")!="PRELIMINARY_PERSON_ROW_TEXT_ONLY"||
+                unifiedStatus !in setOf("ROLE_TEXT_MATCH_ONLY","NAME_ONLY_REVIEW")||
+                status !in setOf("PRELIMINARY_PERSON_ROW_TEXT_ONLY","NAME_ONLY_REVIEW")||
+                (status=="NAME_ONLY_REVIEW")!=(unifiedStatus=="NAME_ONLY_REVIEW")||
                 keys!=setOf("printedRowOrdinal","rightsParts","documentPage","status")||
                 row !in 1..500||page !in 1..certPages||
-                !Regex("^[1-9][0-9]{0,10}(?:[.,][0-9]{1,3})?$").matches(parts))
+                (parts!=null&&
+                 !Regex("^[1-9][0-9]{0,10}(?:[.,][0-9]{1,3})?$").matches(parts))||
+                roles.count{it.role=="SHARED_RIGHTS_HOLDER"&&
+                    it.assessment=="PRELIMINARY_TEXT_AGREEMENT"}!=1)
                 throw OwnerPairException(502)
-            holder=MatchedRightsHolder(row,parts,page)
+            holder=MatchedRightsHolder(row,parts,page,status)
         }
     }
     return CertificateIdentityReview(assessment,nameOf(comparison,"certificateName"),
