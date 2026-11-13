@@ -115,7 +115,8 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
     var pairReport by remember(draftFile) {mutableStateOf<CertificateIdentityReview?>(null)}
     var provisionedCase by remember(draftFile) {mutableStateOf<OwnerEvidenceSession?>(null)}
     var pairError by remember(draftFile) {mutableIntStateOf(0)}
-    var uploadConsent by remember(draftFile) {mutableStateOf(false)}
+    // A dedicated and clearly labelled send action records consent.
+    // No redundant checkbox in addition to the explicit action.
     var step by rememberSaveable(draftFile) {mutableIntStateOf(0)}
     var name by rememberSaveable(draftFile) {mutableStateOf(prefs.getString("title","") ?: "")}
     var region by rememberSaveable(draftFile) {mutableStateOf(prefs.getString("region","") ?: "")}
@@ -131,6 +132,10 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
     val files=remember(draftFile) {mutableStateListOf<ChosenDocument>()}
     val identityFiles=remember(draftFile) {mutableStateListOf<ChosenDocument>()}
     var acceptedFrontKey by remember(draftFile){mutableStateOf<String?>(null)}
+    // OCR candidates are memory-only and tied to the accepted private photo.
+    var acceptedRead by remember(draftFile){
+        mutableStateOf<LocalDocumentOcr.FrontScan?>(null)
+    }
     var identityMessage by remember(draftFile) {mutableIntStateOf(0)}
     // Private in-memory picture gets scanned on this step before acceptance.
     var cameraVisible by remember(draftFile){mutableStateOf(false)}
@@ -215,7 +220,6 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
         pairError=0
         localOcrResult=false
         localOcrRunning=false
-        uploadConsent=false
     }
     DisposableEffect(Unit) {
         onDispose {
@@ -477,16 +481,7 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                                 // One compact readout, never five oversized
                                 // duplicate "unreadable" failure cards.
                                 Column(verticalArrangement=Arrangement.spacedBy(2.dp)){
-                                    OcrDataRow(s(R.string.local_surname),
-                                        scan?.surname?:placeholder)
-                                    OcrDataRow(s(R.string.local_given_name),
-                                        scan?.givenName?:placeholder)
-                                    OcrDataRow(s(R.string.camera_review_cin),
-                                        scan?.cinFull?:placeholder,
-                                        numeric=true)
-                                    OcrDataRow(s(R.string.camera_review_birth),
-                                        scan?.birthDate?:placeholder,
-                                        numeric=true)
+                                    IdFieldsReadout(scan,placeholder)
                                 }
                                 val message=when{
                                     frontReadBusy->R.string.camera_review_scanning
@@ -529,42 +524,45 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                 }
                 else -> {
                     SectionHeading(s(R.string.summary_title),s(R.string.summary_hint))
-                    SummaryFact(s(R.string.summary_property),name.ifBlank {s(R.string.no_value)})
-                    SummaryFact(s(R.string.summary_region),region.ifBlank {s(R.string.no_value)})
-                    SummaryFact(s(R.string.summary_area),"$area m²")
-                    SummaryFact(s(R.string.summary_price),"$price TND")
-                    SummaryFact(s(R.string.summary_capacity),s(Capacities.firstOrNull {it.code==capacity}?.label ?: R.string.capacity_owner))
-                    SummaryFact(s(R.string.summary_docs),if(files.isNotEmpty())"${files.size}" else s(R.string.not_uploaded))
-                    SummaryFact(s(R.string.summary_identity),if(identitySelected)s(R.string.identity_selected) else s(R.string.not_uploaded))
+                    Surface(shape=RoundedCornerShape(20.dp),color=Color.White,
+                        border=BorderStroke(1.dp,CardBorder)){
+                        Column(Modifier.fillMaxWidth().padding(14.dp)){
+                            OcrDataRow(s(R.string.summary_property),
+                                name.ifBlank{s(R.string.no_value)})
+                            HorizontalDivider(color=CardBorder)
+                            OcrDataRow(s(R.string.summary_region),
+                                region.ifBlank{s(R.string.no_value)})
+                            HorizontalDivider(color=CardBorder)
+                            OcrDataRow(s(R.string.summary_area),"$area m²",numeric=true)
+                            HorizontalDivider(color=CardBorder)
+                            OcrDataRow(s(R.string.summary_price),"$price TND",numeric=true)
+                            HorizontalDivider(color=CardBorder)
+                            OcrDataRow(s(R.string.summary_capacity),
+                                s(Capacities.firstOrNull{it.code==capacity}?.label
+                                    ?:R.string.capacity_owner))
+                            HorizontalDivider(color=CardBorder)
+                            OcrDataRow(s(R.string.summary_docs),
+                                if(files.isNotEmpty())files.size.toString() else
+                                    s(R.string.not_uploaded))
+                        }
+                    }
+                    if(identitySelected){
+                        Surface(shape=RoundedCornerShape(20.dp),color=Color.White,
+                            border=BorderStroke(1.dp,CardBorder)){
+                            Column(Modifier.fillMaxWidth().padding(14.dp),
+                                verticalArrangement=Arrangement.spacedBy(7.dp)){
+                                Text(s(R.string.identity_section),fontWeight=FontWeight.Bold,
+                                    fontSize=16.sp,color=Brand.Ink)
+                                IdFieldsReadout(acceptedRead,
+                                    s(R.string.camera_field_missing))
+                            }
+                        }
+                    }
                     SectionHeading(s(R.string.review_status_title),
-                        s(if(pairReport==null)R.string.review_status_intro else R.string.pair_review_received))
-                    VerificationStage(Icons.Outlined.Description,s(R.string.ocr_status),
-                        s(when {
-                            pairReport?.certificateName!=null->R.string.pair_name_extracted
-                            pairReport!=null->R.string.pair_name_unreadable
-                            pairProgress!=null->R.string.pair_reading_in_progress
-                            else->R.string.ocr_pending
-                        }),
-                        when {
-                            pairReport?.certificateName!=null->ReadingStatus.EXTRACTED
-                            pairReport!=null->ReadingStatus.REVIEW
-                            pairProgress!=null->ReadingStatus.READING
-                            else->ReadingStatus.PENDING
-                        })
-                    VerificationStage(Icons.Outlined.Badge,s(R.string.identity_ocr_status),
-                        s(when {
-                            pairReport?.identityName!=null->R.string.pair_name_extracted
-                            pairReport!=null->R.string.pair_name_unreadable
-                            pairProgress!=null->R.string.pair_reading_in_progress
-                            else->R.string.identity_ocr_pending
-                        }),
-                        when {
-                            pairReport?.identityName!=null->ReadingStatus.EXTRACTED
-                            pairReport!=null->ReadingStatus.REVIEW
-                            pairProgress!=null->ReadingStatus.READING
-                            else->ReadingStatus.PENDING
-                        })
-                    VerificationStage(Icons.Outlined.CompareArrows,s(R.string.match_status),
+                        s(if(pairReport==null)R.string.review_status_intro
+                            else R.string.pair_review_received))
+                    VerificationStage(Icons.Outlined.CompareArrows,
+                        s(R.string.match_status),
                         s(when(pairReport?.assessment){
                             "PRELIMINARY_TEXT_AGREEMENT"->R.string.pair_agreement
                             "TEXT_DIFFERENCE_NEEDS_REVIEW"->R.string.pair_difference
@@ -575,70 +573,49 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                             "PRELIMINARY_TEXT_AGREEMENT"->ReadingStatus.EXTRACTED
                             "TEXT_DIFFERENCE_NEEDS_REVIEW",
                             "INSUFFICIENT_OR_AMBIGUOUS"->ReadingStatus.REVIEW
-                            else->if(pairProgress!=null)ReadingStatus.READING else ReadingStatus.PENDING
+                            else->if(pairProgress!=null)
+                                ReadingStatus.READING else ReadingStatus.PENDING
                         })
-                    if(pairReport!=null) {
+                    if(pairReport!=null){
                         val result=pairReport!!
-                        SummaryFact(s(R.string.pair_certificate_pages),result.certificatePages.toString())
-                        SummaryFact(s(R.string.pair_identity_pages),result.identityPages.toString())
-                        result.localFields?.let{ local->
-                            SummaryFact(s(R.string.local_title_ref),
-                                local.titleNumber?:s(R.string.pair_unreadable))
-                            SummaryFact(s(R.string.local_area_m2),
-                                local.areaM2?.let{it+" m²"}?:s(R.string.pair_unreadable))
-                            SummaryFact(s(R.string.local_expected_pages),
-                                local.expectedCertificatePages?.toString()
-                                    ?:s(R.string.pair_unreadable))
-                            SummaryFact(s(R.string.local_surname),
-                                local.surname?:s(R.string.pair_unreadable))
-                            SummaryFact(s(R.string.local_given_name),
-                                local.givenName?:s(R.string.pair_unreadable))
-                            SummaryFact(s(R.string.local_cin_masked),
-                                local.cinLast4?.let{"••••"+it}?:s(R.string.pair_unreadable))
-                            SummaryFact(s(R.string.local_birth_date),
-                                local.birthDate?:s(R.string.pair_unreadable))
-                        }
-                        SummaryFact(s(R.string.pair_certificate_owner),
-                            result.certificateName?.value?:s(R.string.pair_unreadable))
-                        result.certificateName?.let { evidence->
-                            val source=s(if(evidence.source=="pdf-text")
-                                R.string.pair_source_pdf else R.string.pair_source_ocr)
-                            val score=evidence.confidence?.let {
-                                " · ${s(R.string.pair_confidence)}: ${it}%"
-                            }?:""
-                            Text("${s(R.string.pair_source_page)} ${evidence.page} · $source$score",
-                                color=Brand.Muted,fontSize=12.sp)
-                        }
-                        SummaryFact(s(R.string.pair_identity_owner),
-                            result.identityName?.value?:s(R.string.pair_unreadable))
-                        result.identityName?.let { evidence->
-                            val source=s(if(evidence.source=="pdf-text")
-                                R.string.pair_source_pdf else R.string.pair_source_ocr)
-                            val score=evidence.confidence?.let {
-                                " · ${s(R.string.pair_confidence)}: ${it}%"
-                            }?:""
-                            Text("${s(R.string.pair_source_page)} ${evidence.page} · $source$score",
-                                color=Brand.Muted,fontSize=12.sp)
-                        }
-                        SummaryFact(s(R.string.pair_cin_label),
-                            s(when(result.cinStatus) {
-                                "SAME_NUMBER_UNVERIFIED"->R.string.pair_cin_equal
-                                "NUMBER_DIFFERS_NEEDS_REVIEW"->R.string.pair_cin_diff
-                                "AMBIGUOUS_OR_LOW_CONFIDENCE"->R.string.pair_cin_uncertain
-                                else->R.string.pair_cin_missing
-                            }))
-                        SummaryFact(s(R.string.pair_identity_coverage),
-                            s(R.string.pair_front_only))
-                        if(result.reasons.isNotEmpty()) {
-                            Text(s(R.string.pair_reasons_title),color=Brand.Ink,
-                                fontSize=15.sp,fontWeight=FontWeight.SemiBold)
-                            result.reasons.distinct().forEach { code->
-                                PlainNotice(Icons.Outlined.Info,s(pairReasonText(code)))
+                        Surface(shape=RoundedCornerShape(18.dp),
+                            color=Color.White,border=BorderStroke(1.dp,CardBorder)){
+                            Column(Modifier.fillMaxWidth().padding(14.dp)){
+                                OcrDataRow(s(R.string.pair_certificate_owner),
+                                    result.certificateName?.value
+                                        ?:s(R.string.camera_field_missing))
+                                HorizontalDivider(color=CardBorder)
+                                OcrDataRow(s(R.string.pair_identity_owner),
+                                    result.identityName?.value
+                                        ?:s(R.string.camera_field_missing))
+                                HorizontalDivider(color=CardBorder)
+                                OcrDataRow(s(R.string.pair_cin_label),
+                                    s(when(result.cinStatus){
+                                        "SAME_NUMBER_UNVERIFIED"->R.string.pair_cin_equal
+                                        "NUMBER_DIFFERS_NEEDS_REVIEW"->R.string.pair_cin_diff
+                                        "AMBIGUOUS_OR_LOW_CONFIDENCE"->R.string.pair_cin_uncertain
+                                        else->R.string.pair_cin_missing
+                                    }))
+                                result.localFields?.let{local->
+                                    if(local.titleNumber!=null){
+                                        HorizontalDivider(color=CardBorder)
+                                        OcrDataRow(s(R.string.local_title_ref),
+                                            local.titleNumber)
+                                    }
+                                    if(local.areaM2!=null){
+                                        HorizontalDivider(color=CardBorder)
+                                        OcrDataRow(s(R.string.local_area_m2),
+                                            local.areaM2+" m²",numeric=true)
+                                    }
+                                }
                             }
                         }
-                        if(localOcrResult)PlainNotice(Icons.Outlined.Smartphone,
-                            s(R.string.local_ocr_result_label))
-                        PlainNotice(Icons.Outlined.Info,s(R.string.pair_preliminary_only))
+                        result.reasons.distinct().forEach{code->
+                            Text(s(pairReasonText(code)),
+                                color=Brand.Muted,fontSize=12.sp,lineHeight=18.sp)
+                        }
+                        PlainNotice(Icons.Outlined.Info,
+                            s(R.string.pair_preliminary_only))
                     }
                     if(pairProgress!=null) {
                         PlainNotice(Icons.Outlined.HourglassTop,
@@ -650,19 +627,15 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                             }))
                     }
                     if(pairError!=0)PlainNotice(Icons.Outlined.Info,s(pairError))
-                    PlainNotice(Icons.Outlined.Cloud,
-                        s(R.string.camera_huawei_review_hint))
-                    if(ownerSession==null&&authenticatedOwnerSession==null) {
-                        Text(s(R.string.local_ocr_server_later),color=Brand.Muted,fontSize=12.sp)
+
+                    if(ownerSession==null&&authenticatedOwnerSession==null){
+                        Text(s(R.string.review_auth_needed),
+                            color=Brand.Muted,fontSize=12.sp,lineHeight=18.sp)
                     }else{
-                        Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
-                            Checkbox(checked=uploadConsent,onCheckedChange={uploadConsent=it},
-                                enabled=pairProgress==null)
-                            Text(s(R.string.pair_upload_consent),Modifier.weight(1f),
-                                fontSize=12.sp,color=Brand.Ink,lineHeight=19.sp)
-                        }
+                        Text(s(R.string.review_send_disclosure),
+                            color=Brand.Muted,fontSize=12.sp,lineHeight=18.sp)
                         Button(onClick={
-                            if(pairProgress!=null||!uploadConsent||files.isEmpty()||!identityReadyForRemote)
+                            if(pairProgress!=null||files.isEmpty()||!identityReadyForRemote)
                                 return@Button
                             val cert=files.toList().map{
                                 PairEvidenceFile(it.uri,it.length,it.mime,it.uploadKey)
@@ -741,7 +714,7 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                                     if(requestEpoch==thisRequest)pairProgress=null
                                 }
                             }
-                        },enabled=uploadConsent&&pairProgress==null&&files.isNotEmpty()&&identityReadyForRemote,
+                        },enabled=pairProgress==null&&files.isNotEmpty()&&identityReadyForRemote,
                             modifier=Modifier.fillMaxWidth().heightIn(min=54.dp),
                             colors=ButtonDefaults.buttonColors(containerColor=Brand.Crimson),
                             shape=RoundedCornerShape(16.dp)) {
@@ -750,8 +723,8 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                             Text(s(R.string.pair_start))
                         }
                     }
-                    VerificationStage(Icons.Outlined.Gavel,s(R.string.official_status),s(R.string.legal_pending))
-                    PlainNotice(Icons.Outlined.Info,s(R.string.never_verified))
+                    if(pairReport==null)
+                        PlainNotice(Icons.Outlined.Info,s(R.string.legal_pending))
                     OutlinedButton(onClick={step=0;showInvalid=false},modifier=Modifier.fillMaxWidth().heightIn(min=51.dp)) {
                         Icon(Icons.Outlined.Edit,null,Modifier.size(20.dp))
                         Spacer(Modifier.width(8.dp))
@@ -786,6 +759,7 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                             identityFiles.clear()
                             identityFiles.add(pending)
                             acceptedFrontKey=pending.uploadKey
+                            acceptedRead=frontRead?.takeIf{it.issue==null}
                             pendingPhoto=null
                             frontRead=null
                             identityMessage=0
@@ -842,6 +816,19 @@ private fun PlainNotice(icon:androidx.compose.ui.graphics.vector.ImageVector,mes
             Text(message,Modifier.weight(1f),fontSize=12.sp,color=Brand.Ink,lineHeight=19.sp)
         }
     }
+}
+
+@Composable
+private fun IdFieldsReadout(scan:LocalDocumentOcr.FrontScan?,placeholder:String){
+    OcrDataRow(s(R.string.local_surname),scan?.surname?:placeholder)
+    HorizontalDivider(color=CardBorder)
+    OcrDataRow(s(R.string.local_given_name),scan?.givenName?:placeholder)
+    HorizontalDivider(color=CardBorder)
+    OcrDataRow(s(R.string.camera_review_cin),
+        scan?.cinFull?:placeholder,numeric=true)
+    HorizontalDivider(color=CardBorder)
+    OcrDataRow(s(R.string.camera_review_birth),
+        scan?.birthDate?:placeholder,numeric=true)
 }
 
 @Composable

@@ -237,4 +237,6 @@
     <string name="camera_field_pending">Reading…</string>
     <string name="camera_photo_accepted">Photo added</string>
     <string name="camera_capture_disclosure">Capturing sends this photo securely for text extraction. No identity or ownership is automatically verified.</string>
+    <string name="review_auth_needed">Your identity photo remains private. Document matching becomes available after verified account access.</string>
+    <string name="review_send_disclosure">By selecting “Compare documents”, you agree to securely send the selected documents for review. This does not confirm ownership.</string>
 </resources>

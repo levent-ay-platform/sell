@@ -237,4 +237,6 @@
     <string name="camera_field_pending">جارٍ القراءة…</string>
     <string name="camera_photo_accepted">تمت إضافة صورة الهوية</string>
     <string name="camera_capture_disclosure">عند التصوير تُرسل الصورة بأمان لاستخراج البيانات فقط، دون إثبات تلقائي للهوية أو الملكية.</string>
+    <string name="review_auth_needed">صورة الهوية محفوظة بشكل خاص. مطابقة مستندات الملكية متاحة بعد توثيق الحساب.</string>
+    <string name="review_send_disclosure">بالضغط على «مقارنة المستندات» توافق على إرسال الوثائق المحددة بأمان للمراجعة، دون إثبات تلقائي للملكية.</string>
 </resources>

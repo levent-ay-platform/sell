@@ -237,4 +237,6 @@
     <string name="camera_field_pending">Lecture…</string>
     <string name="camera_photo_accepted">Photo ajoutée</string>
     <string name="camera_capture_disclosure">En photographiant, vous envoyez la photo de façon sécurisée pour en extraire le texte, sans validation automatique de l’identité ni de la propriété.</string>
+    <string name="review_auth_needed">Votre photo reste privée. La comparaison des documents nécessite un compte vérifié.</string>
+    <string name="review_send_disclosure">En choisissant « Comparer les documents », vous acceptez leur envoi sécurisé pour examen, sans validation automatique de propriété.</string>
 </resources>
