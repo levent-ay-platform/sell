@@ -23,4 +23,22 @@ class SmartListingAssistTest {
         assertNull(SmartListingAssist.pricePerSquareMeter("150", "0"))
         assertNull(SmartListingAssist.pricePerSquareMeter("150", "18,900"))
     }
+
+    @Test fun coordinatesNeverGuessOrUseInvalidValues() {
+        assertEquals(36.852 to 10.312, SmartListingAssist.coordinates("36,852","10.312"))
+        assertEquals(-90.0 to -180.0, SmartListingAssist.coordinates("-90","-180"))
+        assertNull(SmartListingAssist.coordinates("91","10"))
+        assertNull(SmartListingAssist.coordinates("33","181"))
+        assertNull(SmartListingAssist.coordinates("30.123456789","9"))
+        assertNull(SmartListingAssist.coordinates("NaN","9"))
+        assertNull(SmartListingAssist.coordinates("","9"))
+    }
+    @Test fun localDescriptionContainsOnlySellerSubmittedFacts() {
+        val text=SmartListingAssist.descriptionSuggestion(
+            "Kélibia","150","18900","Terrain à vendre à","m²","Prix demandé")
+        assertEquals("Terrain à vendre à Kélibia · 150 m². Prix demandé 18900 TND.",text)
+        assertNull(SmartListingAssist.descriptionSuggestion(
+            "Kélibia","0","18900","Terrain à vendre à","m²","Prix demandé"))
+    }
+
 }
