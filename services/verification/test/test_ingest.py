@@ -71,6 +71,10 @@ class TestMalakOcr(unittest.TestCase):
             self.assertIn('987654', full_text, 'clear synthetic title reference should survive OCR')
             self.assertIn('843', full_text, 'clear synthetic area should survive OCR')
             self.assertTrue(all(0<=l['confidence']<=1 for l in out['pages'][0]['lines']))
+            boxes=[line['bbox'] for line in out['pages'][0]['lines'] if 'bbox' in line]
+            self.assertGreater(len(boxes),0, 'Tesseract page scan should retain text boxes')
+            self.assertTrue(all(0<=b['left']<b['right'] and 0<=b['top']<b['bottom']
+                                for b in boxes))
             self.assertEqual(out['mayApproveOwnership'],False)
             # Strict text accuracy is evaluated in a separate golden corpus. OCR is imperfect.
             print(json.dumps({'benchmark':'synthetic_image_ocr','milliseconds':dt,
