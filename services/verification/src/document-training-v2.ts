@@ -164,7 +164,16 @@ export function classifyLandPaper(lines:readonly RecognizedLine[]):DocumentTrain
     // different paper ('شهادة ملكية' / 'وصل قبض'), but cannot reclassify the file.
     if(text.length<3||text.length>115)continue;
     for(const rule of TITLES){
-      if(rule.pattern.test(text)){
+      const match=rule.pattern.exec(text);
+      if(!match)continue;
+      // A true heading must appear at the start (allowing a short issuer
+      // prefix and ornamental stars), not deep inside a narrative sentence.
+      // Tax receipts cited inside a deed are NOT separate uploaded receipts.
+      if(match.index>22 || (rule.kind==='FINANCIAL_RECEIPT' &&
+          (text.length>65 || /(?:ضمن|مرفق|اشير|بموجب|سابق)/u.test(text))))continue;
+      if(match.index===0 && text.length>95 &&
+          rule.kind!=='SALE_DEED')continue;
+      {
         const evidence:TitleEvidence={page:line.page,lineIndex:index,
           confidence:line.confidence,source:line.source,rule:rule.rule};
         hits.set(rule.kind,[...(hits.get(rule.kind)??[]),evidence]);
