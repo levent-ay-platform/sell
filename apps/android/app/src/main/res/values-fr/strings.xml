@@ -247,4 +247,7 @@
     <string name="smart_preview_heading">Aperçu de votre annonce</string>
     <string name="smart_preview_disclosure">Cet aperçu utilise uniquement vos données. Il ne prouve pas la propriété et ne publie pas votre annonce.</string>
     <string name="smart_autosave_hint">Données enregistrées automatiquement sur cet appareil. Les images de vos documents ne sont pas conservées avec le brouillon.</string>
+    <string name="smart_title_auto">Votre titre est créé automatiquement</string>
+    <string name="smart_title_pending">Indiquez la région et la superficie pour obtenir un titre</string>
+    <string name="smart_title_edit">Modifier</string>
 </resources>
