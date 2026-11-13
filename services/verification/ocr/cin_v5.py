@@ -207,24 +207,23 @@ def recognize(session,characters,crop):
         sum(confidence)/len(confidence) if confidence else 0.)
 
 
-def recognize_digits(session, characters, crop, centered=False):
-    """Same small v5 model, numeric-only CTC output: no guessed digits.
+def recognize_digits(session, characters, crop, bright_padding=False):
+    """Numeric-only CTC: hold glyph alignment fixed, vary padding.
 
-    A centered, white letterbox improves short year/day exposure while the
-    original left-aligned geometry is retained as a separate vote.
-    Numeric fields must agree across two independent image preparations.
+    Public-model synthetic calibration on the Mac (2026-11-13) showed that
+    centering digits loses or degrades short day/year and complete CIN rows.
+    Both readings keep the glyphs LEFT-aligned, but use independent dark vs
+    light letterbox backgrounds and gray-vs-color preprocessing.
+    No confidence-floor reduction, missing-digit completion or ID lookup.
     """
     if crop.size == 0:
         return "", 0.0
     width=max(1,min(300,int(np.ceil(48*crop.shape[1]/crop.shape[0]))))
     resized=cv2.resize(crop,(width,48),interpolation=cv2.INTER_CUBIC)
-    if centered:
-        left=(320-width)//2
-        resized=cv2.copyMakeBorder(resized,0,0,left,320-width-left,
-                                  cv2.BORDER_CONSTANT,value=(255,255,255))
-    elif width<320:
+    if width<320:
+        pad=(255,255,255) if bright_padding else (0,0,0)
         resized=cv2.copyMakeBorder(resized,0,0,0,320-width,
-                                  cv2.BORDER_CONSTANT,value=(0,0,0))
+                                  cv2.BORDER_CONSTANT,value=pad)
     tensor=(resized.astype(np.float32)/255-.5)/.5
     tensor=tensor.transpose(2,0,1)[None,:,:,:]
     scores=session.run(None,{session.get_inputs()[0].name:tensor})[0][0]
