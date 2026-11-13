@@ -39,9 +39,12 @@ internal object CameraGuideTransform {
 
     fun guideRect(viewport:PixelRect):PixelRect? {
         if(viewport.width<64||viewport.height<64)return null
-        val width=(viewport.width*.84f).toInt()
-        val height=min((width/1.585f).toInt(),
-                       (viewport.height*.70f).toInt())
+        // Preserve the CIN landscape ratio even in a short ViewPort.
+        // Independently clamping height distorted the guide to 2.24:1.
+        val maxWidth=(viewport.width*.84f).toInt()
+        val maxHeight=(viewport.height*.96f).toInt()
+        val width=min(maxWidth,(maxHeight*1.585f).toInt())
+        val height=(width/1.585f).toInt()
         if(width<64||height<45)return null
         val left=viewport.left+(viewport.width-width)/2
         val top=viewport.top+(viewport.height-height)/2

@@ -21,7 +21,8 @@ class CameraGuideTransformTest {
         val guide=CameraGuideTransform.guideRect(view)!!
         assertTrue(guide.left>=view.left&&guide.right<=view.right)
         assertTrue(guide.top>=view.top&&guide.bottom<=view.bottom)
-        assertEquals(.84f,guide.width.toFloat()/view.width,.01f)
+        assertTrue(guide.width.toFloat()/view.width<=.84f+.001f)
+        assertTrue(guide.height.toFloat()/view.height<=.96f+.001f)
         assertEquals(1.585f,guide.width.toFloat()/guide.height,.03f)
     }
     @Test fun invalidRotationOrCropFailsClosed(){
