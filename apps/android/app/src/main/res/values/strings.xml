@@ -251,7 +251,7 @@
     <string name="smart_title_pending">Enter location and area to generate a title</string>
     <string name="smart_title_edit">Edit</string>
     <string name="smart_title_done">Done</string>
-    <string name="smart_document_first_hint">Start with your document, even a receipt or unknown paper. After sign-in and minimum details, we\'ll read it privately and suggest fields for review.</string>
+    <string name="smart_document_first_hint">Upload your property document, then scan the front of your ID. We show your extracted information without exposing other owners.</string>
     <string name="smart_read_source_title">Read details from your document</string>
     <string name="smart_read_source_intro">After minimum details, a private reading suggests sourced fields. Your listing is never edited without consent.</string>
     <string name="smart_read_auth_required">A real signed-in owner account is required to read this private document.</string>
@@ -315,4 +315,9 @@
     <string name="unified_role_possessor">Possession requester</string>
     <string name="unified_role_payer">Fee payer</string>
     <string name="unified_role_other">Named person</string>
+    <string name="malak_my_identity">My identity details</string>
+    <string name="malak_identity_preliminary">These fields were read from the front of your ID. Private document comparison is not official ownership verification.</string>
+    <string name="malak_holder_parts">Your printed rights parts (not square metres)</string>
+    <string name="malak_holder_row">Your row number on the ownership paper</string>
+    <string name="malak_holder_preliminary">Your share was found in the row associated with your name and CIN. This is preliminary text agreement only.</string>
 </resources>

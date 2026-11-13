@@ -251,7 +251,7 @@
     <string name="smart_title_pending">حدّد المنطقة والمساحة ليظهر عنوان إعلانك</string>
     <string name="smart_title_edit">تعديل</string>
     <string name="smart_title_done">تم</string>
-    <string name="smart_document_first_hint">ابدأ بوثيقتك، حتى لو كانت وصلاً أو غير معروفة. بعد تسجيل الدخول وتعبئة الحد الأدنى من البيانات، سنقرأها بصورة خاصة ونقترح الحقول القابلة للمراجعة.</string>
+    <string name="smart_document_first_hint">ابدأ برفع وثيقة العقار، ثم صوّر وجه هويتك الأمامي. سنعرض بعدها بياناتك المقروءة والحقول المقترحة دون إظهار بقية المالكين.</string>
     <string name="smart_read_source_title">بيانات العقار من وثيقتك</string>
     <string name="smart_read_source_intro">بعد إدخال المعلومات الأساسية، اقرأ الوثيقة عبر خادم ملاك الخاص لتظهر الاقتراحات مع رقم الصفحة. لن تتغير بيانات الإعلان دون موافقتك.</string>
     <string name="smart_read_auth_required">يلزم تسجيل دخول مالك حساب حقيقي لقراءة الوثيقة الخاصة.</string>
@@ -315,4 +315,9 @@
     <string name="unified_role_possessor">طالب التحويز</string>
     <string name="unified_role_payer">دافع المعاليم</string>
     <string name="unified_role_other">الشخص المذكور</string>
+    <string name="malak_my_identity">بيانات هويتي</string>
+    <string name="malak_identity_preliminary">هذه بيانات مستخرجة من صورة هويتك الأمامية. نطابقها مع الوثيقة في مراجعة خاصة، دون اعتماد ملكية قانونية.</string>
+    <string name="malak_holder_parts">حصتك المطبـوعة (أجزاء لا أمتار مربعة)</string>
+    <string name="malak_holder_row">رقم صفّك في وثيقة الملكية</string>
+    <string name="malak_holder_preliminary">ظهرت حصتك من الصف المرتبط باسمك وCIN. هذه مطابقة نصية أولية وليست تأكيداً قانونياً.</string>
 </resources>

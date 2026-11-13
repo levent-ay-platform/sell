@@ -33,6 +33,7 @@ internal data class LocalOcrFields(
     val birthDate:String?
 )
 internal data class UnifiedRoleStatus(val role:String,val assessment:String,val page:Int?)
+internal data class MatchedRightsHolder(val rowOrdinal:Int,val parts:String,val page:Int)
 internal data class CertificateIdentityReview(
     val assessment:String,val certificateName:PairNameEvidence?,val identityName:PairNameEvidence?,
     val cinStatus:String,val reasons:List<String>,val identityCapture:String,
@@ -40,7 +41,8 @@ internal data class CertificateIdentityReview(
     val ownershipVerified:Boolean=false,val identityVerified:Boolean=false,
     val mayPublish:Boolean=false,val localFields:LocalOcrFields?=null,
     val detectedKind:String?=null,val unifiedAssessment:String?=null,
-    val unifiedRoles:List<UnifiedRoleStatus> = emptyList())
+    val unifiedRoles:List<UnifiedRoleStatus> = emptyList(),
+    val matchedRightsHolder:MatchedRightsHolder?=null)
 internal class OwnerPairException(val statusCode:Int):Exception("PRIVATE_PAIR_UNAVAILABLE")
 
 private const val DOC_LIMIT=12L*1024L*1024L
@@ -202,6 +204,7 @@ private fun parseReview(body:JSONObject):CertificateIdentityReview {
     var kind:String?=null
     var unifiedStatus:String?=null
     var roles:List<UnifiedRoleStatus> = emptyList()
+    var holder:MatchedRightsHolder?=null
     if(unified!=null) {
         if(unified.optBoolean("legalOwnershipVerified",true)||
            unified.optBoolean("identityVerified",true)||
@@ -226,10 +229,26 @@ private fun parseReview(body:JSONObject):CertificateIdentityReview {
                 throw OwnerPairException(502)
             UnifiedRoleStatus(role,status,page)
         }
+        val matched=unified.optJSONObject("matchedRightsHolder")
+        if(matched!=null){
+            val row=matched.optInt("printedRowOrdinal",-1)
+            val page=matched.optInt("documentPage",-1)
+            val parts=matched.optString("rightsParts")
+            val keys=matched.keys().asSequence().toSet()
+            if(kind!="SHARED_OWNERSHIP_CERTIFICATE"||
+                unifiedStatus!="ROLE_TEXT_MATCH_ONLY"||
+                matched.optString("status")!="PRELIMINARY_PERSON_ROW_TEXT_ONLY"||
+                keys!=setOf("printedRowOrdinal","rightsParts","documentPage","status")||
+                row !in 1..500||page !in 1..certPages||
+                !Regex("^[1-9][0-9]{0,10}(?:[.,][0-9]{1,3})?$").matches(parts))
+                throw OwnerPairException(502)
+            holder=MatchedRightsHolder(row,parts,page)
+        }
     }
     return CertificateIdentityReview(assessment,nameOf(comparison,"certificateName"),
         nameOf(comparison,"identityName"),cinStatus,reasons,capture,certPages,idPages,
-        detectedKind=kind,unifiedAssessment=unifiedStatus,unifiedRoles=roles)
+        detectedKind=kind,unifiedAssessment=unifiedStatus,unifiedRoles=roles,
+        matchedRightsHolder=holder)
 }
 /**
  * Only explicit user action uploads files. Server-owned case/consent required.

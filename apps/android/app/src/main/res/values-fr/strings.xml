@@ -251,7 +251,7 @@
     <string name="smart_title_pending">Indiquez la région et la superficie pour obtenir un titre</string>
     <string name="smart_title_edit">Modifier</string>
     <string name="smart_title_done">Terminé</string>
-    <string name="smart_document_first_hint">Commencez par votre document, même un reçu ou un document non identifié. Après connexion et saisie du minimum requis, nous lirons le document en privé et proposerons des données à vérifier.</string>
+    <string name="smart_document_first_hint">Ajoutez votre document, puis photographiez le recto de votre carte d’identité. Les données extraites sont affichées sans révéler les autres copropriétaires.</string>
     <string name="smart_read_source_title">Données extraites de votre document</string>
     <string name="smart_read_source_intro">Après les informations minimales, la lecture privée propose des champs avec leurs pages sources. Rien ne modifie votre annonce sans validation.</string>
     <string name="smart_read_auth_required">Connectez-vous avec un véritable compte propriétaire pour lire ce document.</string>
@@ -315,4 +315,9 @@
     <string name="unified_role_possessor">Demandeur de constat</string>
     <string name="unified_role_payer">Payeur</string>
     <string name="unified_role_other">Personne mentionnée</string>
+    <string name="malak_my_identity">Données de ma carte d’identité</string>
+    <string name="malak_identity_preliminary">Ces données proviennent du recto de votre carte. La comparaison du document reste privée et ne constitue pas une preuve légale de propriété.</string>
+    <string name="malak_holder_parts">Votre quote-part imprimée (parts, pas m²)</string>
+    <string name="malak_holder_row">Numéro de votre ligne dans le titre</string>
+    <string name="malak_holder_preliminary">Votre part apparaît sur la ligne associée à votre nom et votre CIN. Correspondance textuelle préliminaire uniquement.</string>
 </resources>

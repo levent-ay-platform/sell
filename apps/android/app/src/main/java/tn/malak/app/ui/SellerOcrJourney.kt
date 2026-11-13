@@ -179,6 +179,17 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
         mutableStateOf<LocalDocumentOcr.FrontScan?>(null)
     }
     var frontReadBusy by remember(draftFile){mutableStateOf(false)}
+    suspend fun ensureEvidenceIntakeCase():OwnerEvidenceSession {
+        ownerSession?.let{return it}
+        provisionedCase?.let{return it}
+        val auth=authenticatedOwnerSession?:throw OwnerPairException(401)
+        val previous=prefs.getString("pending_evidence_intake_key",null)
+        val key=if(previous!=null&&Regex("^[0-9a-fA-F-]{36}$").matches(previous))
+            previous else UUID.randomUUID().toString()
+        if(!prefs.edit().putString("pending_evidence_intake_key",key).commit())
+            throw IllegalStateException("EVIDENCE_INTENT_NOT_DURABLE")
+        return provisionOwnerEvidenceIntakeCase(auth,key).also{provisionedCase=it}
+    }
     LaunchedEffect(draftFile,pendingPhoto?.uploadKey,
         ownerSession,authenticatedOwnerSession,pilotOcrSession,canReadPrivateId){
         val pending=pendingPhoto
@@ -198,32 +209,7 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                             context,pending.uri,pending.length,pending.mime,pilotOcrSession)
                         if(pendingPhoto?.uploadKey==pending.uploadKey)frontRead=result
                     }else{
-                    val activeCase=ownerSession?:provisionedCase?:run {
-                        val auth=authenticatedOwnerSession
-                        if(auth==null){
-                            frontRead=LocalDocumentOcr.FrontScan(
-                                null,null,null,null,null,0,
-                                LocalDocumentOcr.FrontIssue.SESSION_REQUIRED)
-                            null
-                        }else{
-                            val normalized=area.replace(',', '.')
-                            val values=listOf(listingTitle,region.trim(),normalized,price,capacity)
-                            val material=values.joinToString(""){it.length.toString()+":"+it}
-                            val fp=java.security.MessageDigest.getInstance("SHA-256")
-                                .digest(material.toByteArray(Charsets.UTF_8))
-                                .joinToString(""){"%02x".format(it.toInt() and 255)}
-                            val known=prefs.getString("pending_case_key",null)
-                            val k=if(prefs.getString("pending_case_fingerprint",null)==fp &&
-                                known!=null && Regex("^[0-9a-fA-F-]{36}$").matches(known))
-                                known else UUID.randomUUID().toString()
-                            if(!prefs.edit().putString("pending_case_fingerprint",fp)
-                                .putString("pending_case_key",k).commit())
-                                throw IllegalStateException("CASE_INTENT_NOT_DURABLE")
-                            provisionOwnerEvidenceCase(auth,NewOwnerCaseDraft(
-                                k,listingTitle,region.trim(),normalized,price,capacity))
-                                .also{provisionedCase=it}
-                        }
-                    }
+                    val activeCase=ensureEvidenceIntakeCase()
                     if(activeCase!=null){
                         val result=LocalDocumentOcr.inspectFront(
                             context,pending.uri,pending.length,pending.mime,activeCase)
@@ -244,8 +230,7 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
     }
     // Never let a stale comparison be displayed after selecting other documents,
     // navigation, account or case changes. Private report is memory-only.
-    LaunchedEffect(draftFile,files.toList(),identityFiles.toList(),ownerSession,authenticatedOwnerSession,
-        name,region,area,price,capacity) {
+    LaunchedEffect(draftFile,files.toList(),identityFiles.toList(),ownerSession,authenticatedOwnerSession) {
         requestEpoch++
         requestJob?.cancel()
         provisionedCase=null
@@ -333,8 +318,8 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
             if(committed)R.string.draft_saved else R.string.draft_error
         }catch (_:Exception){R.string.draft_error}
     }
-    val stepLabels=listOf(R.string.smart_step_documents,R.string.step_property,
-        R.string.step_identity,R.string.step_summary)
+    val stepLabels=listOf(R.string.smart_step_documents,R.string.step_identity,
+        R.string.step_property,R.string.step_summary)
     LaunchedEffect(step) { if(step>3) step=3 }
 
     if(cameraVisible){
@@ -435,7 +420,306 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                     PlainNotice(Icons.Outlined.Info,s(R.string.smart_document_first_hint))
                 }
                 1 -> {
+                    SectionHeading(s(R.string.identity_section),s(R.string.identity_hint))
+                    if(pendingPhoto==null&&!identitySelected){
+                        Surface(color=Color.White,
+                            shape=RoundedCornerShape(20.dp),
+                            border=BorderStroke(1.dp,CardBorder)){
+                            Column(Modifier.fillMaxWidth().padding(18.dp),
+                                verticalArrangement=Arrangement.spacedBy(13.dp)){
+                                Button(onClick={cameraVisible=true},
+                                    modifier=Modifier.fillMaxWidth().heightIn(min=56.dp),
+                                    shape=RoundedCornerShape(16.dp),
+                                    colors=ButtonDefaults.buttonColors(containerColor=Brand.Crimson)){
+                                    Icon(Icons.Outlined.CameraAlt,null,Modifier.size(22.dp))
+                                    Spacer(Modifier.width(10.dp))
+                                    Text(s(R.string.camera_front_action),fontSize=15.sp)
+                                }
+                                Text(s(R.string.camera_capture_disclosure),
+                                    color=Brand.Muted,fontSize=12.sp,lineHeight=19.sp)
+                            }
+                        }
+                    }
+                    if(pendingPhoto!=null){
+                        val pending=pendingPhoto!!
+                        Surface(color=Color.White,shape=RoundedCornerShape(20.dp),
+                            border=BorderStroke(1.dp,CardBorder)){
+                            Column(Modifier.fillMaxWidth().padding(16.dp),
+                                verticalArrangement=Arrangement.spacedBy(12.dp)){
+                                Text(s(R.string.camera_review_title),
+                                    color=Brand.Ink,fontSize=18.sp,
+                                    fontWeight=FontWeight.SemiBold)
+                                val preview=remember(pending.uri){
+                                    runCatching{
+                                        val opts=BitmapFactory.Options().apply{inSampleSize=4}
+                                        context.contentResolver.openInputStream(pending.uri)?.use{
+                                            BitmapFactory.decodeStream(it,null,opts)
+                                        }
+                                    }.getOrNull()
+                                }
+                                if(preview!=null)
+                                    Image(preview.asImageBitmap(),null,
+                                        modifier=Modifier.fillMaxWidth().heightIn(max=255.dp)
+                                            .height(235.dp),
+                                        contentScale=ContentScale.Fit)
+                                if(frontReadBusy)
+                                    LinearProgressIndicator(Modifier.fillMaxWidth())
+                                val scan=frontRead?.takeIf{it.issue==null}
+                                val waiting=frontReadBusy||frontRead==null
+                                val placeholder=s(if(waiting)
+                                    R.string.camera_field_pending else R.string.camera_field_missing)
+                                // One compact readout, never five oversized
+                                // duplicate "unreadable" failure cards.
+                                Column(verticalArrangement=Arrangement.spacedBy(2.dp)){
+                                    IdFieldsReadout(scan,placeholder)
+                                }
+                                val message=when{
+                                    frontReadBusy->R.string.camera_review_scanning
+                                    !canReadPrivateId->
+                                        R.string.camera_huawei_login_required
+                                    frontRead?.issue==
+                                        LocalDocumentOcr.FrontIssue.SERVICE_UNAVAILABLE->
+                                        R.string.camera_huawei_unavailable
+                                    frontRead?.issue==
+                                        LocalDocumentOcr.FrontIssue.LOW_RESOLUTION->
+                                        R.string.camera_image_low_resolution
+                                    frontRead?.issue!=null->
+                                        R.string.camera_review_failed
+                                    scan?.surname!=null&&scan.givenName!=null&&
+                                        scan.cinFull!=null&&scan.birthDate!=null->
+                                        R.string.camera_review_ready
+                                    else->R.string.camera_review_manual
+                                }
+                                Text(s(message),color=Brand.Muted,
+                                    fontSize=12.sp,lineHeight=19.sp)
+                            }
+                        }
+                    }else if(identitySelected){
+                        Surface(color=Color(0xFFE9F6F1),
+                            shape=RoundedCornerShape(17.dp)){
+                            Row(Modifier.fillMaxWidth().padding(15.dp),
+                                verticalAlignment=Alignment.CenterVertically,
+                                horizontalArrangement=Arrangement.spacedBy(12.dp)){
+                                Icon(Icons.Outlined.CheckCircle,null,
+                                    tint=Color(0xFF178063))
+                                Text(s(R.string.camera_photo_accepted),
+                                    Modifier.weight(1f),color=Brand.Ink,
+                                    fontWeight=FontWeight.SemiBold)
+                                TextButton(onClick={cameraVisible=true}){
+                                    Text(s(R.string.camera_review_retake))
+                                }
+                            }
+                        }
+                    }
+                    if(identityMessage!=0) PlainNotice(Icons.Outlined.Info,s(identityMessage))
+                }
+                2 -> {
+                    Surface(shape=RoundedCornerShape(18.dp),color=Color.White,
+                        border=BorderStroke(1.dp,CardBorder)){
+                        Column(Modifier.fillMaxWidth().padding(14.dp),
+                            verticalArrangement=Arrangement.spacedBy(8.dp)){
+                            Text(s(R.string.malak_my_identity),fontWeight=FontWeight.Bold,
+                                color=Brand.Ink)
+                            IdFieldsReadout(acceptedRead,s(R.string.camera_field_missing))
+                            Text(s(R.string.malak_identity_preliminary),
+                                color=Brand.Muted,fontSize=12.sp,lineHeight=18.sp)
+                        }
+                    }
+                    SectionHeading(s(R.string.review_status_title),
+                        s(if(pairReport==null)R.string.review_status_intro
+                            else R.string.pair_review_received))
+                    VerificationStage(Icons.Outlined.CompareArrows,
+                        s(R.string.match_status),
+                        s(when(pairReport?.unifiedAssessment?:pairReport?.assessment){
+                            "ROLE_TEXT_MATCH_ONLY"->R.string.unified_role_match
+                            "ROLE_TEXT_DIFFERENCE"->R.string.unified_role_difference
+                            "ROLE_AMBIGUOUS"->R.string.unified_role_ambiguous
+                            "INSUFFICIENT_EVIDENCE"->R.string.unified_role_inconclusive
+                            "PRELIMINARY_TEXT_AGREEMENT"->R.string.pair_agreement
+                            "TEXT_DIFFERENCE_NEEDS_REVIEW"->R.string.pair_difference
+                            "INSUFFICIENT_OR_AMBIGUOUS"->R.string.pair_uncertain
+                            else->R.string.match_pending
+                        }),
+                        when(pairReport?.unifiedAssessment?:pairReport?.assessment){
+                            "ROLE_TEXT_MATCH_ONLY","ROLE_TEXT_DIFFERENCE",
+                            "ROLE_AMBIGUOUS","INSUFFICIENT_EVIDENCE"->ReadingStatus.REVIEW
+                            "PRELIMINARY_TEXT_AGREEMENT"->ReadingStatus.EXTRACTED
+                            "TEXT_DIFFERENCE_NEEDS_REVIEW",
+                            "INSUFFICIENT_OR_AMBIGUOUS"->ReadingStatus.REVIEW
+                            else->if(pairProgress!=null)
+                                ReadingStatus.READING else ReadingStatus.PENDING
+                        })
+                    if(pairReport!=null){
+                        val result=pairReport!!
+                        Surface(shape=RoundedCornerShape(18.dp),
+                            color=Color.White,border=BorderStroke(1.dp,CardBorder)){
+                            Column(Modifier.fillMaxWidth().padding(14.dp)){
+                                if(result.unifiedAssessment!=null&&
+                                    result.detectedKind!="OWNERSHIP_CERTIFICATE"){
+                                    OcrDataRow(s(R.string.unified_document_kind),
+                                        s(documentFamilyLabel(result.detectedKind?:"UNKNOWN")))
+                                    result.unifiedRoles.forEach{role->
+                                        HorizontalDivider(color=CardBorder)
+                                        OcrDataRow(s(unifiedRoleLabel(role.role)),
+                                            s(unifiedRoleAssessmentLabel(role.assessment)))
+                                    }
+                                    result.matchedRightsHolder?.let{matched->
+                                        HorizontalDivider(color=CardBorder)
+                                        OcrDataRow(s(R.string.malak_holder_parts),matched.parts,numeric=true)
+                                        HorizontalDivider(color=CardBorder)
+                                        OcrDataRow(s(R.string.malak_holder_row),
+                                            matched.rowOrdinal.toString(),numeric=true)
+                                        HorizontalDivider(color=CardBorder)
+                                        OcrDataRow(s(R.string.smart_read_page),
+                                            matched.page.toString(),numeric=true)
+                                        Text(s(R.string.malak_holder_preliminary),
+                                            fontSize=12.sp,color=Brand.Muted,lineHeight=17.sp)
+                                    }
+                                    Text(s(R.string.unified_not_ownership),
+                                        fontSize=12.sp,color=Brand.Muted,lineHeight=18.sp)
+                                }else{
+                                OcrDataRow(s(R.string.pair_certificate_owner),
+                                    result.certificateName?.value
+                                        ?:s(R.string.camera_field_missing))
+                                HorizontalDivider(color=CardBorder)
+                                OcrDataRow(s(R.string.pair_identity_owner),
+                                    result.identityName?.value
+                                        ?:s(R.string.camera_field_missing))
+                                HorizontalDivider(color=CardBorder)
+                                OcrDataRow(s(R.string.pair_cin_label),
+                                    s(when(result.cinStatus){
+                                        "SAME_NUMBER_UNVERIFIED"->R.string.pair_cin_equal
+                                        "NUMBER_DIFFERS_NEEDS_REVIEW"->R.string.pair_cin_diff
+                                        "AMBIGUOUS_OR_LOW_CONFIDENCE"->R.string.pair_cin_uncertain
+                                        else->R.string.pair_cin_missing
+                                    }))
+                                result.localFields?.let{local->
+                                    if(local.titleNumber!=null){
+                                        HorizontalDivider(color=CardBorder)
+                                        OcrDataRow(s(R.string.local_title_ref),
+                                            local.titleNumber)
+                                    }
+                                    if(local.areaM2!=null){
+                                        HorizontalDivider(color=CardBorder)
+                                        OcrDataRow(s(R.string.local_area_m2),
+                                            local.areaM2+" m²",numeric=true)
+                                    }
+                                }
+                                }
+                            }
+                        }
+                        if(result.unifiedAssessment==null||
+                            result.detectedKind=="OWNERSHIP_CERTIFICATE")
+                            result.reasons.distinct().forEach{code->
+                                Text(s(pairReasonText(code)),
+                                    color=Brand.Muted,fontSize=12.sp,lineHeight=18.sp)
+                            }
+                        PlainNotice(Icons.Outlined.Info,
+                            s(R.string.pair_preliminary_only))
+                    }
+                    if(pairProgress!=null) {
+                        PlainNotice(Icons.Outlined.HourglassTop,
+                            s(when(pairProgress){
+                                PairProgress.CASE_PROVISION->R.string.pair_creating_case
+                                PairProgress.CERTIFICATE_UPLOAD->R.string.pair_upload_cert
+                                PairProgress.IDENTITY_UPLOAD->R.string.pair_upload_identity
+                                else->R.string.pair_comparing
+                            }))
+                    }
+                    if(pairError!=0)PlainNotice(Icons.Outlined.Info,s(pairError))
+
+                    if(ownerSession==null&&authenticatedOwnerSession==null){
+                        Text(s(R.string.review_auth_needed),
+                            color=Brand.Muted,fontSize=12.sp,lineHeight=18.sp)
+                    }else{
+                        Text(s(R.string.review_send_disclosure),
+                            color=Brand.Muted,fontSize=12.sp,lineHeight=18.sp)
+                        Text(s(if(familyReadings.isEmpty())R.string.smart_pair_first_read
+                            else R.string.unified_identity_hint),
+                            color=Brand.Muted,fontSize=12.sp,lineHeight=18.sp)
+                        Button(onClick={
+                            if(pairProgress!=null||files.isEmpty()||!identityReadyForRemote||
+                                familyReadBusy)
+                                return@Button
+                            val selected=files.toList()
+                            val idDocs=identityFiles.toList().map{
+                                PairEvidenceFile(it.uri,it.length,it.mime,it.uploadKey)
+                            }
+                            pairError=0
+                            pairReport=null
+                                                                    pairProgress=PairProgress.CASE_PROVISION
+                            val thisRequest=++requestEpoch
+                            requestJob=scope.launch {
+                                try {
+                                    // The trusted sign-in identity first provisions a real,
+                                    // consented case; an absent login never invents a case.
+                                    val activeCase=ensureEvidenceIntakeCase()
+                                    val readings=if(familyReadings.size==selected.size&&
+                                        familyReadings.all{it.status=="READY"})familyReadings
+                                    else selected.mapIndexed{index,item->
+                                        readOcrForOwner(context,item.uri,item.length,item.mime,
+                                            if(item.mime=="application/pdf")null else index+1,
+                                            item.uploadKey+"-ocr",normalizedArea,
+                                            QaOcrSession(activeCase.httpsBaseUrl,
+                                                activeCase.caseId,activeCase.bearer))
+                                    }
+                                    if(requestEpoch!=thisRequest)return@launch
+                                    val recognized=readings.map{it.familyKind}
+                                        .filter{it!="UNKNOWN"}.distinct()
+                                    if(recognized.size!=1||readings.any{it.status!="READY"}){
+                                        pairError=R.string.unified_review_separately
+                                        return@launch
+                                    }
+                                    familyReadings=readings
+                                    val cert=selected.mapIndexed{index,item->
+                                        val kind=readings[index].familyKind
+                                        PairEvidenceFile(item.uri,item.length,item.mime,item.uploadKey,
+                                            if(kind=="UNKNOWN")"OTHER_LEGAL_PROOF" else kind)
+                                    }
+                                    val result=compareOwnerDocumentsAndIdentity(
+                                        context,activeCase,cert,idDocs){
+                                        if(requestEpoch==thisRequest)pairProgress=it
+                                    }
+                                    if(requestEpoch==thisRequest &&
+                                       files.map{it.uploadKey}==cert.map{it.idempotencyKey} &&
+                                       identityFiles.map{it.uploadKey}==idDocs.map{it.idempotencyKey}) {
+                                        pairReport=result
+                                    }
+                                }catch(cancel:CancellationException) {
+                                    throw cancel
+                                }catch(err:OwnerPairException) {
+                                    // Never show tokens, provider URLs or internal service errors.
+                                    if(requestEpoch==thisRequest)pairError=when(err.statusCode) {
+                                        401->R.string.pair_session_invalid
+                                        403->R.string.pair_case_forbidden
+                                        413,415,422->R.string.pair_document_rejected
+                                        429->R.string.pair_rate_limited
+                                        502,503,504->R.string.pair_service_unavailable
+                                        else->R.string.pair_request_failed
+                                    }
+                                }catch(_:Exception){
+                                    if(requestEpoch==thisRequest)
+                                        pairError=R.string.pair_request_failed
+                                }finally{
+                                    if(requestEpoch==thisRequest)pairProgress=null
+                                }
+                            }
+                        },enabled=pairProgress==null&&files.isNotEmpty()&&identityReadyForRemote&&
+                            !familyReadBusy,
+                            modifier=Modifier.fillMaxWidth().heightIn(min=54.dp),
+                            colors=ButtonDefaults.buttonColors(containerColor=Brand.Crimson),
+                            shape=RoundedCornerShape(16.dp)) {
+                            Icon(Icons.Outlined.FactCheck,null)
+                            Spacer(Modifier.width(8.dp))
+                            Text(s(R.string.pair_start))
+                        }
+                    }
+                    if(pairReport==null)
+                        PlainNotice(Icons.Outlined.Info,s(R.string.legal_pending))
+
                     SectionHeading(s(R.string.property_section),s(R.string.property_section_hint))
+
+
                     Surface(color=Color(0xFFF2F8F5),shape=RoundedCornerShape(16.dp)){
                         Column(Modifier.fillMaxWidth().padding(15.dp),
                             verticalArrangement=Arrangement.spacedBy(8.dp)){
@@ -511,7 +795,7 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                                 Text(s(R.string.smart_read_auth_required),
                                     fontSize=12.sp,color=Brand.Crimson)
                             Button(onClick={
-                                if(!validFirst){showInvalid=true}
+                                if(files.isEmpty()){familyReadError=R.string.smart_read_failed}
                                 else {
                                     familyReadJob?.cancel()
                                     val epoch=++familyReadEpoch
@@ -525,26 +809,7 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                                     familyReadings=emptyList()
                                     familyReadJob=scope.launch {
                                         try {
-                                            val session=ownerSession?:provisionedCase?:run{
-                                                val auth=authenticatedOwnerSession
-                                                    ?:throw OwnerPairException(401)
-                                                val material=values.joinToString(""){
-                                                    it.length.toString()+":"+it}
-                                                val fingerprint=java.security.MessageDigest.getInstance("SHA-256")
-                                                    .digest(material.toByteArray(Charsets.UTF_8))
-                                                    .joinToString(""){"%02x".format(it.toInt() and 255)}
-                                                val known=prefs.getString("pending_case_key",null)
-                                                val key=if(prefs.getString("pending_case_fingerprint",null)==fingerprint&&
-                                                    known!=null&&Regex("^[0-9a-fA-F-]{36}$").matches(known))
-                                                    known else UUID.randomUUID().toString()
-                                                if(!prefs.edit()
-                                                    .putString("pending_case_fingerprint",fingerprint)
-                                                    .putString("pending_case_key",key).commit())
-                                                    throw IllegalStateException("CASE_INTENT_NOT_DURABLE")
-                                                provisionOwnerEvidenceCase(auth,NewOwnerCaseDraft(
-                                                    key,values[0],values[1],values[2],values[3],values[4]))
-                                                    .also{provisionedCase=it}
-                                            }
+                                            val session=ensureEvidenceIntakeCase()
                                             val authenticated=QaOcrSession(
                                                 session.httpsBaseUrl,session.caseId,session.bearer)
                                             val result=selected.mapIndexed{index,item->
@@ -639,100 +904,6 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                         }
                     }
                 }
-                2 -> {
-                    SectionHeading(s(R.string.identity_section),s(R.string.identity_hint))
-                    if(pendingPhoto==null&&!identitySelected){
-                        Surface(color=Color.White,
-                            shape=RoundedCornerShape(20.dp),
-                            border=BorderStroke(1.dp,CardBorder)){
-                            Column(Modifier.fillMaxWidth().padding(18.dp),
-                                verticalArrangement=Arrangement.spacedBy(13.dp)){
-                                Button(onClick={cameraVisible=true},
-                                    modifier=Modifier.fillMaxWidth().heightIn(min=56.dp),
-                                    shape=RoundedCornerShape(16.dp),
-                                    colors=ButtonDefaults.buttonColors(containerColor=Brand.Crimson)){
-                                    Icon(Icons.Outlined.CameraAlt,null,Modifier.size(22.dp))
-                                    Spacer(Modifier.width(10.dp))
-                                    Text(s(R.string.camera_front_action),fontSize=15.sp)
-                                }
-                                Text(s(R.string.camera_capture_disclosure),
-                                    color=Brand.Muted,fontSize=12.sp,lineHeight=19.sp)
-                            }
-                        }
-                    }
-                    if(pendingPhoto!=null){
-                        val pending=pendingPhoto!!
-                        Surface(color=Color.White,shape=RoundedCornerShape(20.dp),
-                            border=BorderStroke(1.dp,CardBorder)){
-                            Column(Modifier.fillMaxWidth().padding(16.dp),
-                                verticalArrangement=Arrangement.spacedBy(12.dp)){
-                                Text(s(R.string.camera_review_title),
-                                    color=Brand.Ink,fontSize=18.sp,
-                                    fontWeight=FontWeight.SemiBold)
-                                val preview=remember(pending.uri){
-                                    runCatching{
-                                        val opts=BitmapFactory.Options().apply{inSampleSize=4}
-                                        context.contentResolver.openInputStream(pending.uri)?.use{
-                                            BitmapFactory.decodeStream(it,null,opts)
-                                        }
-                                    }.getOrNull()
-                                }
-                                if(preview!=null)
-                                    Image(preview.asImageBitmap(),null,
-                                        modifier=Modifier.fillMaxWidth().heightIn(max=255.dp)
-                                            .height(235.dp),
-                                        contentScale=ContentScale.Fit)
-                                if(frontReadBusy)
-                                    LinearProgressIndicator(Modifier.fillMaxWidth())
-                                val scan=frontRead?.takeIf{it.issue==null}
-                                val waiting=frontReadBusy||frontRead==null
-                                val placeholder=s(if(waiting)
-                                    R.string.camera_field_pending else R.string.camera_field_missing)
-                                // One compact readout, never five oversized
-                                // duplicate "unreadable" failure cards.
-                                Column(verticalArrangement=Arrangement.spacedBy(2.dp)){
-                                    IdFieldsReadout(scan,placeholder)
-                                }
-                                val message=when{
-                                    frontReadBusy->R.string.camera_review_scanning
-                                    !canReadPrivateId->
-                                        R.string.camera_huawei_login_required
-                                    frontRead?.issue==
-                                        LocalDocumentOcr.FrontIssue.SERVICE_UNAVAILABLE->
-                                        R.string.camera_huawei_unavailable
-                                    frontRead?.issue==
-                                        LocalDocumentOcr.FrontIssue.LOW_RESOLUTION->
-                                        R.string.camera_image_low_resolution
-                                    frontRead?.issue!=null->
-                                        R.string.camera_review_failed
-                                    scan?.surname!=null&&scan.givenName!=null&&
-                                        scan.cinFull!=null&&scan.birthDate!=null->
-                                        R.string.camera_review_ready
-                                    else->R.string.camera_review_manual
-                                }
-                                Text(s(message),color=Brand.Muted,
-                                    fontSize=12.sp,lineHeight=19.sp)
-                            }
-                        }
-                    }else if(identitySelected){
-                        Surface(color=Color(0xFFE9F6F1),
-                            shape=RoundedCornerShape(17.dp)){
-                            Row(Modifier.fillMaxWidth().padding(15.dp),
-                                verticalAlignment=Alignment.CenterVertically,
-                                horizontalArrangement=Arrangement.spacedBy(12.dp)){
-                                Icon(Icons.Outlined.CheckCircle,null,
-                                    tint=Color(0xFF178063))
-                                Text(s(R.string.camera_photo_accepted),
-                                    Modifier.weight(1f),color=Brand.Ink,
-                                    fontWeight=FontWeight.SemiBold)
-                                TextButton(onClick={cameraVisible=true}){
-                                    Text(s(R.string.camera_review_retake))
-                                }
-                            }
-                        }
-                    }
-                    if(identityMessage!=0) PlainNotice(Icons.Outlined.Info,s(identityMessage))
-                }
                 else -> {
                     SectionHeading(s(R.string.summary_title),s(R.string.summary_hint))
                     Surface(color=Brand.Rose,shape=RoundedCornerShape(20.dp)){
@@ -792,205 +963,14 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                             }
                         }
                     }
-                    SectionHeading(s(R.string.review_status_title),
-                        s(if(pairReport==null)R.string.review_status_intro
-                            else R.string.pair_review_received))
-                    VerificationStage(Icons.Outlined.CompareArrows,
-                        s(R.string.match_status),
-                        s(when(pairReport?.unifiedAssessment?:pairReport?.assessment){
-                            "ROLE_TEXT_MATCH_ONLY"->R.string.unified_role_match
-                            "ROLE_TEXT_DIFFERENCE"->R.string.unified_role_difference
-                            "ROLE_AMBIGUOUS"->R.string.unified_role_ambiguous
-                            "INSUFFICIENT_EVIDENCE"->R.string.unified_role_inconclusive
-                            "PRELIMINARY_TEXT_AGREEMENT"->R.string.pair_agreement
-                            "TEXT_DIFFERENCE_NEEDS_REVIEW"->R.string.pair_difference
-                            "INSUFFICIENT_OR_AMBIGUOUS"->R.string.pair_uncertain
-                            else->R.string.match_pending
-                        }),
-                        when(pairReport?.unifiedAssessment?:pairReport?.assessment){
-                            "ROLE_TEXT_MATCH_ONLY","ROLE_TEXT_DIFFERENCE",
-                            "ROLE_AMBIGUOUS","INSUFFICIENT_EVIDENCE"->ReadingStatus.REVIEW
-                            "PRELIMINARY_TEXT_AGREEMENT"->ReadingStatus.EXTRACTED
-                            "TEXT_DIFFERENCE_NEEDS_REVIEW",
-                            "INSUFFICIENT_OR_AMBIGUOUS"->ReadingStatus.REVIEW
-                            else->if(pairProgress!=null)
-                                ReadingStatus.READING else ReadingStatus.PENDING
-                        })
-                    if(pairReport!=null){
-                        val result=pairReport!!
-                        Surface(shape=RoundedCornerShape(18.dp),
-                            color=Color.White,border=BorderStroke(1.dp,CardBorder)){
-                            Column(Modifier.fillMaxWidth().padding(14.dp)){
-                                if(result.unifiedAssessment!=null&&
-                                    result.detectedKind!="OWNERSHIP_CERTIFICATE"){
-                                    OcrDataRow(s(R.string.unified_document_kind),
-                                        s(documentFamilyLabel(result.detectedKind?:"UNKNOWN")))
-                                    result.unifiedRoles.forEach{role->
-                                        HorizontalDivider(color=CardBorder)
-                                        OcrDataRow(s(unifiedRoleLabel(role.role)),
-                                            s(unifiedRoleAssessmentLabel(role.assessment)))
-                                    }
-                                    Text(s(R.string.unified_not_ownership),
-                                        fontSize=12.sp,color=Brand.Muted,lineHeight=18.sp)
-                                }else{
-                                OcrDataRow(s(R.string.pair_certificate_owner),
-                                    result.certificateName?.value
-                                        ?:s(R.string.camera_field_missing))
-                                HorizontalDivider(color=CardBorder)
-                                OcrDataRow(s(R.string.pair_identity_owner),
-                                    result.identityName?.value
-                                        ?:s(R.string.camera_field_missing))
-                                HorizontalDivider(color=CardBorder)
-                                OcrDataRow(s(R.string.pair_cin_label),
-                                    s(when(result.cinStatus){
-                                        "SAME_NUMBER_UNVERIFIED"->R.string.pair_cin_equal
-                                        "NUMBER_DIFFERS_NEEDS_REVIEW"->R.string.pair_cin_diff
-                                        "AMBIGUOUS_OR_LOW_CONFIDENCE"->R.string.pair_cin_uncertain
-                                        else->R.string.pair_cin_missing
-                                    }))
-                                result.localFields?.let{local->
-                                    if(local.titleNumber!=null){
-                                        HorizontalDivider(color=CardBorder)
-                                        OcrDataRow(s(R.string.local_title_ref),
-                                            local.titleNumber)
-                                    }
-                                    if(local.areaM2!=null){
-                                        HorizontalDivider(color=CardBorder)
-                                        OcrDataRow(s(R.string.local_area_m2),
-                                            local.areaM2+" m²",numeric=true)
-                                    }
-                                }
-                                }
-                            }
-                        }
-                        if(result.unifiedAssessment==null||
-                            result.detectedKind=="OWNERSHIP_CERTIFICATE")
-                            result.reasons.distinct().forEach{code->
-                                Text(s(pairReasonText(code)),
-                                    color=Brand.Muted,fontSize=12.sp,lineHeight=18.sp)
-                            }
-                        PlainNotice(Icons.Outlined.Info,
-                            s(R.string.pair_preliminary_only))
-                    }
-                    if(pairProgress!=null) {
-                        PlainNotice(Icons.Outlined.HourglassTop,
-                            s(when(pairProgress){
-                                PairProgress.CASE_PROVISION->R.string.pair_creating_case
-                                PairProgress.CERTIFICATE_UPLOAD->R.string.pair_upload_cert
-                                PairProgress.IDENTITY_UPLOAD->R.string.pair_upload_identity
-                                else->R.string.pair_comparing
-                            }))
-                    }
-                    if(pairError!=0)PlainNotice(Icons.Outlined.Info,s(pairError))
 
-                    if(ownerSession==null&&authenticatedOwnerSession==null){
-                        Text(s(R.string.review_auth_needed),
-                            color=Brand.Muted,fontSize=12.sp,lineHeight=18.sp)
-                    }else{
-                        Text(s(R.string.review_send_disclosure),
-                            color=Brand.Muted,fontSize=12.sp,lineHeight=18.sp)
-                        Text(s(if(familyReadings.isEmpty())R.string.smart_pair_first_read
-                            else if(!canRunUnifiedPair)R.string.unified_review_separately
-                            else R.string.unified_identity_hint),
-                            color=Brand.Muted,fontSize=12.sp,lineHeight=18.sp)
-                        Button(onClick={
-                            if(pairProgress!=null||files.isEmpty()||!identityReadyForRemote||
-                                !canRunUnifiedPair)
-                                return@Button
-                            val cert=files.toList().mapIndexed{index,item->
-                                val detected=familyReadings[index].familyKind
-                                PairEvidenceFile(item.uri,item.length,item.mime,item.uploadKey,
-                                    if(detected=="UNKNOWN")"OTHER_LEGAL_PROOF" else detected)
-                            }
-                            val idDocs=identityFiles.toList().map{
-                                PairEvidenceFile(it.uri,it.length,it.mime,it.uploadKey)
-                            }
-                            val caseRequestKey=try {
-                                val parts=listOf(listingTitle,region.trim(),normalizedArea,price,capacity)
-                                val serialized=parts.joinToString(separator="") { "${it.length}:${it}" }
-                                val fingerprint=java.security.MessageDigest.getInstance("SHA-256")
-                                    .digest(serialized.toByteArray(Charsets.UTF_8))
-                                    .joinToString("") { "%02x".format(it.toInt() and 0xff) }
-                                val saved=prefs.getString("pending_case_key",null)
-                                val key=if(prefs.getString("pending_case_fingerprint",null)==fingerprint &&
-                                    saved!=null && Regex("^[0-9a-fA-F-]{36}$").matches(saved)) saved
-                                    else UUID.randomUUID().toString()
-                                // A failed disk write means we must not risk a duplicate
-                                // case on retry after process death.
-                                val stored=prefs.edit()
-                                    .putString("pending_case_fingerprint",fingerprint)
-                                    .putString("pending_case_key",key)
-                                    .putString("title",name.trim())
-                                    .putString("region",region.trim())
-                                    .putString("area",area)
-                                    .putString("price",price)
-                                    .putString("capacity",capacity)
-                                    .commit()
-                                if(!stored)throw IllegalStateException("CASE_INTENT_NOT_DURABLE")
-                                key
-                            }catch (_:Exception) {
-                                pairError=R.string.pair_request_failed
-                                return@Button
-                            }
-                            pairError=0
-                            pairReport=null
-                                                                    pairProgress=PairProgress.CASE_PROVISION
-                            val thisRequest=++requestEpoch
-                            requestJob=scope.launch {
-                                try {
-                                    // The trusted sign-in identity first provisions a real,
-                                    // consented case; an absent login never invents a case.
-                                    val activeCase=ownerSession?:provisionedCase?:
-                                        provisionOwnerEvidenceCase(
-                                            authenticatedOwnerSession?:throw OwnerPairException(401),
-                                            NewOwnerCaseDraft(caseRequestKey,listingTitle,region.trim(),
-                                                normalizedArea,price,capacity)
-                                        ).also{if(requestEpoch==thisRequest)provisionedCase=it}
-                                    val result=compareOwnerDocumentsAndIdentity(
-                                        context,activeCase,cert,idDocs){
-                                        if(requestEpoch==thisRequest)pairProgress=it
-                                    }
-                                    if(requestEpoch==thisRequest &&
-                                       files.map{it.uploadKey}==cert.map{it.idempotencyKey} &&
-                                       identityFiles.map{it.uploadKey}==idDocs.map{it.idempotencyKey}) {
-                                        pairReport=result
-                                    }
-                                }catch(cancel:CancellationException) {
-                                    throw cancel
-                                }catch(err:OwnerPairException) {
-                                    // Never show tokens, provider URLs or internal service errors.
-                                    if(requestEpoch==thisRequest)pairError=when(err.statusCode) {
-                                        401->R.string.pair_session_invalid
-                                        403->R.string.pair_case_forbidden
-                                        413,415,422->R.string.pair_document_rejected
-                                        429->R.string.pair_rate_limited
-                                        502,503,504->R.string.pair_service_unavailable
-                                        else->R.string.pair_request_failed
-                                    }
-                                }catch(_:Exception){
-                                    if(requestEpoch==thisRequest)
-                                        pairError=R.string.pair_request_failed
-                                }finally{
-                                    if(requestEpoch==thisRequest)pairProgress=null
-                                }
-                            }
-                        },enabled=pairProgress==null&&files.isNotEmpty()&&identityReadyForRemote&&
-                            canRunUnifiedPair,
-                            modifier=Modifier.fillMaxWidth().heightIn(min=54.dp),
-                            colors=ButtonDefaults.buttonColors(containerColor=Brand.Crimson),
-                            shape=RoundedCornerShape(16.dp)) {
-                            Icon(Icons.Outlined.FactCheck,null)
-                            Spacer(Modifier.width(8.dp))
-                            Text(s(R.string.pair_start))
-                        }
-                    }
-                    if(pairReport==null)
-                        PlainNotice(Icons.Outlined.Info,s(R.string.legal_pending))
-                    OutlinedButton(onClick={step=1;showInvalid=false},modifier=Modifier.fillMaxWidth().heightIn(min=51.dp)) {
+                    OutlinedButton(onClick={step=2;showInvalid=false},
+                        modifier=Modifier.fillMaxWidth().heightIn(min=51.dp)) {
                         Icon(Icons.Outlined.Edit,null,Modifier.size(20.dp))
                         Spacer(Modifier.width(8.dp))
                         Text(s(R.string.edit_property))
                     }
+
                 }
             }
             if(saveMessage!=0) PlainNotice(
@@ -1002,7 +982,7 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
         }
         Column(Modifier.fillMaxWidth().padding(horizontal=17.dp,vertical=12.dp),verticalArrangement=Arrangement.spacedBy(7.dp)) {
             // Never show "Continue" under a failed scan: keep retake in reach.
-            if(step==2&&pendingPhoto!=null){
+            if(step==1&&pendingPhoto!=null){
                 Row(Modifier.fillMaxWidth(),
                     horizontalArrangement=Arrangement.spacedBy(10.dp)){
                     OutlinedButton(onClick={
@@ -1033,8 +1013,8 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
             }else{
             Button(onClick={
                 if(step==0&&files.isEmpty()){pickMessage=R.string.certificate_required}
-                else if(step==1&&!validFirst)showInvalid=true
-                else if(step==2&&(!identitySelected||pendingPhoto!=null)){
+                else if(step==2&&!validFirst)showInvalid=true
+                else if(step==1&&(!identitySelected||pendingPhoto!=null)){
                     identityMessage=R.string.identity_required
                 }
                 else if(step<3){step++;showInvalid=false;saveMessage=0}

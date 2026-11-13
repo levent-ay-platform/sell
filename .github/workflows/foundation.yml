@@ -73,7 +73,10 @@ jobs:
             db/migrations/0006_private_owner_case_intents.sql \
             db/migrations/0007_private_owner_http_routes.sql \
             db/migrations/0008_pilot_same_service_login.sql \
-            db/migrations/0009_private_cin_preview_rate_limit.sql; do
+            db/migrations/0009_private_cin_preview_rate_limit.sql \
+            db/migrations/0010_pilot_cin_preview_rate_limit.sql \
+            db/migrations/0011_smart_listing_private_document_kinds.sql \
+            db/migrations/0012_evidence_only_case.sql; do
             test -f "$sql_file"
             docker exec -i -e PGPASSWORD="$PGPASSWORD" "$postgres_service" \
               psql -h 127.0.0.1 -U sell_ci -d sell_ci \

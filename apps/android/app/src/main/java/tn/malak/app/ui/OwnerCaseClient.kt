@@ -47,14 +47,28 @@ private fun validateDraft(draft:NewOwnerCaseDraft) {
 /** Returns a real case only when server creates it; never manufacture a case UUID. */
 internal suspend fun provisionOwnerEvidenceCase(
     auth:AuthenticatedOwnerSession,draft:NewOwnerCaseDraft
-):OwnerEvidenceSession=withContext(Dispatchers.IO) {
-    val base=privateBase(auth)
+):OwnerEvidenceSession {
     validateDraft(draft)
-    val payload=JSONObject().put("idempotencyKey",draft.idempotencyKey)
+    return submitOwnerCase(auth,JSONObject().put("idempotencyKey",draft.idempotencyKey)
         .put("title",draft.title.trim()).put("region",draft.region.trim())
         .put("areaSquareMetres",draft.areaSquareMetres)
         .put("priceTnd",draft.priceTnd).put("capacity",draft.capacity)
-        .put("consentAccepted",true).toString().toByteArray(Charsets.UTF_8)
+        .put("consentAccepted",true))
+}
+/** Consent to review scanned documents before claiming a title or entering prices. */
+internal suspend fun provisionOwnerEvidenceIntakeCase(
+    auth:AuthenticatedOwnerSession,idempotencyKey:String
+):OwnerEvidenceSession {
+    if(!KEY.matches(idempotencyKey))throw OwnerPairException(400)
+    return submitOwnerCase(auth,JSONObject()
+        .put("mode","EVIDENCE_ONLY").put("idempotencyKey",idempotencyKey)
+        .put("consentAccepted",true))
+}
+private suspend fun submitOwnerCase(
+    auth:AuthenticatedOwnerSession,request:JSONObject
+):OwnerEvidenceSession=withContext(Dispatchers.IO) {
+    val base=privateBase(auth)
+    val payload=request.toString().toByteArray(Charsets.UTF_8)
     val connection=URL(base+"/internal/v1/owner/cases").openConnection() as? HttpsURLConnection
         ?:throw OwnerPairException(400)
     try {
