@@ -292,3 +292,16 @@ test('rights-table partial sum or conflicting printed denominator prevents match
  assert.equal(r.identityVerified,false);
  assert.equal(r.legalOwnershipVerified,false);
 });
+
+
+test('contradictory page-count labels on the SAME page fail closed',()=>{
+ const full=sharedAcrossTwoPages();
+ const pages=full.pages.map((p,i)=>i===0?{...p,lines:[
+   ...p.lines,
+   {page:1,text:'صفحة 1 من 3',source:'ocr-ar' as const,confidence:.99}
+ ]}:p);
+ const r=compareUnifiedPrivateDocumentIdentity({...full,pages},arabicFront,
+   ['SHARED_OWNERSHIP_CERTIFICATE']);
+ assert.equal(r.assessment,'INSUFFICIENT_EVIDENCE');
+ assert.equal(r.legalOwnershipVerified,false);
+});

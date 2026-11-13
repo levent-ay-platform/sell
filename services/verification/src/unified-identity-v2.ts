@@ -91,6 +91,7 @@ function completePrintedPagination(document:IngestedDocument):number|null {
     }
     if(observations.length===0||observations.some(x=>
         x.page!==page.page||x.total<1||x.total>8||
+        x.total!==observations[0]!.total||
         x.total<page.page||required!==null&&required!==x.total))
       return null;
     required=observations[0]!.total;
