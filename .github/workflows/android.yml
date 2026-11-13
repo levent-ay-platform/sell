@@ -84,7 +84,7 @@ jobs:
             echo "MISSING_REAL_QA_ENDPOINT_IN_APK" >&2
             exit 1
           }
-          if unzip -Z1 "$apk" | grep -Ei '(^|/)(inference\\.onnx|.*\\.traineddata|libonnxruntime.*\\.so|libopencv.*\\.so|libtesseract.*\\.so)$'; then
+          if unzip -Z1 "$apk" | grep -Ei '(^|/)(inference\.onnx|.*\\.traineddata|libonnxruntime.*\\.so|libopencv.*\\.so|libtesseract.*\\.so)$'; then
             echo 'HEAVY_OCR_ASSET_IN_APK' >&2
             exit 1
           fi
