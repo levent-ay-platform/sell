@@ -266,9 +266,9 @@ def consensus_name(session,letters,card,center):
 def _cin_full_front(session,letters,card):
     """Private in-memory complete eight-digit OCR candidate.
 
-    The public worker still exposes only masked CIN suffix. This helper
-    exists so LOCAL QA can check all eight digits without ever logging or
-    serializing them. Its output is not identity or ownership verification.
+    Full digits are released only to the authorized submitting user through
+    a short-lived private preview. They are not logged or stored and do NOT
+    establish identity, ownership, or legal validity.
     """
     h,w=card.shape[:2]
     votes=set()

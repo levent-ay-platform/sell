@@ -110,8 +110,6 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
         context.getSharedPreferences(draftFile,Context.MODE_PRIVATE)
     }
     var pairProgress by remember(draftFile) {mutableStateOf<PairProgress?>(null)}
-    var localOcrResult by remember(draftFile) {mutableStateOf(false)}
-    var localOcrRunning by remember(draftFile) {mutableStateOf(false)}
     var pairReport by remember(draftFile) {mutableStateOf<CertificateIdentityReview?>(null)}
     var provisionedCase by remember(draftFile) {mutableStateOf<OwnerEvidenceSession?>(null)}
     var pairError by remember(draftFile) {mutableIntStateOf(0)}
@@ -218,8 +216,6 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
         pairReport=null
         pairProgress=null
         pairError=0
-        localOcrResult=false
-        localOcrRunning=false
     }
     DisposableEffect(Unit) {
         onDispose {
@@ -619,7 +615,7 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                     }
                     if(pairProgress!=null) {
                         PlainNotice(Icons.Outlined.HourglassTop,
-                            s(if(localOcrRunning)R.string.local_ocr_processing else when(pairProgress){
+                            s(when(pairProgress){
                                 PairProgress.CASE_PROVISION->R.string.pair_creating_case
                                 PairProgress.CERTIFICATE_UPLOAD->R.string.pair_upload_cert
                                 PairProgress.IDENTITY_UPLOAD->R.string.pair_upload_identity
@@ -672,9 +668,7 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                             }
                             pairError=0
                             pairReport=null
-                            localOcrResult=false
-                            localOcrRunning=false
-                            pairProgress=PairProgress.CASE_PROVISION
+                                                                    pairProgress=PairProgress.CASE_PROVISION
                             val thisRequest=++requestEpoch
                             requestJob=scope.launch {
                                 try {

@@ -31,8 +31,8 @@ class DateDecodeTests(unittest.TestCase):
             '2000-08-05')
 
     def test_month_with_adjacent_printed_day_year_tokens(self):
-        self.assertEqual(self.read(day='80', month='08 ديسمبر 1962', year='2691'),
-                         '1962-12-08')
+        self.assertEqual(self.read(day='91', month='19 ديسمبر 2004', year='4002'),
+                         '2004-12-19')
         self.assertIsNone(self.read(month='جانفي ديسمبر'))
         self.assertIsNone(self.read(month='ديسمبر تاريخ'))
 
