@@ -239,4 +239,12 @@
     <string name="camera_capture_disclosure">Capturing sends this photo securely for text extraction. No identity or ownership is automatically verified.</string>
     <string name="review_auth_needed">Your identity photo remains private. Document matching becomes available after verified account access.</string>
     <string name="review_send_disclosure">By selecting “Compare documents”, you agree to securely send the selected documents for review. This does not confirm ownership.</string>
+    <string name="smart_step_documents">Documents</string>
+    <string name="smart_land_title_prefix">Land for sale in</string>
+    <string name="smart_area_unit">m²</string>
+    <string name="smart_title_use">Use suggested title</string>
+    <string name="smart_unit_price">Price per m² from your asking price</string>
+    <string name="smart_preview_heading">Your listing preview</string>
+    <string name="smart_preview_disclosure">This preview only uses information you entered. It does not verify ownership or publish the listing.</string>
+    <string name="smart_autosave_hint">Listing details save automatically on this device. Identity and title document images are not saved in the draft.</string>
 </resources>
