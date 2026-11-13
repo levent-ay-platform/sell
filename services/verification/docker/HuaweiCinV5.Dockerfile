@@ -27,6 +27,7 @@ COPY services/verification/ocr/cin_v5_date.py /opt/malak/ocr/cin_v5_date.py
 COPY services/verification/ocr/cin_v5_digits.py /opt/malak/ocr/cin_v5_digits.py
 COPY services/verification/ocr/cin_v5_region.py /opt/malak/ocr/cin_v5_region.py
 COPY services/verification/ocr/test_cin_v5_region.py /opt/malak/ocr/test_cin_v5_region.py
+COPY services/verification/ocr/test_cin_v5_normalize.py /opt/malak/ocr/test_cin_v5_normalize.py
 COPY services/verification/ocr/test_cin_v5_numeric_preprocess.py /opt/malak/ocr/test_cin_v5_numeric_preprocess.py
 COPY services/verification/ocr/cin_v5_eval_scope.py /opt/malak/ocr/cin_v5_eval_scope.py
 COPY services/verification/ocr/test_cin_v5_exact_eval.py /opt/malak/ocr/test_cin_v5_exact_eval.py

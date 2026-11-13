@@ -67,9 +67,15 @@ def order_quad(poly):
 
 
 def normalize_card(image):
-    h,w=image.shape[:2]
-    if h>w*1.13:
-        image=image[12:round(.49*h),round(.06*w):round(.96*w)]
+    """Find the COMPLETE front card before any field crop.
+
+    Portrait camera photos can contain the card anywhere in the viewport.
+    The old arbitrary top-49%-only crop destroyed lower-centred cards and
+    made OCR look broken even when the captured JPEG was usable. Never
+    assume a screen/camera orientation implies card placement.
+    """
+    if image is None or image.size==0:
+        return None
     sh,sw=image.shape[:2]
     scale=min(1.0,900/max(sh,sw))
     small=cv2.resize(image,None,fx=scale,fy=scale)
