@@ -17,7 +17,9 @@ export type LandFactKey=
   'rightsDenominator'|'seller'|'buyer'|'transferor'|'transferee'|
   'salePriceTnd'|'receiptAmountTnd'|'receiptNumber'|'transferReference'|
   'serviceRequestNumber'|'serviceRequestDate'|'serviceApplicant'|
-  'possessionRequester'|'receiptPayer';
+  'possessionRequester'|'receiptPayer'|
+  'buyerCin'|'sellerCin'|'transferorCin'|'transfereeCin'|
+  'possessionRequesterCin'|'receiptPayerCin'|'serviceApplicantCin';
 export type LandFactStatus='CANDIDATE'|'LOW_CONFIDENCE'|'CONFLICT'|'MASKED'|'ABSENT';
 export interface PrivateLandFactEvidence {
   readonly page:number;
@@ -46,7 +48,7 @@ export interface PrivateLandFacts {
   readonly ownershipVerified:false;
   readonly mayPublish:false;
 }
-type Shape='title'|'area'|'parts'|'plot'|'money'|'actor'|'reference'|'date';
+type Shape='title'|'area'|'parts'|'plot'|'money'|'actor'|'reference'|'date'|'cin';
 interface Rule {key:LandFactKey;pattern:RegExp;shape:Shape;}
 const commonTitle:Rule={
  key:'registerReference',
@@ -110,6 +112,25 @@ const transferor:Rule={
 const transferee:Rule={
  key:'transferee',pattern:/^(?:المنقول\s+اليه|المحال\s+اليه|cessionnaire)\s*[:：-]\s*(.{2,100})$/iu,shape:'actor'
 };
+/** Role-prefixed CIN ONLY. An unlabeled 8-digit title/receipt number cannot
+ * be assigned to the buyer, seller, transferor, payer or applicant. */
+const actorCin=(key:LandFactKey,pattern:RegExp):Rule=>
+ ({key,pattern,shape:'cin'});
+const buyerCin=actorCin('buyerCin',
+ /^(?:رقم\s+(?:بطاق[ةه]\s+تعريف|هوي[ةه])\s+المشتري|cin\s+(?:de\s+l['’])?(?:acheteur|acqu[eé]reur))[\s:#：-]*([0-9٠-٩۰-۹Xx*█■▇#-]{1,16})\s*$/iu);
+const sellerCin=actorCin('sellerCin',
+ /^(?:رقم\s+(?:بطاق[ةه]\s+تعريف|هوي[ةه])\s+البائع|cin\s+du\s+vendeur)[\s:#：-]*([0-9٠-٩۰-۹Xx*█■▇#-]{1,16})\s*$/iu);
+const transferorCin=actorCin('transferorCin',
+ /^(?:رقم\s+(?:بطاق[ةه]\s+تعريف|هوي[ةه])\s+(?:الناقل|المحيل)|cin\s+du\s+c[eé]dant)[\s:#：-]*([0-9٠-٩۰-۹Xx*█■▇#-]{1,16})\s*$/iu);
+const transfereeCin=actorCin('transfereeCin',
+ /^(?:رقم\s+(?:بطاق[ةه]\s+تعريف|هوي[ةه])\s+(?:المنقول\s+اليه|المحال\s+اليه)|cin\s+du\s+cessionnaire)[\s:#：-]*([0-9٠-٩۰-۹Xx*█■▇#-]{1,16})\s*$/iu);
+const possessionRequesterCin=actorCin('possessionRequesterCin',
+ /^(?:رقم\s+(?:بطاق[ةه]\s+تعريف|هوي[ةه])\s+طالب\s+التحويز|cin\s+du\s+requ[eé]rant)[\s:#：-]*([0-9٠-٩۰-۹Xx*█■▇#-]{1,16})\s*$/iu);
+const receiptPayerCin=actorCin('receiptPayerCin',
+ /^(?:رقم\s+(?:بطاق[ةه]\s+تعريف|هوي[ةه])\s+(?:دافع\s+(?:ال)?معاليم|الدافع)|cin\s+du\s+payeur)[\s:#：-]*([0-9٠-٩۰-۹Xx*█■▇#-]{1,16})\s*$/iu);
+const serviceApplicantCin=actorCin('serviceApplicantCin',
+ /^(?:رقم\s+(?:بطاق[ةه]\s+تعريف|هوي[ةه])\s+طالب\s+الخدم[ةه]|cin\s+du\s+demandeur)[\s:#：-]*([0-9٠-٩۰-۹Xx*█■▇#-]{1,16})\s*$/iu);
+
 const salePrice:Rule={
  key:'salePriceTnd',
  pattern:/^(?:ثمن\s+(?:البيع|العقار)|الثمن\s+الجملي|prix\s+de\s+vente)[\s:#：-]*([0-9]{1,12}(?:[.,][0-9]{1,3})?)\s*(?:دينار(?:ا)?|د\.?\s*ت\.?|dt|tnd)\s*$/iu,
@@ -163,12 +184,12 @@ const serviceReceiptAmount:Rule={
 const RULES:Readonly<Record<LandPaperKind,readonly Rule[]>>={
  OWNERSHIP_CERTIFICATE:[commonTitle,parent,totalArea,registeredPlot,denominator],
  SHARED_OWNERSHIP_CERTIFICATE:[commonTitle,parent,totalArea,registeredPlot,denominator],
- SALE_DEED:[commonTitle,parent,soldPlot,soldArea,seller,buyer,salePrice],
- POSSESSION_REPORT:[commonTitle,parent,possessedPlot,possessedArea,possessionRequester],
- TRANSFER_CARD:[commonTitle,parent,transferredArea,transferor,transferee,transferRef],
- FINANCIAL_RECEIPT:[receiptNumber,receiptAmount,receiptPayer],
+ SALE_DEED:[commonTitle,parent,soldPlot,soldArea,seller,buyer,salePrice,sellerCin,buyerCin],
+ POSSESSION_REPORT:[commonTitle,parent,possessedPlot,possessedArea,possessionRequester,possessionRequesterCin],
+ TRANSFER_CARD:[commonTitle,parent,transferredArea,transferor,transferee,transferRef,transferorCin,transfereeCin],
+ FINANCIAL_RECEIPT:[receiptNumber,receiptAmount,receiptPayer,receiptPayerCin],
  PROPERTY_SERVICE_RECEIPT:[commonTitle,serviceRequestNumber,serviceRequestDate,
-   serviceApplicant,serviceReceiptAmount],
+   serviceApplicant,serviceReceiptAmount,serviceApplicantCin],
  UNKNOWN:[]
 };
 function normalize(s:string):string {
@@ -185,6 +206,11 @@ const masked=(s:string)=>/^(?:[Xx*█■▇#\s-]+)$/u.test(s);
 function parseValue(raw:string,shape:Shape):{value:string|null;uncertain:boolean;masked:boolean} {
  const v=digits(raw.trim());
  if(masked(v))return {value:null,uncertain:false,masked:true};
+ if(shape==='cin'){
+   return /^[0-9]{8}$/u.test(v)?
+     {value:v,uncertain:false,masked:false}:
+     {value:null,uncertain:true,masked:false};
+ }
  if(shape==='actor'){
    // Explicit role labels only; no CIN/DOB/transaction number in name.
    if(v.length>90||/[0-9\u0000-\u001f\u007f]/u.test(v)||

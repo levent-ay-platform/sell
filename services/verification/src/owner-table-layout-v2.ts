@@ -204,6 +204,28 @@ export function locateOwnerTableFromWords(pages:readonly SpatialPage[]):SpatialT
         result.push(makeCell(candidates[0]!,n,'cin',
           cinDigits(candidates[0]!.text),candidates[0]!.confidence));
       else if(candidates.length>1)findings.add('CIN_AMBIGUOUS');
+      else {
+        const masked=identityWords.filter(w=>
+          /^(?:[Xx*█■▇#]{4,12})$/u.test(w.text.trim())&&
+          labels.some(label=>
+            Math.abs(center(label.bbox)-center(w.bbox))<page.width*.20&&
+            Math.abs(middle(label.bbox)-middle(w.bbox))<page.height*.06));
+        if(masked.length===1){
+          result.push({ordinal:n,field:'cin',page:page.page,
+            lineIndex:0,source:'ocr-ar',confidence:null,value:null,
+            state:'MASKED'});
+          continue;
+        }
+        // A CIN-like number without a reliably adjacent role label is not
+        // proof that this row has NO CIN. Prevent name-only promotion when
+        // an unassociated identity number or unreadable label is visible.
+        const unbound=identityWords.some(w=>
+          /^[0-9]{8}$/u.test(cinDigits(w.text)));
+        if(unbound||labels.length>0)
+          result.push({ordinal:n,field:'cin',page:page.page,
+            lineIndex:0,source:'ocr-ar',confidence:null,value:null,
+            state:'UNREADABLE'});
+      }
     }
   }
   if(!ordinals.length)findings.add('NO_NUMBERED_OWNER_ROWS');

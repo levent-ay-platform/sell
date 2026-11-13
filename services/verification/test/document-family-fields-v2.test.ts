@@ -227,3 +227,47 @@ test('different printed rights totals conflict and cannot produce a trusted deno
  assert.equal(field(r,'rightsDenominator')?.status,'CONFLICT');
  assert.equal(field(r,'rightsDenominator')?.value,null);
 });
+
+
+test('actor-specific CINs are extracted only for their named role',()=>{
+ const r=reading(['عقد بيع','المشتري: ليلى بنت سالم','البائع: كريم بن علي',
+   'رقم بطاقة تعريف المشتري: ٠٠٠٠١١٢٢',
+   'رقم بطاقة تعريف البائع: ١٢٣٤٥٦٧٨',
+   'رقم الرسم العقاري: 555941']);
+ assert.equal(r.kind,'SALE_DEED');
+ assert.equal(field(r,'buyerCin')?.value,'00001122');
+ assert.equal(field(r,'sellerCin')?.value,'12345678');
+ assert.equal(field(r,'buyerCin')?.status,'CANDIDATE');
+ assert.equal(field(r,'buyerCin')?.evidence[0].page,1);
+ assert.equal(r.ownershipVerified,false);
+});
+test('generic CIN, plot number and receipt amount are not buyer or payer CIN',()=>{
+ const s=reading(['عقد بيع','المشتري: ليلى بنت سالم',
+   'CIN: 00001122','رقم الرسم العقاري: 00001122']);
+ assert.equal(field(s,'buyerCin')?.status,'ABSENT');
+ const r=reading(['QUITTANCE N° 00001122',
+   'دافع المعاليم: ليلى بنت سالم','MONTANT: 210.000']);
+ assert.equal(field(r,'receiptPayerCin')?.status,'ABSENT');
+});
+test('masked CIN is masked, never interpreted as genuinely absent',()=>{
+ const r=reading(['عقد بيع','المشتري: ليلى بنت سالم',
+   'رقم بطاقة تعريف المشتري: ████████']);
+ assert.equal(field(r,'buyerCin')?.status,'MASKED');
+ assert.equal(field(r,'buyerCin')?.value,null);
+});
+test('conflicting printed CINs of same role block agreement',()=>{
+ const r=reading(['عقد بيع','المشتري: ليلى بنت سالم',
+   'رقم بطاقة تعريف المشتري: 00001122',
+   'رقم بطاقة تعريف المشتري: 00003344']);
+ assert.equal(field(r,'buyerCin')?.status,'CONFLICT');
+ assert.equal(field(r,'buyerCin')?.value,null);
+});
+test('receipt applicant has a role-bound CIN, not the service request number',()=>{
+ const r=reading(['وصل تسلم مطلب خدمة واستخلاص معاليم',
+   'طالب الخدمة: ليلى بنت سالم',
+   'رقم بطاقة تعريف طالب الخدمة: 00001122',
+   'رقم مطلب: 00001122']);
+ assert.equal(field(r,'serviceApplicantCin')?.value,'00001122');
+ assert.equal(field(r,'serviceRequestNumber')?.value,'00001122');
+ assert.equal(r.ownershipVerified,false);
+});

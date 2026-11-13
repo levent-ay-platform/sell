@@ -24,24 +24,33 @@ export type LegalPartyRole=
 export interface RoleTextResult {
   readonly role:LegalPartyRole;
   readonly assessment:ComparisonAssessment;
+  /** Does not reveal the private CIN or the raw actor's name. */
+  readonly documentCinStatus:
+    'NOT_PRINTED'|'SAME_NUMBER_UNVERIFIED'|
+    'NUMBER_DIFFERS_NEEDS_REVIEW'|'AMBIGUOUS_OR_LOW_CONFIDENCE'|
+    'MASKED_IN_SOURCE';
   /** Page of this labelled person, not the scanned CIN or their name. */
   readonly documentPage:number|null;
 }
 export type UnifiedReviewAssessment=
- 'ROLE_TEXT_MATCH_ONLY'|'ROLE_TEXT_DIFFERENCE'|
- 'ROLE_AMBIGUOUS'|'INSUFFICIENT_EVIDENCE';
+ 'ROLE_TEXT_MATCH_ONLY'|'NAME_ONLY_REVIEW'|'ROLE_TEXT_DIFFERENCE'|
+ 'ROLE_AMBIGUOUS'|'CONFLICT_REVIEW'|'NO_PERSON_IDENTIFIED'|
+ 'INSUFFICIENT_EVIDENCE';
 export type UnifiedReviewReason=
  'DOCUMENT_TYPE_NOT_CONFIRMED'|'DOCUMENT_TYPE_MISMATCH'|
  'UNSUPPORTED_ROLE_EXTRACTION'|'MULTIPLE_MATCHING_ROLES'|
  'LOW_CONFIDENCE_OR_CONFLICTING_ROLE'|'SHARED_RIGHTS_NEED_ROW_REVIEW'|
  'ROLE_MATCH_NOT_OWNERSHIP'|'CIN_TEXT_DIFFERS'|'CIN_UNREADABLE'|
- 'OFFICIAL_REGISTRY_NOT_CHECKED'|'SCAN_QUALITY_NEEDS_REVIEW';
+ 'OFFICIAL_REGISTRY_NOT_CHECKED'|'SCAN_QUALITY_NEEDS_REVIEW'|
+ 'DOCUMENT_CIN_NOT_PRINTED'|'DOCUMENT_CIN_UNREADABLE'|
+ 'ROLE_CIN_CONFLICT'|'DOCUMENT_CIN_MASKED'|'TARGET_RIGHTS_NOT_READABLE'|
+ 'NO_ROLE_LABELED_PERSON';
 export interface MatchedPrivateRightsHolder {
   /** Only the holder identified by the captured front ID; no other owners. */
   readonly printedRowOrdinal:number;
-  readonly rightsParts:string;
+  readonly rightsParts:string|null;
   readonly documentPage:number;
-  readonly status:'PRELIMINARY_PERSON_ROW_TEXT_ONLY';
+  readonly status:'PRELIMINARY_PERSON_ROW_TEXT_ONLY'|'NAME_ONLY_REVIEW';
 }
 export interface UnifiedPrivateDocumentIdentityResult {
   readonly detectedKind:LandPaperKind;
@@ -56,21 +65,23 @@ export interface UnifiedPrivateDocumentIdentityResult {
   readonly requiresHumanReview:true;
 }
 const ROLE_KEYS:Readonly<Partial<Record<LandPaperKind,
-  readonly {key:LandFactKey;role:LegalPartyRole}[]>>>={
+  readonly {key:LandFactKey;cinKey:LandFactKey;role:LegalPartyRole}[]>>>={
  SALE_DEED:[
-   {key:'buyer',role:'BUYER'},{key:'seller',role:'SELLER'}
+   {key:'buyer',cinKey:'buyerCin',role:'BUYER'},
+   {key:'seller',cinKey:'sellerCin',role:'SELLER'}
  ],
  TRANSFER_CARD:[
-   {key:'transferee',role:'TRANSFEREE'},{key:'transferor',role:'TRANSFEROR'}
+   {key:'transferee',cinKey:'transfereeCin',role:'TRANSFEREE'},
+   {key:'transferor',cinKey:'transferorCin',role:'TRANSFEROR'}
  ],
  PROPERTY_SERVICE_RECEIPT:[
-   {key:'serviceApplicant',role:'SERVICE_APPLICANT'}
+   {key:'serviceApplicant',cinKey:'serviceApplicantCin',role:'SERVICE_APPLICANT'}
  ],
  POSSESSION_REPORT:[
-   {key:'possessionRequester',role:'POSSESSION_REQUESTER'}
+   {key:'possessionRequester',cinKey:'possessionRequesterCin',role:'POSSESSION_REQUESTER'}
  ],
  FINANCIAL_RECEIPT:[
-   {key:'receiptPayer',role:'PAYMENT_PAYER'}
+   {key:'receiptPayer',cinKey:'receiptPayerCin',role:'PAYMENT_PAYER'}
  ]
 };
 function candidate(f:PrivateLandFact):CandidateName|null {
@@ -159,23 +170,27 @@ export function compareUnifiedPrivateDocumentIdentity(
   let matchedRightsHolder:MatchedPrivateRightsHolder|null=null;
   if(kind==='OWNERSHIP_CERTIFICATE'){
     const r=comparePrivateCertificateIdentityOcr(textDoc,textIdentity);
-    const cin=compareCertificateIdentityCinText(document,frontIdentity);
-    if(cin.status==='NUMBER_DIFFERS_NEEDS_REVIEW'){
-      reasons.add('CIN_TEXT_DIFFERS');
-      return {...base,assessment:'ROLE_TEXT_DIFFERENCE',reasons:[...reasons]};
-    }
+    const cin=compareCertificateIdentityCinText(textDoc,textIdentity);
+    if(cin.status==='NUMBER_DIFFERS_NEEDS_REVIEW')
+      reasons.add('ROLE_CIN_CONFLICT');
     if(cin.status==='AMBIGUOUS_OR_LOW_CONFIDENCE')
-      reasons.add('CIN_UNREADABLE');
-    const assessment=cin.status==='AMBIGUOUS_OR_LOW_CONFIDENCE'?
-      'INSUFFICIENT_OR_AMBIGUOUS':r.assessment;
-    roles.push({role:'REGISTERED_HOLDER',assessment,
+      reasons.add('DOCUMENT_CIN_UNREADABLE');
+    if(cin.status==='NOT_COMPARABLE')
+      reasons.add('DOCUMENT_CIN_NOT_PRINTED');
+    roles.push({role:'REGISTERED_HOLDER',assessment:r.assessment,
+      documentCinStatus:cin.status==='NOT_COMPARABLE'?
+        'NOT_PRINTED':cin.status,
       documentPage:r.certificateName?.page??null});
   } else if(kind==='SHARED_OWNERSHIP_CERTIFICATE'){
-    // Evaluate only the row corresponding to the identity holder. Other
-    // people's unreadable names or parts must not block this PRIVATE preview.
+    // Only the identity holder's OWN row may leave this private comparison.
+    // Other unreadable owners do not block it; an unrelated 8-digit number
+    // must never be compared as a CIN for the selected person.
     reasons.add('SHARED_RIGHTS_NEED_ROW_REVIEW');
-    let assessment:ComparisonAssessment='INSUFFICIENT_OR_AMBIGUOUS';
-    let page:number|null=null;
+    let selected:RoleTextResult={
+      role:'SHARED_RIGHTS_HOLDER',
+      assessment:'INSUFFICIENT_OR_AMBIGUOUS',
+      documentCinStatus:'NOT_PRINTED',documentPage:null
+    };
     const pagesComplete=completePrintedPagination(textDoc)!==null;
     const spatialReady=document.pages.length>0&&document.pages.every(p=>
       p.privateSpatialPage!==undefined&&p.spatialWordsTruncated===false&&
@@ -184,7 +199,8 @@ export function compareUnifiedPrivateDocumentIdentity(
       const layout=locateOwnerTableFromWords(
         document.pages.map(p=>p.privateSpatialPage!));
       const fatal=new Set(['NO_PAGE_1','HEADER_NOT_FOUND',
-        'HEADER_GEOMETRY_AMBIGUOUS','DUPLICATE_OWNER_ORDINAL','CIN_AMBIGUOUS']);
+        'HEADER_GEOMETRY_AMBIGUOUS','DUPLICATE_OWNER_ORDINAL',
+        'CIN_AMBIGUOUS']);
       if(layout.ownerOrdinals.length>0&&
           !layout.findings.some(f=>fatal.has(f))){
         const table=analyzeOwnerTable(layout.cells,{
@@ -192,67 +208,152 @@ export function compareUnifiedPrivateDocumentIdentity(
           receivedPages:document.pages.map(p=>p.page),
           declaredOwnerCount:null,printedTotalParts:null
         });
-        const matches:{ordinal:number;page:number;parts:string}[]=[];
-        let contradiction=false;
+        const matches:{
+          ordinal:number;page:number;parts:string|null;
+          status:'NAME_ONLY_REVIEW'|'PRELIMINARY_PERSON_ROW_TEXT_ONLY';
+          cinStatus:RoleTextResult['documentCinStatus']
+        }[]=[];
+        let inconsistent=false;
         for(const row of table.rows){
-          const n=row.fields.name,c=row.fields.cin,rights=row.fields.rightsParts;
-          if(n.status!=='CANDIDATE'||c.status!=='CANDIDATE'||
-             rights.status!=='CANDIDATE'||!n.value||!c.value||!rights.value)
+          const name=row.fields.name,cin=row.fields.cin,rights=row.fields.rightsParts;
+          if(name.status!=='CANDIDATE'||!name.value)continue;
+          const n=name.evidence[0];
+          if(!n||row.sourcePages.length!==1||row.sourcePages[0]!==n.page)
             continue;
-          const namePage=n.evidence[0]?.page,cinPage=c.evidence[0]?.page;
-          const partsPage=rights.evidence[0]?.page;
-          if(namePage===undefined||namePage!==cinPage||
-             namePage!==partsPage||row.sourcePages.length!==1)continue;
-          const actor:CandidateName={value:n.value,page:namePage,
-            source:n.evidence[0]!.source,confidence:n.evidence[0]!.confidence};
-          const nameCheck=comparePrivateRoleLabeledNameToIdentity(
+          const actor:CandidateName={value:name.value,page:n.page,
+            source:n.source,confidence:n.confidence};
+          const nameResult=comparePrivateRoleLabeledNameToIdentity(
             actor,textIdentity).assessment;
-          const cinCheck=compareExactOwnerRowCinToIdentity(
-            c.value,textIdentity);
-          if(nameCheck==='PRELIMINARY_TEXT_AGREEMENT'&&
-             cinCheck==='SAME_NUMBER_UNVERIFIED')
-            matches.push({ordinal:row.ordinal,page:namePage,parts:rights.value});
-          else if((nameCheck==='PRELIMINARY_TEXT_AGREEMENT'&&
-                   cinCheck==='NUMBER_DIFFERS_NEEDS_REVIEW')||
-                  (cinCheck==='SAME_NUMBER_UNVERIFIED'&&
-                   nameCheck==='TEXT_DIFFERENCE_NEEDS_REVIEW'))
-            contradiction=true;
+          if(nameResult==='INSUFFICIENT_OR_AMBIGUOUS')continue;
+          let cinStatus:RoleTextResult['documentCinStatus']='NOT_PRINTED';
+          if(cin.status==='MASKED'){
+            cinStatus='MASKED_IN_SOURCE';
+          }else if(cin.status==='NOT_OBSERVED'){
+            cinStatus='NOT_PRINTED';
+          }else if(cin.status==='CANDIDATE'&&cin.value&&
+                   cin.evidence[0]?.page===n.page){
+            const checked=compareExactOwnerRowCinToIdentity(
+              cin.value,textIdentity);
+            cinStatus=checked==='NOT_COMPARABLE'?
+              'AMBIGUOUS_OR_LOW_CONFIDENCE':checked;
+          }else cinStatus='AMBIGUOUS_OR_LOW_CONFIDENCE';
+          if(nameResult==='TEXT_DIFFERENCE_NEEDS_REVIEW'){
+            if(cinStatus==='SAME_NUMBER_UNVERIFIED')inconsistent=true;
+            continue;
+          }
+          if(cinStatus==='NUMBER_DIFFERS_NEEDS_REVIEW'){
+            inconsistent=true;
+            reasons.add('ROLE_CIN_CONFLICT');
+            continue;
+          }
+          if(cinStatus==='AMBIGUOUS_OR_LOW_CONFIDENCE'){
+            reasons.add('DOCUMENT_CIN_UNREADABLE');
+            continue;
+          }
+          if(cinStatus==='MASKED_IN_SOURCE')reasons.add('DOCUMENT_CIN_MASKED');
+          if(rights.status!=='CANDIDATE'||!rights.value||
+              rights.evidence[0]?.page!==n.page){
+            reasons.add('TARGET_RIGHTS_NOT_READABLE');
+          }
+          matches.push({
+            ordinal:row.ordinal,page:n.page,
+            parts:rights.status==='CANDIDATE'&&rights.evidence[0]?.page===n.page?
+              rights.value:null,
+            status:cinStatus==='NOT_PRINTED'||cinStatus==='MASKED_IN_SOURCE'?
+              'NAME_ONLY_REVIEW':
+              'PRELIMINARY_PERSON_ROW_TEXT_ONLY',cinStatus
+          });
         }
-        if(matches.length===1&&!contradiction){
+        // Duplicate name/identity matches never choose the first row.
+        if(matches.length===1&&!inconsistent){
           const match=matches[0]!;
-          assessment='PRELIMINARY_TEXT_AGREEMENT';
-          page=match.page;
+          selected={
+            role:'SHARED_RIGHTS_HOLDER',
+            assessment:'PRELIMINARY_TEXT_AGREEMENT',
+            documentCinStatus:match.cinStatus,documentPage:match.page
+          };
           matchedRightsHolder={
             printedRowOrdinal:match.ordinal,rightsParts:match.parts,
-            documentPage:match.page,
-            status:'PRELIMINARY_PERSON_ROW_TEXT_ONLY'
+            documentPage:match.page,status:match.status
           };
-        }else if(matches.length>1||contradiction){
+          if(match.cinStatus==='NOT_PRINTED')
+            reasons.add('DOCUMENT_CIN_NOT_PRINTED');
+        }else if(matches.length>1||inconsistent){
           reasons.add('LOW_CONFIDENCE_OR_CONFLICTING_ROLE');
+          if(inconsistent)reasons.add('ROLE_CIN_CONFLICT');
         }
       }
     }
-    roles.push({role:'SHARED_RIGHTS_HOLDER',assessment,documentPage:page});
+    roles.push(selected);
   } else {
     const targets=ROLE_KEYS[kind];
     if(!targets||!targets.length)reasons.add('UNSUPPORTED_ROLE_EXTRACTION');
     for(const target of targets??[]){
       const fact=read.privateFamilyFields.facts.find(f=>f.key===target.key);
-      if(!fact||fact.status!=='CANDIDATE')
-        reasons.add('LOW_CONFIDENCE_OR_CONFLICTING_ROLE');
+      const cinFact=read.privateFamilyFields.facts.find(f=>f.key===target.cinKey);
       const actor=fact?candidate(fact):null;
-      const compared=comparePrivateRoleLabeledNameToIdentity(actor,frontIdentity);
+      if(fact&&fact.status!=='CANDIDATE')
+        reasons.add('LOW_CONFIDENCE_OR_CONFLICTING_ROLE');
+      const compared=comparePrivateRoleLabeledNameToIdentity(actor,textIdentity);
+      let cinStatus:RoleTextResult['documentCinStatus']='NOT_PRINTED';
+      if(cinFact&&cinFact.status!=='ABSENT'){
+        if(cinFact.status==='MASKED')
+          cinStatus='MASKED_IN_SOURCE';
+        else if(cinFact.status!=='CANDIDATE'||!cinFact.value||
+            !actor||cinFact.evidence[0]?.page!==actor.page)
+          cinStatus='AMBIGUOUS_OR_LOW_CONFIDENCE';
+        else {
+          const r=compareExactOwnerRowCinToIdentity(cinFact.value,textIdentity);
+          cinStatus=r==='NOT_COMPARABLE'?'AMBIGUOUS_OR_LOW_CONFIDENCE':r;
+        }
+      }
+      if(compared.assessment==='PRELIMINARY_TEXT_AGREEMENT'){
+        if(cinStatus==='NOT_PRINTED')
+          reasons.add('DOCUMENT_CIN_NOT_PRINTED');
+        if(cinStatus==='MASKED_IN_SOURCE')
+          reasons.add('DOCUMENT_CIN_MASKED');
+        if(cinStatus==='AMBIGUOUS_OR_LOW_CONFIDENCE')
+          reasons.add('DOCUMENT_CIN_UNREADABLE');
+        if(cinStatus==='NUMBER_DIFFERS_NEEDS_REVIEW')
+          reasons.add('ROLE_CIN_CONFLICT');
+      }else if(compared.assessment==='TEXT_DIFFERENCE_NEEDS_REVIEW'&&
+               cinStatus==='SAME_NUMBER_UNVERIFIED'){
+        reasons.add('ROLE_CIN_CONFLICT');
+      }
       roles.push({role:target.role,assessment:compared.assessment,
-        documentPage:actor?.page??null});
+        documentCinStatus:cinStatus,documentPage:actor?.page??null});
     }
   }
   const matches=roles.filter(r=>r.assessment==='PRELIMINARY_TEXT_AGREEMENT');
-  if(matches.length>0)reasons.add('ROLE_MATCH_NOT_OWNERSHIP');
   let assessment:UnifiedReviewAssessment='INSUFFICIENT_EVIDENCE';
-  if(matches.length>1){assessment='ROLE_AMBIGUOUS';reasons.add('MULTIPLE_MATCHING_ROLES');}
-  else if(matches.length===1)assessment='ROLE_TEXT_MATCH_ONLY';
-  else if(roles.length>0&&roles.every(r=>
-      r.assessment==='TEXT_DIFFERENCE_NEEDS_REVIEW'))
+  if(reasons.has('ROLE_CIN_CONFLICT')){
+    assessment='CONFLICT_REVIEW';
+    matchedRightsHolder=null;
+  }else if(matches.length>1){
+    assessment='ROLE_AMBIGUOUS';
+    reasons.add('MULTIPLE_MATCHING_ROLES');
+    matchedRightsHolder=null;
+  }else if(matches.length===1){
+    const cin=matches[0]!.documentCinStatus;
+    if(cin==='SAME_NUMBER_UNVERIFIED'){
+      assessment='ROLE_TEXT_MATCH_ONLY';
+    }else if(cin==='NOT_PRINTED'||cin==='MASKED_IN_SOURCE'){
+      assessment='NAME_ONLY_REVIEW';
+      if(cin==='NOT_PRINTED')reasons.add('DOCUMENT_CIN_NOT_PRINTED');
+      else reasons.add('DOCUMENT_CIN_MASKED');
+    }else {
+      assessment='INSUFFICIENT_EVIDENCE';
+      matchedRightsHolder=null;
+    }
+    reasons.add('ROLE_MATCH_NOT_OWNERSHIP');
+  }else if(roles.length>0&&roles.every(r=>
+      r.assessment==='TEXT_DIFFERENCE_NEEDS_REVIEW')){
     assessment='ROLE_TEXT_DIFFERENCE';
+  }else if(roles.length>0&&roles.every(r=>
+      r.assessment==='INSUFFICIENT_OR_AMBIGUOUS' &&
+      r.documentCinStatus==='NOT_PRINTED')){
+    assessment='NO_PERSON_IDENTIFIED';
+    reasons.add('NO_ROLE_LABELED_PERSON');
+  }
   return {...base,assessment,roles,matchedRightsHolder,reasons:[...reasons]};
 }

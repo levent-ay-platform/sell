@@ -47,7 +47,7 @@ test('sale deed keeps buyer and seller separate; only buyer matches owner identi
  ]);
  const r=compareUnifiedPrivateDocumentIdentity(doc,identity,['SALE_DEED']);
  assert.equal(r.detectedKind,'SALE_DEED');
- assert.equal(r.assessment,'ROLE_TEXT_MATCH_ONLY');
+ assert.equal(r.assessment,'NAME_ONLY_REVIEW');
  assert.equal(r.roles.find(x=>x.role==='BUYER')?.assessment,
   'PRELIMINARY_TEXT_AGREEMENT');
  assert.equal(r.roles.find(x=>x.role==='SELLER')?.assessment,
@@ -59,7 +59,7 @@ test('sale deed can match seller but never assume they are the current owner',()
  const doc=wrap(['عقد بيع','المشتري: Karim Ben Ahmed',
   'البائع: Leila Ben Salem']);
  const r=compareUnifiedPrivateDocumentIdentity(doc,identity,['SALE_DEED']);
- assert.equal(r.assessment,'ROLE_TEXT_MATCH_ONLY');
+ assert.equal(r.assessment,'NAME_ONLY_REVIEW');
  assert.equal(r.roles.find(x=>x.role==='SELLER')?.assessment,
   'PRELIMINARY_TEXT_AGREEMENT');
  assert.equal(r.legalOwnershipVerified,false);
@@ -79,7 +79,7 @@ test('service receipt applicant can match name but NOT land ownership or verific
   'طالب الخدمة: Leila Ben Salem','العدد: 999123']);
  const r=compareUnifiedPrivateDocumentIdentity(doc,identity,
   ['PROPERTY_SERVICE_RECEIPT']);
- assert.equal(r.assessment,'ROLE_TEXT_MATCH_ONLY');
+ assert.equal(r.assessment,'NAME_ONLY_REVIEW');
  assert.equal(r.roles[0]?.role,'SERVICE_APPLICANT');
  assert.equal(r.identityVerified,false);
  assert.equal(r.legalOwnershipVerified,false);
@@ -91,7 +91,7 @@ test('financial receipt and possession report with no reliably labelled relevant
   ['محضر معاينة تحويز','POSSESSION_REPORT']
  ] as const){
   const r=compareUnifiedPrivateDocumentIdentity(wrap([title]),identity,[kind]);
-  assert.equal(r.assessment,'INSUFFICIENT_EVIDENCE');
+  assert.equal(r.assessment,'NO_PERSON_IDENTIFIED');
   assert.equal(r.roles[0]?.assessment,'INSUFFICIENT_OR_AMBIGUOUS');
   assert.ok(r.reasons.includes('LOW_CONFIDENCE_OR_CONFLICTING_ROLE'));
   assert.equal(r.mayPublish,false);
@@ -115,7 +115,7 @@ test('generic OTHER_LEGAL_PROOF is usable as safe intake and must not force a ki
   wrap(['عقد بيع','المشتري: Leila Ben Salem']),
   identity,['OTHER_LEGAL_PROOF']);
  assert.equal(r.detectedKind,'SALE_DEED');
- assert.equal(r.assessment,'ROLE_TEXT_MATCH_ONLY');
+ assert.equal(r.assessment,'NAME_ONLY_REVIEW');
 });
 test('two matching legal roles cannot be resolved silently',()=>{
  const r=compareUnifiedPrivateDocumentIdentity(wrap(['عقد بيع',
@@ -148,14 +148,14 @@ test('explicitly labelled possession requester matches a role, never legal title
  assert.equal(r.detectedKind,'POSSESSION_REPORT');
  assert.equal(r.roles[0]?.role,'POSSESSION_REQUESTER');
  assert.equal(r.roles[0]?.assessment,'PRELIMINARY_TEXT_AGREEMENT');
- assert.equal(r.assessment,'ROLE_TEXT_MATCH_ONLY');
+ assert.equal(r.assessment,'NAME_ONLY_REVIEW');
  assert.equal(r.legalOwnershipVerified,false);
 });
 test('financial payment receipt payer is NOT the owner and must be expressly labelled',()=>{
  const doc=wrap(['QUITTANCE N° F0001','دافع المعاليم: Leila Ben Salem']);
  const r=compareUnifiedPrivateDocumentIdentity(doc,identity,['FINANCIAL_RECEIPT']);
  assert.equal(r.roles[0]?.role,'PAYMENT_PAYER');
- assert.equal(r.assessment,'ROLE_TEXT_MATCH_ONLY');
+ assert.equal(r.assessment,'NAME_ONLY_REVIEW');
  assert.equal(r.legalOwnershipVerified,false);
  assert.equal(r.mayPublish,false);
 });
@@ -166,7 +166,7 @@ test('unlabelled name in possession or receipt must NOT be a role',()=>{
  ] as const){
    const doc=wrap([title,'Leila Ben Salem']);
    const r=compareUnifiedPrivateDocumentIdentity(doc,identity,[kind]);
-   assert.equal(r.assessment,'INSUFFICIENT_EVIDENCE');
+   assert.equal(r.assessment,'NO_PERSON_IDENTIFIED');
    assert.equal(r.roles[0]?.assessment,'INSUFFICIENT_OR_AMBIGUOUS');
  }
 });
@@ -177,7 +177,7 @@ const word=(page:number,text:string,x:number,y:number)=>({
 });
 function sharedAcrossTwoPages(opts:{
  secondRowCin?:string;firstRowCin?:string;stripCinMarker?:boolean;
- ambiguousSecondCin?:boolean
+ omitFirstCin?:boolean;ambiguousSecondCin?:boolean
 }={}):IngestedDocument {
  const row=(page:number,n:number,name:string,cin:string,y:number)=>[
    word(page,'1/'+n,945,y),word(page,'100',580,y+20),
@@ -185,7 +185,7 @@ function sharedAcrossTwoPages(opts:{
    word(page,name,830,y+20),word(page,'بنت',790,y+20),
    word(page,'سالم',750,y+20),
    ...(!opts.stripCinMarker?[word(page,'CIN',750,y+108)]:[]),
-   word(page,cin,815,y+108)
+   ...(!(opts.omitFirstCin&&n===1)?[word(page,cin,815,y+108)]:[])
  ];
  const first=[
    word(1,'موضوع',580,290),word(1,'هوية',790,290),
@@ -337,8 +337,9 @@ test('missing matched persons share prevents claiming any row',()=>{
  });
  const r=compareUnifiedPrivateDocumentIdentity({...doc,pages},arabicFront,
   ['SHARED_OWNERSHIP_CERTIFICATE']);
- assert.equal(r.matchedRightsHolder,null);
- assert.equal(r.assessment,'INSUFFICIENT_EVIDENCE');
+ assert.equal(r.matchedRightsHolder?.rightsParts,null);
+ assert.equal(r.assessment,'ROLE_TEXT_MATCH_ONLY');
+ assert.ok(r.reasons.includes('TARGET_RIGHTS_NOT_READABLE'));
 });
 test('duplicate matching coowner rows abstain without choosing one',()=>{
  const doc=sharedAcrossTwoPages({secondRowCin:'00001122'});
@@ -362,4 +363,116 @@ test('only the identity holders matched row and parts may leave private comparat
   assert.equal(json.includes(sensitive),false);
  assert.equal(r.legalOwnershipVerified,false);
  assert.equal(r.mayPublish,false);
+});
+
+test('buyer name alone is provisional; CIN not printed does not reject a sale deed',()=>{
+ const r=compareUnifiedPrivateDocumentIdentity(wrap([
+  'عقد بيع','المشتري: Leila Ben Salem','البائع: Karim Ben Ahmed',
+  'القطعة المبيعة رقم: 82','المساحة المبيعة: 185.25 م²'
+ ]),identity,['SALE_DEED']);
+ assert.equal(r.assessment,'NAME_ONLY_REVIEW');
+ assert.equal(r.roles.find(x=>x.role==='BUYER')?.documentCinStatus,'NOT_PRINTED');
+ assert.ok(r.reasons.includes('DOCUMENT_CIN_NOT_PRINTED'));
+ assert.equal(r.matchedRightsHolder,null);
+ assert.equal(r.legalOwnershipVerified,false);
+});
+test('explicit buyer CIN + buyer name can agree, unrelated seller CIN cannot substitute',()=>{
+ const r=compareUnifiedPrivateDocumentIdentity(wrap([
+  'عقد بيع','المشتري: Leila Ben Salem','البائع: Karim Ben Ahmed',
+  'رقم بطاقة تعريف المشتري: 00001122',
+  'رقم بطاقة تعريف البائع: 12345678'
+ ]),identity,['SALE_DEED']);
+ assert.equal(r.assessment,'ROLE_TEXT_MATCH_ONLY');
+ const buyer=r.roles.find(x=>x.role==='BUYER');
+ assert.equal(buyer?.documentCinStatus,'SAME_NUMBER_UNVERIFIED');
+ assert.equal(r.roles.find(x=>x.role==='SELLER')?.documentCinStatus,
+  'NUMBER_DIFFERS_NEEDS_REVIEW');
+ assert.equal(r.legalOwnershipVerified,false);
+});
+test('buyer name matches but explicitly buyer-labelled CIN differs => conflict review',()=>{
+ const r=compareUnifiedPrivateDocumentIdentity(wrap([
+  'عقد بيع','المشتري: Leila Ben Salem',
+  'رقم بطاقة تعريف المشتري: 12345678'
+ ]),identity,['SALE_DEED']);
+ assert.equal(r.assessment,'CONFLICT_REVIEW');
+ assert.ok(r.reasons.includes('ROLE_CIN_CONFLICT'));
+ assert.equal(r.mayPublish,false);
+});
+test('labelled CIN with conflicting values never falls back to name-only',()=>{
+ const r=compareUnifiedPrivateDocumentIdentity(wrap([
+  'عقد بيع','المشتري: Leila Ben Salem',
+  'رقم بطاقة تعريف المشتري: 00001122',
+  'رقم بطاقة تعريف المشتري: 12345678'
+ ]),identity,['SALE_DEED']);
+ assert.equal(r.assessment,'INSUFFICIENT_EVIDENCE');
+ assert.ok(r.reasons.includes('DOCUMENT_CIN_UNREADABLE'));
+});
+test('anonymous service and financial receipts remain usable but no actor is claimed',()=>{
+ for(const [text,kind] of [
+  ['وصل تسلم مطلب خدمة واستخلاص معاليم','PROPERTY_SERVICE_RECEIPT'],
+  ['QUITTANCE N° X0001','FINANCIAL_RECEIPT']
+ ] as const){
+  const r=compareUnifiedPrivateDocumentIdentity(wrap([text,'المبلغ: 210.000']),
+   identity,[kind]);
+  assert.equal(r.detectedKind,kind);
+  assert.equal(r.assessment,'NO_PERSON_IDENTIFIED');
+  assert.equal(r.roles[0]?.assessment,'INSUFFICIENT_OR_AMBIGUOUS');
+  assert.equal(r.mayPublish,false);
+ }
+});
+test('co-owner without CIN printed in target row is name-only review, not rejected',()=>{
+ const r=compareUnifiedPrivateDocumentIdentity(
+  sharedAcrossTwoPages({stripCinMarker:true,omitFirstCin:true}),arabicFront,
+  ['SHARED_OWNERSHIP_CERTIFICATE']);
+ assert.equal(r.assessment,'NAME_ONLY_REVIEW');
+ assert.equal(r.matchedRightsHolder?.printedRowOrdinal,1);
+ assert.equal(r.matchedRightsHolder?.rightsParts,'100');
+ assert.equal(r.matchedRightsHolder?.status,'NAME_ONLY_REVIEW');
+ assert.equal(r.roles[0]?.documentCinStatus,'NOT_PRINTED');
+ assert.equal(r.identityVerified,false);
+});
+test('unlabelled eight-digit number in target row prevents name-only promotion',()=>{
+ const r=compareUnifiedPrivateDocumentIdentity(
+  sharedAcrossTwoPages({stripCinMarker:true}),arabicFront,
+  ['SHARED_OWNERSHIP_CERTIFICATE']);
+ assert.equal(r.assessment,'INSUFFICIENT_EVIDENCE');
+ assert.equal(r.matchedRightsHolder,null);
+});
+test('co-owner whose printed name matches but linked CIN differs is conflict',()=>{
+ const r=compareUnifiedPrivateDocumentIdentity(
+  sharedAcrossTwoPages({firstRowCin:'12345678'}),arabicFront,
+  ['SHARED_OWNERSHIP_CERTIFICATE']);
+ assert.equal(r.assessment,'CONFLICT_REVIEW');
+ assert.equal(r.matchedRightsHolder,null);
+ assert.ok(r.reasons.includes('ROLE_CIN_CONFLICT'));
+});
+test('generic receipt number is never treated as a payer CIN',()=>{
+ const r=compareUnifiedPrivateDocumentIdentity(
+   wrap(['QUITTANCE N° 00001122','دافع المعاليم: Leila Ben Salem']),
+   identity,['FINANCIAL_RECEIPT']);
+ assert.equal(r.assessment,'NAME_ONLY_REVIEW');
+ assert.equal(r.roles[0]?.documentCinStatus,'NOT_PRINTED');
+ assert.equal(r.matchedRightsHolder,null);
+});
+
+
+test('masked buyer CIN is non-evaluable, not absent or verified',()=>{
+ const r=compareUnifiedPrivateDocumentIdentity(wrap([
+  'عقد بيع','المشتري: Leila Ben Salem',
+  'رقم بطاقة تعريف المشتري: ████████'
+ ]),identity,['SALE_DEED']);
+ assert.equal(r.assessment,'NAME_ONLY_REVIEW');
+ assert.equal(r.roles.find(x=>x.role==='BUYER')?.documentCinStatus,'MASKED_IN_SOURCE');
+ assert.ok(r.reasons.includes('DOCUMENT_CIN_MASKED'));
+ assert.ok(!r.reasons.includes('DOCUMENT_CIN_NOT_PRINTED'));
+ assert.equal(r.legalOwnershipVerified,false);
+});
+test('two CIN-role candidates on separate unrelated buyer/seller pages cannot be swapped',()=>{
+ const r=compareUnifiedPrivateDocumentIdentity(wrap([
+  'عقد بيع','المشتري: Leila Ben Salem',
+  'البائع: Karim Ben Ahmed','رقم بطاقة تعريف البائع: 00001122'
+ ]),identity,['SALE_DEED']);
+ assert.equal(r.assessment,'NAME_ONLY_REVIEW');
+ assert.equal(r.roles.find(x=>x.role==='BUYER')?.documentCinStatus,'NOT_PRINTED');
+ assert.equal(r.legalOwnershipVerified,false);
 });

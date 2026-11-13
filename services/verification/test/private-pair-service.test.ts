@@ -258,7 +258,7 @@ test('unified private comparator reports sale BUYER text only without legal owne
  const h=harness('SALE_DEED');
  const result=await analyze(h.request,h.deps);
  assert.equal(result.unifiedComparison?.detectedKind,'SALE_DEED');
- assert.equal(result.unifiedComparison?.assessment,'ROLE_TEXT_MATCH_ONLY');
+ assert.equal(result.unifiedComparison?.assessment,'NAME_ONLY_REVIEW');
  assert.equal(result.unifiedComparison?.roles.find(r=>r.role==='BUYER')?.assessment,
   'PRELIMINARY_TEXT_AGREEMENT');
  assert.equal(result.comparison.assessment,'INSUFFICIENT_OR_AMBIGUOUS');
@@ -273,7 +273,7 @@ test('service receipt applicant may match text but never be treated as an owner'
  const result=await analyze(h.request,h.deps);
  assert.equal(result.unifiedComparison?.detectedKind,'PROPERTY_SERVICE_RECEIPT');
  assert.equal(result.unifiedComparison?.roles[0]?.role,'SERVICE_APPLICANT');
- assert.equal(result.unifiedComparison?.assessment,'ROLE_TEXT_MATCH_ONLY');
+ assert.equal(result.unifiedComparison?.assessment,'NAME_ONLY_REVIEW');
  assert.equal(result.ownershipVerified,false);
  assert.equal(result.cinComparison.status,'NOT_COMPARABLE');
 });
