@@ -43,7 +43,7 @@ export function balanceOwnershipParts(rows:readonly RightsPartRow[],denominator:
   if(rows.length>500)throw new RangeError('TOO_MANY_RIGHTS_HOLDERS');
   const expected=denominator===null?null:parseMilliparts(denominator);
   const seen=new Set<number>();
-  let invalid=expected===null, sum=0n;
+  let invalid=expected===null||expected===0n||rows.length===0, sum=0n;
   const missing:number[]=[];
   for(const row of rows){
     if(!Number.isSafeInteger(row.rowNumber)||row.rowNumber<1||
