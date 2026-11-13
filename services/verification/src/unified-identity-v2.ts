@@ -171,8 +171,11 @@ export function compareUnifiedPrivateDocumentIdentity(
   if(kind==='OWNERSHIP_CERTIFICATE'){
     const r=comparePrivateCertificateIdentityOcr(textDoc,textIdentity);
     const cin=compareCertificateIdentityCinText(textDoc,textIdentity);
-    if(cin.status==='NUMBER_DIFFERS_NEEDS_REVIEW')
+    if(cin.status==='NUMBER_DIFFERS_NEEDS_REVIEW'){
       reasons.add('ROLE_CIN_CONFLICT');
+      // Retain the original certificate-specific reason for older reviewers.
+      reasons.add('CIN_TEXT_DIFFERS');
+    }
     if(cin.status==='AMBIGUOUS_OR_LOW_CONFIDENCE')
       reasons.add('DOCUMENT_CIN_UNREADABLE');
     if(cin.status==='NOT_COMPARABLE')
