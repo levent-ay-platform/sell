@@ -54,3 +54,17 @@ A form reading `المساحة` anywhere will silently misrepresent subdivided s
 - Exact-head CI plus real Android device UX acceptance; PR remains Draft and not deployed.
 
 Source: User-supplied **private** Tunisian title/share/sale/possession/receipt samples and a two-page ownership certificate. Only class-level field patterns are documented here; no individual or property identifiers included.
+
+
+## Stage-2 checkpoint: private text provenance and multi-page owner-table contract (2026-11-13)
+
+Implemented on the **Draft branch only**:
+
+- `src/owner-table-v2.ts` composes **explicit row-and-column observations** originating from a trusted-infrastructure layout step, never from free-floating text guessed across table columns. Each owner row has its **printed ordinal** (the label `1/7` is ordinal 7, not 1/7 share), a source page for every observed cell, and field states `CANDIDATE / LOW_CONFIDENCE / CONFLICT / MASKED / NOT_IN_SOURCE / UNREADABLE / NOT_OBSERVED`.
+- Seven-row, two-page **fictional** unit cases cover complete and missing pages/owners, repeated value agreement, conflicting names, masked and truly absent CIN, leading-zero CIN strings, invalid coordinates, and 0.001-part discrepancies. Declared owner count, page count and printed total parts must be known before the table can be considered structurally ready for **human** review. Even then `ownershipVerified=false` and `mayPublish=false`.
+- `ocr/ingest.py` retains bounded **Tesseract line pixel rectangles** on full scanned pages. Focused OCR over cropped/enlarged ROI deliberately **discards local crop rectangles** rather than misleadingly identifying them as source-page coordinates. Native text PDF lines currently have no rectangle unless a trusted PDF layout mapping is added later.
+- `src/reader.ts` validates numeric geometry and method, preserves rectangle provenance in `RecognizedLine`; `src/smart-fields.ts` keeps rectangles with OCR field evidence; `src/ocr-presentation.ts` exposes them only as optional **authorized private** fact-card source locations.
+- Existing line OCR is **NOT** a complete spatial table parser. Do not fabricate `ownerTable` rows by regex on OCR text. The next step is a secure layout detector that associates real word-level boxes to printed table columns, paired with private, labeled acceptance. No personally identifying document or genuine title data was committed.
+
+Verification: GitHub-hosted `Malak F1 individual verification core` targeted Node tests and synthetic PDF/OCR integration passed at corrected head `053c89ae`. Recheck final head if additional changes are made. Android real-device visual acceptance and measured classifier recall on genuine, permissioned documents remain open.
+
