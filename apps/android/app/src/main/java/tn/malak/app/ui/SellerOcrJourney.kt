@@ -304,9 +304,9 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
             if(committed)R.string.draft_saved else R.string.draft_error
         }catch (_:Exception){R.string.draft_error}
     }
-    val stepLabels=listOf(R.string.step_property,R.string.smart_step_documents,
-        R.string.step_summary)
-    LaunchedEffect(step) { if(step>2) step=2 }
+    val stepLabels=listOf(R.string.smart_step_documents,R.string.step_property,
+        R.string.step_identity,R.string.step_summary)
+    LaunchedEffect(step) { if(step>3) step=3 }
 
     if(cameraVisible){
         TunisianIdCamera(onClose={cameraVisible=false},
@@ -347,6 +347,65 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
             verticalArrangement=Arrangement.spacedBy(15.dp)) {
             when(step) {
                 0 -> {
+                    SectionHeading(s(R.string.document_section),s(R.string.document_hint))
+                    Surface(color=Color.White,shape=RoundedCornerShape(21.dp),border=BorderStroke(1.dp,CardBorder)) {
+                        Column(Modifier.fillMaxWidth().padding(20.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
+                            Icon(Icons.Outlined.Description,null,Modifier.size(34.dp),tint=Brand.Crimson)
+                            Text(s(R.string.file_rules),color=Brand.Muted,fontSize=12.sp)
+                            Text(s(R.string.certificate_page_order_hint),color=Brand.Muted,
+                                fontSize=12.sp,lineHeight=18.sp)
+                            OutlinedButton(onClick={pickDocuments.launch(
+                                if(files.isEmpty())arrayOf("application/pdf","image/jpeg","image/png","image/tiff")
+                                else arrayOf("image/jpeg","image/png","image/tiff"))},
+                                enabled=files.isEmpty()||
+                                    (files.size<8&&files.none{it.mime=="application/pdf"}),
+                                modifier=Modifier.fillMaxWidth().heightIn(min=52.dp),shape=RoundedCornerShape(16.dp)) {
+                                Icon(Icons.Outlined.FolderOpen,null,Modifier.size(21.dp))
+                                Spacer(Modifier.width(8.dp))
+                                Text(s(if(files.isEmpty())R.string.pick_document
+                                    else R.string.certificate_add_next_page))
+                            }
+                        }
+                    }
+                    if(pickMessage!=0) Text(s(pickMessage),color=Brand.Muted,fontSize=12.sp)
+                    if(files.isEmpty()) {
+                        PlainNotice(Icons.Outlined.Description,s(R.string.file_none))
+                    } else {
+                        Text(s(R.string.documents_selected),color=Brand.Ink,fontSize=16.sp,fontWeight=FontWeight.SemiBold)
+                        files.toList().forEachIndexed { index,file ->
+                            Surface(shape=RoundedCornerShape(16.dp),color=Color.White,border=BorderStroke(1.dp,CardBorder)) {
+                                Row(Modifier.fillMaxWidth().heightIn(min=56.dp).padding(start=11.dp,end=6.dp),
+                                    verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(10.dp)) {
+                                    Icon(Icons.Outlined.InsertDriveFile,null,tint=Brand.Crimson,modifier=Modifier.size(23.dp))
+                                    Column(Modifier.weight(1f)) {
+                                        Text(if(file.mime=="application/pdf")
+                                            s(R.string.certificate_pdf_label)
+                                            else "${s(R.string.certificate_page_label)} ${index+1}",
+                                            color=Brand.Ink,fontWeight=FontWeight.SemiBold,fontSize=12.sp)
+                                        Text("${file.displayName} · ${file.length/1024} KB",
+                                            color=Brand.Muted,maxLines=1,
+                                            overflow=TextOverflow.Ellipsis,fontSize=11.sp)
+                                    }
+                                    IconButton(onClick={
+                                        // A later image's apparent page number must not change
+                                        // silently after deleting an earlier page.
+                                        if(index<files.size&&files[index].uri==file.uri){
+                                            val following=files.size-index-1
+                                            while(files.size>index)files.removeAt(files.lastIndex)
+                                            pickMessage=if(following>0)
+                                                R.string.certificate_following_pages_removed else 0
+                                        }
+                                    },modifier=Modifier.size(48.dp)) {
+                                        Icon(Icons.Outlined.DeleteOutline,s(R.string.remove),tint=Brand.Muted)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    PlainNotice(Icons.Outlined.Lock,s(R.string.file_privacy))
+                    PlainNotice(Icons.Outlined.Info,s(R.string.smart_document_first_hint))
+                }
+                1 -> {
                     SectionHeading(s(R.string.property_section),s(R.string.property_section_hint))
                     Surface(color=Color(0xFFF2F8F5),shape=RoundedCornerShape(16.dp)){
                         Column(Modifier.fillMaxWidth().padding(15.dp),
@@ -424,65 +483,7 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                         }
                     }
                 }
-                1 -> {
-                    SectionHeading(s(R.string.document_section),s(R.string.document_hint))
-                    Surface(color=Color.White,shape=RoundedCornerShape(21.dp),border=BorderStroke(1.dp,CardBorder)) {
-                        Column(Modifier.fillMaxWidth().padding(20.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
-                            Icon(Icons.Outlined.Description,null,Modifier.size(34.dp),tint=Brand.Crimson)
-                            Text(s(R.string.file_rules),color=Brand.Muted,fontSize=12.sp)
-                            Text(s(R.string.certificate_page_order_hint),color=Brand.Muted,
-                                fontSize=12.sp,lineHeight=18.sp)
-                            OutlinedButton(onClick={pickDocuments.launch(
-                                if(files.isEmpty())arrayOf("application/pdf","image/jpeg","image/png","image/tiff")
-                                else arrayOf("image/jpeg","image/png","image/tiff"))},
-                                enabled=files.isEmpty()||
-                                    (files.size<8&&files.none{it.mime=="application/pdf"}),
-                                modifier=Modifier.fillMaxWidth().heightIn(min=52.dp),shape=RoundedCornerShape(16.dp)) {
-                                Icon(Icons.Outlined.FolderOpen,null,Modifier.size(21.dp))
-                                Spacer(Modifier.width(8.dp))
-                                Text(s(if(files.isEmpty())R.string.pick_document
-                                    else R.string.certificate_add_next_page))
-                            }
-                        }
-                    }
-                    if(pickMessage!=0) Text(s(pickMessage),color=Brand.Muted,fontSize=12.sp)
-                    if(files.isEmpty()) {
-                        PlainNotice(Icons.Outlined.Description,s(R.string.file_none))
-                    } else {
-                        Text(s(R.string.documents_selected),color=Brand.Ink,fontSize=16.sp,fontWeight=FontWeight.SemiBold)
-                        files.toList().forEachIndexed { index,file ->
-                            Surface(shape=RoundedCornerShape(16.dp),color=Color.White,border=BorderStroke(1.dp,CardBorder)) {
-                                Row(Modifier.fillMaxWidth().heightIn(min=56.dp).padding(start=11.dp,end=6.dp),
-                                    verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(10.dp)) {
-                                    Icon(Icons.Outlined.InsertDriveFile,null,tint=Brand.Crimson,modifier=Modifier.size(23.dp))
-                                    Column(Modifier.weight(1f)) {
-                                        Text(if(file.mime=="application/pdf")
-                                            s(R.string.certificate_pdf_label)
-                                            else "${s(R.string.certificate_page_label)} ${index+1}",
-                                            color=Brand.Ink,fontWeight=FontWeight.SemiBold,fontSize=12.sp)
-                                        Text("${file.displayName} · ${file.length/1024} KB",
-                                            color=Brand.Muted,maxLines=1,
-                                            overflow=TextOverflow.Ellipsis,fontSize=11.sp)
-                                    }
-                                    IconButton(onClick={
-                                        // A later image's apparent page number must not change
-                                        // silently after deleting an earlier page.
-                                        if(index<files.size&&files[index].uri==file.uri){
-                                            val following=files.size-index-1
-                                            while(files.size>index)files.removeAt(files.lastIndex)
-                                            pickMessage=if(following>0)
-                                                R.string.certificate_following_pages_removed else 0
-                                        }
-                                    },modifier=Modifier.size(48.dp)) {
-                                        Icon(Icons.Outlined.DeleteOutline,s(R.string.remove),tint=Brand.Muted)
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    PlainNotice(Icons.Outlined.Lock,s(R.string.file_privacy))
-                    HorizontalDivider(color=CardBorder)
-
+                2 -> {
                     SectionHeading(s(R.string.identity_section),s(R.string.identity_hint))
                     if(pendingPhoto==null&&!identitySelected){
                         Surface(color=Color.White,
@@ -794,7 +795,7 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                     }
                     if(pairReport==null)
                         PlainNotice(Icons.Outlined.Info,s(R.string.legal_pending))
-                    OutlinedButton(onClick={step=0;showInvalid=false},modifier=Modifier.fillMaxWidth().heightIn(min=51.dp)) {
+                    OutlinedButton(onClick={step=1;showInvalid=false},modifier=Modifier.fillMaxWidth().heightIn(min=51.dp)) {
                         Icon(Icons.Outlined.Edit,null,Modifier.size(20.dp))
                         Spacer(Modifier.width(8.dp))
                         Text(s(R.string.edit_property))
@@ -806,11 +807,11 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                 else Icons.Outlined.CheckCircle,
                 s(saveMessage)
             )
-            if(step==2) Text(s(R.string.draft_local),color=Brand.Muted,fontSize=12.sp)
+            if(step==3) Text(s(R.string.draft_local),color=Brand.Muted,fontSize=12.sp)
         }
         Column(Modifier.fillMaxWidth().padding(horizontal=17.dp,vertical=12.dp),verticalArrangement=Arrangement.spacedBy(7.dp)) {
             // Never show "Continue" under a failed scan: keep retake in reach.
-            if(step==1&&pendingPhoto!=null){
+            if(step==2&&pendingPhoto!=null){
                 Row(Modifier.fillMaxWidth(),
                     horizontalArrangement=Arrangement.spacedBy(10.dp)){
                     OutlinedButton(onClick={
@@ -840,21 +841,21 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                 }
             }else{
             Button(onClick={
-                if(step==0&&!validFirst)showInvalid=true
-                else if(step==1&&files.isEmpty()){pickMessage=R.string.certificate_required}
-                else if(step==1&&(!identitySelected||pendingPhoto!=null)){
+                if(step==0&&files.isEmpty()){pickMessage=R.string.certificate_required}
+                else if(step==1&&!validFirst)showInvalid=true
+                else if(step==2&&(!identitySelected||pendingPhoto!=null)){
                     identityMessage=R.string.identity_required
                 }
-                else if(step<2){step++;showInvalid=false;saveMessage=0}
+                else if(step<3){step++;showInvalid=false;saveMessage=0}
                 else saveLocalDraft()
             }, modifier=Modifier.fillMaxWidth().heightIn(min=54.dp),
                 shape=RoundedCornerShape(17.dp),colors=ButtonDefaults.buttonColors(containerColor=Brand.Crimson)) {
-                Text(s(if(step==2)R.string.save_draft else R.string.continue_label),fontWeight=FontWeight.SemiBold,fontSize=15.sp)
+                Text(s(if(step==3)R.string.save_draft else R.string.continue_label),fontWeight=FontWeight.SemiBold,fontSize=15.sp)
                 Spacer(Modifier.width(9.dp))
-                Icon(if(step==2)Icons.Outlined.Save else Icons.AutoMirrored.Filled.ArrowForward,
+                Icon(if(step==3)Icons.Outlined.Save else Icons.AutoMirrored.Filled.ArrowForward,
                     null,Modifier.size(21.dp))
             }
-            if(step<2) {
+            if(step<3) {
                 Text(s(R.string.smart_autosave_hint),fontSize=11.sp,
                     color=Brand.Muted,lineHeight=17.sp)
             }

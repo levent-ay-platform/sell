@@ -251,4 +251,5 @@
     <string name="smart_title_pending">Enter location and area to generate a title</string>
     <string name="smart_title_edit">Edit</string>
     <string name="smart_title_done">Done</string>
+    <string name="smart_document_first_hint">Start with your document, even a receipt or unknown paper. After sign-in and minimum details, we\'ll read it privately and suggest fields for review.</string>
 </resources>

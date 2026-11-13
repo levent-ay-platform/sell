@@ -251,4 +251,5 @@
     <string name="smart_title_pending">حدّد المنطقة والمساحة ليظهر عنوان إعلانك</string>
     <string name="smart_title_edit">تعديل</string>
     <string name="smart_title_done">تم</string>
+    <string name="smart_document_first_hint">ابدأ بوثيقتك، حتى لو كانت وصلاً أو غير معروفة. بعد تسجيل الدخول وتعبئة الحد الأدنى من البيانات، سنقرأها بصورة خاصة ونقترح الحقول القابلة للمراجعة.</string>
 </resources>
