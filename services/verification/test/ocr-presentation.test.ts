@@ -40,3 +40,16 @@ test('no declared area or uncertain OCR yields no fabricated match',()=>{
 test('invalid or auto-approved OCR payload rejected',()=>{
   assert.throws(()=>presentPrivateCpfReading({...read(),mayPublish:true} as any,'240'),/UNTRUSTED_OCR_READING/);
 });
+
+
+test('authorized private field card carries the same bounded OCR rectangle',()=>{
+ const withRect={...input,pages:[{...input.pages[0],lines:input.pages[0].lines.map(line=>
+   line.text.includes('المساحة')?{...line,bbox:{left:33,top:42,right:200,bottom:68}}:line)}]};
+ const read=readUntrustedOcrDocument(withRect);
+ const view=presentPrivateCpfReading(read,'240');
+ const area=view.facts.find(x=>x.id==='areaSquareMetres')!;
+ assert.deepEqual(area.bbox,{left:33,top:42,right:200,bottom:68});
+ assert.equal(view.access,'AUTHORIZED_OWNER_OR_REVIEWER_ONLY');
+ assert.equal(view.ownershipVerified,false);
+ assert.equal(view.mayPublish,false);
+});
