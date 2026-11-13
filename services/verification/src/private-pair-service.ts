@@ -126,7 +126,14 @@ function joinPages(docs:readonly IngestedDocument[]):IngestedDocument {
   for(const doc of docs)for(const page of doc.pages){
     const number=pages.length+1;
     if(number>8)throw new PrivatePairUnavailable();
-    pages.push({...page,page:number,lines:page.lines.map(line=>({...line,page:number}))});
+    // The private pair comparator reparses its input as a *text-only*
+    // OCR document. Never forward optional word geometry to that boundary:
+    // it has a different schema, and it is not needed for name/CIN matching.
+    // Keep page quality and per-line evidence, but strip layout-only fields.
+    pages.push({page:number,method:page.method,
+      lines:page.lines.map(line=>({...line,page:number})),
+      ...(page.qualityWarnings!==undefined?
+        {qualityWarnings:page.qualityWarnings}:{})});
   }
   return {format:'pdf',mayApproveOwnership:false,pages};
 }
