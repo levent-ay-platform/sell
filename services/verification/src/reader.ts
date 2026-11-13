@@ -2,6 +2,8 @@ import {extractCpfSmartFields} from './smart-fields.ts';
 import type {RecognizedLine, SmartExtraction} from './smart-fields.ts';
 import {classifyLandPaper} from './document-training-v2.ts';
 import type {DocumentTrainingCandidate} from './document-training-v2.ts';
+import {extractPrivateLandDocumentFacts} from './document-family-fields-v2.ts';
+import type {PrivateLandFacts} from './document-family-fields-v2.ts';
 import {locateOwnerTableFromWords} from './owner-table-layout-v2.ts';
 import type {SpatialPage, SpatialWord, SpatialTableCandidate} from './owner-table-layout-v2.ts';
 import type {QualityWarning} from './capture.ts';
@@ -28,6 +30,8 @@ export interface ReadDocumentResult {
   extraction:SmartExtraction;
   /** Non-authoritative, zero-PII document-family hint for later private review. */
   documentFamilyCandidate:DocumentTrainingCandidate;
+  /** Type-specific, sourced values requiring human confirmation; PRIVATE ONLY. */
+  privateFamilyFields:PrivateLandFacts;
   /** Private, unreviewed candidates; never expose through a public listing. */
   ownerTableLayout:SpatialTableCandidate|null;
   pagesReceived:number;
@@ -135,13 +139,14 @@ export function readUntrustedOcrDocument(payload:unknown):ReadDocumentResult {
   const lines=parsed.pages.flatMap(pg=>pg.lines);
   const extraction=extractCpfSmartFields(lines);
   const documentFamilyCandidate=classifyLandPaper(lines);
+  const privateFamilyFields=extractPrivateLandDocumentFacts(lines,documentFamilyCandidate);
   // Table association is safe only if EVERY page has complete original
   // raster-page word geometry. Partial/ROI/native-PDF words never count.
   const spatialReady=parsed.pages.every(pg=>pg.privateSpatialPage!==undefined&&
     !pg.spatialWordsTruncated&&pg.privateSpatialPage.words.length>0);
   const ownerTableLayout=spatialReady?
     locateOwnerTableFromWords(parsed.pages.map(pg=>pg.privateSpatialPage!)):null;
-  return {extraction,documentFamilyCandidate,ownerTableLayout,
+  return {extraction,documentFamilyCandidate,privateFamilyFields,ownerTableLayout,
     pagesReceived:parsed.pages.length,
     extractionMethods:parsed.pages.map(pg=>pg.method),
     qualityReviewPages:parsed.pages.filter(pg=>pg.qualityWarnings?.length).map(pg=>pg.page),

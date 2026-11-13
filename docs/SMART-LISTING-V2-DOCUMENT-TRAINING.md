@@ -83,3 +83,22 @@ Critical caveats:
 - No genuine source files or legal/identity person data are placed in GitHub. No paid model, CRM changes or production deployment.
 
 **Private QA gate before enabling customer autofill:** on each real certificate, verify document family, detected page count, every printed ordinal, all rights sums, correct source bounding boxes and separation of **physical estate area**, **ownership parts**, **subparcel sold area** and **possession area**. Fail closed on ambiguous evidence.
+
+
+## Stage 4 — evidence-backed, document-family-specific field suggestions (2026-11-13)
+
+**Draft-only. No unattended autofill, legal proof, public access or production deployment.**
+
+The private document-family-fields-v2.ts module adds conservative exact-label source-backed extraction for five target kinds plus the supporting-only financial receipt. The private OCR reader attaches privateFamilyFields and does NOT expose it through a public listing endpoint. Each fact retains its original page, line index, optional page pixel box, OCR method and confidence. Conflicting values are blocked; masked personal fields stay masked. Three-digit comma suffixes (such as 42,910) are marked for manual review, not silently interpreted as thousands or decimals.
+
+| Private type | Supported explicit labels (initial subset) | Prohibited inference |
+|---|---|---|
+| Ownership / shared-ownership certificate | register, parent reference, registered whole-estate area m², registered plot, total abstract rights parts | Whole-estate area is not offered seller-specific area; abstract parts are not square metres |
+| Sale deed | parent register, clearly labelled sold plot and sold area, explicit seller/buyer roles, price | Parent estate area is not sold area; first named person is not necessarily the buyer |
+| Possession report | explicitly labelled observed plot and possession area | Possession does not establish registered ownership |
+| Transfer card | transferor, transferee, transferred physical area, operation reference | Real transfer-card sample remains unavailable: no tested accuracy claim |
+| Financial QUITTANCE | receipt number and amount, supporting evidence only | Payment receipt is not a transfer card or title |
+
+**Deliberate limits:** current rules extract only explicit standalone labels. They do not parse free legal prose, legal names in multi-column table without a layout candidate, or unlabelled sums/dates. OCR confidence is not official CPF verification. Real-document benchmark, authenticated UI review/source highlight and party-role adjudication are next gates.
+
+QA consists of wholly fictional fixtures only; no real identity or document data is committed.

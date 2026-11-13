@@ -144,3 +144,38 @@ test('missing or malformed page geometry refuses spatial owner lookup',()=>{
  const incomplete={...source,pages:[{...source.pages[0],ocrWords:[]}]};
  assert.equal(readUntrustedOcrDocument(incomplete).ownerTableLayout,null);
 });
+
+
+test('private OCR reader returns type-specific sale candidates, never the parent area',()=>{
+ const payload={format:'image',mayApproveOwnership:false,pages:[{
+   page:1,method:'ocr',lines:[
+     {page:1,source:'ocr-ar',confidence:.99,text:'عقد بيع'},
+     {page:1,source:'ocr-ar',confidence:.99,text:'الرسم العقاري الأم: 999932'},
+     {page:1,source:'ocr-ar',confidence:.99,text:'المساحة المبيعة: 185.25 م²'},
+     {page:1,source:'ocr-ar',confidence:.99,text:'المساحة الكلية: 42910 م²'}
+   ]
+ }]};
+ const r=readUntrustedOcrDocument(payload);
+ assert.equal(r.documentFamilyCandidate.kind,'SALE_DEED');
+ assert.equal(r.privateFamilyFields.kind,'SALE_DEED');
+ assert.equal(r.privateFamilyFields.facts.find(f=>f.key==='soldAreaM2')?.value,'185.25');
+ assert.equal(r.privateFamilyFields.facts.find(f=>f.key==='registeredAreaM2'),undefined);
+ assert.equal(r.privateFamilyFields.mayAutofillUnreviewed,false);
+ assert.equal(r.privateFamilyFields.ownershipVerified,false);
+ assert.equal(r.privateFamilyFields.mayPublish,false);
+ assert.equal(r.mayPublish,false);
+});
+test('financial receipt never becomes transferrable or verified title',()=>{
+ const payload={format:'image',mayApproveOwnership:false,pages:[{
+   page:1,method:'ocr',lines:[
+     {page:1,source:'ocr-fr',confidence:.96,text:'QUITTANCE N° X0099'},
+     {page:1,source:'ocr-fr',confidence:.96,text:'MONTANT: 50,000'}
+   ]
+ }]};
+ const r=readUntrustedOcrDocument(payload);
+ assert.equal(r.documentFamilyCandidate.kind,'FINANCIAL_RECEIPT');
+ assert.equal(r.privateFamilyFields.kind,'FINANCIAL_RECEIPT');
+ assert.ok(r.privateFamilyFields.issues.includes('SUPPORTING_RECEIPT_NOT_TITLE'));
+ assert.equal(r.privateFamilyFields.mayPublish,false);
+ assert.equal(r.privateFamilyFields.facts.some(f=>f.key==='registerReference'),false);
+});
