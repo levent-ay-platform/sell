@@ -278,4 +278,20 @@
     <string name="smart_fact_transferred_area">Superficie transférée</string>
     <string name="smart_fact_sold_plot">Numéro de lot vendu</string>
     <string name="smart_fact_other">Champ extrait</string>
+    <string name="smart_media_heading">Photos du terrain</string>
+    <string name="smart_media_hint">Choisissez jusqu\'à 8 photos réelles. Elles restent locales et ne sont jamais publiées automatiquement.</string>
+    <string name="smart_media_pick">Ajouter des photos</string>
+    <string name="smart_media_rejected">Certaines photos sont trop grandes, dupliquées ou non prises en charge.</string>
+    <string name="smart_media_selected">Photos ajoutées à l\'aperçu local.</string>
+    <string name="smart_media_remove">Supprimer la photo</string>
+    <string name="smart_location_heading">Position du terrain</string>
+    <string name="smart_location_hint">Ajoutez les coordonnées si vous les connaissez. Ce point facultatif ne définit aucune limite cadastrale.</string>
+    <string name="smart_latitude">Latitude</string>
+    <string name="smart_longitude">Longitude</string>
+    <string name="smart_location_unavailable">Impossible d\'ouvrir une carte.</string>
+    <string name="smart_location_preview">Voir le point dans une application cartographique</string>
+    <string name="smart_description_heading">Description de l\'annonce</string>
+    <string name="smart_description_price_prefix">Prix demandé</string>
+    <string name="smart_description_generate">Créer une description factuelle</string>
+    <string name="smart_media_private_notice">Photos, coordonnées et description ne sont que des aperçus locaux. Ils ne sont ni envoyés ni enregistrés avec le brouillon avant validation d\'un stockage sûr. L\'enregistrement actuel ne couvre que les champs de base.</string>
 </resources>

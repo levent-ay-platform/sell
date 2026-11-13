@@ -278,4 +278,20 @@
     <string name="smart_fact_transferred_area">المساحة المنقولة</string>
     <string name="smart_fact_sold_plot">رقم القطعة المبيعة</string>
     <string name="smart_fact_other">حقل مستخرج</string>
+    <string name="smart_media_heading">صور الأرض</string>
+    <string name="smart_media_hint">اختر إلى 8 صور واضحة للأرض. تُعرض محلياً ولا تُنشر تلقائياً.</string>
+    <string name="smart_media_pick">إضافة صور الأرض</string>
+    <string name="smart_media_rejected">بعض الصور غير مدعومة أو كبيرة أو مكررة.</string>
+    <string name="smart_media_selected">أضيفت الصور إلى المعاينة المحلية.</string>
+    <string name="smart_media_remove">حذف الصورة</string>
+    <string name="smart_location_heading">موقع الأرض</string>
+    <string name="smart_location_hint">حدد الإحداثيات إن كنت تعرفها. هذه نقطة اختيارية ولا تحدد الحدود القانونية.</string>
+    <string name="smart_latitude">خط العرض</string>
+    <string name="smart_longitude">خط الطول</string>
+    <string name="smart_location_unavailable">تعذّر فتح تطبيق الخرائط.</string>
+    <string name="smart_location_preview">معاينة النقطة في تطبيق الخرائط</string>
+    <string name="smart_description_heading">وصف الإعلان</string>
+    <string name="smart_description_price_prefix">السعر المطلوب</string>
+    <string name="smart_description_generate">جهّز وصفاً من بياناتي</string>
+    <string name="smart_media_private_notice">الصور والإحداثيات والوصف في هذه الشاشة معاينة مؤقتة على الهاتف، وليست مرفوعة أو محفوظة في المسودة حتى يكتمل التخزين الآمن. حفظ المسودة الحالي يخص البيانات الأساسية فقط.</string>
 </resources>

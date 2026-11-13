@@ -146,6 +146,11 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
     var saveMessage by remember(draftFile) {mutableIntStateOf(0)}
     var pickMessage by remember(draftFile) {mutableIntStateOf(0)}
     val files=remember(draftFile) {mutableStateListOf<ChosenDocument>()}
+    // Future listing media is preview-only, never private owner title evidence.
+    val listingPhotos=remember(draftFile){mutableStateListOf<DraftListingPhoto>()}
+    var listingLatitude by remember(draftFile){mutableStateOf("")}
+    var listingLongitude by remember(draftFile){mutableStateOf("")}
+    var listingDescription by remember(draftFile){mutableStateOf("")}
     // Never persist private OCR values or even the document URI with the draft.
     var familyReadings by remember(draftFile) {mutableStateOf<List<ReadOcrResult>>(emptyList())}
     var familyReadBusy by remember(draftFile) {mutableStateOf(false)}
@@ -738,6 +743,12 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                                 color=Brand.Muted,lineHeight=19.sp)
                         }
                     }
+                    SmartListingMediaStep(
+                        photos=listingPhotos,
+                        latitude=listingLatitude,onLatitude={listingLatitude=it},
+                        longitude=listingLongitude,onLongitude={listingLongitude=it},
+                        description=listingDescription,onDescription={listingDescription=it},
+                        region=region,area=area,price=price)
                     Surface(shape=RoundedCornerShape(20.dp),color=Color.White,
                         border=BorderStroke(1.dp,CardBorder)){
                         Column(Modifier.fillMaxWidth().padding(14.dp)){

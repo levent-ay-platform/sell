@@ -278,4 +278,20 @@
     <string name="smart_fact_transferred_area">Transferred land area</string>
     <string name="smart_fact_sold_plot">Sold plot number</string>
     <string name="smart_fact_other">Extracted field</string>
+    <string name="smart_media_heading">Land photos</string>
+    <string name="smart_media_hint">Choose up to 8 genuine property photos. They remain local and are never automatically published.</string>
+    <string name="smart_media_pick">Add property photos</string>
+    <string name="smart_media_rejected">Some photos were unsupported, too large or duplicates.</string>
+    <string name="smart_media_selected">Photos added to this local preview.</string>
+    <string name="smart_media_remove">Remove photo</string>
+    <string name="smart_location_heading">Property location</string>
+    <string name="smart_location_hint">Enter coordinates if you know them. This optional pin is not a legal boundary.</string>
+    <string name="smart_latitude">Latitude</string>
+    <string name="smart_longitude">Longitude</string>
+    <string name="smart_location_unavailable">No suitable map app was found.</string>
+    <string name="smart_location_preview">Preview pin in a maps app</string>
+    <string name="smart_description_heading">Listing description</string>
+    <string name="smart_description_price_prefix">Asking price</string>
+    <string name="smart_description_generate">Generate facts-only description</string>
+    <string name="smart_media_private_notice">Photos, coordinates and description are local previews only. They are not yet uploaded or saved with the draft until secure media storage is approved. The current Save Draft covers basic fields only.</string>
 </resources>
