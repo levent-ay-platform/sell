@@ -214,8 +214,138 @@ def _focused_area_lines(path: Path, page: int, anchors: list[tuple[int,int]]) ->
     return result
 
 
+
+def _owner_ordinal(word: dict) -> int | None:
+    """A numbered rights-table row, NOT a fractional ownership share."""
+    if not isinstance(word, dict):
+        return None
+    value = str(word.get('text','')).strip()
+    value = value.translate(str.maketrans('٠١٢٣٤٥٦٧٨٩۰۱۲۳۴۵۶۷۸۹',
+                                         '01234567890123456789'))
+    match = re.fullmatch(r'1\s*[/／]\s*([1-9][0-9]{0,2})',value)
+    if not match:
+        return None
+    number = int(match.group(1))
+    return number if number <= 500 else None
+
+
+def _supplement_owner_ordinal_words(
+        original: list[dict], optional: list[dict], *,
+        left: int, top: int, original_width: int, original_height: int,
+        scale: int = 1
+) -> tuple[list[dict],bool]:
+    """Use focused PSM-11 ONLY to recover missing numbered row markers.
+
+    Never merge alternate name/CIN/share tokens: duplicate or competing OCR
+    streams could create fabricated associations. Coordinates remain in the
+    original page pixel frame. An inconsistent duplicate ordinal fails closed.
+    """
+    if scale not in (1,2):
+        raise InvalidDocument('INVALID_OWNER_ROI_SCALE')
+    anchored=[w for w in original if _owner_ordinal(w) is not None and
+              w['bbox']['left'] >= int(original_width*.73)]
+    if not anchored:
+        return original,False
+    x_ref=sum((w['bbox']['left']+w['bbox']['right'])/2 for w in anchored)/len(anchored)
+    existing={}
+    for anchor in anchored:
+        ordinal=_owner_ordinal(anchor)
+        previous=existing.get(ordinal)
+        if previous is not None:
+            y0=(previous['bbox']['top']+previous['bbox']['bottom'])/2
+            y1=(anchor['bbox']['top']+anchor['bbox']['bottom'])/2
+            if abs(y0-y1)>original_height*.03:
+                return original,True
+        existing[ordinal]=anchor
+    result=list(original)
+    rejected=False
+    added=set()
+    for word in optional:
+        ordinal=_owner_ordinal(word)
+        if ordinal is None or word['confidence']<0.78:
+            continue
+        b=word['bbox']
+        box=dict(left=left+b['left']//scale,top=top+b['top']//scale,
+                 right=left+(b['right']+scale-1)//scale,
+                 bottom=top+(b['bottom']+scale-1)//scale)
+        if (box['left']<0 or box['top']<0 or box['right']>original_width or
+            box['bottom']>original_height or
+            abs((box['left']+box['right'])/2-x_ref)>original_width*.055):
+            continue
+        previous=existing.get(ordinal)
+        if previous is not None:
+            center0=(previous['bbox']['top']+previous['bbox']['bottom'])/2
+            center1=(box['top']+box['bottom'])/2
+            if abs(center0-center1)>original_height*.03:
+                rejected=True
+            continue
+        if ordinal in added:
+            # Two independent positions claim to be the same printed owner.
+            rejected=True
+            continue
+        result.append(dict(page=word['page'],text=word['text'],
+                           confidence=word['confidence'],bbox=box))
+        added.add(ordinal)
+    if rejected:
+        # No geometry can be promoted after an ordinal-position conflict.
+        return original,True
+    return result,False
+
+
+def _focused_owner_ordinal_words(path: Path, page: int,
+                                 original: list[dict]) -> tuple[list[dict],bool]:
+    """One bounded, adaptive crop when the main OCR sees a CPF table ordinal.
+
+    The crop covers the table region, not fixed pixels or a named template.
+    It may improve recall of missing row markers. It cannot assert owners,
+    legal rights, CIN, identity or publishing permission.
+    """
+    width,height=_png_size(path)
+    anchors=[w for w in original if _owner_ordinal(w) is not None and
+             w['bbox']['left']>=int(width*.73) and w['confidence']>=.45]
+    if not anchors:
+        return original,False
+    from PIL import Image
+    y0=min(w['bbox']['top'] for w in anchors)
+    y1=max(w['bbox']['bottom'] for w in anchors)
+    xmid=sum((w['bbox']['left']+w['bbox']['right'])/2 for w in anchors)/len(anchors)
+    # Narrow right-hand ordinal COLUMN, not whole estate/certificate text.
+    # Excluding unrelated stamps, dates and owner names improves recall,
+    # but supplementary observations remain only unverified row markers.
+    prior=.06 if y0>height*.40 else .05
+    after=.11 if y0>height*.40 else .26
+    rect=(max(0,int(xmid-width*.07)),max(0,int(y0-height*prior)),
+          min(width,int(xmid+width*.035)),
+          min(height,int(y1+height*after)))
+    if rect[2]-rect[0]<200 or rect[3]-rect[1]<200:
+        return original,False
+    with Image.open(path) as im:
+        with tempfile.TemporaryDirectory(prefix='malak_owner_roi_') as folder:
+            out=Path(folder)/'owner-region.png'
+            crop=im.crop(rect)
+            crop=crop.resize((crop.width*2,crop.height*2),
+                             Image.Resampling.LANCZOS)
+            crop.save(out)
+            # PSM-11 is a sparse-text supplement, never a replacement for
+            # original-page OCR words (and never persisted outside this call).
+            _,_,alternate,truncated=_tesseract_lines(
+                out,page,psm='11',with_area_anchors=True)
+            if truncated:
+                return original,True
+            return _supplement_owner_ordinal_words(
+                original,alternate,left=rect[0],top=rect[1],
+                original_width=width,original_height=height,scale=2)
+
 def _ocr_page(path: Path, page: int) -> list[dict]:
     first, anchors, spatial_words, spatial_truncated=_tesseract_lines(path,page,psm='3',with_area_anchors=True)
+    # Supplement only missing printed owner ordinal locations from a
+    # focused, bounded sparse OCR pass; never invent names, shares or CIN.
+    spatial_words,unsafe_ordinals=_focused_owner_ordinal_words(
+        path,page,spatial_words)
+    spatial_truncated=spatial_truncated or unsafe_ordinals
+    if len(spatial_words)>MAX_WORD_BOXES_PER_PAGE:
+        spatial_words=[]
+        spatial_truncated=True
     focused=_focused_area_lines(path,page,anchors)
     # Sparse layout is a fallback only. Common Tesseract typo شهعادة is
     # incomplete legal evidence but enough to avoid re-OCR of entire page.

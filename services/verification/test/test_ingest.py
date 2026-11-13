@@ -8,7 +8,7 @@ import time
 
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT/'ocr'))
-from ingest import InvalidDocument, extract_document
+from ingest import InvalidDocument, extract_document, _supplement_owner_ordinal_words
 
 
 def simple_native_pdf(path:Path, text='Certificat de propriete - Superficie 843 m2'):
@@ -135,3 +135,61 @@ class TestMalakOcr(unittest.TestCase):
             self.assertEqual(out['pages'][0]['method'],'ocr')
 
 if __name__=='__main__':unittest.main()
+
+
+
+class TestFocusedOwnerOrdinalSafety(unittest.TestCase):
+    """Only fabricated boxes and ordinals, never actual owner data."""
+    @staticmethod
+    def w(value,x,y,confidence=.98,page=1):
+        return dict(text=value,page=page,confidence=confidence,
+                    bbox=dict(left=x,top=y,right=x+30,bottom=y+17))
+
+    def test_adds_only_missing_rightmost_ordinal_with_original_page_box(self):
+        original=[self.w('1/2',910,570),self.w('اسم',770,590)]
+        # Coordinates in crop-local frame (x+40,y+100 in original frame)
+        extra=[self.w('1/1',870,140),
+               self.w('CIN',730,180),
+               self.w('00001122',780,180),
+               self.w('1/2',870,470)]
+        result,unsafe=_supplement_owner_ordinal_words(original,extra,
+            left=40,top=100,original_width=1000,original_height=1500)
+        self.assertFalse(unsafe)
+        self.assertEqual(len(result),3)
+        self.assertEqual(result[-1]['text'],'1/1')
+        self.assertEqual(result[-1]['bbox']['top'],240)
+        self.assertTrue(all('CIN'!=w['text'] for w in result))
+        self.assertTrue(all('00001122'!=w['text'] for w in result))
+
+    def test_wrong_column_or_low_confidence_is_not_added(self):
+        original=[self.w('1/2',900,600)]
+        added,unsafe=_supplement_owner_ordinal_words(original,
+             [self.w('1/1',440,120),self.w('1/3',860,120,.56)],
+             left=40,top=100,original_width=1000,original_height=1500)
+        self.assertEqual(added,original)
+        self.assertFalse(unsafe)
+
+    def test_conflicting_duplicate_ordinals_fail_closed(self):
+        original=[self.w('1/2',900,600)]
+        rows=[self.w('1/2',860,40)]
+        result,unsafe=_supplement_owner_ordinal_words(original,rows,
+           left=40,top=100,original_width=1000,original_height=1500)
+        self.assertTrue(unsafe)
+        self.assertEqual(result,original)
+
+    def test_same_missing_ordinal_twice_fails_closed(self):
+        original=[self.w('1/2',900,600)]
+        rows=[self.w('1/1',860,200),self.w('1/1',865,400)]
+        result,unsafe=_supplement_owner_ordinal_words(original,rows,
+           left=40,top=100,original_width=1000,original_height=1500)
+        self.assertTrue(unsafe)
+        self.assertEqual(result,original)
+
+    def test_numbered_shares_and_8_digit_cin_never_count_as_ordinal(self):
+        original=[self.w('1/2',900,600)]
+        extras=[self.w('1/1000',860,200),self.w('00001122',860,290),
+                self.w('1/0',860,330),self.w('03/04',860,370)]
+        result,unsafe=_supplement_owner_ordinal_words(original,extras,
+           left=40,top=100,original_width=1000,original_height=1500)
+        self.assertEqual(result,original)
+        self.assertFalse(unsafe)

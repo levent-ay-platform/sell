@@ -200,12 +200,15 @@ function sharedAcrossTwoPages(opts:{
   format:'pdf',mayApproveOwnership:false,pages:[
    {page:1,method:'ocr',
     lines:[{page:1,text:'شهادة اشتراك في الملكية',
-      source:'ocr-ar',confidence:0.99}],
+      source:'ocr-ar',confidence:0.99},
+      {page:1,text:'صفحة 1 من 2',source:'ocr-ar',confidence:0.99}],
     privateSpatialPage:{page:1,width:1000,height:1500,words:first},
     spatialWordsTruncated:false
    },
    {page:2,method:'ocr',
-    lines:[{page:2,text:'صفحة 2 من 2',source:'ocr-ar',confidence:0.99}],
+    lines:[{page:2,text:'صفحة 2 من 2',source:'ocr-ar',confidence:0.99},
+      {page:2,text:'مجموع أجزاء الملكية: 200 جزء',
+        source:'ocr-ar',confidence:0.99}],
     privateSpatialPage:{page:2,width:1000,height:1500,words:second},
     spatialWordsTruncated:false
    }
@@ -262,4 +265,30 @@ test('no spatial word boxes, truncated word boxes or missing pages never assert 
  const missing={...original,pages:[original.pages[0]!]};
  assert.equal(compareUnifiedPrivateDocumentIdentity(missing,arabicFront,
   ['SHARED_OWNERSHIP_CERTIFICATE']).assessment,'INSUFFICIENT_EVIDENCE');
+});
+
+
+test('private co-owner text agreement requires independently printed page count',()=>{
+ const full=sharedAcrossTwoPages();
+ const missingPageCount={...full,pages:full.pages.map(p=>({
+   ...p,lines:p.lines.filter(l=>!l.text.includes('صفحة'))
+ }))};
+ const r=compareUnifiedPrivateDocumentIdentity(missingPageCount,arabicFront,
+    ['SHARED_OWNERSHIP_CERTIFICATE']);
+ assert.equal(r.assessment,'INSUFFICIENT_EVIDENCE');
+ assert.equal(r.mayPublish,false);
+});
+test('rights-table partial sum or conflicting printed denominator prevents matching a co-owner',()=>{
+ const base=sharedAcrossTwoPages();
+ const conflicting={...base,pages:base.pages.map(p=>({
+  ...p,lines:p.lines.map(l=>({
+    ...l,text:l.text==='مجموع أجزاء الملكية: 200 جزء'?
+       'مجموع أجزاء الملكية: 201 جزء':l.text
+  }))
+ }))};
+ const r=compareUnifiedPrivateDocumentIdentity(conflicting,arabicFront,
+  ['SHARED_OWNERSHIP_CERTIFICATE']);
+ assert.equal(r.assessment,'INSUFFICIENT_EVIDENCE');
+ assert.equal(r.identityVerified,false);
+ assert.equal(r.legalOwnershipVerified,false);
 });

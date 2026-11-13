@@ -65,7 +65,7 @@ const totalArea:Rule={
 };
 const denominator:Rule={
  key:'rightsDenominator',
- pattern:/^(?:مجموع\s+(?:اجزاء|الاجزاء)\s+الملكي[ةه]|total\s+des\s+parts)[\s:#：-]*([0-9]{1,12}(?:[.,][0-9]{1,3})?)\s*(?:جزء|اجزاء)?\s*$/iu,
+ pattern:/^(?:مجموع\s+(?:اجزاء|الاجزاء)\s+الملكي[ةه]|المجموع|التجزئ[ةه]|total\s+des\s+parts)[\s:#：-]*([0-9]{1,12}(?:[.,][0-9]{1,3})?)\s*(?:جزء|اجزاء)?\s*$/iu,
  shape:'parts'
 };
 const registeredPlot:Rule={

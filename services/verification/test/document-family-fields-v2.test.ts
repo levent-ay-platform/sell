@@ -212,3 +212,18 @@ test('masked or contradictory receipt payer never becomes an identity match',()=
  assert.equal(field(r,'receiptPayer')?.status,'CONFLICT');
  assert.equal(field(r,'receiptPayer')?.value,null);
 });
+
+
+test('printed rights denominator from CPF final-page total is distinct from physical area',()=>{
+ const r=reading(['شهادة اشتراك في الملكية','المجموع: 200 جزء']);
+ assert.equal(field(r,'rightsDenominator')?.value,'200');
+ assert.equal(field(r,'rightsDenominator')?.status,'CANDIDATE');
+ assert.equal(field(r,'registeredAreaM2')?.status,'ABSENT');
+ assert.equal(r.ownershipVerified,false);
+});
+test('different printed rights totals conflict and cannot produce a trusted denominator',()=>{
+ const r=reading(['شهادة اشتراك في الملكية',
+   'مجموع أجزاء الملكية: 200 جزء','المجموع: 201 جزء']);
+ assert.equal(field(r,'rightsDenominator')?.status,'CONFLICT');
+ assert.equal(field(r,'rightsDenominator')?.value,null);
+});

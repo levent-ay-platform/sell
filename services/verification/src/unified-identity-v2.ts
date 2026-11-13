@@ -73,6 +73,35 @@ function candidate(f:PrivateLandFact):CandidateName|null {
     return null;
   return {value:f.value,page:e.page,source:e.source,confidence:e.confidence};
 }
+/** An independently printed "page x of n" footer; without it, no full table. */
+function completePrintedPagination(document:IngestedDocument):number|null {
+  if(document.pages.length<1||document.pages.length>8)return null;
+  let required:number|null=null;
+  const seen=new Set<number>();
+  for(const page of document.pages) {
+    const observations:{page:number;total:number}[]=[];
+    for(const line of page.lines){
+      if(line.text.length>300)continue;
+      const text=line.text.normalize('NFKC')
+        .replace(/[٠-٩]/gu,d=>String(d.charCodeAt(0)-0x660));
+      const a=/(?:صفحة)\s*([0-9]{1,2})\s*من\s*([0-9]{1,2})/u.exec(text);
+      const b=/\bpage\s*([0-9]{1,2})\s*(?:de|of)\s*([0-9]{1,2})\b/iu.exec(text);
+      const found=a??b;
+      if(found)observations.push({page:Number(found[1]),total:Number(found[2])});
+    }
+    if(observations.length===0||observations.some(x=>
+        x.page!==page.page||x.total<1||x.total>8||
+        x.total<page.page||required!==null&&required!==x.total))
+      return null;
+    required=observations[0]!.total;
+    seen.add(page.page);
+  }
+  if(required!==document.pages.length||seen.size!==required||
+     Array.from({length:required},(_,i)=>i+1).some(n=>!seen.has(n)))
+    return null;
+  return required;
+}
+
 function initial(kind:LandPaperKind):UnifiedPrivateDocumentIdentityResult {
   return {detectedKind:kind,assessment:'INSUFFICIENT_EVIDENCE',roles:[],
     reasons:['OFFICIAL_REGISTRY_NOT_CHECKED'],
@@ -138,7 +167,11 @@ export function compareUnifiedPrivateDocumentIdentity(
     reasons.add('SHARED_RIGHTS_NEED_ROW_REVIEW');
     let assessment:ComparisonAssessment='INSUFFICIENT_OR_AMBIGUOUS';
     let page:number|null=null;
-    const ready=document.pages.length>0&&document.pages.every(p=>
+    const printedPageCount=completePrintedPagination(textDoc);
+    const printedDenominator=read.privateFamilyFields.facts.find(
+      f=>f.key==='rightsDenominator'&&f.status==='CANDIDATE')?.value??null;
+    const ready=printedPageCount!==null&&printedDenominator!==null&&
+      document.pages.length>0&&document.pages.every(p=>
       p.privateSpatialPage!==undefined&&p.spatialWordsTruncated===false&&
       p.privateSpatialPage.words.length>0);
     if(ready){
@@ -147,11 +180,13 @@ export function compareUnifiedPrivateDocumentIdentity(
       if(layout.findings.length===0&&layout.ownerOrdinals.length>=2){
         const count=Math.max(...layout.ownerOrdinals);
         const table=analyzeOwnerTable(layout.cells,{
-          declaredPages:document.pages.length,
+          declaredPages:printedPageCount,
           receivedPages:document.pages.map(p=>p.page),
-          declaredOwnerCount:count,printedTotalParts:null
+          declaredOwnerCount:count,printedTotalParts:printedDenominator
         });
-        const complete=table.missingPages.length===0&&
+        const complete=table.readyForHumanReview&&
+          table.rightsBalance.status==='BALANCED'&&
+          table.missingPages.length===0&&
           table.missingOwnerOrdinals.length===0&&
           table.rows.every(r=>r.fields.name.status==='CANDIDATE'&&
             r.fields.rightsParts.status==='CANDIDATE');

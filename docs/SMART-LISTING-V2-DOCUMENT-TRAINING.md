@@ -152,3 +152,15 @@ This Draft adds opt-in *private text-only* role comparison for two previously in
 The encrypted pair service preserves word geometry only in private memory between independently sealed OCR reads and the unified role matcher; the legacy certificate comparator still consumes text only. All reports omit raw co-owner names and CIN in the new role statuses; public listing APIs never see table contents. Regression fixtures are wholly invented and synthetic.
 
 **Remaining strict gate:** private accuracy scoring against the user's genuine Tunisian samples on exact running service, manual rights/legal review, final photo/map storage workflow and real Android device UX. No real personal data was pushed to public GitHub; no production migration or deploy.
+
+
+## Stage 8 — private real-image ordinal recovery and complete-table gate (2026-11-13)
+
+**Observation on a consented private two-page CPF scan:** whole-page Tesseract 5.5 Arabic/French PSM 3 detected just three of seven printed owner row indices. A *manually isolated* rightmost ordinal-column crop with PSM 11 detected all seven printed indices across two pages. This is **not** an integrated-worker accuracy claim; neither owner names, CIN associations, parts nor true ownership have been verified by this experiment. Originals and raw text stay private; none are committed here.
+
+**Implemented (Draft only):**
+- One bounded, adaptive supplementary OCR pass on a narrow right-hand ordinal column, **only when existing page words contain a plausible printed row index**. Crop is derived from observed page geometry, doubled only inside the temporary private worker, and removed after reading. The pass may add **only newly recognized, high-confidence numbered row markers**, each mapped back into the original full-page pixel coordinates. It must not merge alternate owner names, CIN or rights parts, which could create fabricated row associations. Conflicting duplicate positions and too many words invalidate the whole spatial lookup, not just one row.
+- A provisional shared-owner **same-row CIN and name** comparison now additionally requires printed per-page labels (page x of n, complete 1..n page set), a unique explicitly printed abstract rights-parts total, all numbered rows complete, and exact arithmetic agreement of all parts against that total. Incomplete pagination, totals or any ambiguity -> manual review, never automatic matching.
+- Both changes use free deterministic local Tesseract / TypeScript and fabricated test cases. Additional OCR may increase work; retain 45s worker budget and fail closed on timeouts.
+
+**Still blocked:** the genuine source uses Arabic national-ID-card prose next to CIN numbers, not always the literal separate label CIN. A matching 8-digit number alone is unsafe; current checker must abstain rather than infer it belongs to the current rights holder. Real full-engine benchmark across all documents, Android live-device tests, source highlights and permanent secure photo/media storage remain open. No legal registry verification or production deployment.

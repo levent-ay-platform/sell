@@ -74,8 +74,19 @@ function harness(kind:EvidenceRow['kind']='OWNERSHIP_CERTIFICATE'){
           lines:[{page:n,text:title,source:'ocr-ar' as const,confidence:0.99}]
         });
         return {format:'pdf' as const,mayApproveOwnership:false as const,
-          pages:[page(1,words1,'شهادة اشتراك في الملكية'),
-            page(2,words2,'صفحة 2 من 2')]};
+          pages:[{...page(1,words1,'شهادة اشتراك في الملكية'),
+            lines:[
+              {page:1,text:'شهادة اشتراك في الملكية',
+                source:'ocr-ar' as const,confidence:0.99},
+              {page:1,text:'صفحة 1 من 2',
+                source:'ocr-ar' as const,confidence:0.99}
+            ]},
+            {...page(2,words2,'صفحة 2 من 2'),lines:[
+              {page:2,text:'صفحة 2 من 2',
+                source:'ocr-ar' as const,confidence:0.99},
+              {page:2,text:'مجموع أجزاء الملكية: 200 جزء',
+                source:'ocr-ar' as const,confidence:0.99}
+            ]}]};
       }
       const documentLines=kind==='SALE_DEED'?
         ['عقد بيع','المشتري: '+name,'البائع: Karim Ben Ahmed']:
