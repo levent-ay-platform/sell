@@ -250,4 +250,5 @@
     <string name="smart_title_auto">Your listing title is created automatically</string>
     <string name="smart_title_pending">Enter location and area to generate a title</string>
     <string name="smart_title_edit">Edit</string>
+    <string name="smart_title_done">Done</string>
 </resources>
