@@ -181,6 +181,7 @@
     <string name="pair_not_connected">Secure document reading is not yet enabled for your account. You can save your draft.</string>
     <string name="pair_upload_consent">I agree to send my certificate and identity documents to Malak’s private service for reading and comparison for my verification case.</string>
     <string name="pair_start">Read and compare documents</string>
+    <string name="pilot_ocr_service_unavailable">Pilot OCR service unavailable. A connected private server is required to sign in.</string>
     <string name="pilot_login_title">Pilot sign-in / Accès pilote</string>
     <string name="pilot_login_subtitle">Enter a Tunisian phone number, then the temporary test code. No SMS will be sent.</string>
     <string name="pilot_phone_label">Tunisian phone number</string>
@@ -192,8 +193,8 @@
     <string name="pilot_otp_invalid">Incorrect test code. Try again.</string>
     <string name="pilot_enter">Enter pilot</string>
     <string name="pilot_change_phone">Change phone number</string>
-    <string name="pilot_no_real_identity">Your Malak access is a test mode. No SMS was sent, no phone ownership was confirmed, and no identity or land title was verified. You can browse and save local drafts.</string>
-    <string name="pilot_session_badge">Pilot access — phone unverified</string>
+    <string name="pilot_no_real_identity">The test number and code will now open a real, temporary OCR session through our private server. If the server is unavailable, login will not be simulated.</string>
+    <string name="pilot_session_badge">Pilot OCR session — phone not verified</string>
     <string name="pilot_sign_out">Sign out</string>
     <string name="camera_scan_front">Photograph CIN front</string>
     <string name="camera_field_guide_note">Align the front inside the single frame. Review the entire photo after capture.</string>

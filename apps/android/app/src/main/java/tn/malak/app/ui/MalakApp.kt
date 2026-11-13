@@ -72,14 +72,17 @@ internal fun MalakApp(
     var screen by rememberSaveable { mutableStateOf("home") }
     var category by rememberSaveable { mutableStateOf("all") }
     var query by rememberSaveable { mutableStateOf("") }
-    // In-memory only: never promote fixed pilot OTP to an authenticated server identity.
+    // A successful server login returns a real scoped QA bearer. Local UI
+    // PIN alone can NEVER create this session.
     var pilotPhone by remember { mutableStateOf<String?>(null) }
+    var pilotOcrSession by remember { mutableStateOf<PilotOcrSession?>(null) }
     val tabs = setOf("home", "map", "favorites", "more")
 
     CompositionLocalProvider(LocalMalakStringsContext provides localizedContext,
         LocalLayoutDirection provides direction,
         LocalOwnerEvidenceSession provides (if (PilotOtpGate.enabled) null else ownerEvidenceSession),
-        LocalAuthenticatedOwnerSession provides (if (PilotOtpGate.enabled) null else authenticatedOwnerSession)) {
+        LocalAuthenticatedOwnerSession provides (if (PilotOtpGate.enabled) null else authenticatedOwnerSession),
+        LocalPilotOcrSession provides (if (PilotOtpGate.enabled) pilotOcrSession else null)) {
         MaterialTheme(colorScheme = lightColorScheme(
             primary = Brand.Crimson,
             background = Brand.Pearl,
@@ -88,12 +91,17 @@ internal fun MalakApp(
         )) {
             Surface(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing), color = Brand.Pearl) {
                 if (PilotOtpGate.enabled && pilotPhone == null) {
-                    PilotOtpScreen(onEnterPilot = { pilotPhone = it; screen = "home" })
+                    PilotOtpScreen(onEnterPilot = { phone, session ->
+                        pilotOcrSession=session
+                        pilotPhone=phone
+                        screen="home"
+                    })
                 } else Scaffold(
                     containerColor = Brand.Pearl,
                     contentWindowInsets = WindowInsets(0, 0, 0, 0),
                     topBar = {
                         if (PilotOtpGate.enabled) PilotSessionBar(pilotPhone.orEmpty()) {
+                            pilotOcrSession = null
                             pilotPhone = null
                             screen = "home"
                         }

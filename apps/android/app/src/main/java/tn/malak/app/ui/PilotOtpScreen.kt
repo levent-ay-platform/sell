@@ -11,6 +11,9 @@ import androidx.compose.material.icons.outlined.Phone
 import androidx.compose.material.icons.outlined.Security
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.platform.LocalContext
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.CancellationException
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -23,13 +26,15 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import tn.malak.app.R
 
-/**
- * Ephemeral pilot screen. It never persists a phone number, calls an API or
- * creates AuthenticatedOwnerSession / OwnerEvidenceSession. The fixed PIN only
- * exists in the debug source set; the release verifier always returns false.
+/** Debug pilot obtains a REAL server-issued, scoped OCR bearer.
+ * Never grants legal identity/ownership approval or persists bearer.
  */
 @Composable
-internal fun PilotOtpScreen(onEnterPilot:(String)->Unit) {
+internal fun PilotOtpScreen(onEnterPilot:(String,PilotOcrSession)->Unit) {
+    val context=LocalContext.current
+    val coroutine=rememberCoroutineScope()
+    var submitting by remember { mutableStateOf(false) }
+    var serverFailure by remember { mutableStateOf(false) }
     var phone by remember { mutableStateOf("") }
     var otp by remember { mutableStateOf("") }
     var stage by remember { mutableStateOf(0) }
@@ -82,7 +87,7 @@ internal fun PilotOtpScreen(onEnterPilot:(String)->Unit) {
                     Text("+216 "+phone,color=Brand.Ink,fontSize=15.sp)
                     OutlinedTextField(
                         value=otp,
-                        onValueChange={otp=it.filter(Char::isDigit).take(4);error=false},
+                        onValueChange={otp=it.filter(Char::isDigit).take(4);error=false;serverFailure=false},
                         label={Text(s(R.string.pilot_otp_label))},
                         leadingIcon={Icon(Icons.Outlined.Lock,null)},
                         modifier=Modifier.fillMaxWidth(),singleLine=true,
@@ -95,16 +100,35 @@ internal fun PilotOtpScreen(onEnterPilot:(String)->Unit) {
                     )
                     Button(
                         onClick={
-                            if(PilotOtpGate.verify(phone,otp)){
-                                onEnterPilot("+216"+phone)
-                                otp=""
-                            } else error=true
+                            if(!PilotOtpGate.verify(phone,otp)) {
+                                error=true
+                            }else if(!submitting) {
+                                submitting=true
+                                serverFailure=false
+                                coroutine.launch {
+                                    try {
+                                        val auth=PilotOcrLogin.login(context,phone,otp)
+                                        onEnterPilot("+216"+phone,auth)
+                                        otp=""
+                                    }catch(cancel:CancellationException){throw cancel}
+                                    catch(e:PilotOcrLoginException){
+                                        if(e.status==401||e.status==400)error=true
+                                        else serverFailure=true
+                                    }finally{submitting=false}
+                                }
+                            }
                         },
-                        enabled=otp.length==4,
+                        enabled=otp.length==4&&!submitting,
                         modifier=Modifier.fillMaxWidth().heightIn(min=52.dp),
                         shape=RoundedCornerShape(14.dp)
                     ){Text(s(R.string.pilot_enter))}
-                    TextButton(onClick={stage=0;otp="";error=false}){
+                    if(submitting)
+                        LinearProgressIndicator(Modifier.fillMaxWidth())
+                    if(serverFailure)
+                        Text(s(R.string.pilot_ocr_service_unavailable),
+                            color=MaterialTheme.colorScheme.error,fontSize=13.sp)
+                    TextButton(onClick={stage=0;otp="";error=false;serverFailure=false},
+                        enabled=!submitting){
                         Text(s(R.string.pilot_change_phone))
                     }
                 }

@@ -84,8 +84,11 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
     val context=LocalContext.current
     val ownerSession=LocalOwnerEvidenceSession.current
     val authenticatedOwnerSession=LocalAuthenticatedOwnerSession.current
-    // The pilot phone/PIN is not a verified owner OCR session.
-    val canReadPrivateId=ownerSession!=null||authenticatedOwnerSession!=null
+    val pilotOcrSession=LocalPilotOcrSession.current
+    // Pilot is a real server OCR session, but never a verified identity
+    // or owner/case/publishing credential.
+    val canReadPrivateId=ownerSession!=null||authenticatedOwnerSession!=null||
+        (pilotOcrSession!=null&&pilotOcrSession.expiresAtMs>System.currentTimeMillis())
     val scope=rememberCoroutineScope()
     var requestJob by remember {mutableStateOf<Job?>(null)}
     // Invalidate old asynchronous work whenever fields, documents, consented
@@ -140,7 +143,7 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
     var frontReadFailed by remember(draftFile){mutableStateOf(false)}
     var captureOcrConsent by remember(draftFile){mutableStateOf(false)}
     LaunchedEffect(draftFile,pendingPhoto?.uploadKey,
-        captureOcrConsent,ownerSession,authenticatedOwnerSession,canReadPrivateId){
+        captureOcrConsent,ownerSession,authenticatedOwnerSession,pilotOcrSession,canReadPrivateId){
         val pending=pendingPhoto
         frontRead=null;frontReadFailed=false;frontReadBusy=false
         if(pending!=null){
@@ -153,6 +156,11 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
             }else{
                 frontReadBusy=true
                 try{
+                    if(pilotOcrSession!=null){
+                        val result=LocalDocumentOcr.inspectPilotFront(
+                            context,pending.uri,pending.length,pending.mime,pilotOcrSession)
+                        if(pendingPhoto?.uploadKey==pending.uploadKey)frontRead=result
+                    }else{
                     val activeCase=ownerSession?:provisionedCase?:run {
                         val auth=authenticatedOwnerSession
                         if(auth==null){
@@ -183,6 +191,7 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                         val result=LocalDocumentOcr.inspectFront(
                             context,pending.uri,pending.length,pending.mime,activeCase)
                         if(pendingPhoto?.uploadKey==pending.uploadKey)frontRead=result
+                    }
                     }
                 }catch(cancel:CancellationException){throw cancel}
                 catch (_:Exception){

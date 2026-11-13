@@ -181,6 +181,7 @@
     <string name="pair_not_connected">La lecture sécurisée n’est pas encore activée pour votre compte. Vous pouvez enregistrer le brouillon.</string>
     <string name="pair_upload_consent">J’accepte l’envoi de mon certificat et de ma carte d’identité au service privé de Malak pour la lecture et la comparaison liées à mon dossier.</string>
     <string name="pair_start">Lire et comparer les documents</string>
+    <string name="pilot_ocr_service_unavailable">Service OCR pilote indisponible. Connexion au serveur privé requise.</string>
     <string name="pilot_login_title">Connexion pilote</string>
     <string name="pilot_login_subtitle">Saisissez un numéro tunisien, puis le code de test temporaire. Aucun SMS ne sera envoyé.</string>
     <string name="pilot_phone_label">Numéro tunisien</string>
@@ -192,8 +193,8 @@
     <string name="pilot_otp_invalid">Code de test incorrect. Réessayez.</string>
     <string name="pilot_enter">Entrer en mode pilote</string>
     <string name="pilot_change_phone">Modifier le numéro</string>
-    <string name="pilot_no_real_identity">Vous utilisez un mode de test : aucun SMS n’a été envoyé, le numéro de téléphone et l’identité ne sont pas vérifiés, et aucune propriété n’est confirmée. Vous pouvez parcourir les annonces et enregistrer un brouillon local.</string>
-    <string name="pilot_session_badge">Accès pilote — numéro non vérifié</string>
+    <string name="pilot_no_real_identity">Le numéro et le code pilote ouvrent désormais une vraie session OCR temporaire sur notre serveur privé. Si le service est indisponible, aucune fausse connexion.</string>
+    <string name="pilot_session_badge">Session OCR pilote — numéro non vérifié</string>
     <string name="pilot_sign_out">Déconnexion</string>
     <string name="camera_scan_front">Photographier le recto de la CIN</string>
     <string name="camera_field_guide_note">Cadrez tout le recto dans le seul cadre, puis vérifiez la photo.</string>

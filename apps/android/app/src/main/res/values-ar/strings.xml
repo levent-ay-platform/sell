@@ -181,6 +181,7 @@
     <string name="pair_not_connected">القراءة الآمنة غير مفعّلة لحسابك حالياً. يمكنك حفظ مسودتك.</string>
     <string name="pair_upload_consent">أوافق على إرسال ملفات الشهادة والهوية إلى خدمة ملاك الخاصة لقراءة البيانات ومقارنتها ضمن طلب التحقق الخاص بي.</string>
     <string name="pair_start">قراءة الوثائق ومقارنتها</string>
+    <string name="pilot_ocr_service_unavailable">تعذّر الاتصال بخدمة OCR التجريبية. لازم يكون الخادم الخاص متصلاً حتى يفتح الدخول.</string>
     <string name="pilot_login_title">الدخول التجريبي إلى ملاك</string>
     <string name="pilot_login_subtitle">أدخل رقم هاتف تونسي، ثم الرمز التجريبي المؤقت. لن نرسل رسالة SMS.</string>
     <string name="pilot_phone_label">رقم الهاتف التونسي</string>
@@ -192,8 +193,8 @@
     <string name="pilot_otp_invalid">الرمز التجريبي غير صحيح. حاول مجدداً.</string>
     <string name="pilot_enter">الدخول إلى النسخة التجريبية</string>
     <string name="pilot_change_phone">تغيير رقم الهاتف</string>
-    <string name="pilot_no_real_identity">هذه نسخة تجريبية فقط. لم تُرسل رسالة SMS ولم نتحقق من ملكية رقم الهاتف أو الهوية أو ملكية الأرض. يمكنك التصفح وحفظ مسودة محلية.</string>
-    <string name="pilot_session_badge">دخول تجريبي — الرقم غير متحقق منه</string>
+    <string name="pilot_no_real_identity">الرقم والرمز التجريبي بيفتحوا جلسة OCR حقيقية مؤقتة عبر الخادم الخاص. إذا الخدمة غير متصلة رح يظهر الخطأ بدل دخول وهمي.</string>
+    <string name="pilot_session_badge">جلسة OCR تجريبية — لا تُثبت ملكية الرقم</string>
     <string name="pilot_sign_out">تسجيل الخروج</string>
     <string name="camera_scan_front">تصوير وجه بطاقة التعريف</string>
     <string name="camera_field_guide_note">خلّي وجه البطاقة كاملاً داخل الإطار الواحد، وراجع الصورة بعد التصوير.</string>
