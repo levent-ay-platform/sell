@@ -117,3 +117,25 @@ QA consists of wholly fictional fixtures only; no real identity or document data
 **Hard constraints:** all classes and unknown intake output ACCEPT_FOR_PRIVATE_REVIEW for file-type policy, but security/malware/consent checks remain mandatory. A mere photo, name/CIN match or numeric score NEVER sets a verified-seller badge, legal ownership, title clearance or publication permission. The score is PRIVATE until product/legal review of fairness and misuse. Differences in ID/parcel references, incomplete/low-quality OCR and conflicting values need human review. Repeating multiple low-quality receipts must not inflate score. Service receipts are not title deeds.
 
 **Current stage limitations:** no real-world accuracy calibration, no actual image-based model training for the new service-receipt specimen, no production allowance for all document upload kinds, no end-user UI change to show this private score yet. Do not publicize as “seller confidence percentage”.
+
+
+## Stage 6 — ONE unified private identity/document matcher (2026-11-13)
+
+The user's decision: retire independent document-identity policy branches in favor of **one orchestrator with document-specific roles**. Do not merge all legal meanings into one generic “seller is owner” status.
+
+Code: `src/unified-identity-v2.ts` coordinates private document classification, source-backed legal actors and front-CIN identity-name text using the same validated normalizer as the existing certificate comparator. The encrypted case-bound pair service invokes this orchestrator for all supported private evidence kinds. The previous certificate-only comparison fields remain backward compatible, but other documents never produce fake certificate agreement.
+
+| OCR document family | Person roles compared to CIN-front name | Meaning and limitation |
+| --- | --- | --- |
+| OWNERSHIP_CERTIFICATE | Explicit, uniquely labelled registered owner + separate strict CIN text when present | Name/CIN text agreement only, never authentic title |
+| SHARED_OWNERSHIP_CERTIFICATE | Rights holder only after per-row owner/CIN source association | No guessed match from any name in multi-owner certificate |
+| SALE_DEED | BUYER and SELLER separately | Matching buyer/seller name doesn't prove currently registered title |
+| TRANSFER_CARD | TRANSFEREE and TRANSFEROR separately | Registered transfer is not assumed from form |
+| POSSESSION_REPORT | Requester when independently and explicitly extracted (not yet supported) | No automatic title agreement |
+| PROPERTY_SERVICE_RECEIPT | SERVICE_APPLICANT | Applicant/fee payer is not a registered owner |
+| FINANCIAL_RECEIPT | Payer when reliably and explicitly extracted (not yet supported) | Supporting payment only |
+| UNKNOWN | None | Preserve private evidence and request review |
+
+Hard rules: no fuzzy or cross-script name matches, no CIN from general title or contract digits, multiple matching roles ambiguous, missing/low-confidence person fields inconclusive, mismatched stored kind versus detected OCR type inconclusive. New result contains **role status only, never the raw names or CIN**, plus `identityVerified:false`, `legalOwnershipVerified:false`, `mayPublish:false`, `requiresHumanReview:true`. All sensitive processing stays within authorized, consented, scanned, encrypted per-case boundary.
+
+Status: Draft-only; synthetic CI contract acceptance is not real-document benchmark, legal ownership validation or real Android UX acceptance. The staged mobile flow must switch from the old certificate-only button to the new unified role report with guarded evidence-kind mapping before claiming complete mobile parity.

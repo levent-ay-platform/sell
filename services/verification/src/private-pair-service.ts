@@ -12,6 +12,8 @@ import {comparePrivateCertificateIdentityOcr} from './private-document-compariso
 import {compareCertificateIdentityCinText} from './private-cin-comparison.ts';
 import type {PrivateCinComparison} from './private-cin-comparison.ts';
 import type {PrivateDocumentComparison} from './private-document-comparison.ts';
+import {compareUnifiedPrivateDocumentIdentity} from './unified-identity-v2.ts';
+import type {UnifiedPrivateDocumentIdentityResult} from './unified-identity-v2.ts';
 import type {Authenticator,AuthorizedUploadCase,EvidenceRow,CaseEvidenceRepository} from './evidence-upload.ts';
 import type {PrivateCiphertextReader} from './local-private-store.ts';
 import type {PrivateOcrWorker} from './seller-ocr-service.ts';
@@ -20,7 +22,7 @@ const ID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{1
 const SHA=/^[0-9a-f]{64}$/i;
 const MAGIC=Buffer.from('MALAK-EV1\0','ascii');
 const MAX_BYTES=12*1024*1024;
-type Kind='OWNERSHIP_CERTIFICATE'|'IDENTITY';
+type Kind='DOCUMENT'|'IDENTITY';
 export class PrivatePairAccessDenied extends Error {
   constructor(){super('PRIVATE_PAIR_ACCESS_DENIED');}
 }
@@ -51,6 +53,8 @@ export interface PrivatePairReport {
   readonly comparison:PrivateDocumentComparison;
   /** Number values are NEVER returned; document-level review remains mandatory. */
   readonly cinComparison:PrivateCinComparison;
+  /** Shared seven-family orchestrator, separate from legacy certificate DTO. */
+  readonly unifiedComparison?:UnifiedPrivateDocumentIdentityResult;
   readonly ownershipVerified:false;
   readonly identityVerified:false;
   readonly mayPublish:false;
@@ -75,7 +79,9 @@ function checkIds(req:PrivatePairRequest):void {
 }
 function rowAllowed(row:EvidenceRow|null,kind:Kind,req:PrivatePairRequest,userId:string,evidenceId:string):row is EvidenceRow {
   return !!row&&row.evidenceId===evidenceId&&row.caseId===req.caseId&&
-    row.uploadedBy===userId&&row.kind===kind&&SHA.test(row.digest)&&
+    row.uploadedBy===userId&&
+    (kind==='IDENTITY'?row.kind==='IDENTITY':row.kind!=='IDENTITY')&&
+    SHA.test(row.digest)&&
     Number.isSafeInteger(row.fileSize)&&row.fileSize>=20&&row.fileSize<=MAX_BYTES&&
     (kind==='IDENTITY'
       ?row.pageNumber===1&&['image/jpeg','image/png'].includes(row.mime)
@@ -165,7 +171,7 @@ export async function analyzeAuthorizedPrivateEvidencePair(
     }
     return rows;
   };
-  const certRows=await fetchRows(req.certificateEvidenceIds,'OWNERSHIP_CERTIFICATE');
+  const certRows=await fetchRows(req.certificateEvidenceIds,'DOCUMENT');
   const idRows=await fetchRows(req.identityEvidenceIds,'IDENTITY');
   // Certificates may be multi-page; the CIN is exactly one front image
   // numbered page 1. Never silently renumber evidence before OCR.
@@ -184,10 +190,30 @@ export async function analyzeAuthorizedPrivateEvidencePair(
   const identityDocs:IngestedDocument[]=[];
   for(const row of idRows){checkBudget();identityDocs.push(await readOne(row,deps));checkBudget();}
   const cert=joinPages(certDocs),identity=joinPages(identityDocs);
-  const cinComparison=compareCertificateIdentityCinText(cert,identity);
-  let comparison:PrivateDocumentComparison;
-  try {comparison=comparePrivateCertificateIdentityOcr(cert,identity);}
-  catch {throw new PrivatePairUnavailable();}
+  // One private pipeline for every paper; source kind and legal role are
+  // inferred from private OCR. Legacy name/CIN DTO remains certificate-only.
+  let unifiedComparison:UnifiedPrivateDocumentIdentityResult;
+  try {
+    unifiedComparison=compareUnifiedPrivateDocumentIdentity(
+      cert,identity,certRows.map(row=>row.kind));
+  }catch{throw new PrivatePairUnavailable();}
+  const legacyCertificate=certRows.every(r=>r.kind==='OWNERSHIP_CERTIFICATE')&&
+    (unifiedComparison.detectedKind==='OWNERSHIP_CERTIFICATE'||
+     unifiedComparison.detectedKind==='UNKNOWN');
+  const cinComparison:PrivateCinComparison=legacyCertificate?
+    compareCertificateIdentityCinText(cert,identity):
+    {status:'NOT_COMPARABLE',certificateEvidence:null,identityEvidence:null,
+      mayVerifyIdentity:false};
+  let comparison:PrivateDocumentComparison={
+    assessment:'INSUFFICIENT_OR_AMBIGUOUS',certificateName:null,
+    identityName:null,reasons:['ROLE_SPECIFIC_UNIFIED_REVIEW_REQUIRED'],
+    ownershipVerified:false,identityVerified:false,mayPublish:false,
+    requiresHumanReview:true
+  };
+  if(legacyCertificate){
+    try {comparison=comparePrivateCertificateIdentityOcr(cert,identity);}
+    catch {throw new PrivatePairUnavailable();}
+  }
   if(cinComparison.status==='NUMBER_DIFFERS_NEEDS_REVIEW'){
     comparison={...comparison,assessment:'TEXT_DIFFERENCE_NEEDS_REVIEW',
       reasons:[...comparison.reasons,'CIN_NUMBER_TEXT_DIFFERS']};
@@ -210,5 +236,6 @@ export async function analyzeAuthorizedPrivateEvidencePair(
   return {access:'AUTHORIZED_CASE_OWNER_ONLY',certificatePagesReceived:cert.pages.length,
     identityPagesReceived:identity.pages.length,
     identityCapture:'FRONT_IMAGE_ONLY_UNVERIFIED',comparison,cinComparison,
-    ownershipVerified:false,identityVerified:false,mayPublish:false,requiresHumanReview:true};
+    unifiedComparison,ownershipVerified:false,identityVerified:false,
+    mayPublish:false,requiresHumanReview:true};
 }

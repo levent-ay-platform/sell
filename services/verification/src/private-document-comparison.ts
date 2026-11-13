@@ -164,3 +164,42 @@ export function comparePrivateCertificateIdentityOcr(certInput:unknown,idInput:u
   return {assessment,certificateName:a,identityName:b,reasons:issues,
     ownershipVerified:false,identityVerified:false,mayPublish:false,requiresHumanReview:true};
 }
+
+
+/**
+ * A role-labelled name from the SAME authorized private legal document can
+ * be text-compared to the direct-front CIN. Reuses the strict certificate
+ * comparator's identity-name parser; does NOT assert ownership or legal role.
+ * Never return the raw name or identity OCR to public listing APIs.
+ */
+export interface PrivateActorNameComparison {
+  readonly assessment:ComparisonAssessment;
+  readonly reasons:readonly string[];
+  readonly ownershipVerified:false;
+  readonly identityVerified:false;
+  readonly mayPublish:false;
+  readonly requiresHumanReview:true;
+}
+export function comparePrivateRoleLabeledNameToIdentity(
+  actor:CandidateName|null, identity:IngestedDocument
+):PrivateActorNameComparison {
+  const known=actor===null?null:parsedName(actor.value);
+  const id=unique(collect(identity,'IDENTITY'));
+  const issues:string[]=[];
+  let assessment:ComparisonAssessment='INSUFFICIENT_OR_AMBIGUOUS';
+  if(!known||!id)issues.push('MISSING_OR_AMBIGUOUS_LABELED_NAME');
+  if((actor!==null&&uncertainNameConfidence(actor))||
+     uncertainNameConfidence(id))
+    issues.push('LOW_OCR_CONFIDENCE');
+  if(identity.pages.some(p=>(p.qualityWarnings?.length??0)>0))
+    issues.push('SCAN_QUALITY_NEEDS_REVIEW');
+  if(issues.length===0&&known&&id){
+    assessment=canonical(known)===canonical(id.value)?
+      'PRELIMINARY_TEXT_AGREEMENT':'TEXT_DIFFERENCE_NEEDS_REVIEW';
+    if(assessment==='TEXT_DIFFERENCE_NEEDS_REVIEW')
+      issues.push('ROLE_NAME_TEXT_DIFFERS_OR_SCRIPT_MISMATCH');
+    else issues.push('TEXT_ONLY_OFFICIAL_IDENTITY_NOT_CHECKED');
+  }
+  return {assessment,reasons:issues,ownershipVerified:false,
+    identityVerified:false,mayPublish:false,requiresHumanReview:true};
+}

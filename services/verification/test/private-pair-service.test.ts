@@ -20,12 +20,12 @@ function seal(bytes:Buffer,evidenceId:string):Buffer {
   return Buffer.concat([magic,iv,(()=>{const clear=cipher.update(bytes),end=cipher.final();
     const tag=cipher.getAuthTag();return Buffer.concat([tag,clear,end]);})()]);
 }
-function harness(){
+function harness(kind:EvidenceRow['kind']='OWNERSHIP_CERTIFICATE'){
   let active:AuthorizedUploadCase|null=consent,sessionUser:string|null=userId;
   let reads=0,ocrCalls=0;
   const certRow:EvidenceRow={evidenceId:certificateId,caseId,uploadedBy:userId,
     objectKey:'private/evidence/'+randomUUID(),digest:createHash('sha256').update(certBytes).digest('hex'),
-    mime:'application/pdf',kind:'OWNERSHIP_CERTIFICATE',pageNumber:null,fileSize:certBytes.length,
+    mime:'application/pdf',kind,pageNumber:null,fileSize:certBytes.length,
     wrappedDataKey:'synthetic_vault_key',keyVersion:'v1',idempotencyKey:'synthetic_unique_cert_key'};
   const identityRow:EvidenceRow={...certRow,evidenceId:identityId,kind:'IDENTITY',
     mime:'image/png',pageNumber:1,
@@ -48,13 +48,23 @@ function harness(){
       const content=Buffer.from(bytes).toString('utf8');
       const id=content.includes('ID1')||content.includes('DIFF');
       const name=content.includes('DIFF')?'Amira Gharbi':'Amira Ben Salem';
-      const line=id?'Nom et prénom: '+name:'Propriétaire: '+name;
+      const documentLines=kind==='SALE_DEED'?
+        ['عقد بيع','المشتري: '+name,'البائع: Karim Ben Ahmed']:
+        kind==='PROPERTY_SERVICE_RECEIPT'?
+          ['وصل تسلم مطلب خدمة واستخلاص معاليم','طالب الخدمة: '+name]:
+          kind==='FINANCIAL_RECEIPT'?['QUITTANCE N° X0001']:
+          kind==='SHARED_OWNERSHIP_CERTIFICATE'?
+            ['شهادة اشتراك في الملكية','Propriétaire: '+name]:
+            kind==='TRANSFER_CARD'?
+              ['بطاقة نقل الملكية','المنقول إليه: '+name]:
+              ['Propriétaire: '+name];
+      const observed=id?['Nom et prénom: '+name]:documentLines;
       return {format:(id?'image':'pdf') as 'image'|'pdf',
         mayApproveOwnership:false as const,
         pages:[{page:1,method:(id?'ocr':'pdf-text') as 'ocr'|'pdf-text',
-          lines:[{text:line,page:1,
+          lines:observed.map(text=>({text,page:1,
             source:(id?'ocr-fr':'pdf-text') as 'ocr-fr'|'pdf-text',
-            confidence:id?0.98:null}]}]};
+            confidence:id?0.98:null}))}]};
     }}
   };
   const request={bearerToken:token,caseId,certificateEvidenceIds:[certificateId],
@@ -201,4 +211,46 @@ test('single PDF cannot disguise itself as a numbered scanned page',async()=>{
   other.rows.set(identityId,{...other.identityRow,mime:'application/pdf',pageNumber:1});
   await assert.rejects(analyze(other.request,other.deps),PrivatePairAccessDenied);
   assert.equal(other.ocrCalls,0);
+});
+
+
+test('unified private comparator reports sale BUYER text only without legal ownership',async()=>{
+ const h=harness('SALE_DEED');
+ const result=await analyze(h.request,h.deps);
+ assert.equal(result.unifiedComparison?.detectedKind,'SALE_DEED');
+ assert.equal(result.unifiedComparison?.assessment,'ROLE_TEXT_MATCH_ONLY');
+ assert.equal(result.unifiedComparison?.roles.find(r=>r.role==='BUYER')?.assessment,
+  'PRELIMINARY_TEXT_AGREEMENT');
+ assert.equal(result.comparison.assessment,'INSUFFICIENT_OR_AMBIGUOUS');
+ assert.equal(result.cinComparison.status,'NOT_COMPARABLE');
+ assert.equal(result.ownershipVerified,false);
+ assert.equal(result.identityVerified,false);
+ assert.equal(result.mayPublish,false);
+ assert.equal(JSON.stringify(result.unifiedComparison).includes('Amira Ben Salem'),false);
+});
+test('service receipt applicant may match text but never be treated as an owner',async()=>{
+ const h=harness('PROPERTY_SERVICE_RECEIPT');
+ const result=await analyze(h.request,h.deps);
+ assert.equal(result.unifiedComparison?.detectedKind,'PROPERTY_SERVICE_RECEIPT');
+ assert.equal(result.unifiedComparison?.roles[0]?.role,'SERVICE_APPLICANT');
+ assert.equal(result.unifiedComparison?.assessment,'ROLE_TEXT_MATCH_ONLY');
+ assert.equal(result.ownershipVerified,false);
+ assert.equal(result.cinComparison.status,'NOT_COMPARABLE');
+});
+test('financial receipt with no person role stays inconclusive',async()=>{
+ const h=harness('FINANCIAL_RECEIPT');
+ const result=await analyze(h.request,h.deps);
+ assert.equal(result.unifiedComparison?.detectedKind,'FINANCIAL_RECEIPT');
+ assert.equal(result.unifiedComparison?.assessment,'INSUFFICIENT_EVIDENCE');
+ assert.equal(result.unifiedComparison?.roles.length,0);
+ assert.equal(result.mayPublish,false);
+});
+test('stored kind disagreeing with OCR heading cannot claim a role match',async()=>{
+ const h=harness('SALE_DEED');
+ h.rows.set(certificateId,{...h.certRow,kind:'OWNERSHIP_CERTIFICATE'});
+ const result=await analyze(h.request,h.deps);
+ assert.equal(result.unifiedComparison?.assessment,'INSUFFICIENT_EVIDENCE');
+ assert.ok(result.unifiedComparison?.reasons.includes('DOCUMENT_TYPE_MISMATCH'));
+ assert.equal(result.comparison.assessment,'INSUFFICIENT_OR_AMBIGUOUS');
+ assert.equal(result.mayPublish,false);
 });
