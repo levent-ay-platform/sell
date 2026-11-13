@@ -1,30 +1,44 @@
-# macOS private OCR QA server (tailnet-only, not production)
+# Malak OCR QA — public HTTPS API, no phone VPN
 
-Provides real server-issued memory-only 12-hour test bearer to the debug
-+216 phone and 1234 login. Handles POST /internal/v1/pilot/preview-cin via the
-same pinned Arabic PP-OCRv5 ONNX model already tested on the Mac. This is a
-LOCAL QA substitute for the not-yet-deployed full PostgreSQL/Huawei gateway;
-it does not create property/identity verification or publishing privileges.
+Android connects directly to **https://malak-api.ayasofia.shop** using ordinary
+HTTPS. No Tailscale installation, VPN, login prompt for a network, or custom
+server-address entry is required on the phone.
 
-**Network boundary:** HTTP binds **127.0.0.1:18443** only. Terminate HTTPS
-with Tailscale Serve on the Mac; do NOT use Funnel, port forwarding, or a
-public hostname for the shared 1234 QA PIN. The Android phone must be a
-connected member of the SAME tailnet. The public URL in a QA build is the
-Mac's tailnet HTTPS DNS name. No real CIN/PII in public repository or CI.
+Current QA ingress (2026-11-13):
+1. Cloudflare HTTPS and wildcard DNS for `malak-api.ayasofia.shop`
+2. Huawei existing Traefik router (new, isolated `malak-qa-public-api` Docker
+   container on `ayasofia-net`, no modification to CRM)
+3. Small nginx TLS-validating reverse proxy, limits request rate and image
+   body size, exposes **only** `/healthz`, `/internal/v1/pilot/login`,
+   `/internal/v1/pilot/preview-cin`
+4. **Server-to-server only** private transport to the Mac's existing
+   `com.levent.malak.qaocr` launchd process at `127.0.0.1:18443`
+5. Existing pinned Arabic-v5 ONNX model, in memory on the Mac, no OCR model
+   or personal documents in the APK/repository.
 
-Requirements: dedicated Python virtualenv with cv2, numpy, PyYAML and
-ONNX Runtime; checked-in OCR source, and the pinned public model weights
-stored locally on the private Mac. Run as an unprivileged user with macOS
-launchd. Avoid a second model process. Always validate health, login,
-synthetic PNG OCR and user consent before enabling a phone.
+Huawei public proxy configuration location:
+`C:\\ProgramData\\MalakQaPublicApi\\default.conf`. Do not rewrite
+Traefik or Cloudflare tunnel configurations or modify any CRM service.
+Mac launchd: `/Library/LaunchDaemons/com.levent.malak.qaocr.plist`.
+The private Mac tailnet link is an internal server transport ONLY — the
+Android app must not depend on it.
 
-The worker never stores original images or OCR text on disk. The bearer
-table remains in process memory and is invalidated at restart. The server
-accepts at most 6 MiB PNG/JPEG, checks image bounds, and responds only
-with preliminary masked CIN last four and names/DOB plus
-identityVerified=false, ownershipVerified=false, mayPublish=false.
-A shared test PIN is intentionally not a verified phone claim.
+QA-only authentication: +216 test phone and code `1234` obtain a real
+12h, memory-only bearer from the running service. Explicit camera OCR
+consent is required before uploading at most 6MiB. The service rate-limits
+requests and is isolated from owner/publishing endpoints. The fixed code
+is not identity proof and must never be used as production authentication.
 
-**Acceptance is NOT inferred from synthetic tests:** compare exact
-private eligible CIN 1/2/5 and DOB on 1-5 after explicit QA run.
-No merges or production deployment from this script.
+The API must return `identityVerified:false`, `ownershipVerified:false`,
+and `mayPublish:false`; no legal verification or real listings are
+activated. Images and extracted text are not logged or written to disk.
+
+Verified: public HTTPS `/healthz` returned HTTP 200 from Huawei via
+Cloudflare with `engine=arabic-v5, modelReady=true`. The actual Android
+phone login + image OCR round trip and exact CIN/DOB benchmark are **not
+independently measured** yet. Do not claim full acceptance from HTTP 200
+or the Android emulator login smoke.
+
+The Mac's older direct tailnet port `10000` is now only a **private backend**
+connection, not an Android URL. Previous tailnet-only APK artifact is
+obsolete and should not be installed for user QA.

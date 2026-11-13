@@ -70,17 +70,17 @@ jobs:
           path: apps/android/app/build/outputs/apk/debug/app-debug.apk
           retention-days: 3
           if-no-files-found: error
-      - name: Build connected Mac OCR QA APK (tailnet only, Draft PR only)
+      - name: Build public HTTPS Malak OCR QA APK (Draft PR only)
         if: ${{ github.event_name == 'pull_request' && github.head_ref == 'feat/individual-property-triage-20261110' }}
         run: |
           set -euo pipefail
-          url=https://levents-macbook-pro.tail68ff84.ts.net:10000
+          url=https://malak-api.ayasofia.shop
           gradle -p apps/android :app:assembleDebug "-PmalakPrivateBaseUrl=$url" --no-daemon
           apk=apps/android/app/build/outputs/apk/debug/app-debug.apk
           size="$(stat -c %s "$apk")"
-          echo "Connected Malak tailnet QA APK bytes: $size; hard limit 60000000"
+          echo "Connected Malak public HTTPS QA APK bytes: $size; hard limit 60000000"
           test "$size" -le 60000000
-          unzip -p "$apk" 'classes*.dex' | strings | grep -F 'levents-macbook-pro.tail68ff84.ts.net' >/dev/null || {
+          unzip -p "$apk" 'classes*.dex' | strings | grep -F 'malak-api.ayasofia.shop' >/dev/null || {
             echo "MISSING_REAL_QA_ENDPOINT_IN_APK" >&2
             exit 1
           }
@@ -88,11 +88,11 @@ jobs:
             echo 'HEAVY_OCR_ASSET_IN_APK' >&2
             exit 1
           fi
-      - name: Upload Mac tailnet OCR pilot QA APK — private tailnet required
+      - name: Upload Malak public HTTPS OCR pilot QA APK
         if: ${{ github.event_name == 'pull_request' && github.head_ref == 'feat/individual-property-triage-20261110' }}
         uses: actions/upload-artifact@v4
         with:
-          name: malak-MAC-TAILNET-OCR-PILOT-QA-${{ github.sha }}
+          name: malak-PUBLIC-HTTPS-OCR-PILOT-QA-${{ github.sha }}
           path: apps/android/app/build/outputs/apk/debug/app-debug.apk
           retention-days: 3
           if-no-files-found: error
