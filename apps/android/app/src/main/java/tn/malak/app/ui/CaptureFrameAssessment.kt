@@ -18,7 +18,9 @@ internal data class FieldZone(
 internal data class FrameAssessment(
     val hint:CaptureHint,
     val bounds:CardBounds?=null,
-    val zones:List<Boolean> = emptyList()
+    val zones:List<Boolean> = emptyList(),
+    // Card bounds mapped to the rotated capture viewport, not the UI overlay.
+    val captureBounds:CardBounds?=null
 )
 
 internal object CaptureFrameAssessment {

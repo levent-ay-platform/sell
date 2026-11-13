@@ -86,10 +86,17 @@ private fun checkLight(frame:ImageProxy,previous:IntArray?):Pair<FrameAssessment
             return FrameAssessment(CaptureHint.WAIT) to IntArray(0)
         samples[r*cols+c]=buffer.get(offset).toInt() and 255
     }
-    return CaptureFrameAssessment.inspect(samples,cols,rows,previous) to samples
+    val assessed=CaptureFrameAssessment.inspect(samples,cols,rows,previous)
+    val mapped=assessed.bounds?.let{b->
+        CardBounds((left+b.left*roiW)/width,
+            (top+b.top*roiH)/height,
+            (left+b.right*roiW)/width,
+            (top+b.bottom*roiH)/height)
+    }
+    return assessed.copy(captureBounds=mapped) to samples
 }
 
-private fun rotateAndEncode(image:ImageProxy):ByteArray {
+private fun rotateAndEncode(image:ImageProxy,bounds:CardBounds?):ByteArray {
     if(image.format!=ImageFormat.JPEG &&
         !(android.os.Build.VERSION.SDK_INT>=34 &&
             image.format==ImageFormat.JPEG_R))
@@ -121,16 +128,11 @@ private fun rotateAndEncode(image:ImageProxy):ByteArray {
                 allocated.add(it)
             }
         }else field
-        // The overlay is centered and 91% of the visible preview width.
-        // Add a small margin so document corners remain visible to OCR.
-        val width=minOf((oriented.width*.96f).toInt(),
-            (oriented.height*.96f*1.585f).toInt()).coerceAtLeast(40)
-        val height=(width/1.585f).toInt().coerceAtLeast(25)
+        // Use stable detected FRONT-card bounds to avoid clipping an
+        // off-centre card. A geometry mismatch falls back to centre crop.
+        val plan=CardCaptureCrop.plan(oriented.width,oriented.height,bounds)
         val framed=Bitmap.createBitmap(oriented,
-            ((oriented.width-width)/2).coerceAtLeast(0),
-            ((oriented.height-height)/2).coerceAtLeast(0),
-            width.coerceAtMost(oriented.width),
-            height.coerceAtMost(oriented.height)).also{allocated.add(it)}
+            plan.left,plan.top,plan.width,plan.height).also{allocated.add(it)}
         val maxEdge=maxOf(framed.width,framed.height)
         val resized=if(maxEdge>2400) {
             val factor=2400f/maxEdge
@@ -143,7 +145,7 @@ private fun rotateAndEncode(image:ImageProxy):ByteArray {
         val out=ByteArrayOutputStream()
         check(resized.compress(Bitmap.CompressFormat.JPEG,86,out))
         val bytes=out.toByteArray()
-        require(bytes.size in 20..12*1024*1024)
+        require(bytes.size in 20..6*1024*1024)
         return bytes
     }finally{
         raw.fill(0)
@@ -348,10 +350,11 @@ internal fun TunisianIdCamera(
                         if(!active.get()||!ready||capturing)return@Button
                         capturing=true
                         cameraError=false
+                        val snappedBounds=pictureQuality.captureBounds
                         capture.takePicture(executor,object:ImageCapture.OnImageCapturedCallback(){
                             override fun onCaptureSuccess(image:ImageProxy){
                                 try{
-                                    val bytes=try{rotateAndEncode(image)}
+                                    val bytes=try{rotateAndEncode(image,snappedBounds)}
                                         finally{image.close()}
                                     val uri=PrivateCaptureMemory.addJpeg(bytes)
                                     handler.post{
