@@ -250,4 +250,5 @@
     <string name="smart_title_auto">Votre titre est créé automatiquement</string>
     <string name="smart_title_pending">Indiquez la région et la superficie pour obtenir un titre</string>
     <string name="smart_title_edit">Modifier</string>
+    <string name="smart_title_done">Terminé</string>
 </resources>
