@@ -7,15 +7,24 @@ export type FieldName =
   | 'registryReference' | 'areaSquareMetres' | 'ownershipShareUnits'
   | 'ownershipTotalUnits' | 'parcelCount' | 'parcelNumber'
   | 'documentPage' | 'documentPageCount' | 'certificateIssuedAt' | 'lastRegistryUpdatedAt';
+export interface OcrPixelBox {
+  readonly left:number;
+  readonly top:number;
+  readonly right:number;
+  readonly bottom:number;
+}
 export interface RecognizedLine {
   text: string;
   page: number;
   confidence: number | null; // OCR confidence 0..1; null for native PDF or unavailable.
   source: 'pdf-text' | 'ocr-ar' | 'ocr-fr';
+  /** Optional OCR line bounds in original raster-page pixels, never ROI pixels. */
+  bbox?: OcrPixelBox;
 }
 export interface FieldEvidence {
   value: string | number;
   page: number;
+  bbox?: OcrPixelBox;
   lineIndex: number;
   confidence: number | null;
   source: RecognizedLine['source'];
@@ -101,7 +110,8 @@ export function extractCpfSmartFields(lines:readonly RecognizedLine[]):SmartExtr
     if(/شهعاد[ةه]\s+ملكي[ةه]/u.test(normalized))noisyTitle=true;
     if(/اشتراك\s*في\s*الملكيه|copropri[eé]t[eé]/iu.test(normalized))coownership=true;
     for(const [key,value] of extractLineFields(normalized)){
-      buckets.get(key)!.push({value,page:l.page,lineIndex:i,confidence:l.confidence,source:l.source});
+      buckets.get(key)!.push({value,page:l.page,lineIndex:i,confidence:l.confidence,source:l.source,
+        ...(l.bbox?{bbox:l.bbox}:{})});
     }
   }
   // OCR can distort a paper heading; recognize as a non-authoritative candidate
