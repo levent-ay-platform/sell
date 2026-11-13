@@ -83,7 +83,7 @@ const possessedPlot:Rule={
 };
 const soldArea:Rule={
  key:'soldAreaM2',
- pattern:/^(?:مساح[ةه]\s+(?:القطع[ةه]\s+)?المبيع[ةه]|المساح[ةه]\s+موضوع\s+البيع|superficie\s+vendue)[\s:#：-]*([0-9]{1,10}(?:[.,][0-9]{1,3})?)\s*(?:م(?:تر)?(?:\s*مربع|²|2)?|m²|m2)?\s*$/iu,
+ pattern:/^(?:(?:ال)?مساح[ةه]\s+(?:القطع[ةه]\s+)?المبيع[ةه]|المساح[ةه]\s+موضوع\s+البيع|superficie\s+vendue)[\s:#：-]*([0-9]{1,10}(?:[.,][0-9]{1,3})?)\s*(?:م(?:تر)?(?:\s*مربع|²|2)?|m²|m2)?\s*$/iu,
  shape:'area'
 };
 const possessedArea:Rule={
@@ -206,7 +206,13 @@ export function extractPrivateLandDocumentFacts(
    for(const rule of rules){
      const match=rule.pattern.exec(t);
      if(!match?.[1])continue;
-     const parsed=parseValue(match[1],rule.shape);
+     // Match canonicalized labels, but keep the actual personal name as
+     // written. Normalizing hamzas/alef-maqsura in source names is a data
+     // corruption even when it helps recognize the document heading.
+     const originalActor=rule.shape==='actor'?
+       /^[^:：-]{1,45}\s*[:：-]\s*(.{2,100})$/u.exec(l.text.normalize('NFKC'))?.[1]:null;
+     if(rule.shape==='actor'&&!originalActor)continue;
+     const parsed=parseValue(rule.shape==='actor'?originalActor!:match[1],rule.shape);
      if(parsed.value===null&&!parsed.masked)continue;
      const low=classification.status==='LOW_CONFIDENCE'||
        (l.confidence!==null&&l.confidence<0.90)||parsed.uncertain;
