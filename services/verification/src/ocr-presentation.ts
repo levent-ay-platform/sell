@@ -5,7 +5,7 @@
  * An extracted OCR candidate is NEVER a legal or identity match.
  */
 import type {ReadDocumentResult} from './reader.ts';
-import type {FieldName, ExtractedField, SmartExtraction} from './smart-fields.ts';
+import type {FieldName, ExtractedField, SmartExtraction, OcrPixelBox} from './smart-fields.ts';
 
 const LABELS: Record<FieldName,{ar:string;fr:string}>={
   registryReference:{ar:'مرجع الرسم العقاري',fr:'Référence du titre foncier'},
@@ -34,6 +34,8 @@ export interface PrivateOcrFact {
   readonly page:number|null;
   readonly source:'pdf-text'|'ocr-ar'|'ocr-fr'|null;
   readonly confidencePercent:number|null;
+  /** Rectangle of source OCR text on private page; null for PDF without coordinates. */
+  readonly bbox:OcrPixelBox|null;
 }
 export interface PrivateOcrPresentation {
   readonly schemaVersion:1;
@@ -79,7 +81,8 @@ export function presentPrivateCpfReading(read:ReadDocumentResult,declaredArea:un
       value:safeValue(f),status:f.status,
       page:source?.page??null,source:firstSource(f),
       confidencePercent:source?.confidence===null||source?.confidence===undefined?
-        null:Math.round(source.confidence*100)
+        null:Math.round(source.confidence*100),
+      bbox:source?.bbox??null
     } satisfies PrivateOcrFact;
   });
   const documentArea=read.extraction.fields.areaSquareMetres;
