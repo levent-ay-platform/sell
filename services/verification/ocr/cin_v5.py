@@ -264,11 +264,6 @@ def _cin_full_front(session,letters,card):
     exists so LOCAL QA can check all eight digits without ever logging or
     serializing them. Its output is not identity or ownership verification.
     """
-
-    The old wide upper band included the emblem, background and ID label.
-    Smaller overlapping crops cover varying perspective/print placement.
-    This is a generic geometry adaptation, never a lookup table of IDs.
-    """
     h,w=card.shape[:2]
     votes=set()
     tight=crop_printed_number(card,(.29,.22,.80,.48),8)
