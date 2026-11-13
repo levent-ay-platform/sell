@@ -18,7 +18,8 @@ import {createPrivateEvidenceHttpHandler} from './private-evidence-http.ts';
 import type {PrivateCiphertextReader} from './local-private-store.ts';
 import type {PrivateOcrWorker} from './seller-ocr-service.ts';
 import type {CinV5Worker} from './private-cin-v5-service.ts';
-import {previewOwnerCin} from './private-cin-v5-service.ts';
+import {previewOwnerCin,sanitizeCinFields} from './private-cin-v5-service.ts';
+import {SameServicePilotAuth} from './pilot-auth.ts';
 import type {PrivatePairDependencies} from './private-pair-service.ts';
 import {analyzeAuthorizedPrivateEvidencePair} from './private-pair-service.ts';
 import {provisionIndividualOwnerCase,revokeIndividualOwnerConsent} from './private-owner-case.ts';
@@ -80,6 +81,10 @@ export interface UnboundFirstLoopGatewayDeps {
   readonly worker:PrivateOcrWorker;
   /** Optional Huawei-only v5 recognizer, injected after private host acceptance. */
   readonly cinWorker?:CinV5Worker;
+  /** QA pilot may use this SAME service for OCR after server-issued login.
+   * Explicit private deployment opt-in; off for production by default.
+   */
+  readonly pilotQa?:{enabled:true;deviceHmacSecret:Uint8Array};
   readonly rateLimitHmacSecret:Uint8Array;
   readonly policyVersion:string;
   /** Optional deterministic clock for isolated synthetic-only tests. */
@@ -95,7 +100,15 @@ export function composeUnboundMalakFirstLoop(deps:UnboundFirstLoopGatewayDeps) {
     !deps.worker||!deps.rateLimitHmacSecret||
     typeof deps.policyVersion!=='string'||!/^[A-Za-z0-9_-]{3,70}$/.test(deps.policyVersion))
     throw new Error('FIRST_LOOP_CONFIGURATION_INCOMPLETE');
-  const auth=authenticatorFromVerifiedOwnerProvider(deps.provider,deps.now);
+  const verifiedAuth=authenticatorFromVerifiedOwnerProvider(deps.provider,deps.now);
+  const pilotAuth=deps.pilotQa?.enabled===true
+    ?new SameServicePilotAuth(deps.pool,{
+      enabled:true,deviceHmacSecret:deps.pilotQa.deviceHmacSecret
+    }):null;
+  // A pilot is still unverified for all real owner/case/publishing routes.
+  const auth:Authenticator={authenticate:async token=>
+    (await verifiedAuth.authenticate(token))??(
+      pilotAuth?await pilotAuth.authenticate(token):null)};
   const cases=new PostgresIndividualEvidenceRepository(deps.pool);
   const limits=new PostgresPrivateEvidenceRateLimiter(deps.pool,deps.rateLimitHmacSecret);
   const audit=new PostgresPrivateEvidenceDenialAudit(deps.pool);
@@ -111,6 +124,19 @@ export function composeUnboundMalakFirstLoop(deps:UnboundFirstLoopGatewayDeps) {
     previewCin:deps.cinWorker?request=>previewOwnerCin(request,{
       auth,cases,worker:deps.cinWorker!
     }):undefined,
+    loginPilot:pilotAuth?input=>pilotAuth.login(input):undefined,
+    previewPilotCin:pilotAuth&&deps.cinWorker?
+      async(bearer,bytes,mime)=>{
+        // Explicit pilot OCR is transient and never provisions a case.
+        const before=await pilotAuth.authenticate(bearer);
+        if(!before?.userId||before.pilotUnverified!==true)
+          throw Error('PILOT_OCR_AUTH');
+        const fields=await deps.cinWorker!.readFront(bytes,mime);
+        const after=await pilotAuth.authenticate(bearer);
+        if(!after?.userId||after.pilotUnverified!==true||
+           after.userId!==before.userId)throw Error('PILOT_OCR_EXPIRED');
+        return sanitizeCinFields(fields);
+      }:undefined,
     analyzeOwnerPair:request=>analyzeAuthorizedPrivateEvidencePair(request,{
       auth,cases,objects:deps.objects,worker:deps.worker,
       keys:{unwrapDataKey:key=>deps.keys.unwrapDataKey(key)}

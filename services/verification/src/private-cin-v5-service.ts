@@ -54,7 +54,7 @@ function safeWord(raw:unknown):string|null {
   if(n.length>55||!AR.test(n))throw Error('PRIVATE_CIN_MODEL_INVALID');
   return n;
 }
-function sanitized(fields:CinFields):CinFields {
+export function sanitizeCinFields(fields:CinFields):CinFields {
   if(!fields||typeof fields!=='object'||
     !Number.isInteger(fields.confidencePercent)||
     fields.confidencePercent<0||fields.confidencePercent>100)throw Error('PRIVATE_CIN_MODEL_INVALID');
@@ -107,5 +107,5 @@ export async function previewOwnerCin(
     second.pilotUnverified===true)throw new CinPreviewDenied();
   const after=await deps.cases.getUploadCase(request.caseId,first.userId);
   if(!permitted(after,request.caseId,first.userId))throw new CinPreviewDenied();
-  return sanitized(result);
+  return sanitizeCinFields(result);
 }

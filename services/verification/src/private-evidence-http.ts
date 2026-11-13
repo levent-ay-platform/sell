@@ -33,9 +33,10 @@ const PAIR=/^\/internal\/v1\/evidence\/([0-9a-f-]{36})\/compare-pair$/i;
 const REVIEW=/^\/internal\/v1\/review\/([0-9a-f-]{36})\/([0-9a-f-]{36})\/inspect$/i;
 const OWNER_CASE=/^\/internal\/v1\/owner\/cases$/;
 const PILOT_LOGIN=/^\/internal\/v1\/pilot\/login$/;
+const PILOT_CIN_PREVIEW=/^\/internal\/v1\/pilot\/preview-cin$/;
 const CONSENT_REVOKE=/^\/internal\/v1\/owner\/cases\/([0-9a-f-]{36})\/revoke-consent$/i;
 const MIME=new Set(['application/pdf','image/png','image/jpeg','image/tiff']);
-export type PrivateRoute='UPLOAD'|'INSPECT'|'OCR'|'CIN_PREVIEW'|'PAIR'|'OWNER_CASE'|'CONSENT_REVOKE'|'PILOT_LOGIN';
+export type PrivateRoute='UPLOAD'|'INSPECT'|'OCR'|'CIN_PREVIEW'|'PAIR'|'OWNER_CASE'|'CONSENT_REVOKE'|'PILOT_LOGIN'|'PILOT_CIN_PREVIEW';
 export type DenialReason='BAD_ROUTE'|'BAD_REQUEST'|'UNAUTHENTICATED'|'FORBIDDEN'|'RATE_LIMITED'|'FILE_REJECTED'|'REPLAY_CONFLICT'|'UPSTREAM_UNAVAILABLE';
 export interface DenialAuditRecord {route:PrivateRoute|'UNKNOWN';reason:DenialReason;actorUserId:string|null;requestId:string;}
 export interface PrivateEvidenceHttpDeps {
@@ -57,6 +58,8 @@ export interface PrivateEvidenceHttpDeps {
   provisionOwnerCase?:(bearerToken:string,input:unknown)=>Promise<OwnerCaseResult>;
   /** Optional pilot entry point of this SAME private service; never a standalone API. */
   loginPilot?:(input:unknown)=>Promise<{bearer:string;expiresInSeconds:number;pilotConfirmed:true}>;
+  /** QA-only transient OCR. Pilot token is real, but never owner/legal proof. */
+  previewPilotCin?:(bearer:string,bytes:Uint8Array,mime:'image/jpeg'|'image/png')=>Promise<CinFields>;
   withdrawOwnerConsent?:(bearerToken:string,caseId:string)=>Promise<{revoked:true;ownershipVerified:false;identityVerified:false;mayPublish:false}>;
 }
 
@@ -137,7 +140,8 @@ export function createPrivateEvidenceHttpHandler(deps:PrivateEvidenceHttpDeps) {
     const url=req.url??'';
     const upload=UPLOAD.exec(url),ocrUpload=OCR_UPLOAD.exec(url),cinPreview=CIN_PREVIEW.exec(url),review=REVIEW.exec(url),pair=PAIR.exec(url);
     const caseCreate=OWNER_CASE.test(url),consentRevoke=CONSENT_REVOKE.exec(url);
-    const route:PrivateRoute|'UNKNOWN'=PILOT_LOGIN.test(url)?'PILOT_LOGIN':caseCreate?'OWNER_CASE':consentRevoke?'CONSENT_REVOKE':
+    const route:PrivateRoute|'UNKNOWN'=PILOT_LOGIN.test(url)?'PILOT_LOGIN':
+      PILOT_CIN_PREVIEW.test(url)?'PILOT_CIN_PREVIEW':caseCreate?'OWNER_CASE':consentRevoke?'CONSENT_REVOKE':
       pair?'PAIR':cinPreview?'CIN_PREVIEW':ocrUpload?'OCR':upload?'UPLOAD':review?'INSPECT':'UNKNOWN';
     // Do not log/return raw URL, bearer token, file name or document identifiers.
     const reject=async(status:number,reason:DenialReason)=>{
@@ -160,6 +164,7 @@ export function createPrivateEvidenceHttpHandler(deps:PrivateEvidenceHttpDeps) {
          !noDuplicate(req,'content-length')||!noDuplicate(req,'x-idempotency-key')||
          !noDuplicate(req,'x-evidence-kind')||!noDuplicate(req,'x-page-number')||
          !noDuplicate(req,'x-claimed-mime')||
+         !noDuplicate(req,'x-pilot-ocr-consent')||
          !noDuplicate(req,'x-declared-area-m2')||
          req.headers['transfer-encoding']){await reject(400,'BAD_REQUEST');return;}
       if(route==='PILOT_LOGIN'){
@@ -203,10 +208,54 @@ export function createPrivateEvidenceHttpHandler(deps:PrivateEvidenceHttpDeps) {
         const id=await deps.auth.authenticate(bearerToken);
         if(!id?.userId||!UUID.test(id.userId)){await reject(401,'UNAUTHENTICATED');return;}
         actor=id.userId;
-        // Enforce at the HTTP boundary even if an injected downstream action
-        // accidentally forgets to check the pilot's limited assurance level.
-        if(id.pilotUnverified===true){await reject(403,'FORBIDDEN');return;}
+        // The pilot bearer is restricted to ephemeral OCR. All evidence,
+        // ownership case and legal paths continue to deny it.
+        if(id.pilotUnverified===true&&route!=='PILOT_CIN_PREVIEW'){
+          await reject(403,'FORBIDDEN');return;
+        }
+        if(id.pilotUnverified!==true&&route==='PILOT_CIN_PREVIEW'){
+          await reject(403,'FORBIDDEN');return;
+        }
       }catch {await reject(503,'UPSTREAM_UNAVAILABLE');return;}
+      if(route==='PILOT_CIN_PREVIEW'){
+        if(!deps.previewPilotCin){await reject(503,'UPSTREAM_UNAVAILABLE');return;}
+        if(req.headers['x-evidence-kind']||req.headers['x-page-number']||
+           req.headers['x-idempotency-key']||req.headers['x-declared-area-m2']||
+           single(req,'content-type')!=='application/octet-stream'||
+           single(req,'x-pilot-ocr-consent')!=='1'){
+          await reject(400,'BAD_REQUEST');return;
+        }
+        const mime=single(req,'x-claimed-mime');
+        const header=single(req,'content-length');
+        const length=header&&/^[0-9]{1,8}$/.test(header)?Number(header):NaN;
+        if((mime!=='image/jpeg'&&mime!=='image/png')||
+           !Number.isSafeInteger(length)||length<20){
+          await reject(400,'BAD_REQUEST');return;
+        }
+        if(length>6*1024*1024){await reject(413,'FILE_REJECTED');return;}
+        let bytes:Uint8Array;
+        try{bytes=await limitedBody(req,length);}
+        catch{await reject(400,'FILE_REJECTED');return;}
+        try{
+          if(mime==='image/jpeg'&&!(bytes[0]===255&&bytes[1]===216&&bytes[2]===255)){
+            await reject(422,'FILE_REJECTED');return;
+          }
+          if(mime==='image/png'&&
+             ![137,80,78,71,13,10,26,10].every((n,i)=>bytes[i]===n)){
+            await reject(422,'FILE_REJECTED');return;
+          }
+          let fields:CinFields;
+          try{fields=await deps.previewPilotCin(bearerToken,bytes,mime);}
+          catch{await reject(503,'UPSTREAM_UNAVAILABLE');return;}
+          if(!fields||!Number.isInteger(fields.confidencePercent)||
+             fields.confidencePercent<0||fields.confidencePercent>100){
+            await reject(503,'UPSTREAM_UNAVAILABLE');return;
+          }
+          json(res,200,{ok:true,pilotOcr:true,schemaVersion:1,engine:'arabic-v5',
+            ...fields,identityVerified:false,ownershipVerified:false,mayPublish:false});
+          return;
+        }finally{bytes.fill(0);}
+      }
       if(route==='OWNER_CASE'||route==='CONSENT_REVOKE') {
         // Bearer must resolve to a real server identity; the injected
         // service independently rechecks that identity before COMMIT.
