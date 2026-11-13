@@ -121,9 +121,16 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
     var region by rememberSaveable(draftFile) {mutableStateOf(prefs.getString("region","") ?: "")}
     var area by rememberSaveable(draftFile) {mutableStateOf(prefs.getString("area","") ?: "")}
     var price by rememberSaveable(draftFile) {mutableStateOf(prefs.getString("price","") ?: "")}
-    var capacity by rememberSaveable(draftFile) {mutableStateOf(prefs.getString("capacity","")?.takeIf{saved->
-        Capacities.any{it.code==saved}
-    } ?: "")}
+    // Legacy drafts could contain an automatically selected "owner".
+    // Without a recorded explicit user choice, do not assert legal capacity.
+    var capacityConfirmed by rememberSaveable(draftFile) {
+        mutableStateOf(prefs.getBoolean("capacity_user_confirmed",false))
+    }
+    var capacity by rememberSaveable(draftFile) {mutableStateOf(
+        if(capacityConfirmed)prefs.getString("capacity","")?.takeIf{saved->
+            Capacities.any{it.code==saved}
+        } ?: "" else ""
+    )}
     // A public listing title can be composed from facts; the seller only
     // types one when they choose to personalize it.
     var editTitle by rememberSaveable(draftFile) {mutableStateOf(name.isNotBlank())}
@@ -132,14 +139,15 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
     val listingTitle=if(name.isBlank()) suggestedTitle.orEmpty() else name.trim()
     // Auto-save only the non-sensitive listing fields, never scans, tokens,
     // CIN, dates of birth, credentials or document URIs.
-    LaunchedEffect(draftFile,name,region,area,price,capacity) {
+    LaunchedEffect(draftFile,name,region,area,price,capacity,capacityConfirmed) {
         kotlinx.coroutines.delay(500)
         prefs.edit()
             .putString("title",name.trim())
             .putString("region",region.trim())
             .putString("area",area)
             .putString("price",price)
-            .putString("capacity",capacity)
+            .putString("capacity",if(capacityConfirmed)capacity else "")
+            .putBoolean("capacity_user_confirmed",capacityConfirmed)
             .apply()
     }
     // Generate the case request key only when the user submits. Persist the
@@ -317,7 +325,8 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                 .putString("region",region.trim())
                 .putString("area",area)
                 .putString("price",price)
-                .putString("capacity",capacity)
+                .putString("capacity",if(capacityConfirmed)capacity else "")
+                .putBoolean("capacity_user_confirmed",capacityConfirmed)
                 .commit()
             if(committed)R.string.draft_saved else R.string.draft_error
         }catch (_:Exception){R.string.draft_error}
@@ -927,7 +936,9 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                     SectionHeading(s(R.string.capacity_section),s(R.string.capacity_hint))
                     Capacities.forEach { option ->
                         val active=capacity==option.code
-                        Surface(Modifier.fillMaxWidth().clickable {capacity=option.code;saveMessage=0},
+                        Surface(Modifier.fillMaxWidth().clickable {
+                            capacity=option.code;capacityConfirmed=true;saveMessage=0
+                        },
                             shape=RoundedCornerShape(17.dp),color=if(active)Brand.Rose else Color.White,
                             border=BorderStroke(1.dp,if(active)Brand.Crimson else CardBorder)) {
                             Row(Modifier.fillMaxWidth().heightIn(min=57.dp).padding(horizontal=15.dp),
