@@ -257,8 +257,13 @@ def consensus_name(session,letters,card,center):
     return select_name(candidates)
 
 
-def cin_number(session,letters,card):
-    """Eight complete visible digits on the FRONT only; no suffix guessing.
+def _cin_full_front(session,letters,card):
+    """Private in-memory complete eight-digit OCR candidate.
+
+    The public worker still exposes only masked CIN suffix. This helper
+    exists so LOCAL QA can check all eight digits without ever logging or
+    serializing them. Its output is not identity or ownership verification.
+    """
 
     The old wide upper band included the emblem, background and ID label.
     Smaller overlapping crops cover varying perspective/print placement.
@@ -291,7 +296,12 @@ def cin_number(session,letters,card):
             # Never retain multiple conflicting numbers as accepted.
             if len(votes)>1:
                 return None
-    return next(iter(votes))[-4:] if len(votes)==1 else None
+    return next(iter(votes)) if len(votes)==1 else None
+
+
+def cin_number(session,letters,card):
+    full=_cin_full_front(session,letters,card)
+    return full[-4:] if full is not None else None
 
 
 def birth_date(session,letters,card,given_name_row):
