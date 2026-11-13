@@ -305,6 +305,12 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
         PrivateCaptureMemory.length(identityFiles[0].uri)==identityFiles[0].length
     // Front-only secure comparison requires explicit consent and genuine login.
     val identityReadyForRemote=identitySelected
+    // Existing private pair engine only understands OWNERSHIP_CERTIFICATE.
+    // Do not silently pass receipts, contracts or unknown documents as title.
+    val canRunCertificatePair=files.size==1 &&
+        familyReadings.size==1 &&
+        familyReadings[0].status=="READY" &&
+        familyReadings[0].familyKind=="OWNERSHIP_CERTIFICATE"
     // Tunisian/French comma is normalized only for numeric validation and API.
     val normalizedArea=area.replace(',', '.')
     val validArea=normalizedArea.matches(ValidLandArea)
@@ -859,8 +865,13 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                     }else{
                         Text(s(R.string.review_send_disclosure),
                             color=Brand.Muted,fontSize=12.sp,lineHeight=18.sp)
+                        Text(s(if(familyReadings.isEmpty())R.string.smart_pair_first_read
+                            else if(!canRunCertificatePair)R.string.smart_pair_supported_review
+                            else R.string.smart_pair_certificate_only_notice),
+                            color=Brand.Muted,fontSize=12.sp,lineHeight=18.sp)
                         Button(onClick={
-                            if(pairProgress!=null||files.isEmpty()||!identityReadyForRemote)
+                            if(pairProgress!=null||files.isEmpty()||!identityReadyForRemote||
+                                !canRunCertificatePair)
                                 return@Button
                             val cert=files.toList().map{
                                 PairEvidenceFile(it.uri,it.length,it.mime,it.uploadKey)
@@ -937,7 +948,8 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                                     if(requestEpoch==thisRequest)pairProgress=null
                                 }
                             }
-                        },enabled=pairProgress==null&&files.isNotEmpty()&&identityReadyForRemote,
+                        },enabled=pairProgress==null&&files.isNotEmpty()&&identityReadyForRemote&&
+                            canRunCertificatePair,
                             modifier=Modifier.fillMaxWidth().heightIn(min=54.dp),
                             colors=ButtonDefaults.buttonColors(containerColor=Brand.Crimson),
                             shape=RoundedCornerShape(16.dp)) {

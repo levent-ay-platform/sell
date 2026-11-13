@@ -294,4 +294,7 @@
     <string name="smart_description_price_prefix">Asking price</string>
     <string name="smart_description_generate">Generate facts-only description</string>
     <string name="smart_media_private_notice">Photos, coordinates and description are local previews only. They are not yet uploaded or saved with the draft until secure media storage is approved. The current Save Draft covers basic fields only.</string>
+    <string name="smart_pair_first_read">Read the document in the previous step before comparing identity.</string>
+    <string name="smart_pair_supported_review">Document accepted for private review. Automatic comparison does not yet support this kind and cannot claim matched ownership.</string>
+    <string name="smart_pair_certificate_only_notice">This is only a preliminary text comparison for an ownership certificate, not official verification.</string>
 </resources>

@@ -294,4 +294,7 @@
     <string name="smart_description_price_prefix">السعر المطلوب</string>
     <string name="smart_description_generate">جهّز وصفاً من بياناتي</string>
     <string name="smart_media_private_notice">الصور والإحداثيات والوصف في هذه الشاشة معاينة مؤقتة على الهاتف، وليست مرفوعة أو محفوظة في المسودة حتى يكتمل التخزين الآمن. حفظ المسودة الحالي يخص البيانات الأساسية فقط.</string>
+    <string name="smart_pair_first_read">اقرأ الوثيقة في المرحلة السابقة لتحديد نوعها قبل مقارنة الهوية.</string>
+    <string name="smart_pair_supported_review">هذه الوثيقة مقبولة للمراجعة، لكن المقارنة الآلية الحالية لا تدعم نوعها. لن نعرض نتيجة تطابق ملكية غير موثوقة.</string>
+    <string name="smart_pair_certificate_only_notice">هذه مقارنة نصية أولية لشهادة الملكية فقط، وليست تحققاً رسمياً.</string>
 </resources>
