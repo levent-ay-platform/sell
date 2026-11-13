@@ -21,10 +21,17 @@ internal data class ReadOcrFact(
     val label: String, val value: String?, val state: String,
     val page: Int?, val source: String?, val confidence: Int?
 )
+internal data class ReadFamilyFact(
+    val id:String,val value:String?,val status:String,val page:Int?,
+    val confidencePercent:Int?
+)
 internal data class ReadOcrResult(
     val evidenceId: String, val status: String, val facts: List<ReadOcrFact>,
     val missingPages: List<Int>, val qualityPages: List<Int>,
     val areaComparison: String, val pagesReceived: Int,
+    val familyKind:String="UNKNOWN",
+    val familyFacts:List<ReadFamilyFact> = emptyList(),
+    val documentSupportLevel:Int=0,
 )
 private const val MAX_DOC = 12L * 1024L * 1024L
 private const val MAX_REPLY = 64 * 1024
@@ -36,7 +43,7 @@ internal class PrivateOcrClientException(val statusCode: Int) : Exception("PRIVA
 internal suspend fun readOcrForOwner(
     context: Context, uri: Uri, expectedBytes: Long, mime: String,
     pageNumber: Int?, idempotencyKey: String, declaredArea: String,
-    session: QaOcrSession
+    session: QaOcrSession, evidenceKind:String="OTHER_LEGAL_PROOF"
 ): ReadOcrResult = withContext(Dispatchers.IO) {
     if(expectedBytes !in 20..MAX_DOC ||
         mime !in setOf("application/pdf", "image/jpeg", "image/png", "image/tiff") ||
@@ -44,7 +51,11 @@ internal suspend fun readOcrForOwner(
         !Regex("^[A-Za-z0-9_-]{16,100}$").matches(idempotencyKey) ||
         session.bearer.length !in 20..4096 ||
         !Regex("^[A-Za-z0-9._~+/-]+$").matches(session.bearer) ||
-        (pageNumber != null && pageNumber !in 1..8)) throw PrivateOcrClientException(400)
+        (pageNumber != null && pageNumber !in 1..8) ||
+        evidenceKind !in setOf("OWNERSHIP_CERTIFICATE","SHARED_OWNERSHIP_CERTIFICATE",
+            "SALE_DEED","TRANSFER_CARD","POSSESSION_REPORT","FINANCIAL_RECEIPT",
+            "PROPERTY_SERVICE_RECEIPT","OTHER_LEGAL_PROOF","TITLE_EXTRACT"))
+        throw PrivateOcrClientException(400)
     val base = runCatching { URI(session.httpsBaseUrl.trim()) }.getOrNull()
         ?: throw PrivateOcrClientException(400)
     if(base.scheme != "https" || base.host.isNullOrBlank() ||
@@ -66,7 +77,7 @@ internal suspend fun readOcrForOwner(
         conn.setRequestProperty("Content-Type", "application/octet-stream")
         conn.setRequestProperty("Cache-Control", "no-store")
         conn.setRequestProperty("X-Idempotency-Key", idempotencyKey)
-        conn.setRequestProperty("X-Evidence-Kind", "OWNERSHIP_CERTIFICATE")
+        conn.setRequestProperty("X-Evidence-Kind", evidenceKind)
         conn.setRequestProperty("X-Page-Number", pageNumber?.toString() ?: "null")
         conn.setRequestProperty("X-Claimed-Mime", mime)
         if(Regex("^[0-9]{1,10}(?:\\.[0-9]{1,3})?$").matches(declaredArea))
@@ -140,8 +151,27 @@ internal suspend fun readOcrForOwner(
             if(arr.length() > 8) throw PrivateOcrClientException(502)
             return (0 until arr.length()).map { arr.optInt(it) }.filter { it in 1..8 }
         }
+        val kind=reading.optString("familyKind","UNKNOWN")
+        if(kind !in setOf("OWNERSHIP_CERTIFICATE","SHARED_OWNERSHIP_CERTIFICATE",
+                "SALE_DEED","TRANSFER_CARD","POSSESSION_REPORT","FINANCIAL_RECEIPT",
+                "PROPERTY_SERVICE_RECEIPT","UNKNOWN"))
+            throw PrivateOcrClientException(502)
+        val rawFamily=reading.optJSONArray("familyFacts")
+        if(rawFamily!=null&&rawFamily.length()>24)throw PrivateOcrClientException(502)
+        val familyFacts=(0 until (rawFamily?.length()?:0)).map{i->
+            val item=rawFamily?.optJSONObject(i)?:throw PrivateOcrClientException(502)
+            ReadFamilyFact(
+                id=item.optString("id").take(40),
+                value=if(item.isNull("value"))null else item.optString("value").take(100),
+                status=item.optString("status").take(24),
+                page=if(item.isNull("page"))null else item.optInt("page").takeIf{it in 1..8},
+                confidencePercent=if(item.isNull("confidencePercent"))null
+                    else item.optInt("confidencePercent").takeIf{it in 0..100}
+            )
+        }
         ReadOcrResult(evidenceId,"READY",facts,pages("missingPages"),
             pages("qualityReviewPages"),reading.optString("declaredAreaComparison"),
-            reading.optInt("pagesReceived").coerceIn(0,8))
+            reading.optInt("pagesReceived").coerceIn(0,8),kind,familyFacts,
+            reading.optInt("documentSupportLevel",0).coerceIn(0,5))
     } finally { conn.disconnect() }
 }
