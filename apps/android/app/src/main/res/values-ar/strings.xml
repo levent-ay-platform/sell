@@ -247,4 +247,7 @@
     <string name="smart_preview_heading">معاينة إعلانك</string>
     <string name="smart_preview_disclosure">المعاينة مبنية على بياناتك فقط. لا يعني ذلك اعتماد الملكية أو نشر الإعلان.</string>
     <string name="smart_autosave_hint">تُحفظ بيانات الإعلان تلقائياً على هذا الهاتف. صور الهوية والشهادة لا تُحفظ في المسودة.</string>
+    <string name="smart_title_auto">عنوان الإعلان يُجهَّز تلقائياً</string>
+    <string name="smart_title_pending">حدّد المنطقة والمساحة ليظهر عنوان إعلانك</string>
+    <string name="smart_title_edit">تعديل</string>
 </resources>
