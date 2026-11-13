@@ -121,6 +121,12 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
     var area by rememberSaveable(draftFile) {mutableStateOf(prefs.getString("area","") ?: "")}
     var price by rememberSaveable(draftFile) {mutableStateOf(prefs.getString("price","") ?: "")}
     var capacity by rememberSaveable(draftFile) {mutableStateOf(prefs.getString("capacity","owner") ?: "owner")}
+    // A public listing title can be composed from facts; the seller only
+    // types one when they choose to personalize it.
+    var editTitle by rememberSaveable(draftFile) {mutableStateOf(name.isNotBlank())}
+    val suggestedTitle=SmartListingAssist.titleSuggestion(
+        region,area,s(R.string.smart_land_title_prefix),s(R.string.smart_area_unit))
+    val listingTitle=if(name.isBlank()) suggestedTitle.orEmpty() else name.trim()
     // Auto-save only the non-sensitive listing fields, never scans, tokens,
     // CIN, dates of birth, credentials or document URIs.
     LaunchedEffect(draftFile,name,region,area,price,capacity) {
@@ -183,7 +189,7 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                             null
                         }else{
                             val normalized=area.replace(',', '.')
-                            val values=listOf(name.trim(),region.trim(),normalized,price,capacity)
+                            val values=listOf(listingTitle,region.trim(),normalized,price,capacity)
                             val material=values.joinToString(""){it.length.toString()+":"+it}
                             val fp=java.security.MessageDigest.getInstance("SHA-256")
                                 .digest(material.toByteArray(Charsets.UTF_8))
@@ -196,7 +202,7 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                                 .putString("pending_case_key",k).commit())
                                 throw IllegalStateException("CASE_INTENT_NOT_DURABLE")
                             provisionOwnerEvidenceCase(auth,NewOwnerCaseDraft(
-                                k,name.trim(),region.trim(),normalized,price,capacity))
+                                k,listingTitle,region.trim(),normalized,price,capacity))
                                 .also{provisionedCase=it}
                         }
                     }
@@ -283,9 +289,7 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
     val normalizedArea=area.replace(',', '.')
     val validArea=normalizedArea.matches(ValidLandArea)
     val validPrice=price.matches(ValidLandPrice)
-    val validFirst=name.trim().length in 2..100&&region.trim().length in 2..100&&validArea&&validPrice
-    val suggestedTitle=SmartListingAssist.titleSuggestion(region,area,
-        s(R.string.smart_land_title_prefix),s(R.string.smart_area_unit))
+    val validFirst=listingTitle.length in 2..100&&region.trim().length in 2..100&&validArea&&validPrice
     // Saving a private local draft must work BEFORE document selection or OCR.
     // Do not pretend success when the device fails to persist these fields.
     val saveLocalDraft:()->Unit={
@@ -344,10 +348,33 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
             when(step) {
                 0 -> {
                     SectionHeading(s(R.string.property_section),s(R.string.property_section_hint))
-                    OutlinedTextField(name,{name=it.take(100);saveMessage=0},
-                        label={Text(s(R.string.property_name))}, modifier=Modifier.fillMaxWidth(),singleLine=true,
-                        isError=showInvalid&&name.trim().length<2,
-                        supportingText=if(showInvalid&&name.trim().length<2){{Text(s(R.string.field_required))}}else null)
+                    Surface(color=Color(0xFFF2F8F5),shape=RoundedCornerShape(16.dp)){
+                        Column(Modifier.fillMaxWidth().padding(15.dp),
+                            verticalArrangement=Arrangement.spacedBy(8.dp)){
+                            Row(verticalAlignment=Alignment.CenterVertically,
+                                horizontalArrangement=Arrangement.spacedBy(10.dp)){
+                                Icon(Icons.Outlined.AutoAwesome,null,
+                                    Modifier.size(20.dp),tint=Color(0xFF267B63))
+                                Column(Modifier.weight(1f)){
+                                    Text(s(R.string.smart_title_auto),fontSize=12.sp,
+                                        color=Brand.Muted)
+                                    Text(listingTitle.ifBlank{s(R.string.smart_title_pending)},
+                                        fontSize=15.sp,color=Brand.Ink,
+                                        fontWeight=FontWeight.SemiBold)
+                                }
+                                TextButton(onClick={editTitle=!editTitle}){
+                                    Text(s(R.string.smart_title_edit),fontSize=12.sp)
+                                }
+                            }
+                            if(editTitle)
+                                OutlinedTextField(name,{name=it.take(100);saveMessage=0},
+                                    label={Text(s(R.string.property_name))},
+                                    modifier=Modifier.fillMaxWidth(),singleLine=true,
+                                    isError=showInvalid&&name.isNotBlank()&&name.trim().length<2,
+                                    supportingText=if(showInvalid&&name.isNotBlank()&&name.trim().length<2)
+                                        {{Text(s(R.string.field_required))}}else null)
+                        }
+                    }
                     OutlinedTextField(region,{region=it.take(100);saveMessage=0},
                         label={Text(s(R.string.property_region))},modifier=Modifier.fillMaxWidth(),singleLine=true,
                         isError=showInvalid&&region.trim().length<2,
@@ -364,16 +391,6 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                         keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Number),
                         isError=showInvalid&&!validPrice,
                         supportingText=if(showInvalid&&!validPrice){{Text(s(R.string.price_invalid))}}else null)
-                    // One-tap smart title; never overwrite a seller's own title.
-                    if(name.isBlank()&&suggestedTitle!=null){
-                        OutlinedButton(onClick={name=suggestedTitle;saveMessage=0},
-                            modifier=Modifier.fillMaxWidth(),
-                            shape=RoundedCornerShape(15.dp)){
-                            Icon(Icons.Outlined.AutoAwesome,null,Modifier.size(19.dp))
-                            Spacer(Modifier.width(8.dp))
-                            Text(s(R.string.smart_title_use))
-                        }
-                    }
                     val unitPrice=SmartListingAssist.pricePerSquareMeter(area,price)
                     if(unitPrice!=null){
                         Surface(color=Color(0xFFF2F8F5),shape=RoundedCornerShape(15.dp)){
@@ -570,7 +587,7 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                                 Text(s(R.string.smart_preview_heading),fontSize=13.sp,
                                     fontWeight=FontWeight.SemiBold,color=Brand.Crimson)
                             }
-                            Text(name.ifBlank{suggestedTitle?:s(R.string.no_value)},
+                            Text(listingTitle.ifBlank{s(R.string.no_value)},
                                 fontSize=19.sp,fontWeight=FontWeight.Bold,color=Brand.Ink)
                             Text("${region} · ${area} m² · ${price} TND",
                                 fontSize=13.sp,color=Brand.Muted)
@@ -582,7 +599,7 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                         border=BorderStroke(1.dp,CardBorder)){
                         Column(Modifier.fillMaxWidth().padding(14.dp)){
                             OcrDataRow(s(R.string.summary_property),
-                                name.ifBlank{s(R.string.no_value)})
+                                listingTitle.ifBlank{s(R.string.no_value)})
                             HorizontalDivider(color=CardBorder)
                             OcrDataRow(s(R.string.summary_region),
                                 region.ifBlank{s(R.string.no_value)})
@@ -698,7 +715,7 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                                 PairEvidenceFile(it.uri,it.length,it.mime,it.uploadKey)
                             }
                             val caseRequestKey=try {
-                                val parts=listOf(name.trim(),region.trim(),normalizedArea,price,capacity)
+                                val parts=listOf(listingTitle,region.trim(),normalizedArea,price,capacity)
                                 val serialized=parts.joinToString(separator="") { "${it.length}:${it}" }
                                 val fingerprint=java.security.MessageDigest.getInstance("SHA-256")
                                     .digest(serialized.toByteArray(Charsets.UTF_8))
@@ -735,7 +752,7 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                                     val activeCase=ownerSession?:provisionedCase?:
                                         provisionOwnerEvidenceCase(
                                             authenticatedOwnerSession?:throw OwnerPairException(401),
-                                            NewOwnerCaseDraft(caseRequestKey,name.trim(),region.trim(),
+                                            NewOwnerCaseDraft(caseRequestKey,listingTitle,region.trim(),
                                                 normalizedArea,price,capacity)
                                         ).also{if(requestEpoch==thisRequest)provisionedCase=it}
                                     val result=compareOwnerCertificateAndIdentity(
