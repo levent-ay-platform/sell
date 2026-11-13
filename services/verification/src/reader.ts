@@ -67,7 +67,7 @@ export function parseOcrWorkerOutput(input:unknown):IngestedDocument {
          (item.method==='pdf-text' && line.source!=='pdf-text') ||
          (item.method==='ocr' && line.source==='pdf-text') ||
          (line.bbox!==undefined && (item.method!=='ocr'||
-           !validRasterBox(line.bbox))))) throw new TypeError('INVALID_OCR_LINE');
+           !validRasterBox(line.bbox)))) throw new TypeError('INVALID_OCR_LINE');
       count+=line.text.length;
       if(count>100000) throw new RangeError('OCR_TEXT_TOO_LARGE');
       lines.push({text:line.text,page,confidence:line.confidence as number|null,
