@@ -334,4 +334,5 @@
     <string name="malak_no_auto_identity_association">Aucun lien personnel fiable établi. Les autres parties restent masquées.</string>
     <string name="malak_parts_missing">Quote-part illisible — à corriger depuis la source</string>
     <string name="malak_capacity_not_declared">Non déclarée — en attente de revue du document</string>
+    <string name="malak_pilot_scan_after_identity">Votre connexion actuelle permet de lire le document et le recto de la CIN et de comparer la personne concernée. Seules ses données seront affichées, sans attestation juridique.</string>
 </resources>

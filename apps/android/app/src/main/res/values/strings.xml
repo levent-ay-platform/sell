@@ -334,4 +334,5 @@
     <string name="malak_no_auto_identity_association">No reliable personal match found. Other parties\' data remain hidden.</string>
     <string name="malak_parts_missing">Share unreadable — correct from source</string>
     <string name="malak_capacity_not_declared">Not declared — document review pending</string>
+    <string name="malak_pilot_scan_after_identity">Your current sign-in can scan the document and the front of your ID together. Only your matching role and share are shown; this is not legal ownership verification.</string>
 </resources>

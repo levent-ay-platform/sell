@@ -19,6 +19,8 @@ import {PrivatePairAccessDenied} from './private-pair-service.ts';
 import type {PrivatePairReport,PrivatePairRequest} from './private-pair-service.ts';
 import {OwnerCaseDenied} from './private-owner-case.ts';
 import {PilotLoginDenied} from './pilot-auth.ts';
+import {PilotPairDenied,PilotPairUnavailable,sniffPilotMime} from './pilot-private-pair.ts';
+import type {PilotPairPreview} from './pilot-private-pair.ts';
 import type {OwnerCaseResult} from './private-owner-case.ts';
 
 const MAX_BYTES=12*1024*1024;
@@ -34,9 +36,10 @@ const REVIEW=/^\/internal\/v1\/review\/([0-9a-f-]{36})\/([0-9a-f-]{36})\/inspect
 const OWNER_CASE=/^\/internal\/v1\/owner\/cases$/;
 const PILOT_LOGIN=/^\/internal\/v1\/pilot\/login$/;
 const PILOT_CIN_PREVIEW=/^\/internal\/v1\/pilot\/preview-cin$/;
+const PILOT_PAIR=/^\/internal\/v1\/pilot\/compare-pair$/;
 const CONSENT_REVOKE=/^\/internal\/v1\/owner\/cases\/([0-9a-f-]{36})\/revoke-consent$/i;
 const MIME=new Set(['application/pdf','image/png','image/jpeg','image/tiff']);
-export type PrivateRoute='UPLOAD'|'INSPECT'|'OCR'|'CIN_PREVIEW'|'PAIR'|'OWNER_CASE'|'CONSENT_REVOKE'|'PILOT_LOGIN'|'PILOT_CIN_PREVIEW';
+export type PrivateRoute='UPLOAD'|'INSPECT'|'OCR'|'CIN_PREVIEW'|'PAIR'|'OWNER_CASE'|'CONSENT_REVOKE'|'PILOT_LOGIN'|'PILOT_CIN_PREVIEW'|'PILOT_PAIR';
 export type DenialReason='BAD_ROUTE'|'BAD_REQUEST'|'UNAUTHENTICATED'|'FORBIDDEN'|'RATE_LIMITED'|'FILE_REJECTED'|'REPLAY_CONFLICT'|'UPSTREAM_UNAVAILABLE';
 export interface DenialAuditRecord {route:PrivateRoute|'UNKNOWN';reason:DenialReason;actorUserId:string|null;requestId:string;}
 export interface PrivateEvidenceHttpDeps {
@@ -60,6 +63,10 @@ export interface PrivateEvidenceHttpDeps {
   loginPilot?:(input:unknown)=>Promise<{bearer:string;expiresInSeconds:number;pilotConfirmed:true}>;
   /** QA-only transient OCR. Pilot token is real, but never owner/legal proof. */
   previewPilotCin?:(bearer:string,bytes:Uint8Array,mime:'image/jpeg'|'image/png')=>Promise<CinFields>;
+  /** Only caller-uploaded bytes, kept transient. No private case/owner claim. */
+  previewPilotPair?:(bearer:string,documents:readonly {
+    bytes:Uint8Array;mime:'application/pdf'|'image/jpeg'|'image/png'|'image/tiff'
+  }[],front:{bytes:Uint8Array;mime:'image/jpeg'|'image/png'})=>Promise<PilotPairPreview>;
   withdrawOwnerConsent?:(bearerToken:string,caseId:string)=>Promise<{revoked:true;ownershipVerified:false;identityVerified:false;mayPublish:false}>;
 }
 
@@ -141,7 +148,7 @@ export function createPrivateEvidenceHttpHandler(deps:PrivateEvidenceHttpDeps) {
     const upload=UPLOAD.exec(url),ocrUpload=OCR_UPLOAD.exec(url),cinPreview=CIN_PREVIEW.exec(url),review=REVIEW.exec(url),pair=PAIR.exec(url);
     const caseCreate=OWNER_CASE.test(url),consentRevoke=CONSENT_REVOKE.exec(url);
     const route:PrivateRoute|'UNKNOWN'=PILOT_LOGIN.test(url)?'PILOT_LOGIN':
-      PILOT_CIN_PREVIEW.test(url)?'PILOT_CIN_PREVIEW':caseCreate?'OWNER_CASE':consentRevoke?'CONSENT_REVOKE':
+      PILOT_CIN_PREVIEW.test(url)?'PILOT_CIN_PREVIEW':PILOT_PAIR.test(url)?'PILOT_PAIR':caseCreate?'OWNER_CASE':consentRevoke?'CONSENT_REVOKE':
       pair?'PAIR':cinPreview?'CIN_PREVIEW':ocrUpload?'OCR':upload?'UPLOAD':review?'INSPECT':'UNKNOWN';
     // Do not log/return raw URL, bearer token, file name or document identifiers.
     const reject=async(status:number,reason:DenialReason)=>{
@@ -210,13 +217,91 @@ export function createPrivateEvidenceHttpHandler(deps:PrivateEvidenceHttpDeps) {
         actor=id.userId;
         // The pilot bearer is restricted to ephemeral OCR. All evidence,
         // ownership case and legal paths continue to deny it.
-        if(id.pilotUnverified===true&&route!=='PILOT_CIN_PREVIEW'){
+        if(id.pilotUnverified===true&&
+           route!=='PILOT_CIN_PREVIEW'&&route!=='PILOT_PAIR'){
           await reject(403,'FORBIDDEN');return;
         }
-        if(id.pilotUnverified!==true&&route==='PILOT_CIN_PREVIEW'){
+        if(id.pilotUnverified!==true&&
+           (route==='PILOT_CIN_PREVIEW'||route==='PILOT_PAIR')){
           await reject(403,'FORBIDDEN');return;
         }
       }catch {await reject(503,'UPSTREAM_UNAVAILABLE');return;}
+      if(route==='PILOT_PAIR'){
+        if(!deps.previewPilotPair){await reject(503,'UPSTREAM_UNAVAILABLE');return;}
+        if(req.headers['x-evidence-kind']||req.headers['x-page-number']||
+           req.headers['x-idempotency-key']||req.headers['x-claimed-mime']||
+           req.headers['x-declared-area-m2']||
+           single(req,'content-type')!=='application/octet-stream'||
+           single(req,'x-pilot-ocr-consent')!=='1'){
+          await reject(400,'BAD_REQUEST');return;
+        }
+        const header=single(req,'content-length');
+        const length=header&&/^[0-9]{2,8}$/.test(header)?Number(header):NaN;
+        if(!Number.isSafeInteger(length)||length<56){
+          await reject(400,'BAD_REQUEST');return;
+        }
+        if(length>MAX_BYTES){await reject(413,'FILE_REJECTED');return;}
+        let body:Uint8Array;
+        try{body=await limitedBody(req,length);}
+        catch{await reject(400,'FILE_REJECTED');return;}
+        try{
+          // Exactly one versioned, bounded binary frame. No URI, claim,
+          // file IDs, old cases, or client-declared role are accepted.
+          if(body[0]!==1||body[1]===undefined||body[1]<1||body[1]>8){
+            await reject(400,'BAD_REQUEST');return;
+          }
+          const docCount=body[1];
+          let offset=2;
+          type M='application/pdf'|'image/jpeg'|'image/png'|'image/tiff';
+          const readFile=():{bytes:Uint8Array;mime:M}=>{
+            if(offset+4>body.length)throw new PilotPairDenied();
+            const size=((body[offset]!<<24)>>>0)+
+              (body[offset+1]!<<16)+(body[offset+2]!<<8)+body[offset+3]!;
+            offset+=4;
+            if(size<20||size>MAX_BYTES||offset+size>body.length)
+              throw new PilotPairDenied();
+            const bytes=body.subarray(offset,offset+size);
+            offset+=size;
+            const mime=sniffPilotMime(bytes);
+            if(!mime)throw new PilotPairDenied();
+            return {bytes,mime};
+          };
+          const docs=[];
+          for(let i=0;i<docCount;i++)docs.push(readFile());
+          const front=readFile();
+          if(offset!==body.length||
+             (front.mime!=='image/jpeg'&&front.mime!=='image/png')){
+            await reject(422,'FILE_REJECTED');return;
+          }
+          let result:PilotPairPreview;
+          try{
+            result=await deps.previewPilotPair(bearerToken,docs,
+              front as {bytes:Uint8Array;mime:'image/jpeg'|'image/png'});
+          }catch(e){
+            if(e instanceof PilotPairDenied)await reject(422,'FILE_REJECTED');
+            else await reject(503,'UPSTREAM_UNAVAILABLE');
+            return;
+          }
+          if(!result||result.ownershipVerified!==false||
+             result.identityVerified!==false||result.mayPublish!==false||
+             result.requiresHumanReview!==true||
+             typeof result.detectedKind!=='string'||
+             !Number.isInteger(result.certificatePages)||
+             result.certificatePages<1||result.certificatePages>8||
+             result.identityPages!==1||
+             !Array.isArray(result.propertyFacts)||
+             result.propertyFacts.length>18){
+            await reject(503,'UPSTREAM_UNAVAILABLE');return;
+          }
+          json(res,200,{ok:true,pilotOcr:true,comparison:result,
+            ownershipVerified:false,identityVerified:false,mayPublish:false});
+          return;
+        }catch(e){
+          if(e instanceof PilotPairDenied)await reject(422,'FILE_REJECTED');
+          else await reject(503,'UPSTREAM_UNAVAILABLE');
+          return;
+        }finally{body.fill(0);}
+      }
       if(route==='PILOT_CIN_PREVIEW'){
         if(!deps.previewPilotCin){await reject(503,'UPSTREAM_UNAVAILABLE');return;}
         if(req.headers['x-evidence-kind']||req.headers['x-page-number']||

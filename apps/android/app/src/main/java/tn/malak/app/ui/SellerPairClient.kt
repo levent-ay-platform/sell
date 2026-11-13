@@ -305,3 +305,145 @@ internal suspend fun compareOwnerCertificateAndIdentity(
     onProgress:(PairProgress)->Unit={}
 ):CertificateIdentityReview=compareOwnerDocumentsAndIdentity(
     context,session,certificates,identities,onProgress)
+
+
+/**
+ * Current Malak Pilot login: private preview of ONLY freshly submitted files.
+ * No stored owner evidence, case IDs, second sign-in, or legal verification.
+ */
+internal suspend fun comparePilotDocumentsAndIdentity(
+    context:Context,session:PilotOcrSession,
+    documents:List<PairEvidenceFile>,identities:List<PairEvidenceFile>,
+    onProgress:(PairProgress)->Unit={}
+):CertificateIdentityReview=withContext(Dispatchers.IO){
+    validateFiles(documents,identities)
+    val base=PilotOcrLogin.configuredBase()?:throw OwnerPairException(503)
+    if(base!=session.httpsBaseUrl||!TOKEN.matches(session.bearer)||
+        session.expiresAtMs<=System.currentTimeMillis())
+        throw OwnerPairException(401)
+    val inputs=documents+identities
+    val count=2L+4L*inputs.size+inputs.sumOf{it.expectedBytes}
+    if(count>DOC_LIMIT||count<56||count>Int.MAX_VALUE)
+        throw OwnerPairException(413)
+    val c=(URL(base+"/internal/v1/pilot/compare-pair").openConnection()
+        as? HttpsURLConnection)?:throw OwnerPairException(503)
+    try{
+        c.requestMethod="POST"
+        c.instanceFollowRedirects=false
+        c.connectTimeout=10000
+        c.readTimeout=180000
+        c.useCaches=false
+        c.doOutput=true
+        c.setRequestProperty("Authorization","Bearer "+session.bearer)
+        c.setRequestProperty("Cache-Control","no-store")
+        c.setRequestProperty("Content-Type","application/octet-stream")
+        c.setRequestProperty("X-Pilot-Ocr-Consent","1")
+        c.setFixedLengthStreamingMode(count.toInt())
+        c.outputStream.use{raw->
+            val out=java.io.DataOutputStream(raw)
+            out.writeByte(1)
+            out.writeByte(documents.size)
+            val buffer=ByteArray(32*1024)
+            try{
+                inputs.forEachIndexed{index,file->
+                    withContext(Dispatchers.Main){
+                        onProgress(if(index<documents.size)PairProgress.CERTIFICATE_UPLOAD
+                            else PairProgress.IDENTITY_UPLOAD)
+                    }
+                    out.writeInt(file.expectedBytes.toInt())
+                    val stream=context.contentResolver.openInputStream(file.uri)
+                        ?:throw OwnerPairException(422)
+                    stream.use{input->
+                        var sent=0L
+                        while(true){
+                            val n=input.read(buffer)
+                            if(n<0)break
+                            sent+=n
+                            if(sent>file.expectedBytes)throw OwnerPairException(422)
+                            out.write(buffer,0,n)
+                        }
+                        if(sent!=file.expectedBytes)throw OwnerPairException(422)
+                    }
+                }
+                out.flush()
+            }finally{buffer.fill(0)}
+        }
+        withContext(Dispatchers.Main){onProgress(PairProgress.COMPARING)}
+        val envelope=readJson(c,200)
+        safeEnvelope(envelope)
+        if(envelope.optBoolean("identityVerified",true)||!envelope.optBoolean("pilotOcr",false))
+            throw OwnerPairException(502)
+        val data=envelope.optJSONObject("comparison")?:throw OwnerPairException(502)
+        if(data.optBoolean("identityVerified",true)||
+           data.optBoolean("ownershipVerified",true)||
+           data.optBoolean("mayPublish",true)||
+           !data.optBoolean("requiresHumanReview",false)||
+           data.optInt("identityPages")!=1)
+            throw OwnerPairException(502)
+        val kind=data.optString("detectedKind")
+        val status=data.optString("assessment")
+        if(kind !in DETECTED_KINDS||status !in UNIFIED_ASSESSMENTS)
+            throw OwnerPairException(502)
+        val pages=data.optInt("certificatePages")
+        if(pages !in 1..8)throw OwnerPairException(502)
+        val matchedRole=if(data.isNull("matchedRole"))null else data.optString("matchedRole")
+        val cinStatus=if(data.isNull("documentCinStatus"))null else
+            data.optString("documentCinStatus")
+        if((matchedRole==null)!=(cinStatus==null)||
+            (matchedRole!=null&&matchedRole !in ROLE_NAMES)||
+            (cinStatus!=null&&cinStatus !in DOCUMENT_CIN_STATUSES)||
+            (matchedRole!=null&&
+                status !in setOf("ROLE_TEXT_MATCH_ONLY","NAME_ONLY_REVIEW")))
+            throw OwnerPairException(502)
+        val roles=if(matchedRole!=null)listOf(UnifiedRoleStatus(
+            matchedRole!!,"PRELIMINARY_TEXT_AGREEMENT",null,cinStatus!!))
+            else emptyList()
+        val selected=data.optJSONObject("matchedRightsHolder")
+        var holder:MatchedRightsHolder?=null
+        if(selected!=null){
+            val n=selected.optInt("printedRowOrdinal")
+            val page=selected.optInt("documentPage")
+            val parts=if(selected.isNull("rightsParts"))null
+                else selected.optString("rightsParts")
+            val state=selected.optString("status")
+            if(kind!="SHARED_OWNERSHIP_CERTIFICATE"||matchedRole!="SHARED_RIGHTS_HOLDER"||
+                n !in 1..500||page !in 1..pages||
+                state !in setOf("PRELIMINARY_PERSON_ROW_TEXT_ONLY","NAME_ONLY_REVIEW")||
+                (parts!=null&&!Regex("^[1-9][0-9]{0,10}(?:[.,][0-9]{1,3})?$")
+                    .matches(parts)))
+                throw OwnerPairException(502)
+            holder=MatchedRightsHolder(n,parts,page,state)
+        }
+        val facts=data.optJSONArray("propertyFacts")?:throw OwnerPairException(502)
+        if(facts.length()>18)throw OwnerPairException(502)
+        val values=mutableMapOf<String,String>()
+        for(i in 0 until facts.length()){
+            val f=facts.optJSONObject(i)?:throw OwnerPairException(502)
+            val key=f.optString("key")
+            val value=f.optString("value")
+            if(key !in setOf("registerReference","parentRegisterReference",
+                "registeredAreaM2","soldAreaM2","possessedAreaM2",
+                "transferredAreaM2","registeredPlotNumber","soldPlotNumber",
+                "possessedPlotNumber","salePriceTnd","transferReference",
+                "serviceRequestNumber","serviceRequestDate","rightsDenominator")||
+                value.isBlank()||value.length>100||f.optInt("page") !in 1..pages||
+                values.containsKey(key))throw OwnerPairException(502)
+            values[key]=value
+        }
+        val area=when(kind){
+            "SALE_DEED"->values["soldAreaM2"]
+            "POSSESSION_REPORT"->values["possessedAreaM2"]
+            "TRANSFER_CARD"->values["transferredAreaM2"]
+            else->values["registeredAreaM2"]
+        }
+        CertificateIdentityReview(
+            "INSUFFICIENT_OR_AMBIGUOUS",null,null,"NOT_COMPARABLE",
+            listOf("OFFICIAL_REGISTRY_NOT_CHECKED"),FRONT_CAPTURE,pages,1,
+            localFields=LocalOcrFields(values["registerReference"]?:
+                values["parentRegisterReference"],area,pages,
+                null,null,null,null),
+            detectedKind=kind,unifiedAssessment=status,unifiedRoles=roles,
+            matchedRightsHolder=holder
+        )
+    }finally{c.disconnect()}
+}

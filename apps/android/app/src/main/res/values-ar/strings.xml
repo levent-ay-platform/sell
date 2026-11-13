@@ -334,4 +334,5 @@
     <string name="malak_no_auto_identity_association">لم يتم تحديد شخص مطابق بصورة موثوقة. لم تُعرض بيانات أي طرف آخر.</string>
     <string name="malak_parts_missing">الحصة غير مقروءة — صححها من المصدر</string>
     <string name="malak_capacity_not_declared">لم يتم التصريح بالصفة — تنتظر مراجعة الوثيقة</string>
+    <string name="malak_pilot_scan_after_identity">الرمز الحالي يتيح قراءة الوثيقة والهوية ومطابقتهما بعد تصوير الوجه الأمامي. ستظهر بيانات الشخص المطابق فقط، دون اعتماد ملكية قانونية.</string>
 </resources>

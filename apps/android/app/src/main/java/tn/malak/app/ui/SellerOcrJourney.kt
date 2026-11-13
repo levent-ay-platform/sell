@@ -88,8 +88,10 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
     // Pilot is a real server OCR session, but never a verified identity
     // or owner/case/publishing credential.
     val hasOwnerReviewSession=ownerSession!=null||authenticatedOwnerSession!=null
-    val canReadPrivateId=hasOwnerReviewSession||
-        (pilotOcrSession!=null&&pilotOcrSession.expiresAtMs>System.currentTimeMillis())
+    val hasPilotReviewSession=pilotOcrSession!=null&&
+        pilotOcrSession.expiresAtMs>System.currentTimeMillis()
+    val canRunPrivateMatching=hasOwnerReviewSession||hasPilotReviewSession
+    val canReadPrivateId=canRunPrivateMatching
     val scope=rememberCoroutineScope()
     var requestJob by remember {mutableStateOf<Job?>(null)}
     // Invalidate old asynchronous work whenever fields, documents, consented
@@ -671,7 +673,7 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                     }
                     if(pairError!=0)PlainNotice(Icons.Outlined.Info,s(pairError))
 
-                    if(ownerSession==null&&authenticatedOwnerSession==null){
+                    if(!canRunPrivateMatching){
                         Text(s(R.string.review_auth_needed),
                             color=Brand.Muted,fontSize=12.sp,lineHeight=18.sp)
                     }else{
@@ -682,7 +684,7 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                             color=Brand.Muted,fontSize=12.sp,lineHeight=18.sp)
                         Button(onClick={
                             if(pairProgress!=null||files.isEmpty()||!identityReadyForRemote||
-                                !hasOwnerReviewSession||familyReadBusy)
+                                !canRunPrivateMatching||familyReadBusy)
                                 return@Button
                             val selected=files.toList()
                             val idDocs=identityFiles.toList().map{
@@ -694,8 +696,28 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                             val thisRequest=++requestEpoch
                             requestJob=scope.launch {
                                 try {
-                                    // The trusted sign-in identity first provisions a real,
-                                    // consented case; an absent login never invents a case.
+                                    // The current Malak login directly scans ONLY these
+                                    // newly submitted files. No owner case or extra sign-in.
+                                    if(hasPilotReviewSession&&pilotOcrSession!=null){
+                                        val pilotResult=comparePilotDocumentsAndIdentity(
+                                            context,pilotOcrSession,
+                                            selected.map{item->PairEvidenceFile(
+                                                item.uri,item.length,item.mime,item.uploadKey,
+                                                "OTHER_LEGAL_PROOF")},
+                                            idDocs){progress->
+                                                if(requestEpoch==thisRequest)
+                                                    pairProgress=progress
+                                            }
+                                        if(requestEpoch==thisRequest&&
+                                            files.map{it.uploadKey}==selected.map{it.uploadKey}&&
+                                            identityFiles.map{it.uploadKey}==
+                                                idDocs.map{it.idempotencyKey}){
+                                            pairReport=pilotResult
+                                        }
+                                        return@launch
+                                    }
+                                    // A separately provisioned owner case is needed only
+                                    // for pre-existing case-based, legally reviewed paths.
                                     val activeCase=ensureEvidenceIntakeCase()
                                     val readings=if(familyReadings.size==selected.size&&
                                         familyReadings.all{it.status=="READY"})familyReadings
@@ -748,7 +770,7 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                                 }
                             }
                         },enabled=pairProgress==null&&files.isNotEmpty()&&identityReadyForRemote&&
-                            hasOwnerReviewSession&&!familyReadBusy,
+                            canRunPrivateMatching&&!familyReadBusy,
                             modifier=Modifier.fillMaxWidth().heightIn(min=54.dp),
                             colors=ButtonDefaults.buttonColors(containerColor=Brand.Crimson),
                             shape=RoundedCornerShape(16.dp)) {
@@ -835,8 +857,8 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                             Text(s(R.string.smart_read_source_intro),fontSize=12.sp,
                                 color=Brand.Muted,lineHeight=19.sp)
                             if(!hasOwnerReviewSession)
-                                Text(s(if(pilotOcrSession!=null)
-                                    R.string.smart_read_pilot_only
+                                Text(s(if(hasPilotReviewSession)
+                                    R.string.malak_pilot_scan_after_identity
                                     else R.string.smart_read_auth_required),
                                     fontSize=12.sp,color=Brand.Crimson)
                             Button(onClick={

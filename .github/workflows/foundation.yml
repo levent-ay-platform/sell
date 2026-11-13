@@ -76,7 +76,8 @@ jobs:
             db/migrations/0009_private_cin_preview_rate_limit.sql \
             db/migrations/0010_pilot_cin_preview_rate_limit.sql \
             db/migrations/0011_smart_listing_private_document_kinds.sql \
-            db/migrations/0012_evidence_only_case.sql; do
+            db/migrations/0012_evidence_only_case.sql \
+            db/migrations/0013_pilot_transient_pair_rate_limit.sql; do
             test -f "$sql_file"
             docker exec -i -e PGPASSWORD="$PGPASSWORD" "$postgres_service" \
               psql -h 127.0.0.1 -U sell_ci -d sell_ci \
