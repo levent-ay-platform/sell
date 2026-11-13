@@ -32,6 +32,13 @@ export interface ReadDocumentResult {
 const QUALITY_WARNINGS=new Set<QualityWarning>(['LOW_RESOLUTION','LOW_CONTRAST','POSSIBLE_BLUR','REVIEW_ORIENTATION']);
 const isObject=(x:unknown):x is Record<string,unknown> =>
   typeof x==='object' && x!==null && !Array.isArray(x);
+const validRasterBox=(x:unknown):x is {left:number;top:number;right:number;bottom:number}=>{
+  if(!isObject(x))return false;
+  const {left,top,right,bottom}=x;
+  return [left,top,right,bottom].every(n=>typeof n==='number'&&
+    Number.isSafeInteger(n)&&n>=0&&n<=50000)&&
+    (right as number)>(left as number)&&(bottom as number)>(top as number);
+};
 
 export function parseOcrWorkerOutput(input:unknown):IngestedDocument {
   if(!isObject(input) || !['pdf','image'].includes(String(input.format)) ||
@@ -58,11 +65,18 @@ export function parseOcrWorkerOutput(input:unknown):IngestedDocument {
           !Number.isFinite(line.confidence) || line.confidence<0 || line.confidence>1)) ||
          !['pdf-text','ocr-ar','ocr-fr'].includes(String(line.source)) ||
          (item.method==='pdf-text' && line.source!=='pdf-text') ||
-         (item.method==='ocr' && line.source==='pdf-text')) throw new TypeError('INVALID_OCR_LINE');
+         (item.method==='ocr' && line.source==='pdf-text') ||
+         (line.bbox!==undefined && (item.method!=='ocr'||
+           !validRasterBox(line.bbox))))) throw new TypeError('INVALID_OCR_LINE');
       count+=line.text.length;
       if(count>100000) throw new RangeError('OCR_TEXT_TOO_LARGE');
       lines.push({text:line.text,page,confidence:line.confidence as number|null,
-                  source:line.source as RecognizedLine['source']});
+                  source:line.source as RecognizedLine['source'],
+                  ...(line.bbox!==undefined?{bbox:{
+                    left:(line.bbox as {left:number}).left,
+                    top:(line.bbox as {top:number}).top,
+                    right:(line.bbox as {right:number}).right,
+                    bottom:(line.bbox as {bottom:number}).bottom}}:{})});
     }
     pages.push({page,method:item.method as IngestedPage['method'],lines,
       ...(item.qualityWarnings!==undefined ? {qualityWarnings:item.qualityWarnings as QualityWarning[]} : {})});
