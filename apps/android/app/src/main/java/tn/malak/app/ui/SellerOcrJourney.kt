@@ -121,6 +121,18 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
     var area by rememberSaveable(draftFile) {mutableStateOf(prefs.getString("area","") ?: "")}
     var price by rememberSaveable(draftFile) {mutableStateOf(prefs.getString("price","") ?: "")}
     var capacity by rememberSaveable(draftFile) {mutableStateOf(prefs.getString("capacity","owner") ?: "owner")}
+    // Auto-save only the non-sensitive listing fields, never scans, tokens,
+    // CIN, dates of birth, credentials or document URIs.
+    LaunchedEffect(draftFile,name,region,area,price,capacity) {
+        kotlinx.coroutines.delay(500)
+        prefs.edit()
+            .putString("title",name.trim())
+            .putString("region",region.trim())
+            .putString("area",area)
+            .putString("price",price)
+            .putString("capacity",capacity)
+            .apply()
+    }
     // Generate the case request key only when the user submits. Persist the
     // payload fingerprint + opaque key BEFORE the first network request, so an
     // unknown server response followed by app restart cannot create a new case.
@@ -272,6 +284,8 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
     val validArea=normalizedArea.matches(ValidLandArea)
     val validPrice=price.matches(ValidLandPrice)
     val validFirst=name.trim().length in 2..100&&region.trim().length in 2..100&&validArea&&validPrice
+    val suggestedTitle=SmartListingAssist.titleSuggestion(region,area,
+        s(R.string.smart_land_title_prefix),s(R.string.smart_area_unit))
     // Saving a private local draft must work BEFORE document selection or OCR.
     // Do not pretend success when the device fails to persist these fields.
     val saveLocalDraft:()->Unit={
@@ -286,8 +300,9 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
             if(committed)R.string.draft_saved else R.string.draft_error
         }catch (_:Exception){R.string.draft_error}
     }
-    val stepLabels=listOf(R.string.step_property,R.string.step_capacity,R.string.step_certificate,
-        R.string.step_identity,R.string.step_summary)
+    val stepLabels=listOf(R.string.step_property,R.string.smart_step_documents,
+        R.string.step_summary)
+    LaunchedEffect(step) { if(step>2) step=2 }
 
     if(cameraVisible){
         TunisianIdCamera(onClose={cameraVisible=false},
@@ -349,8 +364,33 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                         keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Number),
                         isError=showInvalid&&!validPrice,
                         supportingText=if(showInvalid&&!validPrice){{Text(s(R.string.price_invalid))}}else null)
-                }
-                1 -> {
+                    // One-tap smart title; never overwrite a seller's own title.
+                    if(name.isBlank()&&suggestedTitle!=null){
+                        OutlinedButton(onClick={name=suggestedTitle;saveMessage=0},
+                            modifier=Modifier.fillMaxWidth(),
+                            shape=RoundedCornerShape(15.dp)){
+                            Icon(Icons.Outlined.AutoAwesome,null,Modifier.size(19.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text(s(R.string.smart_title_use))
+                        }
+                    }
+                    val unitPrice=SmartListingAssist.pricePerSquareMeter(area,price)
+                    if(unitPrice!=null){
+                        Surface(color=Color(0xFFF2F8F5),shape=RoundedCornerShape(15.dp)){
+                            Row(Modifier.fillMaxWidth().padding(14.dp),
+                                verticalAlignment=Alignment.CenterVertically,
+                                horizontalArrangement=Arrangement.spacedBy(10.dp)){
+                                Icon(Icons.Outlined.Calculate,null,tint=Color(0xFF267B63))
+                                Column {
+                                    Text(s(R.string.smart_unit_price),fontSize=12.sp,color=Brand.Muted)
+                                    Text("${java.text.NumberFormat.getNumberInstance(Locale.FRANCE).format(unitPrice)} TND / m²",
+                                        fontWeight=FontWeight.SemiBold,color=Brand.Ink)
+                                }
+                            }
+                        }
+                    }
+                    HorizontalDivider(color=CardBorder)
+
                     SectionHeading(s(R.string.capacity_section),s(R.string.capacity_hint))
                     Capacities.forEach { option ->
                         val active=capacity==option.code
@@ -367,7 +407,7 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                         }
                     }
                 }
-                2 -> {
+                1 -> {
                     SectionHeading(s(R.string.document_section),s(R.string.document_hint))
                     Surface(color=Color.White,shape=RoundedCornerShape(21.dp),border=BorderStroke(1.dp,CardBorder)) {
                         Column(Modifier.fillMaxWidth().padding(20.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
@@ -424,8 +464,8 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                         }
                     }
                     PlainNotice(Icons.Outlined.Lock,s(R.string.file_privacy))
-                }
-                3 -> {
+                    HorizontalDivider(color=CardBorder)
+
                     SectionHeading(s(R.string.identity_section),s(R.string.identity_hint))
                     if(pendingPhoto==null&&!identitySelected){
                         Surface(color=Color.White,
@@ -517,9 +557,27 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                             }
                         }
                     }
+                    if(identityMessage!=0) PlainNotice(Icons.Outlined.Info,s(identityMessage))
                 }
                 else -> {
                     SectionHeading(s(R.string.summary_title),s(R.string.summary_hint))
+                    Surface(color=Brand.Rose,shape=RoundedCornerShape(20.dp)){
+                        Column(Modifier.fillMaxWidth().padding(17.dp),
+                            verticalArrangement=Arrangement.spacedBy(9.dp)){
+                            Row(verticalAlignment=Alignment.CenterVertically,
+                                horizontalArrangement=Arrangement.spacedBy(8.dp)){
+                                Icon(Icons.Outlined.Visibility,null,tint=Brand.Crimson)
+                                Text(s(R.string.smart_preview_heading),fontSize=13.sp,
+                                    fontWeight=FontWeight.SemiBold,color=Brand.Crimson)
+                            }
+                            Text(name.ifBlank{suggestedTitle?:s(R.string.no_value)},
+                                fontSize=19.sp,fontWeight=FontWeight.Bold,color=Brand.Ink)
+                            Text("${region} · ${area} m² · ${price} TND",
+                                fontSize=13.sp,color=Brand.Muted)
+                            Text(s(R.string.smart_preview_disclosure),fontSize=12.sp,
+                                color=Brand.Muted,lineHeight=19.sp)
+                        }
+                    }
                     Surface(shape=RoundedCornerShape(20.dp),color=Color.White,
                         border=BorderStroke(1.dp,CardBorder)){
                         Column(Modifier.fillMaxWidth().padding(14.dp)){
@@ -731,11 +789,11 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                 else Icons.Outlined.CheckCircle,
                 s(saveMessage)
             )
-            if(step==4) Text(s(R.string.draft_local),color=Brand.Muted,fontSize=12.sp)
+            if(step==2) Text(s(R.string.draft_local),color=Brand.Muted,fontSize=12.sp)
         }
         Column(Modifier.fillMaxWidth().padding(horizontal=17.dp,vertical=12.dp),verticalArrangement=Arrangement.spacedBy(7.dp)) {
             // Never show "Continue" under a failed scan: keep retake in reach.
-            if(step==3&&pendingPhoto!=null){
+            if(step==1&&pendingPhoto!=null){
                 Row(Modifier.fillMaxWidth(),
                     horizontalArrangement=Arrangement.spacedBy(10.dp)){
                     OutlinedButton(onClick={
@@ -766,27 +824,22 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
             }else{
             Button(onClick={
                 if(step==0&&!validFirst)showInvalid=true
-                else if(step==2&&files.isEmpty()){pickMessage=R.string.certificate_required}
-                else if(step==3&&(!identitySelected||pendingPhoto!=null)){
+                else if(step==1&&files.isEmpty()){pickMessage=R.string.certificate_required}
+                else if(step==1&&(!identitySelected||pendingPhoto!=null)){
                     identityMessage=R.string.identity_required
                 }
-                else if(step<4){step++;showInvalid=false;saveMessage=0}
+                else if(step<2){step++;showInvalid=false;saveMessage=0}
                 else saveLocalDraft()
             }, modifier=Modifier.fillMaxWidth().heightIn(min=54.dp),
                 shape=RoundedCornerShape(17.dp),colors=ButtonDefaults.buttonColors(containerColor=Brand.Crimson)) {
-                Text(s(if(step==4)R.string.save_draft else R.string.continue_label),fontWeight=FontWeight.SemiBold,fontSize=15.sp)
+                Text(s(if(step==2)R.string.save_draft else R.string.continue_label),fontWeight=FontWeight.SemiBold,fontSize=15.sp)
                 Spacer(Modifier.width(9.dp))
-                Icon(if(step==4)Icons.Outlined.Save else Icons.AutoMirrored.Filled.ArrowForward,
+                Icon(if(step==2)Icons.Outlined.Save else Icons.AutoMirrored.Filled.ArrowForward,
                     null,Modifier.size(21.dp))
             }
-            if(step<4) {
-                OutlinedButton(onClick=saveLocalDraft,
-                    modifier=Modifier.fillMaxWidth().heightIn(min=48.dp),
-                    shape=RoundedCornerShape(16.dp)) {
-                    Icon(Icons.Outlined.Save,contentDescription=null,modifier=Modifier.size(19.dp))
-                    Spacer(Modifier.width(8.dp))
-                    Text(s(R.string.save_draft))
-                }
+            if(step<2) {
+                Text(s(R.string.smart_autosave_hint),fontSize=11.sp,
+                    color=Brand.Muted,lineHeight=17.sp)
             }
             }
         }
