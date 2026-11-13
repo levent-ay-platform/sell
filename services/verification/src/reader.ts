@@ -55,6 +55,20 @@ const validRasterBox=(x:unknown):x is {left:number;top:number;right:number;botto
     (right as number)>(left as number)&&(bottom as number)>(top as number);
 };
 
+/**
+ * A parsed private OCR page stores spatial boxes in a DIFFERENT schema from
+ * raw Tesseract output. Legacy text-only consumers must not reparse that
+ * in-memory layout as if it were untrusted incoming worker metadata.
+ * Preserve source lines, page methods and capture-quality warnings only.
+ */
+export function asTextOnlyOcrDocument(input:IngestedDocument):IngestedDocument {
+  return {format:input.format,mayApproveOwnership:false,
+    pages:input.pages.map(p=>({
+      page:p.page,method:p.method,lines:p.lines,
+      ...(p.qualityWarnings!==undefined?{qualityWarnings:p.qualityWarnings}:{})
+    }))};
+}
+
 export function parseOcrWorkerOutput(input:unknown):IngestedDocument {
   if(!isObject(input) || !['pdf','image'].includes(String(input.format)) ||
      input.mayApproveOwnership!==false || !Array.isArray(input.pages) ||

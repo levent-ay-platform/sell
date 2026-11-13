@@ -6,7 +6,7 @@
  * title ownership, document authenticity or completeness.
  */
 import {createDecipheriv,createHash} from 'node:crypto';
-import {parseOcrWorkerOutput} from './reader.ts';
+import {parseOcrWorkerOutput,asTextOnlyOcrDocument} from './reader.ts';
 import type {IngestedDocument,IngestedPage} from './reader.ts';
 import {comparePrivateCertificateIdentityOcr} from './private-document-comparison.ts';
 import {compareCertificateIdentityCinText} from './private-cin-comparison.ts';
@@ -219,7 +219,8 @@ export async function analyzeAuthorizedPrivateEvidencePair(
     requiresHumanReview:true
   };
   if(legacyCertificate){
-    try {comparison=comparePrivateCertificateIdentityOcr(cert,identity);}
+    try {comparison=comparePrivateCertificateIdentityOcr(
+      asTextOnlyOcrDocument(cert),asTextOnlyOcrDocument(identity));}
     catch {throw new PrivatePairUnavailable();}
   }
   if(cinComparison.status==='NUMBER_DIFFERS_NEEDS_REVIEW'){

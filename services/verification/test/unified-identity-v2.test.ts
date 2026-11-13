@@ -92,7 +92,8 @@ test('financial receipt and possession report with no reliably labelled relevant
  ] as const){
   const r=compareUnifiedPrivateDocumentIdentity(wrap([title]),identity,[kind]);
   assert.equal(r.assessment,'INSUFFICIENT_EVIDENCE');
-  assert.ok(r.reasons.includes('UNSUPPORTED_ROLE_EXTRACTION'));
+  assert.equal(r.roles[0]?.assessment,'INSUFFICIENT_OR_AMBIGUOUS');
+  assert.ok(r.reasons.includes('LOW_CONFIDENCE_OR_CONFLICTING_ROLE'));
   assert.equal(r.mayPublish,false);
  }
 });

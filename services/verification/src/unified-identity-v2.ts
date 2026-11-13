@@ -5,7 +5,7 @@
  * Runs only after case-scoped authenticated private evidence is unsealed and
  * OCR'd. No external paid APIs; no PII in the returned role-status report.
  */
-import {readUntrustedOcrDocument} from './reader.ts';
+import {readUntrustedOcrDocument,asTextOnlyOcrDocument} from './reader.ts';
 import type {IngestedDocument} from './reader.ts';
 import type {LandPaperKind} from './document-training-v2.ts';
 import type {LandFactKey,PrivateLandFact} from './document-family-fields-v2.ts';
@@ -92,7 +92,11 @@ export function compareUnifiedPrivateDocumentIdentity(
   if(!Array.isArray(storedKinds)||storedKinds.length>8||
     storedKinds.some(k=>typeof k!=='string'||k.length>40))
     throw new TypeError('INVALID_PRIVATE_DOCUMENT_KINDS');
-  const read=readUntrustedOcrDocument(document);
+  // Keep parsed source word geometry available for the private shared-owner
+  // row check BELOW, but never feed that parsed format to a text-only reader.
+  const textDoc=asTextOnlyOcrDocument(document);
+  const textIdentity=asTextOnlyOcrDocument(frontIdentity);
+  const read=readUntrustedOcrDocument(textDoc);
   const kind=read.documentFamilyCandidate.kind;
   const base=initial(kind);
   const reasons=new Set<UnifiedReviewReason>(base.reasons);
@@ -115,7 +119,7 @@ export function compareUnifiedPrivateDocumentIdentity(
   }
   const roles:RoleTextResult[]=[];
   if(kind==='OWNERSHIP_CERTIFICATE'){
-    const r=comparePrivateCertificateIdentityOcr(document,frontIdentity);
+    const r=comparePrivateCertificateIdentityOcr(textDoc,textIdentity);
     const cin=compareCertificateIdentityCinText(document,frontIdentity);
     if(cin.status==='NUMBER_DIFFERS_NEEDS_REVIEW'){
       reasons.add('CIN_TEXT_DIFFERS');
@@ -193,7 +197,7 @@ export function compareUnifiedPrivateDocumentIdentity(
     if(!targets||!targets.length)reasons.add('UNSUPPORTED_ROLE_EXTRACTION');
     for(const target of targets??[]){
       const fact=read.privateFamilyFields.facts.find(f=>f.key===target.key);
-      if(!fact||fact.status==='LOW_CONFIDENCE'||fact.status==='CONFLICT')
+      if(!fact||fact.status!=='CANDIDATE')
         reasons.add('LOW_CONFIDENCE_OR_CONFLICTING_ROLE');
       const actor=fact?candidate(fact):null;
       const compared=comparePrivateRoleLabeledNameToIdentity(actor,frontIdentity);

@@ -271,7 +271,9 @@ test('financial receipt with no person role stays inconclusive',async()=>{
  const result=await analyze(h.request,h.deps);
  assert.equal(result.unifiedComparison?.detectedKind,'FINANCIAL_RECEIPT');
  assert.equal(result.unifiedComparison?.assessment,'INSUFFICIENT_EVIDENCE');
- assert.equal(result.unifiedComparison?.roles.length,0);
+ assert.equal(result.unifiedComparison?.roles[0]?.role,'PAYMENT_PAYER');
+ assert.equal(result.unifiedComparison?.roles[0]?.assessment,
+  'INSUFFICIENT_OR_AMBIGUOUS');
  assert.equal(result.mayPublish,false);
 });
 test('stored kind disagreeing with OCR heading cannot claim a role match',async()=>{
