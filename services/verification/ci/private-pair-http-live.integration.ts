@@ -19,6 +19,7 @@ import {createPrivateEvidenceHttpHandler} from '../src/private-evidence-http.ts'
 import {uploadIndividualEvidence} from '../src/evidence-upload.ts';
 import {openPrivateEvidenceStore} from '../src/local-private-store.ts';
 import {createPrivatePythonOcrWorker} from '../src/private-ocr-worker.ts';
+import {parseOcrWorkerOutput} from '../src/reader.ts';
 import {analyzeAuthorizedPrivateEvidencePair} from '../src/private-pair-service.ts';
 import type {EvidenceRow,AuthorizedUploadCase,CaseEvidenceRepository,EvidenceKind} from '../src/evidence-upload.ts';
 
@@ -165,6 +166,10 @@ test('real certificate PDF and single front image private HTTP/OCR workflow',asy
      'Nom et prenom: Amira Ben Salem',
      'CIN: 12345678'
    ]);
+   // Permanent synthetic-only isolation test: ensure optional page layout
+   // metadata cannot unexpectedly break the protected identity OCR path.
+   const isolatedFront=await worker.extract(front,'image/png');
+   assert.equal(parseOcrWorkerOutput(isolatedFront).pages.length,1);
    const sameId=await upload(front,'IDENTITY','image/png',1);
    front.fill(0);
    const yes=await compare(certId,sameId);
