@@ -103,7 +103,7 @@ def _png_size(path: Path) -> tuple[int,int]:
 
 def _tesseract_lines(path: Path, page: int, *, lang: str = 'ara+fra',
                      psm: str = '3', with_area_anchors: bool = False):
-    _png_size(path)
+    image_width,image_height = _png_size(path)
     # OCR data is never sent to the shell; subprocess receives argv only.
     raw = _cmd(['tesseract',str(path),'stdout','--psm',psm,'-l',lang,'tsv'],timeout=30)
     rows=raw.decode('utf-8','replace').splitlines()
@@ -111,10 +111,10 @@ def _tesseract_lines(path: Path, page: int, *, lang: str = 'ara+fra',
         return []
     header=rows[0].split('\t')
     try:
-        indexes={k:header.index(k) for k in ('level','page_num','block_num','par_num','line_num','text','conf','left','top')}
+        indexes={k:header.index(k) for k in ('level','page_num','block_num','par_num','line_num','text','conf','left','top','width','height')}
     except ValueError as exc:
         raise InvalidDocument('UNEXPECTED_OCR_FORMAT') from exc
-    groups: dict[tuple[int,int,int],list[tuple[str,float]]] = {}
+    groups: dict[tuple[int,int,int],list[tuple[str,float,int,int,int,int]]] = {}
     area_anchors: list[tuple[int,int]] = []
     for row in rows[1:]:
         cols=row.split('\t')
@@ -136,15 +136,33 @@ def _tesseract_lines(path: Path, page: int, *, lang: str = 'ara+fra',
                 area_anchors.append((int(cols[indexes['left']]),int(cols[indexes['top']])))
             except ValueError:
                 pass
-        key=tuple(int(cols[indexes[k]]) for k in ('block_num','par_num','line_num'))
-        groups.setdefault(key,[]).append((word,confidence))
+        try:
+            left, top = (int(cols[indexes[k]]) for k in ('left','top'))
+            box_width, box_height = (int(cols[indexes[k]]) for k in ('width','height'))
+            if left < 0 or top < 0 or box_width < 1 or box_height < 1:
+                continue
+            if left + box_width > image_width or top + box_height > image_height:
+                continue
+            key=tuple(int(cols[indexes[k]]) for k in ('block_num','par_num','line_num'))
+        except ValueError:
+            continue
+        groups.setdefault(key,[]).append((word,confidence,left,top,
+                                          left+box_width,top+box_height))
     lines=[]
     for words in groups.values():
-        joined=' '.join(w for w,_ in words).strip()
+        joined=' '.join(word[0] for word in words).strip()
         if joined:
-            confidence=round(sum(score for _,score in words)/len(words)/100,4)
+            confidence=round(sum(word[1] for word in words)/len(words)/100,4)
+            # Integer, original-page pixel coordinates, not arbitrary region
+            # labels. Each bounding rectangle only localizes OCR evidence,
+            # not document authenticity, a legal title or a verified owner.
+            bounds=dict(left=min(word[2] for word in words),
+                        top=min(word[3] for word in words),
+                        right=max(word[4] for word in words),
+                        bottom=max(word[5] for word in words))
             lines.append(dict(text=joined[:1200],page=page,confidence=confidence,
-                              source='ocr-ar' if 'ara' in lang else 'ocr-fr'))
+                              source='ocr-ar' if 'ara' in lang else 'ocr-fr',
+                              bbox=bounds))
         if len(lines)>=MAX_LINES_PER_PAGE:
             break
     return (lines, area_anchors) if with_area_anchors else lines
@@ -176,6 +194,9 @@ def _focused_area_lines(path: Path, page: int, anchors: list[tuple[int,int]]) ->
                 # raise field CONFLICT, not silently overwrite the first read.
                 for line in _tesseract_lines(destination,page,psm='6'):
                     if re.search(r'(المساح[ةه]|superficie)',line['text'],re.I):
+                        # ROI coordinates refer to the resized crop, NOT the
+                        # original page. Never return them as source bboxes.
+                        line.pop('bbox',None)
                         result.append(line)
     return result
 
