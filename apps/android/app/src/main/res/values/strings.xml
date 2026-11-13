@@ -247,4 +247,7 @@
     <string name="smart_preview_heading">Your listing preview</string>
     <string name="smart_preview_disclosure">This preview only uses information you entered. It does not verify ownership or publish the listing.</string>
     <string name="smart_autosave_hint">Listing details save automatically on this device. Identity and title document images are not saved in the draft.</string>
+    <string name="smart_title_auto">Your listing title is created automatically</string>
+    <string name="smart_title_pending">Enter location and area to generate a title</string>
+    <string name="smart_title_edit">Edit</string>
 </resources>
