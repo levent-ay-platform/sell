@@ -305,6 +305,8 @@ test('encrypted two-page co-owner PDF preserves SAME-ROW CIN geometry and matche
  assert.equal(result.unifiedComparison?.assessment,'ROLE_TEXT_MATCH_ONLY');
  assert.equal(result.unifiedComparison?.roles[0]?.role,'SHARED_RIGHTS_HOLDER');
  assert.equal(result.unifiedComparison?.roles[0]?.documentPage,1);
+ assert.deepEqual(result.unifiedComparison?.matchedRightsHolder,{printedRowOrdinal:1,
+  rightsParts:'100',documentPage:1,status:'PRELIMINARY_PERSON_ROW_TEXT_ONLY'});
  assert.equal(result.comparison.assessment,'INSUFFICIENT_OR_AMBIGUOUS');
  assert.equal(result.cinComparison.status,'NOT_COMPARABLE');
  assert.equal(result.ownershipVerified,false);

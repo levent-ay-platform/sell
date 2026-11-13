@@ -223,6 +223,9 @@ test('multi-page share-name and SAME-ROW labelled CIN only can yield preliminary
  assert.equal(r.roles[0]?.role,'SHARED_RIGHTS_HOLDER');
  assert.equal(r.roles[0]?.assessment,'PRELIMINARY_TEXT_AGREEMENT');
  assert.equal(r.roles[0]?.documentPage,1);
+ assert.equal(r.matchedRightsHolder?.printedRowOrdinal,1);
+ assert.equal(r.matchedRightsHolder?.rightsParts,'100');
+ assert.equal(r.matchedRightsHolder?.documentPage,1);
  assert.equal(r.assessment,'ROLE_TEXT_MATCH_ONLY');
  assert.ok(r.reasons.includes('SHARED_RIGHTS_NEED_ROW_REVIEW'));
  assert.equal(r.legalOwnershipVerified,false);
@@ -278,7 +281,7 @@ test('private co-owner text agreement requires independently printed page count'
  assert.equal(r.assessment,'INSUFFICIENT_EVIDENCE');
  assert.equal(r.mayPublish,false);
 });
-test('rights-table partial sum or conflicting printed denominator prevents matching a co-owner',()=>{
+test('target-person row is not blocked by unrelated ownership share totals',()=>{
  const base=sharedAcrossTwoPages();
  const conflicting={...base,pages:base.pages.map(p=>({
   ...p,lines:p.lines.map(l=>({
@@ -288,7 +291,8 @@ test('rights-table partial sum or conflicting printed denominator prevents match
  }))};
  const r=compareUnifiedPrivateDocumentIdentity(conflicting,arabicFront,
   ['SHARED_OWNERSHIP_CERTIFICATE']);
- assert.equal(r.assessment,'INSUFFICIENT_EVIDENCE');
+ assert.equal(r.assessment,'ROLE_TEXT_MATCH_ONLY');
+ assert.equal(r.matchedRightsHolder?.rightsParts,'100');
  assert.equal(r.identityVerified,false);
  assert.equal(r.legalOwnershipVerified,false);
 });
@@ -304,4 +308,58 @@ test('contradictory page-count labels on the SAME page fail closed',()=>{
    ['SHARED_OWNERSHIP_CERTIFICATE']);
  assert.equal(r.assessment,'INSUFFICIENT_EVIDENCE');
  assert.equal(r.legalOwnershipVerified,false);
+});
+
+
+test('unreadable other coowners do not block unique ID holder private profile',()=>{
+ const doc=sharedAcrossTwoPages();
+ const pages=doc.pages.map(p=>p.page!==2?p:{
+  ...p,privateSpatialPage:p.privateSpatialPage?{
+   ...p.privateSpatialPage,words:p.privateSpatialPage.words.filter(w=>
+     w.text!=='100'&&w.text!=='جزء'&&w.text!=='عائشة')
+  }:undefined
+ });
+ const r=compareUnifiedPrivateDocumentIdentity({...doc,pages},arabicFront,
+  ['SHARED_OWNERSHIP_CERTIFICATE']);
+ assert.equal(r.assessment,'ROLE_TEXT_MATCH_ONLY');
+ assert.deepEqual(r.matchedRightsHolder,{
+   printedRowOrdinal:1,rightsParts:'100',documentPage:1,
+   status:'PRELIMINARY_PERSON_ROW_TEXT_ONLY'});
+ assert.equal(JSON.stringify(r).includes('عائشة'),false);
+});
+test('missing matched persons share prevents claiming any row',()=>{
+ const doc=sharedAcrossTwoPages();
+ const pages=doc.pages.map(p=>p.page!==1?p:{
+  ...p,privateSpatialPage:p.privateSpatialPage?{
+   ...p.privateSpatialPage,words:p.privateSpatialPage.words.filter(w=>
+    w.text!=='100'&&w.text!=='جزء')
+  }:undefined
+ });
+ const r=compareUnifiedPrivateDocumentIdentity({...doc,pages},arabicFront,
+  ['SHARED_OWNERSHIP_CERTIFICATE']);
+ assert.equal(r.matchedRightsHolder,null);
+ assert.equal(r.assessment,'INSUFFICIENT_EVIDENCE');
+});
+test('duplicate matching coowner rows abstain without choosing one',()=>{
+ const doc=sharedAcrossTwoPages({secondRowCin:'00001122'});
+ const pages=doc.pages.map(p=>p.page!==2?p:{
+  ...p,privateSpatialPage:p.privateSpatialPage?{
+   ...p.privateSpatialPage,words:p.privateSpatialPage.words.map(w=>
+    w.text==='عائشة'?{...w,text:'أمينة'}:w)
+  }:undefined
+ });
+ const r=compareUnifiedPrivateDocumentIdentity({...doc,pages},arabicFront,
+  ['SHARED_OWNERSHIP_CERTIFICATE']);
+ assert.equal(r.assessment,'INSUFFICIENT_EVIDENCE');
+ assert.equal(r.matchedRightsHolder,null);
+});
+test('only the identity holders matched row and parts may leave private comparator',()=>{
+ const r=compareUnifiedPrivateDocumentIdentity(sharedAcrossTwoPages(),arabicFront,
+  ['SHARED_OWNERSHIP_CERTIFICATE']);
+ const json=JSON.stringify(r);
+ assert.equal(r.matchedRightsHolder?.rightsParts,'100');
+ for(const sensitive of ['أمينة','عائشة','00001122','00003344'])
+  assert.equal(json.includes(sensitive),false);
+ assert.equal(r.legalOwnershipVerified,false);
+ assert.equal(r.mayPublish,false);
 });

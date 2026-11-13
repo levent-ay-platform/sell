@@ -36,10 +36,18 @@ export type UnifiedReviewReason=
  'LOW_CONFIDENCE_OR_CONFLICTING_ROLE'|'SHARED_RIGHTS_NEED_ROW_REVIEW'|
  'ROLE_MATCH_NOT_OWNERSHIP'|'CIN_TEXT_DIFFERS'|'CIN_UNREADABLE'|
  'OFFICIAL_REGISTRY_NOT_CHECKED'|'SCAN_QUALITY_NEEDS_REVIEW';
+export interface MatchedPrivateRightsHolder {
+  /** Only the holder identified by the captured front ID; no other owners. */
+  readonly printedRowOrdinal:number;
+  readonly rightsParts:string;
+  readonly documentPage:number;
+  readonly status:'PRELIMINARY_PERSON_ROW_TEXT_ONLY';
+}
 export interface UnifiedPrivateDocumentIdentityResult {
   readonly detectedKind:LandPaperKind;
   readonly assessment:UnifiedReviewAssessment;
   readonly roles:readonly RoleTextResult[];
+  readonly matchedRightsHolder:MatchedPrivateRightsHolder|null;
   readonly reasons:readonly UnifiedReviewReason[];
   readonly identityCapture:'FRONT_IMAGE_ONLY_UNVERIFIED';
   readonly legalOwnershipVerified:false;
@@ -104,7 +112,7 @@ function completePrintedPagination(document:IngestedDocument):number|null {
 }
 
 function initial(kind:LandPaperKind):UnifiedPrivateDocumentIdentityResult {
-  return {detectedKind:kind,assessment:'INSUFFICIENT_EVIDENCE',roles:[],
+  return {detectedKind:kind,assessment:'INSUFFICIENT_EVIDENCE',roles:[],matchedRightsHolder:null,
     reasons:['OFFICIAL_REGISTRY_NOT_CHECKED'],
     identityCapture:'FRONT_IMAGE_ONLY_UNVERIFIED',
     legalOwnershipVerified:false,identityVerified:false,
@@ -148,6 +156,7 @@ export function compareUnifiedPrivateDocumentIdentity(
     return {...base,reasons:[...reasons]};
   }
   const roles:RoleTextResult[]=[];
+  let matchedRightsHolder:MatchedPrivateRightsHolder|null=null;
   if(kind==='OWNERSHIP_CERTIFICATE'){
     const r=comparePrivateCertificateIdentityOcr(textDoc,textIdentity);
     const cin=compareCertificateIdentityCinText(document,frontIdentity);
@@ -162,68 +171,64 @@ export function compareUnifiedPrivateDocumentIdentity(
     roles.push({role:'REGISTERED_HOLDER',assessment,
       documentPage:r.certificateName?.page??null});
   } else if(kind==='SHARED_OWNERSHIP_CERTIFICATE'){
-    // Untrusted flattened OCR cannot attach a person's name to the right CIN.
-    // Validate complete source word geometry and the printed same-row label
-    // before even considering an identity text agreement.
+    // Evaluate only the row corresponding to the identity holder. Other
+    // people's unreadable names or parts must not block this PRIVATE preview.
     reasons.add('SHARED_RIGHTS_NEED_ROW_REVIEW');
     let assessment:ComparisonAssessment='INSUFFICIENT_OR_AMBIGUOUS';
     let page:number|null=null;
-    const printedPageCount=completePrintedPagination(textDoc);
-    const printedDenominator=read.privateFamilyFields.facts.find(
-      f=>f.key==='rightsDenominator'&&f.status==='CANDIDATE')?.value??null;
-    const ready=printedPageCount!==null&&printedDenominator!==null&&
-      document.pages.length>0&&document.pages.every(p=>
+    const pagesComplete=completePrintedPagination(textDoc)!==null;
+    const spatialReady=document.pages.length>0&&document.pages.every(p=>
       p.privateSpatialPage!==undefined&&p.spatialWordsTruncated===false&&
       p.privateSpatialPage.words.length>0);
-    if(ready){
+    if(pagesComplete&&spatialReady){
       const layout=locateOwnerTableFromWords(
         document.pages.map(p=>p.privateSpatialPage!));
-      if(layout.findings.length===0&&layout.ownerOrdinals.length>=2){
-        const count=Math.max(...layout.ownerOrdinals);
+      const fatal=new Set(['NO_PAGE_1','HEADER_NOT_FOUND',
+        'HEADER_GEOMETRY_AMBIGUOUS','DUPLICATE_OWNER_ORDINAL','CIN_AMBIGUOUS']);
+      if(layout.ownerOrdinals.length>0&&
+          !layout.findings.some(f=>fatal.has(f))){
         const table=analyzeOwnerTable(layout.cells,{
-          declaredPages:printedPageCount,
+          declaredPages:document.pages.length,
           receivedPages:document.pages.map(p=>p.page),
-          declaredOwnerCount:count,printedTotalParts:printedDenominator
+          declaredOwnerCount:null,printedTotalParts:null
         });
-        const complete=table.readyForHumanReview&&
-          table.rightsBalance.status==='BALANCED'&&
-          table.missingPages.length===0&&
-          table.missingOwnerOrdinals.length===0&&
-          table.rows.every(r=>r.fields.name.status==='CANDIDATE'&&
-            r.fields.rightsParts.status==='CANDIDATE');
-        if(complete){
-          const matched:typeof table.rows[number][]=[];
-          let inconsistent=false;
-          for(const row of table.rows){
-            // Without a printed, explicitly labelled CIN in this same row,
-            // even a name equal to the identity card is not enough.
-            const n=row.fields.name,c=row.fields.cin;
-            if(c.status!=='CANDIDATE'||!c.value||!n.value)continue;
-            const cin=compareExactOwnerRowCinToIdentity(c.value,frontIdentity);
-            const nameEvidence=n.evidence[0];
-            if(!nameEvidence)continue;
-            const actor:CandidateName={
-              value:n.value,page:nameEvidence.page,source:nameEvidence.source,
-              confidence:nameEvidence.confidence
-            };
-            const match=comparePrivateRoleLabeledNameToIdentity(
-              actor,frontIdentity).assessment;
-            if(cin==='SAME_NUMBER_UNVERIFIED'&&
-               match==='PRELIMINARY_TEXT_AGREEMENT')
-              matched.push(row);
-            else if((cin==='SAME_NUMBER_UNVERIFIED'&&
-                     match==='TEXT_DIFFERENCE_NEEDS_REVIEW')||
-                    (match==='PRELIMINARY_TEXT_AGREEMENT'&&
-                     cin==='NUMBER_DIFFERS_NEEDS_REVIEW'))
-              inconsistent=true;
-          }
-          if(matched.length===1&&!inconsistent){
-            assessment='PRELIMINARY_TEXT_AGREEMENT';
-            page=matched[0]!.sourcePages[0]??null;
-          }else if(matched.length>1||inconsistent){
-            assessment='INSUFFICIENT_OR_AMBIGUOUS';
-            reasons.add('LOW_CONFIDENCE_OR_CONFLICTING_ROLE');
-          }
+        const matches:{ordinal:number;page:number;parts:string}[]=[];
+        let contradiction=false;
+        for(const row of table.rows){
+          const n=row.fields.name,c=row.fields.cin,rights=row.fields.rightsParts;
+          if(n.status!=='CANDIDATE'||c.status!=='CANDIDATE'||
+             rights.status!=='CANDIDATE'||!n.value||!c.value||!rights.value)
+            continue;
+          const namePage=n.evidence[0]?.page,cinPage=c.evidence[0]?.page;
+          const partsPage=rights.evidence[0]?.page;
+          if(namePage===undefined||namePage!==cinPage||
+             namePage!==partsPage||row.sourcePages.length!==1)continue;
+          const actor:CandidateName={value:n.value,page:namePage,
+            source:n.evidence[0]!.source,confidence:n.evidence[0]!.confidence};
+          const nameCheck=comparePrivateRoleLabeledNameToIdentity(
+            actor,textIdentity).assessment;
+          const cinCheck=compareExactOwnerRowCinToIdentity(
+            c.value,textIdentity);
+          if(nameCheck==='PRELIMINARY_TEXT_AGREEMENT'&&
+             cinCheck==='SAME_NUMBER_UNVERIFIED')
+            matches.push({ordinal:row.ordinal,page:namePage,parts:rights.value});
+          else if((nameCheck==='PRELIMINARY_TEXT_AGREEMENT'&&
+                   cinCheck==='NUMBER_DIFFERS_NEEDS_REVIEW')||
+                  (cinCheck==='SAME_NUMBER_UNVERIFIED'&&
+                   nameCheck==='TEXT_DIFFERENCE_NEEDS_REVIEW'))
+            contradiction=true;
+        }
+        if(matches.length===1&&!contradiction){
+          const match=matches[0]!;
+          assessment='PRELIMINARY_TEXT_AGREEMENT';
+          page=match.page;
+          matchedRightsHolder={
+            printedRowOrdinal:match.ordinal,rightsParts:match.parts,
+            documentPage:match.page,
+            status:'PRELIMINARY_PERSON_ROW_TEXT_ONLY'
+          };
+        }else if(matches.length>1||contradiction){
+          reasons.add('LOW_CONFIDENCE_OR_CONFLICTING_ROLE');
         }
       }
     }
@@ -249,5 +254,5 @@ export function compareUnifiedPrivateDocumentIdentity(
   else if(roles.length>0&&roles.every(r=>
       r.assessment==='TEXT_DIFFERENCE_NEEDS_REVIEW'))
     assessment='ROLE_TEXT_DIFFERENCE';
-  return {...base,assessment,roles,reasons:[...reasons]};
+  return {...base,assessment,roles,matchedRightsHolder,reasons:[...reasons]};
 }
