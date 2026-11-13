@@ -92,3 +92,30 @@ test('rejects invalid confidence, out-of-bounds geometry and duplicate pages',()
   ]}]),/INVALID_SPATIAL_WORD/);
   assert.throws(()=>locateOwnerTableFromWords([pg,pg]),/INVALID_SPATIAL_PAGE/);
 });
+
+
+test('a CIN inside a specific numbered owner row requires a nearby explicit CIN label',()=>{
+ const pages=sample();
+ const first={...pages[0],words:[...pages[0].words,
+  word('CIN',1,755,594),word('00001122',1,810,594)]};
+ const x=locateOwnerTableFromWords([first,pages[1]]);
+ assert.equal(x.cells.find(c=>c.ordinal===1&&c.field==='cin')?.value,'00001122');
+ assert.equal(x.cells.some(c=>c.ordinal===2&&c.field==='cin'),false);
+ assert.equal(x.cells.filter(c=>c.field==='cin').length,1);
+});
+test('unlabelled eight-digit title register cannot count as a row CIN',()=>{
+ const pages=sample();
+ const first={...pages[0],words:[...pages[0].words,
+  word('00001122',1,810,594)]};
+ const x=locateOwnerTableFromWords([first,pages[1]]);
+ assert.equal(x.cells.filter(c=>c.field==='cin').length,0);
+});
+test('competing same-row labelled CIN digits produce no CIN cell',()=>{
+ const pages=sample();
+ const first={...pages[0],words:[...pages[0].words,
+  word('CIN',1,755,594),word('00001122',1,810,594),
+  word('00003344',1,830,610)]};
+ const x=locateOwnerTableFromWords([first,pages[1]]);
+ assert.ok(x.findings.includes('CIN_AMBIGUOUS'));
+ assert.equal(x.cells.filter(c=>c.ordinal===1&&c.field==='cin').length,0);
+});

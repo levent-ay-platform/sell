@@ -139,3 +139,16 @@ Code: `src/unified-identity-v2.ts` coordinates private document classification, 
 Hard rules: no fuzzy or cross-script name matches, no CIN from general title or contract digits, multiple matching roles ambiguous, missing/low-confidence person fields inconclusive, mismatched stored kind versus detected OCR type inconclusive. New result contains **role status only, never the raw names or CIN**, plus `identityVerified:false`, `legalOwnershipVerified:false`, `mayPublish:false`, `requiresHumanReview:true`. All sensitive processing stays within authorized, consented, scanned, encrypted per-case boundary.
 
 Status: Draft-only; synthetic CI contract acceptance is not real-document benchmark, legal ownership validation or real Android UX acceptance. The staged mobile flow must switch from the old certificate-only button to the new unified role report with guarded evidence-kind mapping before claiming complete mobile parity.
+
+
+## Stage 7 — source-associated co-owner CIN / explicit receipt and possession roles
+
+This Draft adds opt-in *private text-only* role comparison for two previously inconclusive document categories:
+- `POSSESSION_REPORT`: labelled `possessionRequester` (طالب التحويز / requérant du constat) with source line. Observed possession is not registered ownership.
+- `FINANCIAL_RECEIPT`: labelled `receiptPayer` (دافع المعاليم / payeur) with source line. Paying fees is not a title, identity authentication or registered transfer.
+
+`SHARED_OWNERSHIP_CERTIFICATE` matching now requires a **complete, untruncated spatial word stream** across all scanned pages. The private table finder must locate actual numbered rows, header anchors, source-associated owner names, separate rights-parts values, and an **explicitly labelled CIN next to the same numbered row**. It does not search for a matching eight-digit number anywhere on the title. The identity front must independently contain a uniquely labelled CIN and strict name. Only a unique row with BOTH CIN text and name text equal can produce provisional `ROLE_TEXT_MATCH_ONLY`. Missing headers/pages, incomplete row structure, ambiguous CIN observations, conflicts, identity quality warnings or multiple matches all abstain. This remains **preliminary row-text agreement only**, never legal sale authority or verification.
+
+The encrypted pair service preserves word geometry only in private memory between independently sealed OCR reads and the unified role matcher; the legacy certificate comparator still consumes text only. All reports omit raw co-owner names and CIN in the new role statuses; public listing APIs never see table contents. Regression fixtures are wholly invented and synthetic.
+
+**Remaining strict gate:** private accuracy scoring against the user's genuine Tunisian samples on exact running service, manual rights/legal review, final photo/map storage workflow and real Android device UX. No real personal data was pushed to public GitHub; no production migration or deploy.

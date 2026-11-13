@@ -48,6 +48,35 @@ function harness(kind:EvidenceRow['kind']='OWNERSHIP_CERTIFICATE'){
       const content=Buffer.from(bytes).toString('utf8');
       const id=content.includes('ID1')||content.includes('DIFF');
       const name=content.includes('DIFF')?'Amira Gharbi':'Amira Ben Salem';
+      if(kind==='SHARED_OWNERSHIP_CERTIFICATE'){
+        if(id)return {format:'image' as const,mayApproveOwnership:false as const,
+          pages:[{page:1,method:'ocr' as const,lines:[
+            {page:1,text:'الاسم واللقب: أمينة بنت سالم',
+              source:'ocr-ar' as const,confidence:0.99},
+            {page:1,text:'CIN: 00001122',source:'ocr-ar' as const,confidence:0.99}
+          ]}]};
+        const word=(page:number,text:string,x:number,y:number)=>({
+          page,text,confidence:0.99,bbox:{
+            left:x-22,top:y-10,right:x+22,bottom:y+10}
+        });
+        const row=(page:number,n:number,first:string,cin:string,y:number)=>[
+          word(page,'1/'+n,945,y),word(page,'100',580,y+20),
+          word(page,'جزء',580,y+46),word(page,first,830,y+20),
+          word(page,'بنت',790,y+20),word(page,'سالم',750,y+20),
+          word(page,'CIN',750,y+108),word(page,cin,815,y+108)
+        ];
+        const words1=[word(1,'موضوع',580,290),word(1,'هوية',790,290),
+          word(1,'العدد',945,290),...row(1,1,'أمينة','00001122',490)];
+        const words2=row(2,2,'عائشة','00003344',320);
+        const page=(n:number,words:ReturnType<typeof word>[],title:string)=>({
+          page:n,method:'ocr' as const,pageImageWidth:1000,pageImageHeight:1500,
+          spatialWordsTruncated:false,ocrWords:words,
+          lines:[{page:n,text:title,source:'ocr-ar' as const,confidence:0.99}]
+        });
+        return {format:'pdf' as const,mayApproveOwnership:false as const,
+          pages:[page(1,words1,'شهادة اشتراك في الملكية'),
+            page(2,words2,'صفحة 2 من 2')]};
+      }
       const documentLines=kind==='SALE_DEED'?
         ['عقد بيع','المشتري: '+name,'البائع: Karim Ben Ahmed']:
         kind==='PROPERTY_SERVICE_RECEIPT'?
@@ -253,4 +282,21 @@ test('stored kind disagreeing with OCR heading cannot claim a role match',async(
  assert.ok(result.unifiedComparison?.reasons.includes('DOCUMENT_TYPE_MISMATCH'));
  assert.equal(result.comparison.assessment,'INSUFFICIENT_OR_AMBIGUOUS');
  assert.equal(result.mayPublish,false);
+});
+
+test('encrypted two-page co-owner PDF preserves SAME-ROW CIN geometry and matches role text only',async()=>{
+ const h=harness('SHARED_OWNERSHIP_CERTIFICATE');
+ const result=await analyze(h.request,h.deps);
+ assert.equal(result.certificatePagesReceived,2);
+ assert.equal(result.unifiedComparison?.detectedKind,'SHARED_OWNERSHIP_CERTIFICATE');
+ assert.equal(result.unifiedComparison?.assessment,'ROLE_TEXT_MATCH_ONLY');
+ assert.equal(result.unifiedComparison?.roles[0]?.role,'SHARED_RIGHTS_HOLDER');
+ assert.equal(result.unifiedComparison?.roles[0]?.documentPage,1);
+ assert.equal(result.comparison.assessment,'INSUFFICIENT_OR_AMBIGUOUS');
+ assert.equal(result.cinComparison.status,'NOT_COMPARABLE');
+ assert.equal(result.ownershipVerified,false);
+ assert.equal(result.identityVerified,false);
+ assert.equal(result.mayPublish,false);
+ assert.equal(JSON.stringify(result.unifiedComparison).includes('أمينة'),false);
+ assert.equal(JSON.stringify(result.unifiedComparison).includes('00001122'),false);
 });

@@ -12,7 +12,10 @@ import type {LandFactKey,PrivateLandFact} from './document-family-fields-v2.ts';
 import {comparePrivateCertificateIdentityOcr,
   comparePrivateRoleLabeledNameToIdentity} from './private-document-comparison.ts';
 import type {CandidateName,ComparisonAssessment} from './private-document-comparison.ts';
-import {compareCertificateIdentityCinText} from './private-cin-comparison.ts';
+import {compareCertificateIdentityCinText,
+  compareExactOwnerRowCinToIdentity} from './private-cin-comparison.ts';
+import {locateOwnerTableFromWords} from './owner-table-layout-v2.ts';
+import {analyzeOwnerTable} from './owner-table-v2.ts';
 
 export type LegalPartyRole=
  'REGISTERED_HOLDER'|'SHARED_RIGHTS_HOLDER'|'BUYER'|'SELLER'|
@@ -54,6 +57,12 @@ const ROLE_KEYS:Readonly<Partial<Record<LandPaperKind,
  ],
  PROPERTY_SERVICE_RECEIPT:[
    {key:'serviceApplicant',role:'SERVICE_APPLICANT'}
+ ],
+ POSSESSION_REPORT:[
+   {key:'possessionRequester',role:'POSSESSION_REQUESTER'}
+ ],
+ FINANCIAL_RECEIPT:[
+   {key:'receiptPayer',role:'PAYMENT_PAYER'}
  ]
 };
 function candidate(f:PrivateLandFact):CandidateName|null {
@@ -119,11 +128,66 @@ export function compareUnifiedPrivateDocumentIdentity(
     roles.push({role:'REGISTERED_HOLDER',assessment,
       documentPage:r.certificateName?.page??null});
   } else if(kind==='SHARED_OWNERSHIP_CERTIFICATE'){
-    // A row-based individual match requires source-aware owner/CIN
-    // association; matching any stray name from the table is unsafe.
+    // Untrusted flattened OCR cannot attach a person's name to the right CIN.
+    // Validate complete source word geometry and the printed same-row label
+    // before even considering an identity text agreement.
     reasons.add('SHARED_RIGHTS_NEED_ROW_REVIEW');
-    roles.push({role:'SHARED_RIGHTS_HOLDER',
-      assessment:'INSUFFICIENT_OR_AMBIGUOUS',documentPage:null});
+    let assessment:ComparisonAssessment='INSUFFICIENT_OR_AMBIGUOUS';
+    let page:number|null=null;
+    const ready=document.pages.length>0&&document.pages.every(p=>
+      p.privateSpatialPage!==undefined&&p.spatialWordsTruncated===false&&
+      p.privateSpatialPage.words.length>0);
+    if(ready){
+      const layout=locateOwnerTableFromWords(
+        document.pages.map(p=>p.privateSpatialPage!));
+      if(layout.findings.length===0&&layout.ownerOrdinals.length>=2){
+        const count=Math.max(...layout.ownerOrdinals);
+        const table=analyzeOwnerTable(layout.cells,{
+          declaredPages:document.pages.length,
+          receivedPages:document.pages.map(p=>p.page),
+          declaredOwnerCount:count,printedTotalParts:null
+        });
+        const complete=table.missingPages.length===0&&
+          table.missingOwnerOrdinals.length===0&&
+          table.rows.every(r=>r.fields.name.status==='CANDIDATE'&&
+            r.fields.rightsParts.status==='CANDIDATE');
+        if(complete){
+          const matched:typeof table.rows[number][]=[];
+          let inconsistent=false;
+          for(const row of table.rows){
+            // Without a printed, explicitly labelled CIN in this same row,
+            // even a name equal to the identity card is not enough.
+            const n=row.fields.name,c=row.fields.cin;
+            if(c.status!=='CANDIDATE'||!c.value||!n.value)continue;
+            const cin=compareExactOwnerRowCinToIdentity(c.value,frontIdentity);
+            const nameEvidence=n.evidence[0];
+            if(!nameEvidence)continue;
+            const actor:CandidateName={
+              value:n.value,page:nameEvidence.page,source:nameEvidence.source,
+              confidence:nameEvidence.confidence
+            };
+            const match=comparePrivateRoleLabeledNameToIdentity(
+              actor,frontIdentity).assessment;
+            if(cin==='SAME_NUMBER_UNVERIFIED'&&
+               match==='PRELIMINARY_TEXT_AGREEMENT')
+              matched.push(row);
+            else if((cin==='SAME_NUMBER_UNVERIFIED'&&
+                     match==='TEXT_DIFFERENCE_NEEDS_REVIEW')||
+                    (match==='PRELIMINARY_TEXT_AGREEMENT'&&
+                     cin==='NUMBER_DIFFERS_NEEDS_REVIEW'))
+              inconsistent=true;
+          }
+          if(matched.length===1&&!inconsistent){
+            assessment='PRELIMINARY_TEXT_AGREEMENT';
+            page=matched[0]!.sourcePages[0]??null;
+          }else if(matched.length>1||inconsistent){
+            assessment='INSUFFICIENT_OR_AMBIGUOUS';
+            reasons.add('LOW_CONFIDENCE_OR_CONFLICTING_ROLE');
+          }
+        }
+      }
+    }
+    roles.push({role:'SHARED_RIGHTS_HOLDER',assessment,documentPage:page});
   } else {
     const targets=ROLE_KEYS[kind];
     if(!targets||!targets.length)reasons.add('UNSUPPORTED_ROLE_EXTRACTION');

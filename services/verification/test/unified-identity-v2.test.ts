@@ -137,3 +137,128 @@ test('each role output excludes names, CIN and other PII',()=>{
  assert.equal(JSON.stringify(r).includes('448899'),false);
  assert.equal(JSON.stringify(r).includes('00001122'),false);
 });
+
+
+test('explicitly labelled possession requester matches a role, never legal title',()=>{
+ const doc=wrap(['محضر معاينة تحويز',
+  'طالب التحويز: Leila Ben Salem',
+  'مساحة القطعة محل التحويز: 314.40 م²']);
+ const r=compareUnifiedPrivateDocumentIdentity(doc,identity,['POSSESSION_REPORT']);
+ assert.equal(r.detectedKind,'POSSESSION_REPORT');
+ assert.equal(r.roles[0]?.role,'POSSESSION_REQUESTER');
+ assert.equal(r.roles[0]?.assessment,'PRELIMINARY_TEXT_AGREEMENT');
+ assert.equal(r.assessment,'ROLE_TEXT_MATCH_ONLY');
+ assert.equal(r.legalOwnershipVerified,false);
+});
+test('financial payment receipt payer is NOT the owner and must be expressly labelled',()=>{
+ const doc=wrap(['QUITTANCE N° F0001','دافع المعاليم: Leila Ben Salem']);
+ const r=compareUnifiedPrivateDocumentIdentity(doc,identity,['FINANCIAL_RECEIPT']);
+ assert.equal(r.roles[0]?.role,'PAYMENT_PAYER');
+ assert.equal(r.assessment,'ROLE_TEXT_MATCH_ONLY');
+ assert.equal(r.legalOwnershipVerified,false);
+ assert.equal(r.mayPublish,false);
+});
+test('unlabelled name in possession or receipt must NOT be a role',()=>{
+ for(const [title,kind] of [
+   ['محضر معاينة تحويز','POSSESSION_REPORT'],
+   ['QUITTANCE N° F0001','FINANCIAL_RECEIPT']
+ ] as const){
+   const doc=wrap([title,'Leila Ben Salem']);
+   const r=compareUnifiedPrivateDocumentIdentity(doc,identity,[kind]);
+   assert.equal(r.assessment,'INSUFFICIENT_EVIDENCE');
+   assert.equal(r.roles[0]?.assessment,'INSUFFICIENT_OR_AMBIGUOUS');
+ }
+});
+
+const bbox=(x:number,y:number)=>({left:x-23,top:y-10,right:x+23,bottom:y+10});
+const word=(page:number,text:string,x:number,y:number)=>({
+ page,text,confidence:0.99,bbox:bbox(x,y)
+});
+function sharedAcrossTwoPages(opts:{
+ secondRowCin?:string;firstRowCin?:string;stripCinMarker?:boolean;
+ ambiguousSecondCin?:boolean
+}={}):IngestedDocument {
+ const row=(page:number,n:number,name:string,cin:string,y:number)=>[
+   word(page,'1/'+n,945,y),word(page,'100',580,y+20),
+   word(page,'جزء',580,y+46),
+   word(page,name,830,y+20),word(page,'بنت',790,y+20),
+   word(page,'سالم',750,y+20),
+   ...(!opts.stripCinMarker?[word(page,'CIN',750,y+108)]:[]),
+   word(page,cin,815,y+108)
+ ];
+ const first=[
+   word(1,'موضوع',580,290),word(1,'هوية',790,290),
+   word(1,'العدد',945,290),
+   ...row(1,1,'أمينة',opts.firstRowCin??'00001122',490)
+ ];
+ const second=[
+   ...row(2,2,'عائشة',opts.secondRowCin??'00003344',320),
+   ...(opts.ambiguousSecondCin?[word(2,'00004455',820,428)]:[])
+ ];
+ return {
+  format:'pdf',mayApproveOwnership:false,pages:[
+   {page:1,method:'ocr',
+    lines:[{page:1,text:'شهادة اشتراك في الملكية',
+      source:'ocr-ar',confidence:0.99}],
+    privateSpatialPage:{page:1,width:1000,height:1500,words:first},
+    spatialWordsTruncated:false
+   },
+   {page:2,method:'ocr',
+    lines:[{page:2,text:'صفحة 2 من 2',source:'ocr-ar',confidence:0.99}],
+    privateSpatialPage:{page:2,width:1000,height:1500,words:second},
+    spatialWordsTruncated:false
+   }
+  ]
+ };
+}
+const arabicFront=wrap(['الاسم واللقب: أمينة بنت سالم','CIN: 00001122'],true);
+test('multi-page share-name and SAME-ROW labelled CIN only can yield preliminary role text agreement',()=>{
+ const r=compareUnifiedPrivateDocumentIdentity(sharedAcrossTwoPages(),arabicFront,
+  ['SHARED_OWNERSHIP_CERTIFICATE','OTHER_LEGAL_PROOF']);
+ assert.equal(r.detectedKind,'SHARED_OWNERSHIP_CERTIFICATE');
+ assert.equal(r.roles[0]?.role,'SHARED_RIGHTS_HOLDER');
+ assert.equal(r.roles[0]?.assessment,'PRELIMINARY_TEXT_AGREEMENT');
+ assert.equal(r.roles[0]?.documentPage,1);
+ assert.equal(r.assessment,'ROLE_TEXT_MATCH_ONLY');
+ assert.ok(r.reasons.includes('SHARED_RIGHTS_NEED_ROW_REVIEW'));
+ assert.equal(r.legalOwnershipVerified,false);
+ assert.equal(r.identityVerified,false);
+ assert.equal(r.mayPublish,false);
+});
+test('shared certificate cannot search ANY CIN from unrelated row',()=>{
+ const r=compareUnifiedPrivateDocumentIdentity(sharedAcrossTwoPages({
+  firstRowCin:'00009988',secondRowCin:'00001122'
+ }),arabicFront,['SHARED_OWNERSHIP_CERTIFICATE']);
+ assert.equal(r.assessment,'INSUFFICIENT_EVIDENCE');
+ assert.notEqual(r.roles[0]?.assessment,'PRELIMINARY_TEXT_AGREEMENT');
+});
+test('unlabelled 8-digit number cannot be guessed as a CIN on shared title',()=>{
+ const r=compareUnifiedPrivateDocumentIdentity(sharedAcrossTwoPages({
+  stripCinMarker:true
+ }),arabicFront,['SHARED_OWNERSHIP_CERTIFICATE']);
+ assert.equal(r.assessment,'INSUFFICIENT_EVIDENCE');
+});
+test('ambiguous extra 8-digit token in owner row blocks agreement when it competes with printed CIN',()=>{
+ const frontSecond=wrap(['الاسم واللقب: عائشة بنت سالم','CIN: 00003344'],true);
+ const r=compareUnifiedPrivateDocumentIdentity(sharedAcrossTwoPages({
+  ambiguousSecondCin:true
+ }),frontSecond,['SHARED_OWNERSHIP_CERTIFICATE']);
+ assert.equal(r.assessment,'INSUFFICIENT_EVIDENCE');
+ assert.equal(r.roles[0]?.assessment,'INSUFFICIENT_OR_AMBIGUOUS');
+});
+test('no spatial word boxes, truncated word boxes or missing pages never assert coowner agreement',()=>{
+ const original=sharedAcrossTwoPages();
+ const absent={...original,pages:original.pages.map(p=>({
+  ...p,privateSpatialPage:undefined
+ }))};
+ assert.equal(compareUnifiedPrivateDocumentIdentity(absent,arabicFront,
+  ['SHARED_OWNERSHIP_CERTIFICATE']).assessment,'INSUFFICIENT_EVIDENCE');
+ const truncated={...original,pages:original.pages.map(p=>({
+  ...p,spatialWordsTruncated:true
+ }))};
+ assert.equal(compareUnifiedPrivateDocumentIdentity(truncated,arabicFront,
+  ['SHARED_OWNERSHIP_CERTIFICATE']).assessment,'INSUFFICIENT_EVIDENCE');
+ const missing={...original,pages:[original.pages[0]!]};
+ assert.equal(compareUnifiedPrivateDocumentIdentity(missing,arabicFront,
+  ['SHARED_OWNERSHIP_CERTIFICATE']).assessment,'INSUFFICIENT_EVIDENCE');
+});

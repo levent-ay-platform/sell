@@ -189,3 +189,26 @@ test('field extraction source limits reject malformed metadata',()=>{
  assert.throws(()=>extractPrivateLandDocumentFacts(
   [{...ll[0],confidence:3}],classification),/INVALID_LAND_FACT_SOURCE/);
 });
+
+
+test('possession requester is extracted only from a labelled role',()=>{
+ const r=reading(['محضر معاينة تحويز',
+  'طالب التحويز: ليلى بنت سالم','المساحة محل التحويز: 314.4 م²']);
+ assert.equal(field(r,'possessionRequester')?.value,'ليلى بنت سالم');
+ assert.equal(field(r,'possessionRequester')?.status,'CANDIDATE');
+ assert.equal(r.ownershipVerified,false);
+});
+test('financial receipt payer is a role, not registered owner',()=>{
+ const r=reading(['QUITTANCE N° Q0012','دافع المعاليم: فاطمة بنت كريم',
+  'MONTANT: 50.000']);
+ assert.equal(field(r,'receiptPayer')?.value,'فاطمة بنت كريم');
+ assert.equal(field(r,'receiptPayer')?.status,'CANDIDATE');
+ assert.equal(field(r,'seller'),undefined);
+ assert.ok(r.issues.includes('SUPPORTING_RECEIPT_NOT_TITLE'));
+});
+test('masked or contradictory receipt payer never becomes an identity match',()=>{
+ const r=reading(['QUITTANCE N° Q0012','دافع المعاليم: فاطمة بنت كريم',
+  'دافع المعاليم: █████']);
+ assert.equal(field(r,'receiptPayer')?.status,'CONFLICT');
+ assert.equal(field(r,'receiptPayer')?.value,null);
+});

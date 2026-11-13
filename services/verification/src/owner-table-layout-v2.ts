@@ -29,7 +29,7 @@ export type LayoutFinding=
   'NO_PAGE_1'|'HEADER_NOT_FOUND'|'HEADER_GEOMETRY_AMBIGUOUS'|
   'NO_NUMBERED_OWNER_ROWS'|'DUPLICATE_OWNER_ORDINAL'|
   'SHARE_NOT_LOCATED'|'SHARE_AMBIGUOUS'|'NAME_NOT_LOCATED'|
-  'PAGE_LAYOUT_MISMATCH';
+  'PAGE_LAYOUT_MISMATCH'|'CIN_AMBIGUOUS';
 export interface SpatialTableCandidate {
   readonly cells:readonly OwnerTableCellObservation[];
   readonly ownerOrdinals:readonly number[];
@@ -82,6 +82,9 @@ const identityLabel=(s:string)=>/هوية|المالك|اللقب|الجنسية
 const shareLabel=(s:string)=>/موضوع|الملكية/u.test(norm(s));
 const isParts=(s:string)=>/^\d{1,9}(?:[.,]\d{1,3})?$/u.test(s);
 const partLabel=(s:string)=>/^(?:جزء|اجزاء)$/u.test(norm(s));
+const cinLabel=(s:string)=>/^(?:cin|c\.i\.n\.?|رقم\s*بطاقة\s*التعريف)$/iu.test(norm(s));
+const cinDigits=(s:string)=>s.replace(/[٠-٩]/gu,d=>String(d.charCodeAt(0)-0x660))
+  .replace(/[۰-۹]/gu,d=>String(d.charCodeAt(0)-0x6f0));
 function findHeader(page:SpatialPage):Header|null|'AMBIGUOUS' {
   const items=page.words.filter(w=>w.confidence>=0.6 && middle(w.bbox)<page.height*.65);
   const ord=items.filter(w=>ordinalLabel(w.text));
@@ -106,7 +109,7 @@ function findHeader(page:SpatialPage):Header|null|'AMBIGUOUS' {
   return {ordinalX:best.xO/page.width,identityX:best.xI/page.width,
     shareX:best.xS/page.width,upperY:best.y/page.height};
 }
-function makeCell(word:SpatialWord,ordinal:number,field:'name'|'rightsParts',value:string,
+function makeCell(word:SpatialWord,ordinal:number,field:'name'|'rightsParts'|'cin',value:string,
   confidence:number):OwnerTableCellObservation {
   return {ordinal,field,page:word.page,lineIndex:0,source:'ocr-ar',
     confidence,value,state:'EXTRACTED'};
@@ -188,6 +191,19 @@ export function locateOwnerTableFromWords(pages:readonly SpatialPage[]):SpatialT
       });
       const name=nameCandidate(identityWords,n);
       if(name)result.push(name);else findings.add('NAME_NOT_LOCATED');
+      // A title can contain many CIN-like 8-digit numbers. Only an explicit
+      // CIN label and an adjacent, SAME-ROW identity-column token can form a
+      // private row CIN candidate. Never match "any CIN" on the whole paper.
+      const labels=identityWords.filter(w=>cinLabel(w.text)&&w.confidence>=.90);
+      const candidates=identityWords.filter(w=>
+        w.confidence>=.90 && /^[0-9]{8}$/u.test(cinDigits(w.text)) &&
+        labels.some(label=>
+          Math.abs(center(label.bbox)-center(w.bbox))<page.width*.20 &&
+          Math.abs(middle(label.bbox)-middle(w.bbox))<page.height*.06));
+      if(candidates.length===1)
+        result.push(makeCell(candidates[0]!,n,'cin',
+          cinDigits(candidates[0]!.text),candidates[0]!.confidence));
+      else if(candidates.length>1)findings.add('CIN_AMBIGUOUS');
     }
   }
   if(!ordinals.length)findings.add('NO_NUMBERED_OWNER_ROWS');

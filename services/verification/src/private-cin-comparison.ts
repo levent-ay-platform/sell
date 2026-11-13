@@ -64,3 +64,26 @@ export function compareCertificateIdentityCinText(cert:IngestedDocument,id:Inges
   return {status,certificateEvidence:a?.evidence??null,identityEvidence:b?.evidence??null,
     mayVerifyIdentity:false};
 }
+
+
+/**
+ * Compare an already-source-associated, eight-digit co-owner row CIN to the
+ * front-only identity card. NEVER scan all title CINs for "any" match.
+ * Neither digits nor card identity leak into the returned status.
+ */
+export function compareExactOwnerRowCinToIdentity(
+  ownerRowCin:string|null,front:IngestedDocument
+):CinTextStatus {
+  if(ownerRowCin===null)return 'NOT_COMPARABLE';
+  const digits=asciiDigits(ownerRowCin);
+  if(!/^[0-9]{8}$/u.test(digits))return 'AMBIGUOUS_OR_LOW_CONFIDENCE';
+  const matches=collect(front),identity=unique(matches);
+  if(front.pages.some(p=>(p.qualityWarnings?.length??0)>0)||
+    (matches.length>0&&!identity)||
+    (identity!==null&&(identity.confidence===null&&
+      identity.evidence.source!=='pdf-text'||identity.confidence!==null&&
+      identity.confidence<0.90)))return 'AMBIGUOUS_OR_LOW_CONFIDENCE';
+  if(!identity)return 'NOT_COMPARABLE';
+  return digits===identity.number?'SAME_NUMBER_UNVERIFIED':
+    'NUMBER_DIFFERS_NEEDS_REVIEW';
+}

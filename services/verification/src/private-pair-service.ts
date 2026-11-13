@@ -138,6 +138,14 @@ function joinPages(docs:readonly IngestedDocument[]):IngestedDocument {
     // Keep page quality and per-line evidence, but strip layout-only fields.
     pages.push({page:number,method:page.method,
       lines:page.lines.map(line=>({...line,page:number})),
+      // Private geometry stays bound to the verified SAME physical page.
+      // The legacy text-only parser safely ignores this extra observation,
+      // while the unified co-owner row comparator uses it in-memory.
+      ...(page.privateSpatialPage!==undefined?{
+        privateSpatialPage:{...page.privateSpatialPage,page:number,
+          words:page.privateSpatialPage.words.map(w=>({...w,page:number}))},
+        spatialWordsTruncated:page.spatialWordsTruncated
+      }:{}),
       ...(page.qualityWarnings!==undefined?
         {qualityWarnings:page.qualityWarnings}:{})});
   }

@@ -16,7 +16,8 @@ export type LandFactKey=
   'registeredPlotNumber'|'soldPlotNumber'|'possessedPlotNumber'|
   'rightsDenominator'|'seller'|'buyer'|'transferor'|'transferee'|
   'salePriceTnd'|'receiptAmountTnd'|'receiptNumber'|'transferReference'|
-  'serviceRequestNumber'|'serviceRequestDate'|'serviceApplicant';
+  'serviceRequestNumber'|'serviceRequestDate'|'serviceApplicant'|
+  'possessionRequester'|'receiptPayer';
 export type LandFactStatus='CANDIDATE'|'LOW_CONFIDENCE'|'CONFLICT'|'MASKED'|'ABSENT';
 export interface PrivateLandFactEvidence {
   readonly page:number;
@@ -144,6 +145,16 @@ const serviceApplicant:Rule={
  pattern:/^(?:طالب\s+الخدم[ةه]|اسم\s+طالب\s+الخدم[ةه]|demandeur)[\s:#：-]*(.{2,100})$/iu,
  shape:'actor'
 };
+const possessionRequester:Rule={
+ key:'possessionRequester',
+ pattern:/^(?:طالب\s+(?:معاين[ةه]\s+)?التحويز|طالب\s+معاين[ةه]\s+الحياز[ةه]|requ[eé]rant\s+du\s+constat)[\s:#：-]+(.{2,100})$/iu,
+ shape:'actor'
+};
+const receiptPayer:Rule={
+ key:'receiptPayer',
+ pattern:/^(?:دافع\s+(?:ال)?معاليم|اسم\s+الدافع|payeur)[\s:#：-]+(.{2,100})$/iu,
+ shape:'actor'
+};
 const serviceReceiptAmount:Rule={
  key:'receiptAmountTnd',
  pattern:/^(?:المبلغ\s+(?:الجملي|المستخلص)|المبلغ|total\s+g[eé]n[eé]ral|montant\s+per[cç]u)[\s:#：-]*([0-9]{1,12}(?:[.,][0-9]{1,3})?)\s*(?:dt|tnd|دينار(?:ا)?)?\s*$/iu,
@@ -153,9 +164,9 @@ const RULES:Readonly<Record<LandPaperKind,readonly Rule[]>>={
  OWNERSHIP_CERTIFICATE:[commonTitle,parent,totalArea,registeredPlot,denominator],
  SHARED_OWNERSHIP_CERTIFICATE:[commonTitle,parent,totalArea,registeredPlot,denominator],
  SALE_DEED:[commonTitle,parent,soldPlot,soldArea,seller,buyer,salePrice],
- POSSESSION_REPORT:[commonTitle,parent,possessedPlot,possessedArea],
+ POSSESSION_REPORT:[commonTitle,parent,possessedPlot,possessedArea,possessionRequester],
  TRANSFER_CARD:[commonTitle,parent,transferredArea,transferor,transferee,transferRef],
- FINANCIAL_RECEIPT:[receiptNumber,receiptAmount],
+ FINANCIAL_RECEIPT:[receiptNumber,receiptAmount,receiptPayer],
  PROPERTY_SERVICE_RECEIPT:[commonTitle,serviceRequestNumber,serviceRequestDate,
    serviceApplicant,serviceReceiptAmount],
  UNKNOWN:[]
