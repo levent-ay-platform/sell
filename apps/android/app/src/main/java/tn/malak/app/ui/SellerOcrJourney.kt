@@ -146,6 +146,19 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
     var saveMessage by remember(draftFile) {mutableIntStateOf(0)}
     var pickMessage by remember(draftFile) {mutableIntStateOf(0)}
     val files=remember(draftFile) {mutableStateListOf<ChosenDocument>()}
+    // Never persist private OCR values or even the document URI with the draft.
+    var familyReadings by remember(draftFile) {mutableStateOf<List<ReadOcrResult>>(emptyList())}
+    var familyReadBusy by remember(draftFile) {mutableStateOf(false)}
+    var familyReadError by remember(draftFile) {mutableIntStateOf(0)}
+    var familyReadEpoch by remember(draftFile) {mutableIntStateOf(0)}
+    var familyReadJob by remember {mutableStateOf<Job?>(null)}
+    LaunchedEffect(draftFile,files.toList(),ownerSession,authenticatedOwnerSession) {
+        familyReadEpoch++
+        familyReadJob?.cancel()
+        familyReadings=emptyList()
+        familyReadError=0
+        familyReadBusy=false
+    }
     val identityFiles=remember(draftFile) {mutableStateListOf<ChosenDocument>()}
     var acceptedFrontKey by remember(draftFile){mutableStateOf<String?>(null)}
     // OCR candidates are memory-only and tied to the accepted private photo.
@@ -239,6 +252,8 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
         onDispose {
             requestEpoch++
             requestJob?.cancel()
+            familyReadEpoch++
+            familyReadJob?.cancel()
             pendingPhoto?.let{PrivateCaptureMemory.discard(it.uri)}
             identityFiles.forEach{PrivateCaptureMemory.discard(it.uri)}
         }
@@ -467,6 +482,133 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                     }
                     HorizontalDivider(color=CardBorder)
 
+                    Surface(color=Color(0xFFF2F8F5),shape=RoundedCornerShape(19.dp)) {
+                        Column(Modifier.fillMaxWidth().padding(15.dp),
+                            verticalArrangement=Arrangement.spacedBy(10.dp)) {
+                            Row(verticalAlignment=Alignment.CenterVertically,
+                                horizontalArrangement=Arrangement.spacedBy(9.dp)) {
+                                Icon(Icons.Outlined.DocumentScanner,null,tint=Color(0xFF267B63))
+                                Text(s(R.string.smart_read_source_title),
+                                    fontWeight=FontWeight.Bold,color=Brand.Ink)
+                            }
+                            Text(s(R.string.smart_read_source_intro),fontSize=12.sp,
+                                color=Brand.Muted,lineHeight=19.sp)
+                            if(ownerSession==null&&authenticatedOwnerSession==null)
+                                Text(s(R.string.smart_read_auth_required),
+                                    fontSize=12.sp,color=Brand.Crimson)
+                            Button(onClick={
+                                if(!validFirst){showInvalid=true}
+                                else {
+                                    familyReadJob?.cancel()
+                                    val epoch=++familyReadEpoch
+                                    val selected=files.toList()
+                                    val keys=selected.map{it.uploadKey}
+                                    val values=listOf(listingTitle,region.trim(),
+                                        normalizedArea,price,capacity)
+                                    val snapshot=values.joinToString("\u0001")
+                                    familyReadBusy=true
+                                    familyReadError=0
+                                    familyReadings=emptyList()
+                                    familyReadJob=scope.launch {
+                                        try {
+                                            val session=ownerSession?:provisionedCase?:run{
+                                                val auth=authenticatedOwnerSession
+                                                    ?:throw OwnerPairException(401)
+                                                val material=values.joinToString(""){
+                                                    it.length.toString()+":"+it}
+                                                val fingerprint=java.security.MessageDigest.getInstance("SHA-256")
+                                                    .digest(material.toByteArray(Charsets.UTF_8))
+                                                    .joinToString(""){"%02x".format(it.toInt() and 255)}
+                                                val known=prefs.getString("pending_case_key",null)
+                                                val key=if(prefs.getString("pending_case_fingerprint",null)==fingerprint&&
+                                                    known!=null&&Regex("^[0-9a-fA-F-]{36}$").matches(known))
+                                                    known else UUID.randomUUID().toString()
+                                                if(!prefs.edit()
+                                                    .putString("pending_case_fingerprint",fingerprint)
+                                                    .putString("pending_case_key",key).commit())
+                                                    throw IllegalStateException("CASE_INTENT_NOT_DURABLE")
+                                                provisionOwnerEvidenceCase(auth,NewOwnerCaseDraft(
+                                                    key,values[0],values[1],values[2],values[3],values[4]))
+                                                    .also{provisionedCase=it}
+                                            }
+                                            val authenticated=QaOcrSession(
+                                                session.httpsBaseUrl,session.caseId,session.bearer)
+                                            val result=selected.mapIndexed{index,item->
+                                                readOcrForOwner(context,item.uri,item.length,item.mime,
+                                                    if(item.mime=="application/pdf")null else index+1,
+                                                    item.uploadKey+"-ocr",normalizedArea,authenticated,
+                                                    evidenceKind="OTHER_LEGAL_PROOF")
+                                            }
+                                            if(epoch==familyReadEpoch &&
+                                                files.map{it.uploadKey}==keys &&
+                                                listOf(listingTitle,region.trim(),
+                                                    area.replace(',','.'),price,capacity)
+                                                    .joinToString("\u0001")==snapshot)
+                                                familyReadings=result
+                                        }catch(cancel:CancellationException){throw cancel}
+                                        catch(_:Exception){
+                                            if(epoch==familyReadEpoch)
+                                                familyReadError=R.string.smart_read_failed
+                                        }finally{
+                                            if(epoch==familyReadEpoch)familyReadBusy=false
+                                        }
+                                    }
+                                }
+                            },enabled=!familyReadBusy&&files.isNotEmpty()&&
+                                (ownerSession!=null||authenticatedOwnerSession!=null),
+                                modifier=Modifier.fillMaxWidth().heightIn(min=50.dp),
+                                shape=RoundedCornerShape(14.dp)) {
+                                Icon(Icons.Outlined.AutoAwesome,null,Modifier.size(19.dp))
+                                Spacer(Modifier.width(8.dp))
+                                Text(s(if(familyReadBusy)R.string.smart_read_working
+                                    else R.string.smart_read_action))
+                            }
+                            if(familyReadError!=0)PlainNotice(Icons.Outlined.Info,s(familyReadError))
+                            if(familyReadings.isNotEmpty()) {
+                                familyReadings.forEachIndexed{docIndex,read->
+                                    Text("${s(R.string.smart_read_document)} ${docIndex+1} · "+
+                                        s(documentFamilyLabel(read.familyKind)),
+                                        fontSize=13.sp,fontWeight=FontWeight.SemiBold,
+                                        color=Brand.Ink)
+                                    if(read.status=="READY"){
+                                        read.familyFacts.filter{it.value!=null&&
+                                            it.status in listOf("CANDIDATE","LOW_CONFIDENCE")&&
+                                            it.id in listOf("registerReference","registeredAreaM2",
+                                                "soldAreaM2","possessedAreaM2",
+                                                "transferredAreaM2","soldPlotNumber")}.forEach{fact->
+                                            Surface(color=Color.White,
+                                                shape=RoundedCornerShape(11.dp)){
+                                                Column(Modifier.fillMaxWidth().padding(10.dp),
+                                                    verticalArrangement=Arrangement.spacedBy(3.dp)) {
+                                                    Text(s(familyFactLabel(fact.id)),
+                                                        color=Brand.Muted,fontSize=11.sp)
+                                                    Text(fact.value?:"",fontWeight=FontWeight.SemiBold,
+                                                        fontSize=14.sp,color=Brand.Ink)
+                                                    Text("${s(R.string.smart_read_page)} ${fact.page?:1} · "+
+                                                        s(if(fact.status=="LOW_CONFIDENCE")
+                                                            R.string.smart_read_needs_review
+                                                          else R.string.smart_read_source_available),
+                                                        color=Brand.Muted,fontSize=11.sp)
+                                                    // Only explicitly SOLD area can be offered as an
+                                                    // ad-area suggestion, never a whole-title area.
+                                                    if(read.familyKind=="SALE_DEED"&&
+                                                        fact.id=="soldAreaM2"&&
+                                                        fact.status=="CANDIDATE"&&
+                                                        fact.value!=null&&
+                                                        fact.value.matches(ValidLandArea))
+                                                        TextButton(onClick={
+                                                            area=fact.value
+                                                            showInvalid=false
+                                                        }){Text(s(R.string.smart_use_sold_area))}
+                                                }
+                                            }
+                                        }
+                                    }else Text(s(R.string.smart_read_needs_review),
+                                        color=Brand.Muted,fontSize=12.sp)
+                                }
+                            }
+                        }
+                    }
                     SectionHeading(s(R.string.capacity_section),s(R.string.capacity_hint))
                     Capacities.forEach { option ->
                         val active=capacity==option.code
@@ -954,4 +1096,24 @@ private fun VerificationStage(
             Icon(statusIcon,null,tint=accent,modifier=Modifier.size(19.dp))
         }
     }
+}
+
+private fun documentFamilyLabel(kind:String):Int=when(kind){
+    "OWNERSHIP_CERTIFICATE"->R.string.smart_kind_title
+    "SHARED_OWNERSHIP_CERTIFICATE"->R.string.smart_kind_shared
+    "SALE_DEED"->R.string.smart_kind_sale
+    "TRANSFER_CARD"->R.string.smart_kind_transfer
+    "POSSESSION_REPORT"->R.string.smart_kind_possession
+    "FINANCIAL_RECEIPT"->R.string.smart_kind_quittance
+    "PROPERTY_SERVICE_RECEIPT"->R.string.smart_kind_service
+    else->R.string.smart_kind_unknown
+}
+private fun familyFactLabel(key:String):Int=when(key){
+    "registerReference"->R.string.smart_fact_register
+    "registeredAreaM2"->R.string.smart_fact_registered_area
+    "soldAreaM2"->R.string.smart_fact_sold_area
+    "possessedAreaM2"->R.string.smart_fact_possessed_area
+    "transferredAreaM2"->R.string.smart_fact_transferred_area
+    "soldPlotNumber"->R.string.smart_fact_sold_plot
+    else->R.string.smart_fact_other
 }
