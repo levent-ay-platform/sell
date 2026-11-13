@@ -1,5 +1,7 @@
 import {extractCpfSmartFields} from './smart-fields.ts';
 import type {RecognizedLine, SmartExtraction} from './smart-fields.ts';
+import {classifyLandPaper} from './document-training-v2.ts';
+import type {DocumentTrainingCandidate} from './document-training-v2.ts';
 import type {QualityWarning} from './capture.ts';
 
 /**
@@ -19,6 +21,8 @@ export interface IngestedDocument {
 }
 export interface ReadDocumentResult {
   extraction:SmartExtraction;
+  /** Non-authoritative, zero-PII document-family hint for later private review. */
+  documentFamilyCandidate:DocumentTrainingCandidate;
   pagesReceived:number;
   extractionMethods:readonly ('pdf-text'|'ocr')[];
   qualityReviewPages:readonly number[];
@@ -70,8 +74,10 @@ export function parseOcrWorkerOutput(input:unknown):IngestedDocument {
 }
 export function readUntrustedOcrDocument(payload:unknown):ReadDocumentResult {
   const parsed=parseOcrWorkerOutput(payload);
-  const extraction=extractCpfSmartFields(parsed.pages.flatMap(pg=>pg.lines));
-  return {extraction,pagesReceived:parsed.pages.length,
+  const lines=parsed.pages.flatMap(pg=>pg.lines);
+  const extraction=extractCpfSmartFields(lines);
+  const documentFamilyCandidate=classifyLandPaper(lines);
+  return {extraction,documentFamilyCandidate,pagesReceived:parsed.pages.length,
     extractionMethods:parsed.pages.map(pg=>pg.method),
     qualityReviewPages:parsed.pages.filter(pg=>pg.qualityWarnings?.length).map(pg=>pg.page),
     requiresIndependentOwnershipReview:true,mayPublish:false};
