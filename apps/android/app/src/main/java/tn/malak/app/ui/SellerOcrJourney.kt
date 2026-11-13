@@ -87,7 +87,8 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
     val pilotOcrSession=LocalPilotOcrSession.current
     // Pilot is a real server OCR session, but never a verified identity
     // or owner/case/publishing credential.
-    val canReadPrivateId=ownerSession!=null||authenticatedOwnerSession!=null||
+    val hasOwnerReviewSession=ownerSession!=null||authenticatedOwnerSession!=null
+    val canReadPrivateId=hasOwnerReviewSession||
         (pilotOcrSession!=null&&pilotOcrSession.expiresAtMs>System.currentTimeMillis())
     val scope=rememberCoroutineScope()
     var requestJob by remember {mutableStateOf<Job?>(null)}
@@ -284,6 +285,7 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
 
     // Only a freshly captured private in-memory front JPEG is admissible.
     val identitySelected=identityFiles.size==1&&
+        acceptedRead?.readyForCameraAcceptance==true&&
         acceptedFrontKey==identityFiles[0].uploadKey&&
         identityFiles[0].mime=="image/jpeg"&&
         PrivateCaptureMemory.isPrivate(identityFiles[0].uri)&&
@@ -485,10 +487,9 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                                         R.string.camera_image_low_resolution
                                     frontRead?.issue!=null->
                                         R.string.camera_review_failed
-                                    scan?.surname!=null&&scan.givenName!=null&&
-                                        scan.cinFull!=null&&scan.birthDate!=null->
+                                    scan?.readyForCameraAcceptance==true->
                                         R.string.camera_review_ready
-                                    else->R.string.camera_review_manual
+                                    else->R.string.camera_review_required_fields
                                 }
                                 Text(s(message),color=Brand.Muted,
                                     fontSize=12.sp,lineHeight=19.sp)
@@ -639,7 +640,7 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                             color=Brand.Muted,fontSize=12.sp,lineHeight=18.sp)
                         Button(onClick={
                             if(pairProgress!=null||files.isEmpty()||!identityReadyForRemote||
-                                familyReadBusy)
+                                !hasOwnerReviewSession||familyReadBusy)
                                 return@Button
                             val selected=files.toList()
                             val idDocs=identityFiles.toList().map{
@@ -705,7 +706,7 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                                 }
                             }
                         },enabled=pairProgress==null&&files.isNotEmpty()&&identityReadyForRemote&&
-                            !familyReadBusy,
+                            hasOwnerReviewSession&&!familyReadBusy,
                             modifier=Modifier.fillMaxWidth().heightIn(min=54.dp),
                             colors=ButtonDefaults.buttonColors(containerColor=Brand.Crimson),
                             shape=RoundedCornerShape(16.dp)) {
@@ -791,8 +792,10 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                             }
                             Text(s(R.string.smart_read_source_intro),fontSize=12.sp,
                                 color=Brand.Muted,lineHeight=19.sp)
-                            if(ownerSession==null&&authenticatedOwnerSession==null)
-                                Text(s(R.string.smart_read_auth_required),
+                            if(!hasOwnerReviewSession)
+                                Text(s(if(pilotOcrSession!=null)
+                                    R.string.smart_read_pilot_only
+                                    else R.string.smart_read_auth_required),
                                     fontSize=12.sp,color=Brand.Crimson)
                             Button(onClick={
                                 if(files.isEmpty()){familyReadError=R.string.smart_read_failed}
@@ -834,7 +837,7 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                                     }
                                 }
                             },enabled=!familyReadBusy&&files.isNotEmpty()&&
-                                (ownerSession!=null||authenticatedOwnerSession!=null),
+                                hasOwnerReviewSession,
                                 modifier=Modifier.fillMaxWidth().heightIn(min=50.dp),
                                 shape=RoundedCornerShape(14.dp)) {
                                 Icon(Icons.Outlined.AutoAwesome,null,Modifier.size(19.dp))
@@ -995,7 +998,7 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                     }
                     Button(onClick={
                         val pending=pendingPhoto
-                        if(pending!=null){
+                        if(pending!=null&&frontRead?.readyForCameraAcceptance==true){
                             identityFiles.forEach{PrivateCaptureMemory.discard(it.uri)}
                             identityFiles.clear()
                             identityFiles.add(pending)
@@ -1004,8 +1007,11 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                             pendingPhoto=null
                             frontRead=null
                             identityMessage=0
+                        } else {
+                            identityMessage=R.string.camera_review_required_fields
                         }
-                    },enabled=!frontReadBusy,
+                    },enabled=!frontReadBusy&&
+                        frontRead?.readyForCameraAcceptance==true,
                         modifier=Modifier.weight(1f).heightIn(min=54.dp)){
                         Text(s(R.string.camera_review_accept))
                     }

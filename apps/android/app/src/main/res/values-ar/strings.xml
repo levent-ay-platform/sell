@@ -320,4 +320,6 @@
     <string name="malak_holder_parts">حصتك المطبـوعة (أجزاء لا أمتار مربعة)</string>
     <string name="malak_holder_row">رقم صفّك في وثيقة الملكية</string>
     <string name="malak_holder_preliminary">ظهرت حصتك من الصف المرتبط باسمك وCIN. هذه مطابقة نصية أولية وليست تأكيداً قانونياً.</string>
+    <string name="camera_review_required_fields">لا يمكن اعتماد الصورة بعد: يلزم استخراج الاسم واللقب ورقم الهوية الكامل (8 أرقام) وتاريخ الميلاد بوضوح. اقترب من البطاقة وأعد التصوير.</string>
+    <string name="smart_read_pilot_only">أنت متصل بجلسة OCR تجريبية للهوية فقط. قراءة وثائق الملكية ومطابقتها تتطلب جلسة مالك مخوّلة وخادم تحقق مفعّلاً؛ الحساب التجريبي لا يمنح هذه الصلاحية.</string>
 </resources>

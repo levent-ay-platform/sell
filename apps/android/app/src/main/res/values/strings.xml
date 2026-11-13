@@ -320,4 +320,6 @@
     <string name="malak_holder_parts">Your printed rights parts (not square metres)</string>
     <string name="malak_holder_row">Your row number on the ownership paper</string>
     <string name="malak_holder_preliminary">Your share was found in the row associated with your name and CIN. This is preliminary text agreement only.</string>
+    <string name="camera_review_required_fields">This photo cannot be accepted: surname, given name, full 8-digit CIN and date of birth must all be clearly extracted. Move closer and retake.</string>
+    <string name="smart_read_pilot_only">You are signed into the ID OCR pilot only. Reading and matching title documents requires an authorized owner session and deployed verification service; pilot access does not grant those permissions.</string>
 </resources>

@@ -320,4 +320,6 @@
     <string name="malak_holder_parts">Votre quote-part imprimée (parts, pas m²)</string>
     <string name="malak_holder_row">Numéro de votre ligne dans le titre</string>
     <string name="malak_holder_preliminary">Votre part apparaît sur la ligne associée à votre nom et votre CIN. Correspondance textuelle préliminaire uniquement.</string>
+    <string name="camera_review_required_fields">Photo non validable : le nom, le prénom, le CIN complet (8 chiffres) et la date de naissance doivent être lisibles. Rapprochez la carte et reprenez la photo.</string>
+    <string name="smart_read_pilot_only">Votre session OCR pilote permet seulement de tester la lecture du recto. Pour lire et comparer les titres, il faut une session propriétaire autorisée et un serveur de vérification actif.</string>
 </resources>
