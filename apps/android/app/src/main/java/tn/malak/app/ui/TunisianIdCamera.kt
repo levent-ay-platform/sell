@@ -23,7 +23,6 @@ import androidx.camera.core.resolutionselector.ResolutionSelector
 import androidx.camera.core.resolutionselector.ResolutionStrategy
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -39,9 +38,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -66,8 +62,10 @@ private fun checkLight(frame:ImageProxy,previous:IntArray?):Pair<FrameAssessment
     val width=if(rot%180==0)frame.width else frame.height
     val height=if(rot%180==0)frame.height else frame.width
     if(width<64||height<64)return FrameAssessment(CaptureHint.WAIT) to IntArray(0)
-    val roiW=(width*.99).toInt()
-    val roiH=minOf((roiW/1.38f).toInt(),(height*.74).toInt())
+    // The sampled camera guidance and drawn card outline share the
+    // same landscape CIN proportions, independent of layout direction.
+    val roiW=(width*.84f).toInt()
+    val roiH=minOf((roiW/1.585f).toInt(),(height*.70f).toInt())
     val left=(width-roiW)/2;val top=(height-roiH)/2
     val cols=160;val rows=112
     val samples=IntArray(cols*rows)
@@ -86,17 +84,12 @@ private fun checkLight(frame:ImageProxy,previous:IntArray?):Pair<FrameAssessment
             return FrameAssessment(CaptureHint.WAIT) to IntArray(0)
         samples[r*cols+c]=buffer.get(offset).toInt() and 255
     }
-    val assessed=CaptureFrameAssessment.inspect(samples,cols,rows,previous)
-    val mapped=assessed.bounds?.let{b->
-        CardBounds((left+b.left*roiW)/width,
-            (top+b.top*roiH)/height,
-            (left+b.right*roiW)/width,
-            (top+b.bottom*roiH)/height)
-    }
-    return assessed.copy(captureBounds=mapped) to samples
+    // Advisory analysis is never used as a JPEG cropping transform.
+    // The PreviewView and ImageCapture use different sensor resolutions.
+    return CaptureFrameAssessment.inspect(samples,cols,rows,previous) to samples
 }
 
-private fun rotateAndEncode(image:ImageProxy,bounds:CardBounds?):ByteArray {
+private fun rotateAndEncode(image:ImageProxy):ByteArray {
     if(image.format!=ImageFormat.JPEG &&
         !(android.os.Build.VERSION.SDK_INT>=34 &&
             image.format==ImageFormat.JPEG_R))
@@ -128,20 +121,18 @@ private fun rotateAndEncode(image:ImageProxy,bounds:CardBounds?):ByteArray {
                 allocated.add(it)
             }
         }else field
-        // Use stable detected FRONT-card bounds to avoid clipping an
-        // off-centre card. A geometry mismatch falls back to centre crop.
-        val plan=CardCaptureCrop.plan(oriented.width,oriented.height,bounds)
-        val framed=Bitmap.createBitmap(oriented,
-            plan.left,plan.top,plan.width,plan.height).also{allocated.add(it)}
-        val maxEdge=maxOf(framed.width,framed.height)
+        // Keep the whole ViewPort-aligned, rotated photo. Applying the
+        // analysis-space CardBounds a SECOND time clipped actual IDs on
+        // portrait devices. Never guess the JPEG transform from the preview.
+        val maxEdge=maxOf(oriented.width,oriented.height)
         val resized=if(maxEdge>2400) {
             val factor=2400f/maxEdge
-            Bitmap.createScaledBitmap(framed,
-                (framed.width*factor).toInt().coerceAtLeast(1),
-                (framed.height*factor).toInt().coerceAtLeast(1),true).also{
+            Bitmap.createScaledBitmap(oriented,
+                (oriented.width*factor).toInt().coerceAtLeast(1),
+                (oriented.height*factor).toInt().coerceAtLeast(1),true).also{
                 allocated.add(it)
             }
-        }else framed
+        }else oriented
         val out=ByteArrayOutputStream()
         check(resized.compress(Bitmap.CompressFormat.JPEG,86,out))
         val bytes=out.toByteArray()
@@ -282,62 +273,16 @@ internal fun TunisianIdCamera(
                     Text(s(R.string.camera_scan_front),
                         color=Color.White,fontSize=19.sp)
                 }
+                // One centered physical card frame, never mirrored by
+                // Arabic RTL direction. No virtual CIN/name/date boxes:
+                // those overlapped the wrong printed fields on-device.
                 Box(Modifier.align(Alignment.Center)
                     .fillMaxWidth(.84f).aspectRatio(1.585f)
-                    .border(BorderStroke(2.dp,Color.White.copy(alpha=.55f)),
-                        RoundedCornerShape(19.dp))){
-                    // Guides approximate printed zones; green does NOT mean OCR passed.
-                    Box(Modifier.align(Alignment.TopCenter).padding(top=10.dp)
-                        .fillMaxWidth(.48f)
-                        .border(1.dp,Color(0xFF5AD3A2),RoundedCornerShape(6.dp))
-                        .background(Color.Black.copy(alpha=.50f),RoundedCornerShape(6.dp))
-                        .padding(4.dp),contentAlignment=Alignment.Center){
-                        Text("CIN · 8",color=Color.White,fontSize=11.sp)
-                    }
-                    Column(Modifier.align(Alignment.CenterEnd).fillMaxWidth(.48f)
-                        .padding(end=10.dp),verticalArrangement=Arrangement.spacedBy(6.dp)){
-                        listOf(R.string.local_surname,R.string.local_given_name,
-                            R.string.camera_review_birth).forEach { label ->
-                            Box(Modifier.fillMaxWidth()
-                                .border(1.dp,Color(0xFF5AD3A2),RoundedCornerShape(5.dp))
-                                .background(Color.Black.copy(alpha=.43f),RoundedCornerShape(5.dp))
-                                .padding(4.dp)){
-                                Text(s(label),color=Color.White,fontSize=10.sp,
-                                    maxLines=1)
-                            }
-                        }
-                    }
-                }
-                Canvas(Modifier.align(Alignment.Center)
-                    .fillMaxWidth(.99f).aspectRatio(1.38f)){
-                    val b=pictureQuality.bounds
-                    if(b!=null){
-                        val green=Color(0xFF5AD3A2)
-                        val outline=if(pictureQuality.hint==CaptureHint.GOOD)
-                            green else Color(0xFFFFD37C)
-                        val x0=b.left*size.width
-                        val y0=b.top*size.height
-                        val x1=b.right*size.width
-                        val y1=b.bottom*size.height
-                        val path=Path().apply{
-                            moveTo(x0,y0);lineTo(x1,y0);lineTo(x1,y1)
-                            lineTo(x0,y1);close()
-                        }
-                        drawPath(path,outline,style=Stroke(width=3.dp.toPx()))
-                        for(zoneIndex in CaptureFrameAssessment.zones.indices){
-                            val z=CaptureFrameAssessment.zones[zoneIndex]
-                            val good=pictureQuality.zones.getOrNull(zoneIndex)==true
-                            val color=if(good) green else Color(0xFFFFD37C)
-                            val zl=x0+(x1-x0)*z.x0;val zr=x0+(x1-x0)*z.x1
-                            val zt=y0+(y1-y0)*z.y0;val zb=y0+(y1-y0)*z.y1
-                            val fieldPath=Path().apply{
-                                moveTo(zl,zt);lineTo(zr,zt);lineTo(zr,zb)
-                                lineTo(zl,zb);close()
-                            }
-                            drawPath(fieldPath,color,style=Stroke(width=1.dp.toPx()))
-                        }
-                    }
-                }
+                    .border(BorderStroke(2.5.dp,when(pictureQuality.hint){
+                        CaptureHint.GOOD->Color(0xFF4DE1A1)
+                        CaptureHint.CIN_UNCLEAR->Color(0xFFFFC85A)
+                        else->Color.White.copy(alpha=.76f)
+                    }),RoundedCornerShape(20.dp)))
                 Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth()
                     .background(Color.Black.copy(alpha=.76f))
                     .padding(20.dp),horizontalAlignment=Alignment.CenterHorizontally){
@@ -350,11 +295,10 @@ internal fun TunisianIdCamera(
                         if(!active.get()||!ready||capturing)return@Button
                         capturing=true
                         cameraError=false
-                        val snappedBounds=pictureQuality.captureBounds
                         capture.takePicture(executor,object:ImageCapture.OnImageCapturedCallback(){
                             override fun onCaptureSuccess(image:ImageProxy){
                                 try{
-                                    val bytes=try{rotateAndEncode(image,snappedBounds)}
+                                    val bytes=try{rotateAndEncode(image)}
                                         finally{image.close()}
                                     val uri=PrivateCaptureMemory.addJpeg(bytes)
                                     handler.post{

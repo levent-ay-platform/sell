@@ -18,9 +18,7 @@ internal data class FieldZone(
 internal data class FrameAssessment(
     val hint:CaptureHint,
     val bounds:CardBounds?=null,
-    val zones:List<Boolean> = emptyList(),
-    // Card bounds mapped to the rotated capture viewport, not the UI overlay.
-    val captureBounds:CardBounds?=null
+    val zones:List<Boolean> = emptyList()
 )
 
 internal object CaptureFrameAssessment {
@@ -68,7 +66,7 @@ internal object CaptureFrameAssessment {
         val top=consistentEdge(p,w,h,vertical=true,first=true)?:return null
         val bottom=consistentEdge(p,w,h,vertical=true,first=false)?:return null
         if(right<=left||bottom<=top)return null
-        val ratio=(right-left).toDouble()/w*1.38/((bottom-top).toDouble()/h)
+        val ratio=(right-left).toDouble()/w*1.585/((bottom-top).toDouble()/h)
         if(ratio !in 1.20..2.20)return null
         return CardBounds(left.toFloat()/w,top.toFloat()/h,
             right.toFloat()/w,bottom.toFloat()/h)

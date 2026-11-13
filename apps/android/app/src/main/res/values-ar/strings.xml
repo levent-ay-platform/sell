@@ -196,10 +196,10 @@
     <string name="pilot_session_badge">دخول تجريبي — الرقم غير متحقق منه</string>
     <string name="pilot_sign_out">تسجيل الخروج</string>
     <string name="camera_scan_front">تصوير وجه بطاقة التعريف</string>
-    <string name="camera_field_guide_note">التصوير المباشر فقط. أي حقل غير واضح يتطلب إعادة الالتقاط.</string>
+    <string name="camera_field_guide_note">خلّي وجه البطاقة كاملاً داخل الإطار الواحد، وراجع الصورة بعد التصوير.</string>
     <string name="camera_move_back">بعّد البطاقة لتظهر الزوايا الأربع</string>
     <string name="camera_stabilize">ثبّت البطاقة والهاتف</string>
-    <string name="camera_focus_fields">ثبّت الهاتف ووضّح مناطق الحقول الأربعة</string>
+    <string name="camera_focus_fields">ثبّت الهاتف وخلي البطاقة كاملة وواضحة</string>
     <string name="camera_correct_angle">عدّل ميلان البطاقة لتصبح مستقيمة</string>
     <string name="camera_preview_quality_only">حدود البطاقة والوضوح تقديرية، قراءة البيانات بعد الالتقاط.</string>
     <string name="camera_align_hint">خلّي زوايا البطاقة الأربع داخل الإطار</string>

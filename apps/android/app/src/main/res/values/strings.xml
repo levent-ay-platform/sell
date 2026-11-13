@@ -196,10 +196,10 @@
     <string name="pilot_session_badge">Pilot access — phone unverified</string>
     <string name="pilot_sign_out">Sign out</string>
     <string name="camera_scan_front">Photograph CIN front</string>
-    <string name="camera_field_guide_note">Live camera only. Retake the photo when any required field is unclear.</string>
+    <string name="camera_field_guide_note">Align the front inside the single frame. Review the entire photo after capture.</string>
     <string name="camera_move_back">Move the card farther away so all corners are visible</string>
     <string name="camera_stabilize">Hold the card and phone steady</string>
-    <string name="camera_focus_fields">Hold still, improve focus on all four outlined field zones</string>
+    <string name="camera_focus_fields">Hold the phone steady and keep the whole card clear</string>
     <string name="camera_correct_angle">Level the card and align its edges</string>
     <string name="camera_preview_quality_only">Outline and clarity are estimates; actual fields are read after capture.</string>
     <string name="camera_align_hint">Fit all four corners inside the frame</string>

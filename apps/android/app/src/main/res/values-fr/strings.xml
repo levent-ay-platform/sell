@@ -196,10 +196,10 @@
     <string name="pilot_session_badge">Accès pilote — numéro non vérifié</string>
     <string name="pilot_sign_out">Déconnexion</string>
     <string name="camera_scan_front">Photographier le recto de la CIN</string>
-    <string name="camera_field_guide_note">Caméra uniquement. Reprenez la photo si un champ est illisible.</string>
+    <string name="camera_field_guide_note">Cadrez tout le recto dans le seul cadre, puis vérifiez la photo.</string>
     <string name="camera_move_back">Éloignez la carte pour montrer les quatre coins</string>
     <string name="camera_stabilize">Stabilisez la carte et le téléphone</string>
-    <string name="camera_focus_fields">Stabilisez et rendez les quatre zones de texte bien nettes</string>
+    <string name="camera_focus_fields">Stabilisez le téléphone et gardez toute la carte nette</string>
     <string name="camera_correct_angle">Redressez la carte et alignez ses bords</string>
     <string name="camera_preview_quality_only">Cadre et netteté estimés ; lecture réelle après la photo.</string>
     <string name="camera_align_hint">Cadrez les quatre coins de la carte</string>
