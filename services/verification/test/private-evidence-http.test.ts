@@ -11,7 +11,7 @@ const TOKEN='a'.repeat(35);
 const pdf=Buffer.from('%PDF-1.4\nPURELY SYNTHETIC OWNER DOCUMENT\n%%EOF');
 const url=`/internal/v1/evidence/${ID}/upload`;
 const inspectUrl=`/internal/v1/review/${ID}/${EVIDENCE}/inspect`;
-function setup(){
+function setup(acceptedKind='OWNERSHIP_CERTIFICATE'){
   const events:DenialAuditRecord[]=[];
   const stats={auth:0,upload:0,inspect:0,limit:0};
   let limited=false,down=false,unauthorized=false, auditDown=false;
@@ -21,7 +21,7 @@ function setup(){
     limits:{consume:async()=>{stats.limit++;if(down)throw Error('disposable limiter offline');return !limited;}},
     audit:{recordDenied:async item=>{if(auditDown)throw Error('audit offline');events.push(item);}},
     upload:async body=>{stats.upload++;exposed=body.bytes;
-      if(body.caseId!==ID||body.pageNumber!==2||body.evidenceKind!=='OWNERSHIP_CERTIFICATE')return {ok:false,code:'FILE_REJECTED',mayPublish:false,ownershipVerified:false};
+      if(body.caseId!==ID||body.pageNumber!==2||body.evidenceKind!==acceptedKind)return {ok:false,code:'FILE_REJECTED',mayPublish:false,ownershipVerified:false};
       return {ok:true,uploaded:true,evidenceId:EVIDENCE,mayPublish:false,ownershipVerified:false};},
     inspect:async body=>{stats.inspect++;if(body.caseId!==ID||body.evidenceId!==EVIDENCE)return {ok:false,code:'ACCESS_DENIED',mayPublish:false,ownershipVerified:false};
       return {ok:true,inspected:true,mayPublish:false,ownershipVerified:false};},
@@ -29,8 +29,8 @@ function setup(){
   return {deps,events,stats,get exposed(){return exposed;},setLimited:(v:boolean)=>limited=v,
     setDown:(v:boolean)=>down=v,setUnauthorized:(v:boolean)=>unauthorized=v,setAuditDown:(v:boolean)=>auditDown=v};
 }
-async function withHttp(run:(port:number, h:ReturnType<typeof setup>)=>Promise<void>){
-  const h=setup();const server=createServer(createPrivateEvidenceHttpHandler(h.deps));
+async function withHttp(run:(port:number, h:ReturnType<typeof setup>)=>Promise<void>,acceptedKind='OWNERSHIP_CERTIFICATE'){
+  const h=setup(acceptedKind);const server=createServer(createPrivateEvidenceHttpHandler(h.deps));
   server.listen(0,'127.0.0.1');await once(server,'listening');
   const address=server.address();if(!address||typeof address==='string')throw Error('no port');
   try{await run(address.port,h);}finally{server.closeAllConnections();await new Promise<void>(resolve=>server.close(()=>resolve()));}
@@ -142,4 +142,14 @@ test('core access denial is redacted in response but recorded in audit',async()=
     assert.equal(h.events[0]?.reason,'FORBIDDEN');
     assert.equal(h.stats.inspect,1);
   });
+});
+
+test('service receipt upload is routed to private scanner without title claim',async()=>{
+ await withHttp(async(port,h)=>{
+   const r=await send(port,{body:pdf,headers:{'X-Evidence-Kind':'PROPERTY_SERVICE_RECEIPT'}});
+   assert.equal(r.status,200);
+   assert.equal(r.body.ownershipVerified,false);
+   assert.equal(r.body.mayPublish,false);
+   assert.equal(h.stats.upload,1);
+ },'PROPERTY_SERVICE_RECEIPT');
 });

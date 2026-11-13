@@ -9,7 +9,7 @@ import type {MediaType} from './capture.ts';
 
 const MAX_BYTES = 12 * 1024 * 1024;
 const CONSENT_PURPOSE = 'PROPERTY_OWNERSHIP_EVIDENCE';
-export type EvidenceKind = 'IDENTITY'|'OWNERSHIP_CERTIFICATE'|'TITLE_EXTRACT'|'OTHER_LEGAL_PROOF';
+export type EvidenceKind = 'IDENTITY'|'OWNERSHIP_CERTIFICATE'|'TITLE_EXTRACT'|'OTHER_LEGAL_PROOF'|'SHARED_OWNERSHIP_CERTIFICATE'|'SALE_DEED'|'TRANSFER_CARD'|'POSSESSION_REPORT'|'FINANCIAL_RECEIPT'|'PROPERTY_SERVICE_RECEIPT';
 export type EvidenceUploadFailure =
   | 'AUTH_REQUIRED'|'CASE_UNAVAILABLE'|'CONSENT_REQUIRED'|'FILE_REJECTED'
   | 'FILE_UNSAFE'|'UPLOAD_KEY_INVALID'|'REPLAY_CONFLICT'|'STORAGE_UNAVAILABLE';
@@ -95,7 +95,7 @@ export type EvidenceUploadResult =
 const deny=(code:EvidenceUploadFailure):EvidenceUploadResult=>({ok:false,code,mayPublish:false,ownershipVerified:false});
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const KEY=/^[A-Za-z0-9_-]{16,100}$/;
-const KINDS=new Set<EvidenceKind>(['IDENTITY','OWNERSHIP_CERTIFICATE','TITLE_EXTRACT','OTHER_LEGAL_PROOF']);
+const KINDS=new Set<EvidenceKind>(['IDENTITY','OWNERSHIP_CERTIFICATE','TITLE_EXTRACT','OTHER_LEGAL_PROOF','SHARED_OWNERSHIP_CERTIFICATE','SALE_DEED','TRANSFER_CARD','POSSESSION_REPORT','FINANCIAL_RECEIPT','PROPERTY_SERVICE_RECEIPT']);
 function detectMedia(bytes:Uint8Array):MediaType|null {
   if(bytes.length>=8 && Buffer.from(bytes.subarray(0,8)).equals(Buffer.from([137,80,78,71,13,10,26,10])))return 'image/png';
   if(bytes.length>=4 && bytes[0]===255&&bytes[1]===216&&bytes[2]===255) return 'image/jpeg';

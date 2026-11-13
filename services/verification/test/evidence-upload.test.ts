@@ -203,3 +203,33 @@ test('identity requires ONE front image: page 1 PNG/JPEG, never PDF or page 2',a
  assert.equal(h.rows[0]?.kind,'IDENTITY');
  assert.equal(h.rows[0]?.pageNumber,1);
 });
+
+test('all recognized property papers and supporting receipts have safe encrypted private intake',async()=>{
+ const h=harness();
+ for(const kind of [
+   'SHARED_OWNERSHIP_CERTIFICATE','SALE_DEED','TRANSFER_CARD',
+   'POSSESSION_REPORT','FINANCIAL_RECEIPT','PROPERTY_SERVICE_RECEIPT',
+   'OTHER_LEGAL_PROOF'
+ ] as const) {
+   const result=await uploadIndividualEvidence({...defaults,
+     evidenceKind:kind,idempotencyKey:'evidence_'+kind},h.deps);
+   assert.equal(result.ok,true,kind);
+   assert.equal(result.ownershipVerified,false);
+   assert.equal(result.mayPublish,false);
+ }
+ assert.equal(h.rows.length,7);
+ assert.equal(h.objects.size,7);
+ assert.equal(h.calls.scanner,7);
+});
+test('supporting receipt still requires authorized case consent and malware clearance',async()=>{
+ const h=harness();
+ h.state.scan='UNKNOWN';
+ const result=await uploadIndividualEvidence({...defaults,
+   evidenceKind:'PROPERTY_SERVICE_RECEIPT'},h.deps);
+ assert.equal(result.ok,false);
+ assert.equal(h.rows.length,0);
+ h.state.scan='CLEAN';h.state.access={...h.state.access!,consent:null};
+ const rejected=await uploadIndividualEvidence({...defaults,
+   evidenceKind:'FINANCIAL_RECEIPT'},h.deps);
+ assert.equal(rejected.ok,false);assert.equal(h.rows.length,0);
+});
