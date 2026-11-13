@@ -44,7 +44,7 @@ internal object SmartListingAssist {
     /** Facts-only multilingual copy, with no fabricated services or sea view. */
     fun descriptionSuggestion(regionRaw:String,areaRaw:String,priceRaw:String,
                               landPrefix:String,unit:String,pricePrefix:String):String? {
-        val region=regionRaw.trim().replace(Regex("""\\s+""")," ")
+        val region=regionRaw.trim().replace(Regex("""\s+""")," ")
         val size=area(areaRaw)?:return null
         val price=priceRaw.trim()
         if(region.length !in 2..80||region.any{Character.isISOControl(it)}||
