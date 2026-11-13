@@ -363,7 +363,7 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                                         fontWeight=FontWeight.SemiBold)
                                 }
                                 TextButton(onClick={editTitle=!editTitle}){
-                                    Text(s(R.string.smart_title_edit),fontSize=12.sp)
+                                    Text(s(if(editTitle)R.string.smart_title_done else R.string.smart_title_edit),fontSize=12.sp)
                                 }
                             }
                             if(editTitle)
