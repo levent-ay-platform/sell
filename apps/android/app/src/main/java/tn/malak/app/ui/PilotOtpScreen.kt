@@ -134,13 +134,10 @@ internal fun PilotOtpScreen(onEnterPilot:(String,PilotOcrSession)->Unit) {
                 }
             }
         }
-        Surface(shape=RoundedCornerShape(14.dp),color=Color(0xFFF1F5F7)){
-            Text(
-                s(R.string.pilot_no_real_identity),
-                Modifier.fillMaxWidth().padding(15.dp),
-                color=Brand.Muted,fontSize=12.sp,lineHeight=19.sp
-            )
-        }
+        Text(s(R.string.pilot_no_real_identity),
+            Modifier.padding(horizontal=8.dp),
+            color=Brand.Muted,fontSize=11.sp,
+            textAlign=TextAlign.Center,lineHeight=17.sp)
     }
 }
 
@@ -151,9 +148,12 @@ internal fun PilotSessionBar(phone:String,onSignOut:()->Unit){
             Modifier.fillMaxWidth().padding(horizontal=12.dp,vertical=5.dp),
             verticalAlignment=Alignment.CenterVertically
         ){
-            Text(s(R.string.pilot_session_badge),color=Brand.Crimson,
-                fontSize=12.sp,modifier=Modifier.weight(1f))
-            Text("+216 ••••••"+phone.takeLast(2),color=Brand.Muted,fontSize=11.sp)
+            Icon(Icons.Outlined.Security,null,
+                tint=Brand.Crimson,modifier=Modifier.size(17.dp))
+            Text(s(R.string.pilot_session_badge),
+                color=Brand.Ink,fontSize=12.sp,modifier=Modifier.weight(1f))
+            Text("+216 ••••••"+phone.takeLast(2),
+                color=Brand.Muted,fontSize=11.sp)
             TextButton(onClick=onSignOut){Text(s(R.string.pilot_sign_out),fontSize=12.sp)}
         }
     }

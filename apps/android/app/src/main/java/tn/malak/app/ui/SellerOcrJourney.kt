@@ -140,20 +140,18 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
         mutableStateOf<LocalDocumentOcr.FrontScan?>(null)
     }
     var frontReadBusy by remember(draftFile){mutableStateOf(false)}
-    var frontReadFailed by remember(draftFile){mutableStateOf(false)}
-    var captureOcrConsent by remember(draftFile){mutableStateOf(false)}
     LaunchedEffect(draftFile,pendingPhoto?.uploadKey,
-        captureOcrConsent,ownerSession,authenticatedOwnerSession,pilotOcrSession,canReadPrivateId){
+        ownerSession,authenticatedOwnerSession,pilotOcrSession,canReadPrivateId){
         val pending=pendingPhoto
-        frontRead=null;frontReadFailed=false;frontReadBusy=false
+        frontRead=null;frontReadBusy=false
         if(pending!=null){
             if(!canReadPrivateId){
                 frontRead=LocalDocumentOcr.FrontScan(null,null,null,null,null,0,
                     LocalDocumentOcr.FrontIssue.SESSION_REQUIRED)
-            }else if(!captureOcrConsent){
-                frontRead=LocalDocumentOcr.FrontScan(null,null,null,null,null,0,
-                    LocalDocumentOcr.FrontIssue.CONSENT_REQUIRED)
             }else{
+                // Camera's explicit "capture and read" action is informed
+                // consent to one transient preview; no persistent evidence
+                // upload or verification is implied.
                 frontReadBusy=true
                 try{
                     if(pilotOcrSession!=null){
@@ -429,42 +427,33 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                 }
                 3 -> {
                     SectionHeading(s(R.string.identity_section),s(R.string.identity_hint))
-                    if(canReadPrivateId){
-                        Row(Modifier.fillMaxWidth(),
-                            verticalAlignment=Alignment.CenterVertically){
-                            Checkbox(checked=captureOcrConsent,
-                                onCheckedChange={captureOcrConsent=it})
-                            Text(s(R.string.camera_huawei_consent),Modifier.weight(1f),
-                                color=Brand.Ink,fontSize=12.sp,lineHeight=19.sp)
-                        }
-                    }else{
-                        PlainNotice(Icons.Outlined.Info,
-                            s(R.string.camera_pilot_no_ocr))
-                    }
-                    Surface(color=Color.White,shape=RoundedCornerShape(21.dp),border=BorderStroke(1.dp,CardBorder)) {
-                        Column(Modifier.fillMaxWidth().padding(20.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
-                            Icon(Icons.Outlined.Badge,null,Modifier.size(34.dp),tint=Brand.Crimson)
-                            Text(s(R.string.identity_front_only),color=Brand.Ink,fontSize=13.sp)
-                            Button(onClick={cameraVisible=true},
-                                modifier=Modifier.fillMaxWidth().heightIn(min=55.dp),
-                                shape=RoundedCornerShape(16.dp),
-                                colors=ButtonDefaults.buttonColors(containerColor=Brand.Crimson)){
-                                Icon(Icons.Outlined.CameraAlt,null,Modifier.size(22.dp))
-                                Spacer(Modifier.width(8.dp))
-                                Text(s(R.string.camera_front_action))
+                    if(pendingPhoto==null&&!identitySelected){
+                        Surface(color=Color.White,
+                            shape=RoundedCornerShape(20.dp),
+                            border=BorderStroke(1.dp,CardBorder)){
+                            Column(Modifier.fillMaxWidth().padding(18.dp),
+                                verticalArrangement=Arrangement.spacedBy(13.dp)){
+                                Button(onClick={cameraVisible=true},
+                                    modifier=Modifier.fillMaxWidth().heightIn(min=56.dp),
+                                    shape=RoundedCornerShape(16.dp),
+                                    colors=ButtonDefaults.buttonColors(containerColor=Brand.Crimson)){
+                                    Icon(Icons.Outlined.CameraAlt,null,Modifier.size(22.dp))
+                                    Spacer(Modifier.width(10.dp))
+                                    Text(s(R.string.camera_front_action),fontSize=15.sp)
+                                }
+                                Text(s(R.string.camera_capture_disclosure),
+                                    color=Brand.Muted,fontSize=12.sp,lineHeight=19.sp)
                             }
-                            Text(s(R.string.camera_field_guide_note),
-                                color=Brand.Muted,fontSize=12.sp)
                         }
                     }
                     if(pendingPhoto!=null){
                         val pending=pendingPhoto!!
                         Surface(color=Color.White,shape=RoundedCornerShape(20.dp),
                             border=BorderStroke(1.dp,CardBorder)){
-                            Column(Modifier.fillMaxWidth().padding(14.dp),
-                                verticalArrangement=Arrangement.spacedBy(10.dp)){
+                            Column(Modifier.fillMaxWidth().padding(16.dp),
+                                verticalArrangement=Arrangement.spacedBy(12.dp)){
                                 Text(s(R.string.camera_review_title),
-                                    color=Brand.Ink,fontSize=17.sp,
+                                    color=Brand.Ink,fontSize=18.sp,
                                     fontWeight=FontWeight.SemiBold)
                                 val preview=remember(pending.uri){
                                     runCatching{
@@ -474,40 +463,34 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                                         }
                                     }.getOrNull()
                                 }
-                                if(preview!=null){
-                                    // Whole photo, letterboxed; no extra crop
-                                    // after CameraX's capture orientation.
+                                if(preview!=null)
                                     Image(preview.asImageBitmap(),null,
-                                        modifier=Modifier.fillMaxWidth().height(270.dp),
+                                        modifier=Modifier.fillMaxWidth().heightIn(max=255.dp)
+                                            .height(235.dp),
                                         contentScale=ContentScale.Fit)
-                                }
                                 if(frontReadBusy)
                                     LinearProgressIndicator(Modifier.fillMaxWidth())
-                                // Show fields only for an actual authorized OCR
-                                // response, not for pilot/consent/network errors.
-                                val hasOcr=FrontReviewPolicy.showFields(
-                                    canReadPrivateId,captureOcrConsent,frontReadBusy,
-                                    frontRead!=null,frontRead?.issue==null)
-                                if(hasOcr){
-                                    val scan=frontRead!!
-                                    if(scan.fullName!=null)
-                                        SummaryFact(s(R.string.camera_review_name),
-                                            scan.fullName)
-                                    if(scan.cinLast4!=null)
-                                        SummaryFact(s(R.string.camera_review_cin),
-                                            "••••"+scan.cinLast4)
-                                    if(scan.birthDate!=null)
-                                        SummaryFact(s(R.string.camera_review_birth),
-                                            scan.birthDate)
+                                val scan=frontRead?.takeIf{it.issue==null}
+                                val waiting=frontReadBusy||frontRead==null
+                                val placeholder=s(if(waiting)
+                                    R.string.camera_field_pending else R.string.camera_field_missing)
+                                // One compact readout, never five oversized
+                                // duplicate "unreadable" failure cards.
+                                Column(verticalArrangement=Arrangement.spacedBy(2.dp)){
+                                    OcrDataRow(s(R.string.local_surname),
+                                        scan?.surname?:placeholder)
+                                    OcrDataRow(s(R.string.local_given_name),
+                                        scan?.givenName?:placeholder)
+                                    OcrDataRow(s(R.string.camera_review_cin),
+                                        scan?.cinFull?:placeholder,
+                                        numeric=true)
+                                    OcrDataRow(s(R.string.camera_review_birth),
+                                        scan?.birthDate?:placeholder,
+                                        numeric=true)
                                 }
-                                val reviewMessage=when{
-                                    !canReadPrivateId->R.string.camera_pilot_no_ocr
+                                val message=when{
                                     frontReadBusy->R.string.camera_review_scanning
-                                    frontRead?.issue==
-                                        LocalDocumentOcr.FrontIssue.CONSENT_REQUIRED->
-                                        R.string.camera_huawei_consent_required
-                                    frontRead?.issue==
-                                        LocalDocumentOcr.FrontIssue.SESSION_REQUIRED->
+                                    !canReadPrivateId->
                                         R.string.camera_huawei_login_required
                                     frontRead?.issue==
                                         LocalDocumentOcr.FrontIssue.SERVICE_UNAVAILABLE->
@@ -515,48 +498,34 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                                     frontRead?.issue==
                                         LocalDocumentOcr.FrontIssue.LOW_RESOLUTION->
                                         R.string.camera_image_low_resolution
-                                    frontRead?.readyForReview==true->
+                                    frontRead?.issue!=null->
+                                        R.string.camera_review_failed
+                                    scan?.surname!=null&&scan.givenName!=null&&
+                                        scan.cinFull!=null&&scan.birthDate!=null->
                                         R.string.camera_review_ready
-                                    frontRead?.readyForManualReview==true->
-                                        R.string.camera_review_manual
-                                    frontRead!=null->R.string.camera_review_unreadable
-                                    else->R.string.camera_review_scanning
+                                    else->R.string.camera_review_manual
                                 }
-                                Text(s(reviewMessage),fontSize=13.sp,
-                                    lineHeight=20.sp,color=Brand.Muted)
-                                if(canReadPrivateId)
-                                    Text(s(R.string.camera_review_privacy),
-                                        fontSize=11.sp,color=Brand.Muted)
+                                Text(s(message),color=Brand.Muted,
+                                    fontSize=12.sp,lineHeight=19.sp)
                             }
                         }
-                    }
-                    if(identityMessage!=0)Text(s(identityMessage),color=Brand.Muted,fontSize=12.sp)
-                    if(identityFiles.isEmpty())PlainNotice(Icons.Outlined.Badge,s(R.string.identity_none))
-                    else {
-                        Text(s(R.string.identity_selected),color=Brand.Ink,fontSize=15.sp,fontWeight=FontWeight.SemiBold)
-                        identityFiles.toList().forEachIndexed { index,doc ->
-                            Surface(shape=RoundedCornerShape(16.dp),color=Color.White,border=BorderStroke(1.dp,CardBorder)) {
-                                Row(Modifier.fillMaxWidth().heightIn(min=56.dp).padding(horizontal=11.dp),
-                                    verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(10.dp)) {
-                                    Icon(Icons.Outlined.InsertDriveFile,null,tint=Brand.Crimson,modifier=Modifier.size(23.dp))
-                                    val faceLabel=R.string.camera_front_action
-                                     Text("${s(faceLabel)}: ${doc.displayName}",Modifier.weight(1f),
-                                        color=Brand.Ink,maxLines=1,overflow=TextOverflow.Ellipsis,fontSize=13.sp)
-                                    IconButton(onClick={
-                                        identityFiles.forEach{PrivateCaptureMemory.discard(it.uri)}
-                                        identityFiles.clear()
-                                        acceptedFrontKey=null
-                                        identityMessage=0
-                                    },modifier=Modifier.size(48.dp)) {
-                                        Icon(Icons.Outlined.DeleteOutline,s(R.string.remove),tint=Brand.Muted)
-                                    }
+                    }else if(identitySelected){
+                        Surface(color=Color(0xFFE9F6F1),
+                            shape=RoundedCornerShape(17.dp)){
+                            Row(Modifier.fillMaxWidth().padding(15.dp),
+                                verticalAlignment=Alignment.CenterVertically,
+                                horizontalArrangement=Arrangement.spacedBy(12.dp)){
+                                Icon(Icons.Outlined.CheckCircle,null,
+                                    tint=Color(0xFF178063))
+                                Text(s(R.string.camera_photo_accepted),
+                                    Modifier.weight(1f),color=Brand.Ink,
+                                    fontWeight=FontWeight.SemiBold)
+                                TextButton(onClick={cameraVisible=true}){
+                                    Text(s(R.string.camera_review_retake))
                                 }
                             }
                         }
                     }
-                    if(!identitySelected)PlainNotice(Icons.Outlined.Info,s(R.string.identity_required))
-                    else PlainNotice(Icons.Outlined.CheckCircle,s(R.string.pair_front_only))
-                    PlainNotice(Icons.Outlined.Lock,s(R.string.identity_privacy))
                 }
                 else -> {
                     SectionHeading(s(R.string.summary_title),s(R.string.summary_hint))
@@ -813,21 +782,15 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                     Button(onClick={
                         val pending=pendingPhoto
                         if(pending!=null){
-                            if(frontRead?.readyForReview==true||
-                                frontRead?.readyForManualReview==true){
-                                identityFiles.forEach{
-                                    PrivateCaptureMemory.discard(it.uri)
-                                }
-                                identityFiles.clear()
-                                identityFiles.add(pending)
-                                acceptedFrontKey=pending.uploadKey
-                            }
+                            identityFiles.forEach{PrivateCaptureMemory.discard(it.uri)}
+                            identityFiles.clear()
+                            identityFiles.add(pending)
+                            acceptedFrontKey=pending.uploadKey
                             pendingPhoto=null
                             frontRead=null
-                            identityMessage=R.string.file_selected
+                            identityMessage=0
                         }
-                    },enabled=(frontRead?.readyForReview==true||
-                        frontRead?.readyForManualReview==true)&&!frontReadBusy,
+                    },enabled=!frontReadBusy,
                         modifier=Modifier.weight(1f).heightIn(min=54.dp)){
                         Text(s(R.string.camera_review_accept))
                     }
@@ -878,6 +841,22 @@ private fun PlainNotice(icon:androidx.compose.ui.graphics.vector.ImageVector,mes
             Icon(icon,null,Modifier.size(22.dp),tint=Color(0xFF26718B))
             Text(message,Modifier.weight(1f),fontSize=12.sp,color=Brand.Ink,lineHeight=19.sp)
         }
+    }
+}
+
+@Composable
+private fun OcrDataRow(label:String,value:String,numeric:Boolean=false){
+    Row(Modifier.fillMaxWidth().heightIn(min=48.dp)
+        .padding(horizontal=4.dp,vertical=7.dp),
+        verticalAlignment=Alignment.CenterVertically,
+        horizontalArrangement=Arrangement.spacedBy(12.dp)){
+        Text(label,Modifier.weight(1f),fontSize=12.sp,
+            color=Brand.Muted)
+        Text(value,Modifier.weight(1.2f),fontSize=15.sp,
+            fontWeight=FontWeight.SemiBold,color=Brand.Ink,
+            textAlign=TextAlign.End,
+            style=TextStyle(textDirection=if(numeric)
+                TextDirection.Ltr else TextDirection.Content))
     }
 }
 

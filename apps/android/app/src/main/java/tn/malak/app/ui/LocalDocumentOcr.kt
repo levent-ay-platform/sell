@@ -17,7 +17,8 @@ internal object LocalDocumentOcr {
     internal data class FrontScan(
         val surname:String?,val givenName:String?,val fullName:String?,
         val cinLast4:String?,val birthDate:String?,val confidence:Int,
-        val issue:FrontIssue?=null
+        val issue:FrontIssue?=null,
+        val cinFull:String?=null
     ) {
         private val readableCore:Boolean get()=
             issue==null&&surname!=null&&givenName!=null&&fullName!=null&&
@@ -154,6 +155,12 @@ internal object LocalDocumentOcr {
             if(confidence !in 0..100)throw IllegalStateException("HUAWEI_OCR_BAD_CONFIDENCE")
             val last4=if(json.isNull("cinLast4"))null
                 else json.optString("cinLast4").takeIf{it.matches(Regex("""\d{4}"""))}
+            val full=if(!json.has("cinFull")||json.isNull("cinFull"))null
+                else json.optString("cinFull").also{
+                    if(!it.matches(Regex("""[0-9]{8}"""))||
+                       it.takeLast(4)!=last4)
+                        throw IllegalStateException("HUAWEI_OCR_BAD_CIN")
+                }
             val birth=if(json.isNull("birthDate"))null
                 else json.optString("birthDate").takeIf{
                     it.matches(Regex("""[0-9]{4}-[0-9]{2}-[0-9]{2}"""))&&
@@ -165,7 +172,7 @@ internal object LocalDocumentOcr {
                 }
             FrontScan(surname,given,
                 if(surname!=null&&given!=null)"$surname $given" else null,
-                last4,birth,confidence)
+                last4,birth,confidence,cinFull=full)
         }catch (cancel:kotlinx.coroutines.CancellationException){throw cancel}
         catch (_:Exception){no(FrontIssue.SERVICE_UNAVAILABLE)}
         finally{conn.disconnect()}
