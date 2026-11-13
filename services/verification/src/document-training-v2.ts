@@ -144,7 +144,7 @@ const TITLES:readonly {kind:SupportedKind;rule:string;pattern:RegExp}[]=[
   {kind:'SALE_DEED',rule:'SALE_DEED_HEADING',pattern:/(?:انجاز|اشهاد|عقد)\s+(?:ال)?بيع|acte\s+de\s+vente/iu},
   {kind:'POSSESSION_REPORT',rule:'POSSESSION_REPORT_HEADING',pattern:/محضر\s+(?:معاين[ةه]\s+)?تحويز|proc[eè]s.verbal\s+de\s+prise\s+de\s+possession/iu},
   {kind:'FINANCIAL_RECEIPT',rule:'QUITTANCE_HEADING',pattern:/quittance\s*(?:n[°o.]|num[eé]ro)?|وصل\s+قبض/iu},
-  {kind:'PROPERTY_SERVICE_RECEIPT',rule:'CPF_SERVICE_RECEIPT_HEADING',pattern:/وصل\s+تسلم\s+مطلب\s+خدم[ةه]\s+و\s+استخلاص\s+معاليم/iu},
+  {kind:'PROPERTY_SERVICE_RECEIPT',rule:'CPF_SERVICE_RECEIPT_HEADING',pattern:/وصل\s+تسلم\s+مطلب\s+خدم[ةه]\s+و\s*استخلاص\s+معاليم/iu},
 ];
 function normalizeTitle(s:string):string {
   return s.normalize('NFKC')
