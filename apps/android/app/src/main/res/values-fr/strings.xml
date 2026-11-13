@@ -239,4 +239,12 @@
     <string name="camera_capture_disclosure">En photographiant, vous envoyez la photo de façon sécurisée pour en extraire le texte, sans validation automatique de l’identité ni de la propriété.</string>
     <string name="review_auth_needed">Votre photo reste privée. La comparaison des documents nécessite un compte vérifié.</string>
     <string name="review_send_disclosure">En choisissant « Comparer les documents », vous acceptez leur envoi sécurisé pour examen, sans validation automatique de propriété.</string>
+    <string name="smart_step_documents">Documents</string>
+    <string name="smart_land_title_prefix">Terrain à vendre à</string>
+    <string name="smart_area_unit">m²</string>
+    <string name="smart_title_use">Utiliser ce titre suggéré</string>
+    <string name="smart_unit_price">Prix au m² calculé à partir du prix saisi</string>
+    <string name="smart_preview_heading">Aperçu de votre annonce</string>
+    <string name="smart_preview_disclosure">Cet aperçu utilise uniquement vos données. Il ne prouve pas la propriété et ne publie pas votre annonce.</string>
+    <string name="smart_autosave_hint">Données enregistrées automatiquement sur cet appareil. Les images de vos documents ne sont pas conservées avec le brouillon.</string>
 </resources>
