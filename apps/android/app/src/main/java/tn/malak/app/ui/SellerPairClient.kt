@@ -22,7 +22,8 @@ internal data class OwnerEvidenceSession(val httpsBaseUrl:String, val caseId:Str
 internal val LocalOwnerEvidenceSession=staticCompositionLocalOf<OwnerEvidenceSession?>{null}
 
 internal data class PairEvidenceFile(val uri:Uri,val expectedBytes:Long,val mime:String,
-    val idempotencyKey:String=UUID.randomUUID().toString())
+    val idempotencyKey:String=UUID.randomUUID().toString(),
+    val evidenceKind:String="OWNERSHIP_CERTIFICATE")
 internal enum class PairProgress { CASE_PROVISION,CERTIFICATE_UPLOAD,IDENTITY_UPLOAD,COMPARING }
 internal data class PairNameEvidence(val value:String,val page:Int,val source:String,val confidence:Int?)
 /** PII is shown only in the user's local screen and never persisted or logged. */
@@ -31,12 +32,15 @@ internal data class LocalOcrFields(
     val surname:String?,val givenName:String?,val cinLast4:String?,
     val birthDate:String?
 )
+internal data class UnifiedRoleStatus(val role:String,val assessment:String,val page:Int?)
 internal data class CertificateIdentityReview(
     val assessment:String,val certificateName:PairNameEvidence?,val identityName:PairNameEvidence?,
     val cinStatus:String,val reasons:List<String>,val identityCapture:String,
     val certificatePages:Int,val identityPages:Int,
     val ownershipVerified:Boolean=false,val identityVerified:Boolean=false,
-    val mayPublish:Boolean=false,val localFields:LocalOcrFields?=null)
+    val mayPublish:Boolean=false,val localFields:LocalOcrFields?=null,
+    val detectedKind:String?=null,val unifiedAssessment:String?=null,
+    val unifiedRoles:List<UnifiedRoleStatus> = emptyList())
 internal class OwnerPairException(val statusCode:Int):Exception("PRIVATE_PAIR_UNAVAILABLE")
 
 private const val DOC_LIMIT=12L*1024L*1024L
@@ -47,6 +51,16 @@ private val TOKEN=Regex("^[A-Za-z0-9._~+/-]{20,4096}$")
 private val MIME=setOf("application/pdf","image/jpeg","image/png","image/tiff")
 private val ASSESSMENTS=setOf("PRELIMINARY_TEXT_AGREEMENT","TEXT_DIFFERENCE_NEEDS_REVIEW","INSUFFICIENT_OR_AMBIGUOUS")
 private val CIN=setOf("SAME_NUMBER_UNVERIFIED","NUMBER_DIFFERS_NEEDS_REVIEW","NOT_COMPARABLE","AMBIGUOUS_OR_LOW_CONFIDENCE")
+private val DOCUMENT_KINDS=setOf("OWNERSHIP_CERTIFICATE","SHARED_OWNERSHIP_CERTIFICATE",
+    "SALE_DEED","TRANSFER_CARD","POSSESSION_REPORT","FINANCIAL_RECEIPT",
+    "PROPERTY_SERVICE_RECEIPT","OTHER_LEGAL_PROOF","TITLE_EXTRACT")
+private val DETECTED_KINDS=(DOCUMENT_KINDS-setOf("OTHER_LEGAL_PROOF","TITLE_EXTRACT"))+
+    setOf("UNKNOWN")
+private val UNIFIED_ASSESSMENTS=setOf("ROLE_TEXT_MATCH_ONLY","ROLE_TEXT_DIFFERENCE",
+    "ROLE_AMBIGUOUS","INSUFFICIENT_EVIDENCE")
+private val ROLE_NAMES=setOf("REGISTERED_HOLDER","SHARED_RIGHTS_HOLDER",
+    "BUYER","SELLER","TRANSFEREE","TRANSFEROR","SERVICE_APPLICANT",
+    "POSSESSION_REQUESTER","PAYMENT_PAYER")
 private const val FRONT_CAPTURE="FRONT_IMAGE_ONLY_UNVERIFIED"
 
 private fun validateSession(session:OwnerEvidenceSession):String {
@@ -58,7 +72,9 @@ private fun validateSession(session:OwnerEvidenceSession):String {
     return uri.toASCIIString().trimEnd('/')
 }
 private fun validateFiles(cert:List<PairEvidenceFile>,identity:List<PairEvidenceFile>) {
-    if(cert.isEmpty()||cert.size>8||identity.size!=1)throw OwnerPairException(400)
+    if(cert.isEmpty()||cert.size>8||identity.size!=1||
+        cert.any{it.evidenceKind !in DOCUMENT_KINDS})
+        throw OwnerPairException(400)
     val all=cert+identity
     if(all.any{it.expectedBytes !in 20..DOC_LIMIT||it.mime !in MIME||
         it.uri.scheme!="content"||!KEY.matches(it.idempotencyKey)}||
@@ -182,14 +198,44 @@ private fun parseReview(body:JSONObject):CertificateIdentityReview {
         if(!Regex("^[A-Z0-9_]{3,80}$").matches(v))throw OwnerPairException(502)
         v
     }
+    val unified=report.optJSONObject("unifiedComparison")
+    var kind:String?=null
+    var unifiedStatus:String?=null
+    var roles:List<UnifiedRoleStatus> = emptyList()
+    if(unified!=null) {
+        if(unified.optBoolean("legalOwnershipVerified",true)||
+           unified.optBoolean("identityVerified",true)||
+           unified.optBoolean("mayPublish",true)||
+           !unified.optBoolean("requiresHumanReview",false)||
+           unified.optString("identityCapture")!=FRONT_CAPTURE)
+            throw OwnerPairException(502)
+        kind=unified.optString("detectedKind")
+        unifiedStatus=unified.optString("assessment")
+        if(kind !in DETECTED_KINDS||unifiedStatus !in UNIFIED_ASSESSMENTS)
+            throw OwnerPairException(502)
+        val all=unified.optJSONArray("roles")?:throw OwnerPairException(502)
+        if(all.length()>8)throw OwnerPairException(502)
+        roles=(0 until all.length()).map{i->
+            val item=all.optJSONObject(i)?:throw OwnerPairException(502)
+            val role=item.optString("role")
+            val status=item.optString("assessment")
+            val page=if(item.isNull("documentPage"))null
+                else item.optInt("documentPage").takeIf{it in 1..8}
+            if(role !in ROLE_NAMES||status !in ASSESSMENTS||
+                (!item.isNull("documentPage")&&page==null))
+                throw OwnerPairException(502)
+            UnifiedRoleStatus(role,status,page)
+        }
+    }
     return CertificateIdentityReview(assessment,nameOf(comparison,"certificateName"),
-        nameOf(comparison,"identityName"),cinStatus,reasons,capture,certPages,idPages)
+        nameOf(comparison,"identityName"),cinStatus,reasons,capture,certPages,idPages,
+        detectedKind=kind,unifiedAssessment=unifiedStatus,unifiedRoles=roles)
 }
 /**
  * Only explicit user action uploads files. Server-owned case/consent required.
  * No automatic retry, no credential/doc/report persistence, no QR/legal approval.
  */
-internal suspend fun compareOwnerCertificateAndIdentity(
+internal suspend fun compareOwnerDocumentsAndIdentity(
     context:Context,session:OwnerEvidenceSession,
     certificates:List<PairEvidenceFile>,identities:List<PairEvidenceFile>,
     onProgress:(PairProgress)->Unit={}
@@ -200,7 +246,7 @@ internal suspend fun compareOwnerCertificateAndIdentity(
     val identityIds=mutableListOf<String>()
     for((i,file) in certificates.withIndex()){
         withContext(Dispatchers.Main){onProgress(PairProgress.CERTIFICATE_UPLOAD)}
-        certIds.add(upload(context,session,base,file,"OWNERSHIP_CERTIFICATE",
+        certIds.add(upload(context,session,base,file,file.evidenceKind,
             if(file.mime=="application/pdf")null else i+1))
     }
     withContext(Dispatchers.Main){onProgress(PairProgress.IDENTITY_UPLOAD)}
@@ -217,3 +263,11 @@ internal suspend fun compareOwnerCertificateAndIdentity(
         parseReview(readJson(c,200))
     }finally{payload.fill(0);c.disconnect()}
 }
+
+/** Source-compatible alias for existing installed clients/tests. */
+internal suspend fun compareOwnerCertificateAndIdentity(
+    context:Context,session:OwnerEvidenceSession,
+    certificates:List<PairEvidenceFile>,identities:List<PairEvidenceFile>,
+    onProgress:(PairProgress)->Unit={}
+):CertificateIdentityReview=compareOwnerDocumentsAndIdentity(
+    context,session,certificates,identities,onProgress)

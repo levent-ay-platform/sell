@@ -305,15 +305,15 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
         PrivateCaptureMemory.length(identityFiles[0].uri)==identityFiles[0].length
     // Front-only secure comparison requires explicit consent and genuine login.
     val identityReadyForRemote=identitySelected
-    // Existing private pair engine only understands OWNERSHIP_CERTIFICATE.
-    // Do not silently pass receipts, contracts or unknown documents as title.
-    val canRunCertificatePair=files.isNotEmpty()&&
+    // One private matcher for the seven document classes. Mixed document
+    // families must be reviewed separately; UNKNOWN continuation pages may
+    // accompany ONE recognized document without inventing its type.
+    val knownDocumentKinds=familyReadings.map{it.familyKind}
+        .filter{it!="UNKNOWN"}.distinct()
+    val canRunUnifiedPair=files.isNotEmpty()&&
         familyReadings.size==files.size &&
-        familyReadings.all{it.status=="READY"&&
-            it.familyKind in setOf("OWNERSHIP_CERTIFICATE","UNKNOWN")}&&
-        familyReadings.any{it.familyKind=="OWNERSHIP_CERTIFICATE"}
-    // Unknown continuation pages are allowed after a recognized certificate;
-    // a conflicting second legal-document type is never auto-compared.
+        familyReadings.all{it.status=="READY"}&&
+        knownDocumentKinds.size==1
     // Tunisian/French comma is normalized only for numeric validation and API.
     val normalizedArea=area.replace(',', '.')
     val validArea=normalizedArea.matches(ValidLandArea)
@@ -797,13 +797,19 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                             else R.string.pair_review_received))
                     VerificationStage(Icons.Outlined.CompareArrows,
                         s(R.string.match_status),
-                        s(when(pairReport?.assessment){
+                        s(when(pairReport?.unifiedAssessment?:pairReport?.assessment){
+                            "ROLE_TEXT_MATCH_ONLY"->R.string.unified_role_match
+                            "ROLE_TEXT_DIFFERENCE"->R.string.unified_role_difference
+                            "ROLE_AMBIGUOUS"->R.string.unified_role_ambiguous
+                            "INSUFFICIENT_EVIDENCE"->R.string.unified_role_inconclusive
                             "PRELIMINARY_TEXT_AGREEMENT"->R.string.pair_agreement
                             "TEXT_DIFFERENCE_NEEDS_REVIEW"->R.string.pair_difference
                             "INSUFFICIENT_OR_AMBIGUOUS"->R.string.pair_uncertain
                             else->R.string.match_pending
                         }),
-                        when(pairReport?.assessment){
+                        when(pairReport?.unifiedAssessment?:pairReport?.assessment){
+                            "ROLE_TEXT_MATCH_ONLY","ROLE_TEXT_DIFFERENCE",
+                            "ROLE_AMBIGUOUS","INSUFFICIENT_EVIDENCE"->ReadingStatus.REVIEW
                             "PRELIMINARY_TEXT_AGREEMENT"->ReadingStatus.EXTRACTED
                             "TEXT_DIFFERENCE_NEEDS_REVIEW",
                             "INSUFFICIENT_OR_AMBIGUOUS"->ReadingStatus.REVIEW
@@ -815,6 +821,18 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                         Surface(shape=RoundedCornerShape(18.dp),
                             color=Color.White,border=BorderStroke(1.dp,CardBorder)){
                             Column(Modifier.fillMaxWidth().padding(14.dp)){
+                                if(result.unifiedAssessment!=null&&
+                                    result.detectedKind!="OWNERSHIP_CERTIFICATE"){
+                                    OcrDataRow(s(R.string.unified_document_kind),
+                                        s(documentFamilyLabel(result.detectedKind?:"UNKNOWN")))
+                                    result.unifiedRoles.forEach{role->
+                                        HorizontalDivider(color=CardBorder)
+                                        OcrDataRow(s(unifiedRoleLabel(role.role)),
+                                            s(unifiedRoleAssessmentLabel(role.assessment)))
+                                    }
+                                    Text(s(R.string.unified_not_ownership),
+                                        fontSize=12.sp,color=Brand.Muted,lineHeight=18.sp)
+                                }else{
                                 OcrDataRow(s(R.string.pair_certificate_owner),
                                     result.certificateName?.value
                                         ?:s(R.string.camera_field_missing))
@@ -842,12 +860,15 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                                             local.areaM2+" m²",numeric=true)
                                     }
                                 }
+                                }
                             }
                         }
-                        result.reasons.distinct().forEach{code->
-                            Text(s(pairReasonText(code)),
-                                color=Brand.Muted,fontSize=12.sp,lineHeight=18.sp)
-                        }
+                        if(result.unifiedAssessment==null||
+                            result.detectedKind=="OWNERSHIP_CERTIFICATE")
+                            result.reasons.distinct().forEach{code->
+                                Text(s(pairReasonText(code)),
+                                    color=Brand.Muted,fontSize=12.sp,lineHeight=18.sp)
+                            }
                         PlainNotice(Icons.Outlined.Info,
                             s(R.string.pair_preliminary_only))
                     }
@@ -869,15 +890,17 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                         Text(s(R.string.review_send_disclosure),
                             color=Brand.Muted,fontSize=12.sp,lineHeight=18.sp)
                         Text(s(if(familyReadings.isEmpty())R.string.smart_pair_first_read
-                            else if(!canRunCertificatePair)R.string.smart_pair_supported_review
-                            else R.string.smart_pair_certificate_only_notice),
+                            else if(!canRunUnifiedPair)R.string.unified_review_separately
+                            else R.string.unified_identity_hint),
                             color=Brand.Muted,fontSize=12.sp,lineHeight=18.sp)
                         Button(onClick={
                             if(pairProgress!=null||files.isEmpty()||!identityReadyForRemote||
-                                !canRunCertificatePair)
+                                !canRunUnifiedPair)
                                 return@Button
-                            val cert=files.toList().map{
-                                PairEvidenceFile(it.uri,it.length,it.mime,it.uploadKey)
+                            val cert=files.toList().mapIndexed{index,item->
+                                val detected=familyReadings[index].familyKind
+                                PairEvidenceFile(item.uri,item.length,item.mime,item.uploadKey,
+                                    if(detected=="UNKNOWN")"OTHER_LEGAL_PROOF" else detected)
                             }
                             val idDocs=identityFiles.toList().map{
                                 PairEvidenceFile(it.uri,it.length,it.mime,it.uploadKey)
@@ -923,7 +946,7 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                                             NewOwnerCaseDraft(caseRequestKey,listingTitle,region.trim(),
                                                 normalizedArea,price,capacity)
                                         ).also{if(requestEpoch==thisRequest)provisionedCase=it}
-                                    val result=compareOwnerCertificateAndIdentity(
+                                    val result=compareOwnerDocumentsAndIdentity(
                                         context,activeCase,cert,idDocs){
                                         if(requestEpoch==thisRequest)pairProgress=it
                                     }
@@ -952,7 +975,7 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                                 }
                             }
                         },enabled=pairProgress==null&&files.isNotEmpty()&&identityReadyForRemote&&
-                            canRunCertificatePair,
+                            canRunUnifiedPair,
                             modifier=Modifier.fillMaxWidth().heightIn(min=54.dp),
                             colors=ButtonDefaults.buttonColors(containerColor=Brand.Crimson),
                             shape=RoundedCornerShape(16.dp)) {
@@ -1142,4 +1165,22 @@ private fun familyFactLabel(key:String):Int=when(key){
     "transferredAreaM2"->R.string.smart_fact_transferred_area
     "soldPlotNumber"->R.string.smart_fact_sold_plot
     else->R.string.smart_fact_other
+}
+
+private fun unifiedRoleLabel(role:String):Int=when(role){
+    "REGISTERED_HOLDER"->R.string.unified_role_holder
+    "SHARED_RIGHTS_HOLDER"->R.string.unified_role_shared
+    "BUYER"->R.string.unified_role_buyer
+    "SELLER"->R.string.unified_role_seller
+    "TRANSFEREE"->R.string.unified_role_transferee
+    "TRANSFEROR"->R.string.unified_role_transferor
+    "SERVICE_APPLICANT"->R.string.unified_role_applicant
+    "POSSESSION_REQUESTER"->R.string.unified_role_possessor
+    "PAYMENT_PAYER"->R.string.unified_role_payer
+    else->R.string.unified_role_other
+}
+private fun unifiedRoleAssessmentLabel(assessment:String):Int=when(assessment){
+    "PRELIMINARY_TEXT_AGREEMENT"->R.string.unified_role_match
+    "TEXT_DIFFERENCE_NEEDS_REVIEW"->R.string.unified_role_difference
+    else->R.string.unified_role_inconclusive
 }

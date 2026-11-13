@@ -297,4 +297,22 @@
     <string name="smart_pair_first_read">اقرأ الوثيقة في المرحلة السابقة لتحديد نوعها قبل مقارنة الهوية.</string>
     <string name="smart_pair_supported_review">هذه الوثيقة مقبولة للمراجعة، لكن المقارنة الآلية الحالية لا تدعم نوعها. لن نعرض نتيجة تطابق ملكية غير موثوقة.</string>
     <string name="smart_pair_certificate_only_notice">هذه مقارنة نصية أولية لشهادة الملكية فقط، وليست تحققاً رسمياً.</string>
+    <string name="unified_role_match">تطابق نصي أولي للصفة — قيد المراجعة</string>
+    <string name="unified_role_difference">اختلاف بيانات الشخص — يحتاج مراجعة</string>
+    <string name="unified_role_ambiguous">أكثر من صفة مطابقة — يلزم تدقيق</string>
+    <string name="unified_role_inconclusive">المعلومات غير كافية للمطابقة</string>
+    <string name="unified_document_kind">نوع الوثيقة</string>
+    <string name="unified_not_ownership">مطابقة اسم الشخص مع صفة مذكورة في الوثيقة ليست إثبات ملكية أو تسجيل رسمي.</string>
+    <string name="unified_review_separately">اقرأ مستنداً واضح النوع أولاً. المستندات المختلفة تُراجع كلٌ على حدة، والمجهول مقبول للمراجعة الخاصة.</string>
+    <string name="unified_identity_hint">المحرك يطابق هوية العميل مع الأدوار المذكورة في هذا النوع فقط، ولا يثبت الملكية تلقائياً.</string>
+    <string name="unified_role_holder">صاحب الحق المسجل</string>
+    <string name="unified_role_shared">صاحب حصة في الملكية</string>
+    <string name="unified_role_buyer">المشتري</string>
+    <string name="unified_role_seller">البائع</string>
+    <string name="unified_role_transferee">المنقول إليه</string>
+    <string name="unified_role_transferor">الناقل</string>
+    <string name="unified_role_applicant">طالب الخدمة</string>
+    <string name="unified_role_possessor">طالب التحويز</string>
+    <string name="unified_role_payer">دافع المعاليم</string>
+    <string name="unified_role_other">الشخص المذكور</string>
 </resources>

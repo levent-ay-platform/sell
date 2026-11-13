@@ -297,4 +297,22 @@
     <string name="smart_pair_first_read">Read the document in the previous step before comparing identity.</string>
     <string name="smart_pair_supported_review">Document accepted for private review. Automatic comparison does not yet support this kind and cannot claim matched ownership.</string>
     <string name="smart_pair_certificate_only_notice">This is only a preliminary text comparison for an ownership certificate, not official verification.</string>
+    <string name="unified_role_match">Preliminary role-name text agreement — review required</string>
+    <string name="unified_role_difference">Person-name text differs — review required</string>
+    <string name="unified_role_ambiguous">Multiple matching roles — review required</string>
+    <string name="unified_role_inconclusive">Not enough reliable data for comparison</string>
+    <string name="unified_document_kind">Document type</string>
+    <string name="unified_not_ownership">Matching a named role does not prove registered title, identity or ownership.</string>
+    <string name="unified_review_separately">Read one identifiable document type first. Mixed types need separate private review; unknown kinds are still accepted for review.</string>
+    <string name="unified_identity_hint">The engine compares document-specific roles to identity text, not legal ownership.</string>
+    <string name="unified_role_holder">Registered rights holder</string>
+    <string name="unified_role_shared">Co-owner</string>
+    <string name="unified_role_buyer">Buyer</string>
+    <string name="unified_role_seller">Seller</string>
+    <string name="unified_role_transferee">Transferee</string>
+    <string name="unified_role_transferor">Transferor</string>
+    <string name="unified_role_applicant">Service applicant</string>
+    <string name="unified_role_possessor">Possession requester</string>
+    <string name="unified_role_payer">Fee payer</string>
+    <string name="unified_role_other">Named person</string>
 </resources>

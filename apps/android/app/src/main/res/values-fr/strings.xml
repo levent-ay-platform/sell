@@ -297,4 +297,22 @@
     <string name="smart_pair_first_read">Lisez le document à l’étape précédente avant de comparer l’identité.</string>
     <string name="smart_pair_supported_review">Document accepté pour examen privé. La comparaison automatique ne couvre pas encore ce type; aucune propriété n’est certifiée.</string>
     <string name="smart_pair_certificate_only_notice">Cette comparaison textuelle préliminaire concerne uniquement le certificat de propriété.</string>
+    <string name="unified_role_match">Accord textuel provisoire du rôle — à revoir</string>
+    <string name="unified_role_difference">Différence de nom — vérification nécessaire</string>
+    <string name="unified_role_ambiguous">Plusieurs rôles concordent — contrôle requis</string>
+    <string name="unified_role_inconclusive">Données insuffisantes pour comparer</string>
+    <string name="unified_document_kind">Type de document</string>
+    <string name="unified_not_ownership">Un nom concordant avec un rôle dans ce document ne prouve ni titre ni propriété enregistrée.</string>
+    <string name="unified_review_separately">Lisez d’abord un document identifié. Les types mixtes seront examinés séparément et les documents inconnus restent admissibles à l’examen privé.</string>
+    <string name="unified_identity_hint">Le moteur compare les rôles pertinents à l’identité sans certifier la propriété.</string>
+    <string name="unified_role_holder">Titulaire inscrit</string>
+    <string name="unified_role_shared">Copropriétaire indivis</string>
+    <string name="unified_role_buyer">Acquéreur</string>
+    <string name="unified_role_seller">Vendeur</string>
+    <string name="unified_role_transferee">Bénéficiaire du transfert</string>
+    <string name="unified_role_transferor">Cédant</string>
+    <string name="unified_role_applicant">Demandeur du service</string>
+    <string name="unified_role_possessor">Demandeur de constat</string>
+    <string name="unified_role_payer">Payeur</string>
+    <string name="unified_role_other">Personne mentionnée</string>
 </resources>
