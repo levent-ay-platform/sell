@@ -7,52 +7,43 @@ permissions:
 jobs:
   probe:
     runs-on: ubuntu-latest
-    timeout-minutes: 4
+    timeout-minutes: 3
     steps:
-      - name: Validate non-placeholder land title numbers and search national CKAN catalog for cadastral datasets
+      - name: Search indexed official gazette archive by exact land title, parent and locality (read only)
         run: |
           python3 - <<'PYCODE'
-          import urllib.request,urllib.parse,urllib.error,json,re,time,os,collections,statistics
-          os.makedirs("real_data_source_final",exist_ok=True)
-          def get(label,url,timeout=17):
+          import urllib.request,urllib.parse,urllib.error,json,time,concurrent.futures,os,re
+          os.makedirs("target_title_independent_search",exist_ok=True)
+          queries=["555941","504219","42910","M'Rada","M'rada et Ferjane","Mrada","Ferjane","Khemis","Khmis"]
+          base="https://api.jort.tn/search"
+          def query(q):
+           args={"q":q,"limit":15,"sort":"relevance"}
+           u=base+"?"+urllib.parse.urlencode(args)
            t=time.monotonic()
            try:
-            with urllib.request.urlopen(urllib.request.Request(url,headers={"User-Agent":"Mozilla/5.0 (Malak public official data discovery)","Accept":"application/json"}),timeout=timeout) as r:raw=r.read(700000)
-            j=json.loads(raw);print("GET",label,"OK",len(raw),"elapsed",round(time.monotonic()-t,1),"json_error",j.get("error"),flush=True);return j
-           except Exception as e:print("GET",label,"ERROR",type(e).__name__,str(e)[:110],"elapsed",round(time.monotonic()-t,1),flush=True);return None
-          url="https://services1.arcgis.com/zcZDLWCe77bUzzw7/arcgis/rest/services/Projet_Municipalit%C3%A9_Raoued/FeatureServer/4/query"
-          p={"where":"1=1","outFields":"OBJECTID_12,TFN_رسم,SURFACE","resultRecordCount":"50","returnGeometry":"false","f":"json"}
-          data=get("raoued_lot_numbers",url+"?"+urllib.parse.urlencode(p))
-          if data and data.get("features"):
-           vals=[x.get("attributes",{}).get("TFN_رسم") for x in data["features"]]
-           sizes=[x.get("attributes",{}).get("SURFACE") for x in data["features"]]
-           clean=[str(v).strip() for v in vals if v is not None and str(v).strip()]
-           result={"features":len(vals),"nonblank":len(clean),"numeric_only_count":sum(bool(re.fullmatch(r"\d+",v)) for v in clean),"unique_nonblank":len(set(clean)),"placeholder_count":sum(v in ("0","000","N/A","-") for v in clean),"length_histogram":dict(collections.Counter(len(v) for v in clean)),"surface_numeric_count":len([v for v in sizes if isinstance(v,(int,float))])}
-           print("RAOUED_TITLE_HEALTH",json.dumps(result,ensure_ascii=False),flush=True)
-           with open("real_data_source_final/raoued_title_quality.json","w") as o:json.dump(result,o,ensure_ascii=False,indent=2)
-          # Actual national open data CKAN is separate from vendor-run ArcGIS org
-          terms=["cadastre","parcelle","lotissement","foncier"]
-          ckan=[]
-          for term in terms:
-           u="https://catalog.data.gov.tn/api/3/action/package_search?"+urllib.parse.urlencode({"q":term,"rows":35})
-           j=get("CKAN_"+term,u)
-           if j and j.get("success"):
-            m=j.get("result",{})
-            rows=[{"title":x.get("title"),"name":x.get("name"),"organization":(x.get("organization") or {}).get("title"),"resources":[{"name":q.get("name"),"format":q.get("format"),"url":q.get("url")} for q in x.get("resources",[])][:12]} for x in m.get("results",[])]
-            print("CKAN_FOUND",json.dumps({"term":term,"count":m.get("count"),"returned":len(rows),"items":rows[:25]},ensure_ascii=False)[:14000],flush=True)
-            ckan.append({"term":term,"count":m.get("count"),"items":rows})
-          with open("real_data_source_final/national_open_data_search.json","w",encoding="utf8") as o:json.dump(ckan,o,ensure_ascii=False,indent=2)
-          p=get("CKAN_2025_admin", "https://catalog.data.gov.tn/api/3/action/package_show?id=a04051fe-0b5c-4ff1-bc7d-59dfc2732866")
-          if p and p.get("success"):
-           q=p["result"]
-           resources=[{"name":a.get("name"),"format":a.get("format"),"url":a.get("url"),"size":a.get("size"),"last_modified":a.get("last_modified")} for a in q.get("resources",[])]
-           print("OFFICIAL_ADMIN_GEOJSON",json.dumps({"publisher":(q.get("organization") or {}).get("title"),"title":q.get("title"),"resources":resources},ensure_ascii=False)[:8500],flush=True)
-           with open("real_data_source_final/official_admin_geojson_resources.json","w",encoding="utf8") as o:json.dump(resources,o,ensure_ascii=False,indent=2)
+            req=urllib.request.Request(u,headers={"User-Agent":"Mozilla/5.0 Malak land registry contextual public research","Accept":"application/json"})
+            with urllib.request.urlopen(req,timeout=18) as r:
+             b=r.read(180000);ct=r.headers.get("Content-Type");code=r.status
+            j=json.loads(b)
+            results=[]
+            for x in j.get("results",[]):
+             s=re.sub(r'<[^>]+>'," ",str(x.get("snippet") or ""))
+             results.append({"collection":x.get("collection"),"year":x.get("year"),"issue":x.get("issue"),"page":x.get("page"),"pdf_url":x.get("pdf_url"),"snippet":s[:400]})
+            res={"query":q,"total":j.get("total"),"results":results,"http":code,"elapsed":round(time.monotonic()-t,2),"error":j.get("error")}
+            print("SEARCH",json.dumps(res,ensure_ascii=False)[:6500],flush=True)
+            return res
+           except Exception as e:
+            res={"query":q,"error":type(e).__name__+":"+str(e)[:160],"elapsed":round(time.monotonic()-t,2)}
+            print("SEARCH",json.dumps(res,ensure_ascii=False),flush=True)
+            return res
+          with concurrent.futures.ThreadPoolExecutor(max_workers=3) as pool:res=list(pool.map(query,queries))
+          with open("target_title_independent_search/jort_full_text_matches.json","w",encoding="utf8") as w:json.dump(res,w,ensure_ascii=False,indent=2)
+          print("SUMMARY",json.dumps({"exact_title_555941_matches":next((x.get("total") for x in res if x["query"]=="555941"),None),"parent_504219_matches":next((x.get("total") for x in res if x["query"]=="504219"),None),"sources_checked":"JORT French currently only per docs.jort.tn","status":"negative search must not be treated as absence from Arabic records"},ensure_ascii=False),flush=True)
 
           PYCODE
-      - name: Save verified real estate data-source research
+      - name: Archive search results and exact evidence
         uses: actions/upload-artifact@v4
         with:
-          name: malak-source-discovery-final-ckan-and-titles
-          path: real_data_source_final/
+          name: malak-title555941-jort-independent-crosscheck
+          path: target_title_independent_search/
           retention-days: 7
