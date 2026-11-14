@@ -9,43 +9,29 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 4
     steps:
-      - name: Test real vector feature REST alternatives (group sublayers find identify POST IDs WMS)
+      - name: Compare HTTP and HTTPS for direct PAU Data feature query
         run: |
           python3 - <<'PYCODE'
-          import urllib.request,urllib.parse,urllib.error,json,time,concurrent.futures,re
-          base="https://geopau.gov.tn/arcgisserver/rest/services/public/PAUs_public/MapServer"
+          import urllib.request,urllib.error,urllib.parse,json,time
+          base="geopau.gov.tn/arcgisserver/rest/services/public/PAUs_public/MapServer"
           tests=[
-           ("group63_metadata","GET",base+"/63",{"f":"json"}),
-           ("group63_query","GET",base+"/63/query",{"where":"1=1","outFields":"OBJECTID","f":"json"}),
-           ("zone60_ids","GET",base+"/60/query",{"where":"1=1","returnIdsOnly":"true","f":"json"}),
-           ("zone60_one_by_objectid","GET",base+"/60/query",{"objectIds":"1","outFields":"OBJECTID,Zone_id,Code,Vocation,PAU_ID","returnGeometry":"false","f":"json"}),
-           ("zone60_post_query","POST",base+"/60/query",{"where":"OBJECTID=1","outFields":"OBJECTID,Zone_id,Code,Vocation,PAU_ID","returnGeometry":"false","f":"json"}),
-           ("sector4_ids","GET",base+"/4/query",{"where":"1=1","returnIdsOnly":"true","f":"json"}),
-           ("admin0_one","GET",base+"/0/query",{"where":"OBJECTID=1","outFields":"OBJECTID,Nom","returnGeometry":"false","f":"json"}),
-           ("map_find","GET",base+"/find",{"searchText":"Hammam Ghzez","contains":"true","searchFields":"Nom,Libelle","layers":"0,1,2,4,69","returnGeometry":"false","f":"json"}),
-           ("map_identify","GET",base+"/identify",{"geometry":"11.090,36.843","geometryType":"esriGeometryPoint","sr":"4326","layers":"all:60,138","tolerance":"1","mapExtent":"11.08,36.83,11.11,36.86","imageDisplay":"256,256,96","returnGeometry":"false","f":"json"}),
-           ("map_export_json","GET",base+"/export",{"bbox":"11.07,36.83,11.12,36.87","bboxSR":"4326","imageSR":"4326","size":"256,256","layers":"show:60,138","f":"json"}),
-           ("map_wms_capabilities","GET","https://geopau.gov.tn/arcgisserver/services/public/PAUs_public/MapServer/WMSServer",{"service":"WMS","request":"GetCapabilities","version":"1.3.0"}),
-           ("service_feature_endpoint","GET","https://geopau.gov.tn/arcgisserver/rest/services/public/PAUs_public/FeatureServer",{"f":"json"})
+          ("http_metadata","http://"+base+"/60?f=json"),
+          ("http_query","http://"+base+"/60/query?where=OBJECTID%3D1&outFields=Zone_id%2CCode%2CVocation%2CPAU_ID&returnGeometry=false&f=json"),
+          ("https_query_exact","https://"+base+"/60/query?where=OBJECTID%3D1&outFields=Zone_id%2CCode%2CVocation%2CPAU_ID&returnGeometry=false&f=json"),
+          ("https_query_gov_0","https://"+base+"/0/query?where=OBJECTID%3D1&outFields=Nom&returnGeometry=false&f=json"),
           ]
-          def test(row):
-           tag,method,url,params=row;t=time.monotonic()
+          class NoRedirect(urllib.request.HTTPRedirectHandler):
+           def redirect_request(self,*args):return None
+          for tag,url in tests:
+           t=time.monotonic()
            try:
-            data=urllib.parse.urlencode(params).encode() if method=="POST" else None
-            u=url if data is not None else url+"?"+urllib.parse.urlencode(params)
-            req=urllib.request.Request(u,method=method,data=data,headers={"User-Agent":"Mozilla/5.0 (Malak read-only public ArcGIS API diagnostic)","Accept":"application/json,application/xml;q=0.9,*/*;q=0.2"})
-            with urllib.request.urlopen(req,timeout=18) as r:
-             body=r.read(80000);headers=dict(r.headers.items());status=r.status
-            try:
-             obj=json.loads(body)
-             summary={"keys":list(obj.keys())[:10],"error":obj.get("error"),"features":len(obj["features"]) if isinstance(obj.get("features"),list) else None,"objectIds_count":len(obj["objectIds"]) if isinstance(obj.get("objectIds"),list) else None,"results_count":len(obj["results"]) if isinstance(obj.get("results"),list) else None,"sample":(obj.get("features") or obj.get("results") or [None])[0]}
-            except Exception:
-             s=body.decode("utf8","replace");summary={"first_160":s[:160],"has_layer":bool(re.search("zones|PAU",s,re.I))}
-            print("TEST",json.dumps({"name":tag,"url_path":urllib.parse.urlsplit(u).path,"method":method,"http_status":status,"type":headers.get("Content-Type"),"duration":round(time.monotonic()-t,2),"result":summary},ensure_ascii=False)[:1700],flush=True)
+            with urllib.request.build_opener(NoRedirect()).open(urllib.request.Request(url,headers={"Accept":"application/json","User-Agent":"Mozilla/5.0"}),timeout=13) as r:body=r.read(10000);code=r.status;location=r.headers.get("Location")
+            try:parsed=json.loads(body)
+            except Exception:parsed={"raw_start":body.decode("utf8","replace")[:120]}
+            print("DIFF",json.dumps({"tag":tag,"http":code,"location":location,"keys":list(parsed)[:10],"error":parsed.get("error"),"nfeatures":len(parsed.get("features",[])) if isinstance(parsed.get("features"),list) else None,"secs":round(time.monotonic()-t,1)},ensure_ascii=False),flush=True)
            except urllib.error.HTTPError as e:
-            print("TEST",json.dumps({"name":tag,"method":method,"http_status":e.code,"duration":round(time.monotonic()-t,2),"body":e.read(300).decode("utf8","replace")},ensure_ascii=False),flush=True)
+            print("DIFF",json.dumps({"tag":tag,"http":e.code,"location":e.headers.get("Location"),"preview":e.read(150).decode("utf8","replace"),"secs":round(time.monotonic()-t,1)},ensure_ascii=False),flush=True)
            except Exception as e:
-            print("TEST",json.dumps({"name":tag,"method":method,"exception":type(e).__name__,"message":str(e)[:140],"duration":round(time.monotonic()-t,2)},ensure_ascii=False),flush=True)
-          with concurrent.futures.ThreadPoolExecutor(max_workers=8) as ex:list(ex.map(test,tests))
+            print("DIFF",json.dumps({"tag":tag,"exception":type(e).__name__,"message":str(e)[:130],"secs":round(time.monotonic()-t,1)},ensure_ascii=False),flush=True)
 
           PYCODE
