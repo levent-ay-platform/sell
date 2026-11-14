@@ -294,7 +294,7 @@
     <string name="smart_description_heading">Listing description</string>
     <string name="smart_description_price_prefix">Asking price</string>
     <string name="smart_description_generate">Generate facts-only description</string>
-    <string name="smart_media_private_notice">Photos, coordinates and description are local previews only. They are not yet uploaded or saved with the draft until secure media storage is approved. The current Save Draft covers basic fields only.</string>
+    <string name="smart_media_private_notice">Description and coordinates are saved in this device’s draft. Selected photos are sent with your request when you choose Send for review; they must be reselected if the app closes.</string>
     <string name="smart_pair_first_read">Read the document in the previous step before comparing identity.</string>
     <string name="smart_pair_supported_review">Document accepted for private review. Automatic comparison does not yet support this kind and cannot claim matched ownership.</string>
     <string name="smart_pair_certificate_only_notice">This is only a preliminary text comparison for an ownership certificate, not official verification.</string>
@@ -362,4 +362,8 @@
     <string name="submission_replace_documents">Replace documents and analyze again</string>
     <string name="source_pdf_text">Document text</string>
     <string name="source_scan_text">Read from image</string>
+    <string name="pair_already_read">Analysis ready — retained for this document set</string>
+    <string name="listing_missing_fields">Complete these fields:</string>
+    <string name="submission_receipt_reference">Request reference: %1$s</string>
+    <string name="submission_receipt_hint">Your request has been received. Follow its status and any requested changes under My requests. It will appear publicly after administrator review.</string>
 </resources>

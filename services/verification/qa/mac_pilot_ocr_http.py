@@ -46,6 +46,8 @@ class MemoryPilot:
         self.tokens = {}
         self.store = None
         self.inference_lock = threading.Lock()
+        self.identity_cache = {}
+        self.cache_lock = threading.Lock()
         self.failures = defaultdict(deque)
 
     def login(self, body, ip):
@@ -97,7 +99,7 @@ class MemoryPilot:
             return None
         return session
 
-    def read(self, payload, mime):
+    def read(self, payload, mime, cache_scope=None):
         import numpy as np
         import cv2
         if mime == "image/jpeg":
@@ -108,6 +110,11 @@ class MemoryPilot:
                 raise ValueError("bad PNG")
         else:
             raise ValueError("unsupported image type")
+        cache_key=(cache_scope,mime,hashlib.sha256(payload).digest()) if cache_scope else None
+        with self.cache_lock:
+            self.identity_cache={k:v for k,v in self.identity_cache.items() if v[0]>time.monotonic()}
+            cached=self.identity_cache.get(cache_key)
+            if cached is not None:return dict(cached[1])
         photo = cv2.imdecode(np.frombuffer(payload,dtype=np.uint8),cv2.IMREAD_COLOR)
         if photo is None:
             raise ValueError("invalid image")
@@ -124,11 +131,16 @@ class MemoryPilot:
             if full is not None and (not isinstance(full,str) or
                     not re.fullmatch(r"[0-9]{8}",full) or fields.get("cinLast4")!=full[-4:]):
                 raise ValueError("inconsistent CIN")
-            return {**fields,"ok":True,"pilotOcr":True,"schemaVersion":1,
+            reply={**fields,"ok":True,"pilotOcr":True,"schemaVersion":1,
                     "engine":"arabic-v5",
                     "birthDateReader":"v5-with-local-mac-consensus" if os.environ.get('MALAK_VISION_BIN') else "v5",
                     "identityVerified":False,
                     "ownershipVerified":False,"mayPublish":False}
+            if cache_key:
+                with self.cache_lock:
+                    while len(self.identity_cache)>=16:self.identity_cache.pop(next(iter(self.identity_cache)))
+                    self.identity_cache[cache_key]=(time.monotonic()+900,dict(reply))
+            return reply
         finally:
             photo.fill(0)
 
@@ -204,7 +216,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
             if len(data) != size:
                 raise ValueError("truncated")
             try:
-                fields = self.server.pilot.read(data,mime)
+                account=self.server.pilot.store.authenticate(self.headers['Authorization'][7:]) if self.server.pilot.store else None
+                if self.server.pilot.store and not account:
+                    self.result(401,{"ok":False});return
+                fields = self.server.pilot.read(data,mime,cache_scope=account['id'] if account else None)
                 auth[1] += 1
                 self.result(200,fields)
             finally:

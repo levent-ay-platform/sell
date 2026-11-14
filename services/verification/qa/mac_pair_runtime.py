@@ -47,7 +47,7 @@ class MacPairRuntime:
     def __init__(self,pilot,vision,node):
         self.pilot=pilot;self.vision=str(vision);self.node=str(node)
         self.lock=threading.Lock()
-    def compare(self,data):
+    def compare(self,data,cache_scope=None):
         files=frame(data)
         if not self.lock.acquire(blocking=False):raise RuntimeError('busy')
         deadline=time.monotonic()+165
@@ -67,7 +67,7 @@ class MacPairRuntime:
                     doc=json.loads(result.stdout)
                     if len(doc.get('pages',[]))+sum(len(x['pages']) for x in docs)>8:raise ValueError('too many pages')
                     docs.append(doc)
-                fields=self.pilot.read(files[-1][2],files[-1][1])
+                fields=self.pilot.read(files[-1][2],files[-1][1],cache_scope=cache_scope)
                 front=identity_document(fields)
                 payload=json.dumps({'documents':docs,'front':front},ensure_ascii=False).encode()
                 result=subprocess.run([self.node,'--experimental-strip-types',str(ROOT/'services/verification/qa/compare_mac_pair.mjs')],input=payload,stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,timeout=remaining(),check=True)

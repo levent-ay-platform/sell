@@ -68,6 +68,8 @@ CREATE TABLE IF NOT EXISTS submissions(id TEXT PRIMARY KEY,account_id TEXT NOT N
 CREATE TABLE IF NOT EXISTS admins(id TEXT PRIMARY KEY,email TEXT UNIQUE NOT NULL,salt TEXT NOT NULL,password_hash TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS admin_sessions(digest TEXT PRIMARY KEY,admin_id TEXT NOT NULL,expires INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS audit(id TEXT PRIMARY KEY,actor TEXT NOT NULL,submission TEXT,action TEXT NOT NULL,created INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS analysis_cache(account_id TEXT NOT NULL,intent TEXT NOT NULL,fingerprint TEXT NOT NULL,revision TEXT NOT NULL,review_id TEXT NOT NULL,analyzed_at INTEGER NOT NULL,PRIMARY KEY(account_id,intent,revision));
+CREATE INDEX IF NOT EXISTS analysis_cache_inputs ON analysis_cache(account_id,fingerprint,revision);
 ''')
         os.chmod(self.path,0o600)
     @contextmanager
@@ -91,14 +93,30 @@ CREATE TABLE IF NOT EXISTS audit(id TEXT PRIMARY KEY,actor TEXT NOT NULL,submiss
         with self.db() as db:
             row=db.execute('SELECT a.* FROM accounts a JOIN sessions s ON s.account_id=a.id WHERE s.digest=? AND s.expires>?',(digest(token),now())).fetchone()
             return dict(row) if row else None
-    def record_review(self,user,files,report):
+    def cached_analysis(self,user,intent,fingerprint,revision):
+        with self.db() as db:
+            row=db.execute('SELECT c.*,r.report,r.created FROM analysis_cache c JOIN reviews r ON r.id=c.review_id AND r.account_id=c.account_id WHERE c.account_id=? AND c.intent=? AND c.revision=?',(user,intent,revision)).fetchone()
+            if row and row['fingerprint']!=fingerprint:raise WorkflowError(409,'ANALYSIS_INPUT_CHANGED')
+            if row and row['analyzed_at']>now()-43200:return row['review_id'],json.loads(row['report']),True,row['analyzed_at']
+            row=db.execute('SELECT c.review_id,r.report,c.analyzed_at FROM analysis_cache c JOIN reviews r ON r.id=c.review_id AND r.account_id=c.account_id WHERE c.account_id=? AND c.fingerprint=? AND c.revision=? AND c.analyzed_at>? ORDER BY c.analyzed_at DESC LIMIT 1',(user,fingerprint,revision,now()-43200)).fetchone()
+            return (row['review_id'],json.loads(row['report']),False,row['analyzed_at']) if row else None
+    def record_review(self,user,files,report,analysis=None):
         review=ident()
         with self.db() as db:
+            if analysis:
+                intent,fingerprint,revision=analysis[:3]
+                analyzed_at=analysis[3] if len(analysis)>3 else now()
+                db.execute('BEGIN IMMEDIATE')
+                prior=db.execute('SELECT fingerprint,review_id,analyzed_at FROM analysis_cache WHERE account_id=? AND intent=? AND revision=?',(user,intent,revision)).fetchone()
+                if prior and prior['fingerprint']!=fingerprint:raise WorkflowError(409,'ANALYSIS_INPUT_CHANGED')
+                if prior and prior['analyzed_at']>now()-43200:return prior['review_id']
             db.execute('INSERT INTO reviews VALUES(?,?,?,?)',(review,user,json.dumps(report,ensure_ascii=False),now()))
             for kind,mime,data in files:
                 eid=ident();nonce=os.urandom(12)
                 sealed=nonce+self.cipher.encrypt(nonce,bytes(data),(review+':'+eid).encode())
                 db.execute('INSERT INTO evidence VALUES(?,?,?,?,?)',(eid,review,kind,mime,sealed))
+            if analysis:
+                db.execute('INSERT OR REPLACE INTO analysis_cache VALUES(?,?,?,?,?,?)',(user,intent,fingerprint,revision,review,analyzed_at))
         return review
     def submit(self,user,data):
         if not isinstance(data,dict):raise WorkflowError()

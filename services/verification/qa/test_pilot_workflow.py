@@ -9,6 +9,28 @@ class Workflow(unittest.TestCase):
         self.root=Path(self.tmp.name)
         self.store=PilotStore(self.root)
     def tearDown(self): self.tmp.cleanup()
+    def test_parallel_analysis_intent_records_exactly_one_review(self):
+        from concurrent.futures import ThreadPoolExecutor
+        import threading
+        barrier=threading.Barrier(2)
+        def record(_):
+            barrier.wait()
+            return self.store.record_review('account-a',[('DOCUMENT','image/png',b'synthetic')],
+                {'assessment':'INSUFFICIENT_EVIDENCE'},('a'*64,'b'*64,'version-one'))
+        with ThreadPoolExecutor(max_workers=2) as pool:ids=list(pool.map(record,range(2)))
+        self.assertEqual(ids[0],ids[1])
+        with self.store.db() as db:self.assertEqual(db.execute('SELECT count(*) FROM reviews').fetchone()[0],1)
+    def test_cloning_analysis_does_not_renew_original_inference_age(self):
+        from unittest.mock import patch
+        files=[('DOCUMENT','image/png',b'synthetic')];report={'assessment':'INSUFFICIENT_EVIDENCE'}
+        with patch('pilot_workflow.now',return_value=1000):
+            self.store.record_review('account-a',files,report,('a'*64,'b'*64,'version-one',1000))
+        with patch('pilot_workflow.now',return_value=44000):
+            hit=self.store.cached_analysis('account-a','c'*64,'b'*64,'version-one')
+            self.assertIsNotNone(hit)
+            self.store.record_review('account-a',files,report,('c'*64,'b'*64,'version-one',hit[3]))
+        with patch('pilot_workflow.now',return_value=45000):
+            self.assertIsNone(self.store.cached_analysis('account-a','c'*64,'b'*64,'version-one'))
     def test_phone_is_account_key_across_devices_and_restart(self):
         a=self.store.login('+21623456789','1234','A'*43)
         b=self.store.login('+21623456789','1234','B'*43)

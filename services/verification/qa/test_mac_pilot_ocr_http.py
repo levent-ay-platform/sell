@@ -17,6 +17,26 @@ class FakeOCR:
         return dict(NULL_FIELDS)
 
 class Contract(unittest.TestCase):
+    def test_identity_reuse_is_scoped_bounded_and_keeps_callers_from_mutating_cache(self):
+        import cv2,numpy as np
+        from unittest.mock import patch
+        class Engine:
+            calls=0
+            def extract_fields(self,*args):
+                self.calls+=1
+                return dict(NULL_FIELDS)
+        engine=Engine();pilot=MemoryPilot(None,[],engine)
+        _,photo=cv2.imencode('.png',np.full((400,650,3),255,dtype=np.uint8))
+        raw=photo.tobytes()
+        with patch('mac_pilot_ocr_http.time.monotonic',return_value=100):
+            first=pilot.read(raw,'image/png',cache_scope='account-a');first['surname']='changed by caller'
+            again=pilot.read(raw,'image/png',cache_scope='account-a')
+            self.assertIsNone(again['surname']);self.assertEqual(engine.calls,1)
+            pilot.read(raw,'image/png',cache_scope='account-b');self.assertEqual(engine.calls,2)
+        with patch('mac_pilot_ocr_http.time.monotonic',return_value=1100):
+            pilot.read(raw,'image/png',cache_scope='account-a');self.assertEqual(engine.calls,3)
+            for i in range(20):pilot.read(raw,'image/png',cache_scope='account-'+str(i))
+            self.assertLessEqual(len(pilot.identity_cache),16)
     @classmethod
     def setUpClass(cls):
         cls.server=HTTPServer(("127.0.0.1",0),Handler)

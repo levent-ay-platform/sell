@@ -59,7 +59,9 @@ class LivePilotJourneyTest{
         val ctx=instrumentation.targetContext
         val phoneHash=java.security.MessageDigest.getInstance("SHA-256")
             .digest("+21623456789".toByteArray(Charsets.UTF_8)).joinToString(""){"%02x".format(it.toInt() and 255)}
-        ctx.getSharedPreferences("malak_pilot_land_draft_"+phoneHash,0).edit().clear().commit()
+        ctx.getSharedPreferences("malak_pilot_land_draft_"+phoneHash,0).edit().clear()
+            .putString("description","SYNTHETIC DRAFT DESCRIPTION")
+            .putString("latitude","36.8").putString("longitude","10.18").commit()
         ctx.getSharedPreferences("malak_public_preferences",0).edit().putString("language","fr").commit()
         val intent=ctx.packageManager.getLaunchIntentForPackage(ctx.packageName)!!.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
         ctx.startActivity(intent)
@@ -97,6 +99,8 @@ class LivePilotJourneyTest{
             shot("05-before-comparison")
             tap("Lire et comparer les documents")
             visible("555941",45000);shot("06-real-document-result")
+            tap("Continuer")
+            assertNotNull(device.wait(Until.findObject(By.textStartsWith("Complétez ces champs :")),5000))
             // Personalize the public title so test data cannot be mistaken for a real listing.
             tap("Modifier")
             fill("Titre de l’annonce","EMULATOR QA - not for sale")
@@ -110,9 +114,15 @@ class LivePilotJourneyTest{
                 (device.displayHeight*.35).toInt(),device.displayWidth/2,
                 (device.displayHeight*.78).toInt(),14)}
             fill("Votre nom","SYNTHETIC EMULATOR QA")
+            visible("SYNTHETIC DRAFT DESCRIPTION")
             hideKeyboard()
             tap("Envoyer pour examen")
             visible("Envoyé pour examen",45000);shot("07-submitted-to-admin")
+            visible("Mes demandes")
+            assertFalse(ctx.getSharedPreferences("malak_pilot_land_draft_"+phoneHash,0).contains("title"))
+            tap("Mes demandes")
+            visible("Déposer un terrain",30000)
+            shot("08-returned-home")
         }catch(e:Throwable){shot("failure");throw e}
     }
 }

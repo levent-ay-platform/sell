@@ -1,5 +1,6 @@
 """Single-service workflow routes; opaque bearer for APK, separate admin session."""
 import json
+import hashlib
 import os
 from pathlib import Path
 import re
@@ -69,10 +70,21 @@ class WorkflowRoutes:
                 user=self.actor(h)
                 if h.headers.get('X-Pilot-Ocr-Consent')!='1':raise WorkflowError(400,'CONSENT_REQUIRED')
                 data=self.body(h,12*1024*1024,True)
-                files,report=self.pair.compare(data)
+                fingerprint=hashlib.sha256(data).hexdigest()
+                intent=h.headers.get('X-Pilot-Analysis-Key',secrets.token_hex(32))
+                if not re.fullmatch(r'[0-9a-f]{64}',intent):raise WorkflowError(400,'INVALID_ANALYSIS_KEY')
+                revision=os.environ.get('MALAK_SOURCE_SHA','development')
+                cached=self.store.cached_analysis(user,intent,fingerprint,revision)
+                if cached:
+                    review,report,same_intent,_=cached
+                    if not same_intent:
+                        from mac_pair_runtime import frame
+                        files=frame(data)
+                else:
+                    files,report=self.pair.compare(data,cache_scope=user)
                 # Recheck session after inference; expired session cannot save/result.
                 if self.actor(h)!=user:raise WorkflowError(401,'SESSION_REQUIRED')
-                review=self.store.record_review(user,files,report)
+                if not cached or not cached[2]:review=self.store.record_review(user,files,report,(intent,fingerprint,revision,cached[3] if cached else int(time.time())))
                 h.result(200,{'ok':True,'pilotOcr':True,'comparison':{**report,'reviewId':review},'identityVerified':False,'ownershipVerified':False,'mayPublish':False});return True
             if path=='/api/pilot/submissions':
                 user=self.actor(h)

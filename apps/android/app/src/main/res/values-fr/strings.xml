@@ -294,7 +294,7 @@
     <string name="smart_description_heading">Description de l\'annonce</string>
     <string name="smart_description_price_prefix">Prix demandé</string>
     <string name="smart_description_generate">Créer une description factuelle</string>
-    <string name="smart_media_private_notice">Photos, coordonnées et description ne sont que des aperçus locaux. Ils ne sont ni envoyés ni enregistrés avec le brouillon avant validation d\'un stockage sûr. L\'enregistrement actuel ne couvre que les champs de base.</string>
+    <string name="smart_media_private_notice">La description et les coordonnées sont enregistrées dans le brouillon sur cet appareil. Les photos sélectionnées sont envoyées avec la demande ; sélectionnez-les à nouveau après la fermeture de l’application.</string>
     <string name="smart_pair_first_read">Lisez le document à l’étape précédente avant de comparer l’identité.</string>
     <string name="smart_pair_supported_review">Document accepté pour examen privé. La comparaison automatique ne couvre pas encore ce type; aucune propriété n’est certifiée.</string>
     <string name="smart_pair_certificate_only_notice">Cette comparaison textuelle préliminaire concerne uniquement le certificat de propriété.</string>
@@ -362,4 +362,8 @@
     <string name="submission_replace_documents">Remplacer les documents et relancer l’analyse</string>
     <string name="source_pdf_text">Texte du document</string>
     <string name="source_scan_text">Lecture de l’image</string>
+    <string name="pair_already_read">Analyse prête et conservée pour ces documents</string>
+    <string name="listing_missing_fields">Complétez ces champs :</string>
+    <string name="submission_receipt_reference">Référence de la demande : %1$s</string>
+    <string name="submission_receipt_hint">Votre demande a été reçue. Suivez son état et les modifications demandées dans Mes demandes. Elle sera visible après validation par un administrateur.</string>
 </resources>

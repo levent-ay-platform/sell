@@ -341,6 +341,10 @@ internal suspend fun comparePilotDocumentsAndIdentity(
         c.setRequestProperty("Cache-Control","no-store")
         c.setRequestProperty("Content-Type","application/octet-stream")
         c.setRequestProperty("X-Pilot-Ocr-Consent","1")
+        val analysisKey=java.security.MessageDigest.getInstance("SHA-256")
+            .digest(inputs.joinToString("|"){it.idempotencyKey}.toByteArray(Charsets.UTF_8))
+            .joinToString(""){"%02x".format(it.toInt() and 255)}
+        c.setRequestProperty("X-Pilot-Analysis-Key",analysisKey)
         c.setFixedLengthStreamingMode(count.toInt())
         c.outputStream.use{raw->
             val out=java.io.DataOutputStream(raw)
@@ -389,6 +393,8 @@ internal suspend fun comparePilotDocumentsAndIdentity(
             throw OwnerPairException(502)
         val pages=data.optInt("certificatePages")
         if(pages !in 1..8)throw OwnerPairException(502)
+        val reviewId=data.optString("reviewId")
+        if(!ID.matches(reviewId))throw OwnerPairException(502)
         val diagnostics=try {
             val reasonArray=data.optJSONArray("reasons")
             val missingArray=data.optJSONArray("missingPages")
@@ -460,7 +466,7 @@ internal suspend fun comparePilotDocumentsAndIdentity(
                 values["parentRegisterReference"],area,diagnostics.expectedPageCount,
                 null,null,null,null),
             detectedKind=kind,unifiedAssessment=status,unifiedRoles=roles,
-            matchedRightsHolder=holder,reviewId=data.optString("reviewId").takeIf{ID.matches(it)},
+            matchedRightsHolder=holder,reviewId=reviewId,
             propertyFacts=values.toMap(),propertyFactStatuses=factStatuses.toMap(),sourceFacts=sourceFacts.toList()
         )
     }finally{c.disconnect()}

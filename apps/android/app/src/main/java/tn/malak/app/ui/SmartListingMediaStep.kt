@@ -26,7 +26,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -83,21 +82,24 @@ internal fun SmartListingMediaStep(
         message=if(refused)R.string.smart_media_rejected else R.string.smart_media_selected
     }
     val point=SmartListingAssist.coordinates(latitude,longitude)
+    val descriptionPrefix=s(R.string.smart_land_title_prefix)
+    val descriptionUnit=s(R.string.smart_area_unit)
+    val descriptionPrice=s(R.string.smart_description_price_prefix)
     Surface(color=Color.White,shape=RoundedCornerShape(20.dp)) {
         Column(Modifier.fillMaxWidth().padding(16.dp),
             verticalArrangement=Arrangement.spacedBy(12.dp)){
-            Text(stringResource(R.string.smart_media_heading),fontSize=17.sp,
+            Text(s(R.string.smart_media_heading),fontSize=17.sp,
                 fontWeight=FontWeight.Bold,color=Brand.Ink)
-            Text(stringResource(R.string.smart_media_hint),fontSize=12.sp,
+            Text(s(R.string.smart_media_hint),fontSize=12.sp,
                 color=Brand.Muted)
             OutlinedButton(onClick={picker.launch(arrayOf("image/jpeg","image/png","image/webp"))},
                 enabled=photos.size<MAX_PHOTOS,modifier=Modifier.fillMaxWidth()
                     .heightIn(min=52.dp)) {
                 Icon(Icons.Outlined.AddPhotoAlternate,null)
                 Spacer(Modifier.width(8.dp))
-                Text(stringResource(R.string.smart_media_pick)+" (${photos.size}/$MAX_PHOTOS)")
+                Text(s(R.string.smart_media_pick)+" (${photos.size}/$MAX_PHOTOS)")
             }
-            if(message!=0)Text(stringResource(message),fontSize=12.sp,
+            if(message!=0)Text(s(message),fontSize=12.sp,
                 color=Brand.Muted)
             photos.toList().forEachIndexed{index,photo->
                 Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically,
@@ -110,23 +112,23 @@ internal fun SmartListingMediaStep(
                             color=Brand.Muted)
                     }
                     IconButton(onClick={photos.removeAt(index)}) {
-                        Icon(Icons.Outlined.Close,stringResource(R.string.smart_media_remove),
+                        Icon(Icons.Outlined.Close,s(R.string.smart_media_remove),
                             tint=Brand.Crimson)
                     }
                 }
             }
             HorizontalDivider()
-            Text(stringResource(R.string.smart_location_heading),
+            Text(s(R.string.smart_location_heading),
                 fontWeight=FontWeight.Bold,color=Brand.Ink)
-            Text(stringResource(R.string.smart_location_hint),
+            Text(s(R.string.smart_location_hint),
                 fontSize=12.sp,color=Brand.Muted)
             Row(horizontalArrangement=Arrangement.spacedBy(10.dp)){
                 OutlinedTextField(latitude,{onLatitude(it.take(14))},
-                    label={Text(stringResource(R.string.smart_latitude))},
+                    label={Text(s(R.string.smart_latitude))},
                     modifier=Modifier.weight(1f),singleLine=true,
                     keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Decimal))
                 OutlinedTextField(longitude,{onLongitude(it.take(14))},
-                    label={Text(stringResource(R.string.smart_longitude))},
+                    label={Text(s(R.string.smart_longitude))},
                     modifier=Modifier.weight(1f),singleLine=true,
                     keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Decimal))
             }
@@ -142,23 +144,21 @@ internal fun SmartListingMediaStep(
             },enabled=point!=null,modifier=Modifier.fillMaxWidth()) {
                 Icon(Icons.Outlined.LocationOn,null)
                 Spacer(Modifier.width(7.dp))
-                Text(stringResource(R.string.smart_location_preview))
+                Text(s(R.string.smart_location_preview))
             }
             HorizontalDivider()
-            Text(stringResource(R.string.smart_description_heading),
+            Text(s(R.string.smart_description_heading),
                 fontWeight=FontWeight.Bold,color=Brand.Ink)
             OutlinedButton(onClick={
                 SmartListingAssist.descriptionSuggestion(region,area,price,
-                    context.getString(R.string.smart_land_title_prefix),
-                    context.getString(R.string.smart_area_unit),
-                    context.getString(R.string.smart_description_price_prefix))?.let(onDescription)
+                    descriptionPrefix,descriptionUnit,descriptionPrice)?.let(onDescription)
             },modifier=Modifier.fillMaxWidth()){
-                Text(stringResource(R.string.smart_description_generate))
+                Text(s(R.string.smart_description_generate))
             }
             OutlinedTextField(description,{onDescription(it.take(650))},
                 modifier=Modifier.fillMaxWidth(),minLines=3,maxLines=6,
-                label={Text(stringResource(R.string.smart_description_heading))})
-            Text(stringResource(R.string.smart_media_private_notice),fontSize=12.sp,
+                label={Text(s(R.string.smart_description_heading))})
+            Text(s(R.string.smart_media_private_notice),fontSize=12.sp,
                 color=Brand.Muted,lineHeight=18.sp)
         }
     }

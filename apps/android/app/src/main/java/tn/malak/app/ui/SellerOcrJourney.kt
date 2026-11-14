@@ -9,6 +9,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -128,6 +130,7 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmission:org.j
     var customerName by remember(draftFile){mutableStateOf(resubmission?.optString("customerName").orEmpty())}
     var sending by remember(draftFile){mutableStateOf(false)}
     var submitted by remember(draftFile){mutableStateOf(false)}
+    var submittedReference by remember(draftFile){mutableStateOf<String?>(null)}
     var submissionMessage by remember(draftFile){mutableIntStateOf(0)}
     var submissionKey by remember(draftFile){mutableStateOf(UUID.randomUUID().toString())}
     // A dedicated and clearly labelled send action records consent.
@@ -155,7 +158,8 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmission:org.j
     val listingTitle=if(name.isBlank()) suggestedTitle.orEmpty() else name.trim()
     // Auto-save only the non-sensitive listing fields, never scans, tokens,
     // CIN, dates of birth, credentials or document URIs.
-    LaunchedEffect(draftFile,name,region,area,price,capacity,capacityConfirmed) {
+    LaunchedEffect(draftFile,name,region,area,price,capacity,capacityConfirmed,submitted) {
+        if(submitted){prefs.edit().clear().apply();return@LaunchedEffect}
         kotlinx.coroutines.delay(500)
         prefs.edit()
             .putString("title",name.trim())
@@ -175,9 +179,15 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmission:org.j
     val files=remember(draftFile) {mutableStateListOf<ChosenDocument>()}
     // Future listing media is preview-only, never private owner title evidence.
     val listingPhotos=remember(draftFile){mutableStateListOf<DraftListingPhoto>()}
-    var listingLatitude by remember(draftFile){mutableStateOf(resubmission?.optString("latitude").orEmpty())}
-    var listingLongitude by remember(draftFile){mutableStateOf(resubmission?.optString("longitude").orEmpty())}
-    var listingDescription by remember(draftFile){mutableStateOf(resubmission?.optString("description").orEmpty())}
+    var listingLatitude by rememberSaveable(draftFile){mutableStateOf(resubmission?.optString("latitude")?:prefs.getString("latitude","").orEmpty())}
+    var listingLongitude by rememberSaveable(draftFile){mutableStateOf(resubmission?.optString("longitude")?:prefs.getString("longitude","").orEmpty())}
+    var listingDescription by rememberSaveable(draftFile){mutableStateOf(resubmission?.optString("description")?:prefs.getString("description","").orEmpty())}
+    LaunchedEffect(draftFile,listingLatitude,listingLongitude,listingDescription,submitted){
+        if(submitted)return@LaunchedEffect
+        kotlinx.coroutines.delay(500)
+        prefs.edit().putString("latitude",listingLatitude).putString("longitude",listingLongitude)
+            .putString("description",listingDescription).apply()
+    }
     // Never persist private OCR values or even the document URI with the draft.
     var familyReadings by remember(draftFile) {mutableStateOf<List<ReadOcrResult>>(emptyList())}
     var familyReadBusy by remember(draftFile) {mutableStateOf(false)}
@@ -340,7 +350,8 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmission:org.j
     val normalizedArea=area.replace(',', '.')
     val validArea=normalizedArea.matches(ValidLandArea)
     val validPrice=price.matches(ValidLandPrice)
-    val validFirst=listingTitle.length in 2..100&&region.trim().length in 2..100&&validArea&&validPrice
+    val missingListingFields=pilotMissingListingFields(listingTitle,region,area,price)
+    val validFirst=missingListingFields.isEmpty()
     // Saving a private local draft must work BEFORE document selection or OCR.
     // Do not pretend success when the device fails to persist these fields.
     val saveLocalDraft:()->Unit={
@@ -358,7 +369,9 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmission:org.j
     }
     val stepLabels=listOf(R.string.smart_step_documents,R.string.step_identity,
         R.string.step_property,R.string.step_summary)
-    LaunchedEffect(step) { if(step>3) step=3 }
+    val stepScroll=rememberScrollState()
+    val missingFieldsTarget=remember{BringIntoViewRequester()}
+    LaunchedEffect(step) { if(step>3) step=3;stepScroll.scrollTo(0) }
 
     if(cameraVisible){
         TunisianIdCamera(onClose={cameraVisible=false},
@@ -370,6 +383,10 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmission:org.j
                     identityMessage=0
                 }else PrivateCaptureMemory.discard(uri)
             })
+        return
+    }
+    if(submitted&&submittedReference!=null){
+        PilotSubmissionComplete(submittedReference!!,listingTitle,onBack)
         return
     }
 
@@ -395,7 +412,7 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmission:org.j
                 }
             }
         }
-        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal=17.dp,vertical=16.dp),
+        Column(Modifier.weight(1f).verticalScroll(stepScroll).padding(horizontal=17.dp,vertical=16.dp),
             verticalArrangement=Arrangement.spacedBy(15.dp)) {
             when(step) {
                 0 -> {
@@ -722,7 +739,7 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmission:org.j
                             else R.string.unified_identity_hint),
                             color=Brand.Muted,fontSize=12.sp,lineHeight=18.sp)
                         Button(onClick={
-                            if(pairProgress!=null||files.isEmpty()||!identityReadyForRemote||
+                            if(pairProgress!=null||pairReport!=null||files.isEmpty()||!identityReadyForRemote||
                                 !canRunPrivateMatching||familyReadBusy)
                                 return@Button
                             val selected=files.toList()
@@ -813,20 +830,31 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmission:org.j
                                     if(requestEpoch==thisRequest)pairProgress=null
                                 }
                             }
-                        },enabled=pairProgress==null&&files.isNotEmpty()&&identityReadyForRemote&&
+                        },enabled=pairProgress==null&&pairReport==null&&files.isNotEmpty()&&identityReadyForRemote&&
                             canRunPrivateMatching&&!familyReadBusy,
                             modifier=Modifier.fillMaxWidth().heightIn(min=54.dp),
                             colors=ButtonDefaults.buttonColors(containerColor=Brand.Crimson),
                             shape=RoundedCornerShape(16.dp)) {
                             Icon(Icons.Outlined.FactCheck,null)
                             Spacer(Modifier.width(8.dp))
-                            Text(s(R.string.pair_start))
+                            Text(s(if(pairReport==null)R.string.pair_start else R.string.pair_already_read))
                         }
                     }
                     if(pairReport==null)
                         PlainNotice(Icons.Outlined.Info,s(R.string.legal_pending))
 
+                    Column(Modifier.bringIntoViewRequester(missingFieldsTarget)){
                     SectionHeading(s(R.string.property_section),s(R.string.property_section_hint))
+                    if(showInvalid&&missingListingFields.isNotEmpty()){
+                        val labels=missingListingFields.map{field->s(when(field){
+                            "title"->R.string.property_name
+                            "region"->R.string.property_region
+                            "area"->R.string.area_m2
+                            else->R.string.price_tnd
+                        })}
+                        PlainNotice(Icons.Outlined.Info,s(R.string.listing_missing_fields)+" "+labels.joinToString("، "))
+                    }
+                    }
 
 
                     Surface(color=Color(0xFFF2F8F5),shape=RoundedCornerShape(16.dp)){
@@ -1137,7 +1165,10 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmission:org.j
             }else{
             Button(onClick={
                 if(step==0&&files.isEmpty()){pickMessage=R.string.certificate_required}
-                else if(step==2&&!validFirst)showInvalid=true
+                else if(step==2&&!validFirst){
+                    showInvalid=true
+                    scope.launch{withFrameNanos{};missingFieldsTarget.bringIntoView()}
+                }
                 else if(step==1&&(!identitySelected||pendingPhoto!=null)){
                     identityMessage=R.string.identity_required
                 }
@@ -1165,8 +1196,11 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmission:org.j
                                 listingPhotos.toList().forEach{photo->
                                     PilotListingClient.photo(context,pilotOcrSession,review,photo.uri,photo.length)
                                 }
-                                PilotListingClient.call(pilotOcrSession,"/api/pilot/submissions",data)
+                                val response=PilotListingClient.call(pilotOcrSession,"/api/pilot/submissions",data)
+                                val receipt=response.optJSONObject("submission")?:throw OwnerPairException(502)
+                                val reference=pilotSubmissionReference(receipt.optString("id"),receipt.optString("status"))?:throw OwnerPairException(502)
                                 if(requestEpoch==sendEpoch&&pairReport?.reviewId==review){
+                                    submittedReference=reference
                                     submitted=true;submissionMessage=R.string.submission_sent
                                 }
                             }catch(cancel:CancellationException){throw cancel}

@@ -17,12 +17,42 @@ class HttpWorkflow(unittest.TestCase):
         self.server=HTTPServer(('127.0.0.1',0),Handler)
         self.server.pilot=MemoryPilot(None,[],None);self.server.pilot.store=self.store
         class Pair:
-            def compare(self,data):
+            calls=0
+            def compare(self,data,cache_scope=None):
+                self.calls+=1
                 from mac_pair_runtime import frame
                 return frame(data),{'detectedKind':'UNKNOWN','assessment':'INSUFFICIENT_EVIDENCE','propertyFacts':[]}
-        self.server.workflow=WorkflowRoutes(self.store,Pair())
+        self.pair=Pair()
+        self.server.workflow=WorkflowRoutes(self.store,self.pair)
         self.thread=threading.Thread(target=self.server.serve_forever,daemon=True);self.thread.start()
     def tearDown(self):self.server.shutdown();self.server.server_close();self.thread.join();self.tmp.cleanup()
+    def test_exact_input_replay_avoids_ocr_but_distinct_listing_gets_own_review(self):
+        from unittest.mock import patch
+        token=self.store.login('+21623456789','1234','A'*43)['bearer']
+        other=self.store.login('+21698765432','1234','B'*43)['bearer']
+        doc=b'%PDF-1.4'+b' '*30;photo=b'\xff\xd8\xff'+b' '*30
+        payload=bytes([1,1])+struct.pack('>I',len(doc))+doc+struct.pack('>I',len(photo))+photo
+        def post(key='a'*64,t=token,data=payload):
+            return self.request('/internal/v1/pilot/compare-pair',data,t,
+                {'Content-Type':'application/octet-stream','X-Pilot-Ocr-Consent':'1','X-Pilot-Analysis-Key':key})
+        with patch.dict('os.environ',{'MALAK_SOURCE_SHA':'version-one'}):
+            status,first=post();self.assertEqual(status,200)
+            status,again=post();self.assertEqual(status,200)
+            self.assertEqual(first['comparison']['reviewId'],again['comparison']['reviewId'])
+            self.assertEqual(self.pair.calls,1)
+            status,new=post('b'*64);self.assertEqual(status,200)
+            self.assertNotEqual(first['comparison']['reviewId'],new['comparison']['reviewId'])
+            self.assertEqual(self.pair.calls,1)
+            self.assertEqual(post(t=other)[0],200);self.assertEqual(self.pair.calls,2)
+            self.assertEqual(post(data=payload[:-1]+b'x')[0],409)
+            self.assertEqual(post(key='bad-key')[0],400)
+        with patch.dict('os.environ',{'MALAK_SOURCE_SHA':'version-two'}):
+            status,fresh=post();self.assertEqual(status,200);self.assertEqual(self.pair.calls,3)
+            with self.store.db() as db:db.execute('UPDATE analysis_cache SET analyzed_at=0 WHERE review_id=?',(fresh['comparison']['reviewId'],))
+            self.assertEqual(post()[0],200);self.assertEqual(self.pair.calls,4)
+            from pilot_workflow import digest
+            with self.store.db() as db:db.execute('UPDATE sessions SET expires=0 WHERE digest=?',(digest(token),))
+            self.assertEqual(post()[0],401);self.assertEqual(self.pair.calls,4)
     def request(self,path,data=None,token=None,headers=None):
         h=headers or {};method='GET' if data is None else 'POST'
         if token:h['Authorization']='Bearer '+token
