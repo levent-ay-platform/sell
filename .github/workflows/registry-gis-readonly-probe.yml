@@ -7,50 +7,42 @@ permissions:
 jobs:
   probe:
     runs-on: ubuntu-latest
-    timeout-minutes: 6
+    timeout-minutes: 5
     steps:
-      - name: Audit names and joins in vector PAU plus administrative GIS
+      - name: Query real Delegation Secteur and PAU localities against certificate
         run: |
           python3 - <<'PYCODE'
-          import urllib.request,urllib.parse,urllib.error,json,re,time,concurrent.futures
-          base="https://geopau.gov.tn/arcgisserver/rest/services/public"
-          urls={"PAU_ALL_LAYERS":base+"/PAUs_public/MapServer/layers?f=json",
-                "LIM_ADMIN_SERVICE":base+"/LimitesAdmin/MapServer?f=json",
-                "LIM_ADMIN_LAYERS":base+"/LimitesAdmin/MapServer/layers?f=json",
-                "PAU_LAYER_69":base+"/PAUs_public/MapServer/69?f=json",
-                "PAU_LAYER_70":base+"/PAUs_public/MapServer/70?f=json",
-                "PAU_LAYER_0":base+"/PAUs_public/MapServer/0?f=json",
-                "PAU_LAYER_66":base+"/PAUs_public/MapServer/66?f=json"}
-          def fetch(item):
-           key,url=item;st=time.monotonic()
+          import urllib.request,urllib.parse,urllib.error,json,time,concurrent.futures,re
+          root="https://geopau.gov.tn/arcgisserver/rest/services/public/PAUs_public/MapServer"
+          jobs=[]
+          for id in [0,1,2,4,69]:
+           jobs.append(("META_"+str(id),f"{root}/{id}?f=json"))
+          checks=[
+           ("DELEG_HAMMAMET",1,"Nom LIKE '%Hammamet%'"),
+           ("DELEG_HAMMAM_AR",1,"Nom LIKE '%حمامات%'"),
+           ("SECT_MRADA",4,"Nom LIKE '%Mrada%'"),
+           ("SECT_FERJ",4,"Nom LIKE '%Ferj%'"),
+           ("SECT_MRAD",4,"Nom LIKE '%Mrad%'"),
+           ("SECT_SIDI",4,"Nom LIKE '%Jedidi%'"),
+           ("SECT_AR_MRAD",4,"Nom LIKE '%مرادة%'"),
+           ("SECT_HAMMAM",4,"Nom LIKE '%Hammamet%'"),
+           ("PAU_LIB_HAMMAM",69,"Libelle LIKE '%Hammamet%'"),
+           ("PAU_LIB_MRADA",69,"Libelle LIKE '%Mrada%'")]
+          for label,lid,where in checks:
+           p={"f":"json","where":where,"outFields":"*","returnGeometry":"false","resultRecordCount":20}
+           jobs.append((label,f"{root}/{lid}/query?"+urllib.parse.urlencode(p)))
+          def get(item):
+           k,u=item;t=time.monotonic()
            try:
-            with urllib.request.urlopen(urllib.request.Request(url,headers={"User-Agent":"Mozilla/5.0 MalakGISFieldAudit/1.0"}),timeout=36) as r:
-             raw=r.read(1600000);typ=r.headers.get("Content-Type")
-            try: data=json.loads(raw)
-            except: data={"_raw":raw[:120].decode("utf8","replace")}
-            return key,data,{"bytes":len(raw),"type":typ,"duration":round(time.monotonic()-st,1)}
-           except Exception as e:return key,{},{"error":type(e).__name__+" "+str(e)[:150],"duration":round(time.monotonic()-st,1)}
-          with concurrent.futures.ThreadPoolExecutor(max_workers=3) as ex:
-           for key,data,info in ex.map(fetch,urls.items()):
-            if data.get("error"): info["error"]=data["error"]
-            print("META_CHECK",key,json.dumps(info,ensure_ascii=False),flush=True)
-            if key=="PAU_ALL_LAYERS":
-             ls=data.get("layers",[])
-             print("LAYER_COUNT",len(ls),flush=True)
-             for l in ls:
-              fields=l.get("fields") or []
-              field_names=[str(f.get("name","")) for f in fields]
-              idx=[n for n in field_names if re.search(r"(pau|nom|name|lieu|comm|gouv|deleg|imad|secteur|zone|lot|local|ville|admin|intitul|code|nature|type|urban|fonc|parc|titr)",n,re.I)]
-              aliases=[str(f.get("alias","")) for f in fields if re.search(r"(pau|nom|name|lieu|comm|gouv|deleg|imad|secteur|zone|lot|local|ville|admin|intitul|code|nature|type|urban|fonc|parc|titr)",str(f.get("alias","")),re.I)]
-              if idx or (not l.get("subLayers") and re.search(r"(limit|pau|ville|gouv|lotiss|zone|contour|comm)",l.get("name",""),re.I)):
-               print("LAYER_FIELDS",l.get("id"),l.get("name"),"geometry",l.get("geometryType"),"fields",json.dumps(idx[:22],ensure_ascii=False),"aliases",json.dumps(aliases[:10],ensure_ascii=False),flush=True)
-            elif key=="LIM_ADMIN_LAYERS":
-             ls=data.get("layers",[])
-             print("ADMIN_LAYERS",len(ls),flush=True)
-             for l in ls[:20]:print("ADMIN_DETAIL",l.get("id"),l.get("name"),"geometry",l.get("geometryType"),"fields",json.dumps([{"n":f.get("name"),"a":f.get("alias")} for f in (l.get("fields") or [])][:28],ensure_ascii=False),flush=True)
-            elif key=="LIM_ADMIN_SERVICE":
-             print("ADMIN_SERVICE",json.dumps({"mapName":data.get("mapName"),"layers":data.get("layers"),"tables":data.get("tables"),"error":data.get("error")},ensure_ascii=False)[:2500],flush=True)
+            with urllib.request.urlopen(urllib.request.Request(u,headers={"User-Agent":"Mozilla/5.0 MalakGeoPublicAudit/1.0","Accept":"application/json"}),timeout=21) as r:raw=r.read(450000);ct=r.headers.get("Content-Type")
+            d=json.loads(raw);return k,d,{"bytes":len(raw),"type":ct,"secs":round(time.monotonic()-t,1)}
+           except Exception as e:return k,{},{"error":type(e).__name__+":"+str(e)[:120],"secs":round(time.monotonic()-t,1)}
+          with concurrent.futures.ThreadPoolExecutor(max_workers=5) as ex:
+           for key,d,info in ex.map(get,jobs):
+            if key.startswith("META_"):
+             print("LAYER_META",key,json.dumps({"status":info,"name":d.get("name"),"type":d.get("type"),"geometry":d.get("geometryType"),"fields":[{"n":z.get("name"),"a":z.get("alias")} for z in (d.get("fields") or [])][:40],"extent":d.get("extent"),"error":d.get("error")},ensure_ascii=False),flush=True)
             else:
-             print("LAYER_DETAIL",key,json.dumps({"id":data.get("id"),"name":data.get("name"),"type":data.get("type"),"geometryType":data.get("geometryType"),"fields":[{"n":x.get("name"),"a":x.get("alias")} for x in (data.get("fields") or [])][:35],"subLayers":data.get("subLayers"),"extent":data.get("extent"),"error":data.get("error")},ensure_ascii=False)[:3500],flush=True)
+             ff=d.get("features") or []
+             print("QUERY_MATCH",key,json.dumps({"status":info,"results":len(ff),"exceeded":d.get("exceededTransferLimit"),"features":[x.get("attributes") for x in ff[:20]],"error":d.get("error")},ensure_ascii=False)[:4300],flush=True)
 
           PYCODE
