@@ -9,61 +9,45 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 3
     steps:
-      - name: Test real municipality lot-to-zoning spatial intersects query with WGS84 geometry
+      - name: Check 8 real lot polygon intersections and distinguish duplicated geometry
         run: |
           python3 - <<'PYCODE'
-          import urllib.request,urllib.parse,json,os,time
-          os.makedirs("real_spatial_join_proof",exist_ok=True)
+          import urllib.request,urllib.parse,json,time,os,math
+          os.makedirs("geopau_lot_join_quality",exist_ok=True)
           base="https://services1.arcgis.com/zcZDLWCe77bUzzw7/arcgis/rest/services/Map_DarChaabane/FeatureServer"
-          def get(layer,params,timeout=18):
-           url=base+"/"+str(layer)+"/query?"+urllib.parse.urlencode(params)
-           t=time.monotonic()
-           with urllib.request.urlopen(urllib.request.Request(url,headers={"Accept":"application/json","User-Agent":"Mozilla/5.0 public read-only GIS geometry join proof"}),timeout=timeout) as r: j=json.load(r)
-           print("HTTP",layer,round(time.monotonic()-t,2),list(j),j.get("error"),flush=True)
-           return j
-          def count(layer,where):
-           j=get(layer,{"where":where,"returnCountOnly":"true","f":"json"})
-           return j.get("count")
-          stats={"source":base,"privacy":"no owner/person records requested"}
-          for where in ("Titre_Foncier IS NOT NULL","ttr_fcier IS NOT NULL","id_lotss IS NOT NULL"):
-           try:stats["lots_"+where]=count(13,where)
-           except Exception as e:stats["lots_"+where+"_error"]=str(e)[:100]
-          for field in ("Titre_Foncier","ttr_fcier"):
-           try:
-            # no response attributes; checks only whether the user's title exists in an unrelated small municipal sample
-            where=field+("=555941" if field=="Titre_Foncier" else "='555941'")
-            stats["lots_"+field+"_555941"]=count(13,where)
-           except Exception as e:stats["lots_"+field+"_555941_error"]=str(e)[:100]
-          for oid in (2001,2002,2003):
-           lot=get(13,{"where":"OBJECTID="+str(oid),"outFields":"OBJECTID,Titre_Foncier,ttr_fcier,id_lotss,id_typ_lot","returnGeometry":"true","outSR":"4326","f":"json"})
-           if not lot.get("features"):continue
-           feat=lot["features"][0];geom=feat.get("geometry",{})
+          def query(layer,p):
+           u=base+"/"+str(layer)+"/query?"+urllib.parse.urlencode(p)
+           with urllib.request.urlopen(urllib.request.Request(u,headers={"User-Agent":"Mozilla/5.0 (read-only GIS independent geometry validity audit)"}),timeout=17) as r:return json.load(r)
+          counts={}
+          for where in ["ttr_fcier IS NOT NULL AND ttr_fcier <> ' '","Titre_Foncier IS NOT NULL","Type_Zone IS NOT NULL"]:
+           layer=11 if where.startswith("Type_Zone") else 13
+           try:counts[where]=query(layer,{"where":where,"returnCountOnly":"true","f":"json"}).get("count")
+           except Exception as e:counts[where+"_error"]=str(e)[:100]
+          sample=query(13,{"where":"1=1","outFields":"OBJECTID,Titre_Foncier,ttr_fcier","returnGeometry":"true","outSR":"4326","orderByFields":"OBJECTID ASC","resultRecordCount":"30","f":"json"})
+          feats=sample.get("features",[])
+          print("SAMPLED_LOTS",len(feats),"first_ids",[f["attributes"].get("OBJECTID") for f in feats[:20]],flush=True)
+          def canonical(g):
+           return json.dumps(g.get("rings"),sort_keys=True,separators=(",",":")) if g else ""
+          records=[]
+          for ix in [0,2,5,10,15,20,25,29]:
+           if ix>=len(feats):continue
+           f=feats[ix];geom=f.get("geometry") or {}
            if not geom.get("rings"):continue
-           info={"lot_OBJECTID":oid,"lot_non_personal_attrs":feat.get("attributes",{}),"lot_rings":len(geom.get("rings",[])),"lot_coordinate_count":sum(len(r) for r in geom.get("rings",[]))}
            try:
-            zone=get(11,{"where":"1=1","geometryType":"esriGeometryPolygon","geometry":json.dumps({"rings":geom["rings"],"spatialReference":{"wkid":4326}},separators=(",",":")),"inSR":"4326","spatialRel":"esriSpatialRelIntersects","outFields":"OBJECTID,Type_Zone,id_typ_zn_1,id_pl_amng_1","returnGeometry":"true","outSR":"4326","f":"json"},timeout=22)
-            info["zones_intersected"]=len(zone.get("features",[]))
-            info["zone_error"]=zone.get("error")
-            info["zone_attributes"]=[x.get("attributes") for x in zone.get("features",[])[:6]]
-            if zone.get("features"):
-             geos=[{"type":"Feature","properties":{"source_layer":13,**feat.get("attributes",{})},"geometry":{"type":"Polygon","coordinates":geom["rings"]}}]
-             for z in zone["features"][:10]:
-              if z.get("geometry",{}).get("rings"):geos.append({"type":"Feature","properties":{"source_layer":11,**z.get("attributes",{})},"geometry":{"type":"Polygon","coordinates":z["geometry"]["rings"]}})
-             with open("real_spatial_join_proof/DarChaabane_Lot_And_Zoning_Real_Sample.geojson","w",encoding="utf8") as f:json.dump({"type":"FeatureCollection","features":geos},f,ensure_ascii=False)
-             print("SUCCESSFUL_SPATIAL_JOIN",json.dumps(info,ensure_ascii=False)[:2800],flush=True)
-             stats["spatial_join"]=info;break
-           except Exception as e:
-            info["zone_exception"]=type(e).__name__+":"+str(e)[:100]
-           stats["spatial_join_attempt_"+str(oid)]=info
-           print("SPATIAL_JOIN_ATTEMPT",json.dumps(info,ensure_ascii=False)[:1500],flush=True)
-          with open("real_spatial_join_proof/evidence.json","w",encoding="utf8") as f:json.dump(stats,f,ensure_ascii=False,indent=2)
-          print("FINAL",json.dumps(stats,ensure_ascii=False)[:4000],flush=True)
+            zones=query(11,{"where":"1=1","geometry":json.dumps({"rings":geom["rings"],"spatialReference":{"wkid":4326}},separators=(",",":")),"geometryType":"esriGeometryPolygon","inSR":"4326","spatialRel":"esriSpatialRelIntersects","outFields":"OBJECTID,Type_Zone","returnGeometry":"true","outSR":"4326","f":"json"})
+            zz=zones.get("features",[])
+            rec={"lot_oid":f["attributes"].get("OBJECTID"),"zones_count":len(zz),"zone_labels":[z["attributes"].get("Type_Zone") for z in zz[:10]],"zone_objectids":[z["attributes"].get("OBJECTID") for z in zz[:10]],"geometry_exact_match":any(canonical(z.get("geometry"))==canonical(geom) for z in zz)}
+            records.append(rec)
+            print("JOIN",json.dumps(rec,ensure_ascii=False),flush=True)
+           except Exception as e:print("JOIN_ERROR",f["attributes"].get("OBJECTID"),type(e).__name__,str(e)[:150],flush=True)
+          result={"sampled_lots":len(feats),"tests":records,"counts":counts}
+          with open("geopau_lot_join_quality/results.json","w",encoding="utf8") as w:json.dump(result,w,ensure_ascii=False,indent=2)
+          print("FINAL",json.dumps(result,ensure_ascii=False)[:7000],flush=True)
 
           PYCODE
-      - name: Save real geometry spatial join without owner records
+      - name: Save geometry join quality evidence
         uses: actions/upload-artifact@v4
         with:
-          name: malak-real-lot-to-zone-spatial-join-proof
-          path: real_spatial_join_proof/
+          name: geopau-darchaabane-eight-lot-geometry-join-quality
+          path: geopau_lot_join_quality/
           retention-days: 7
-          if-no-files-found: error
