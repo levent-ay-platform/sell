@@ -76,6 +76,7 @@ internal fun MalakApp(
     // PIN alone can NEVER create this session.
     var pilotPhone by remember { mutableStateOf<String?>(null) }
     var pilotOcrSession by remember { mutableStateOf<PilotOcrSession?>(null) }
+    var resubmission by remember{mutableStateOf<org.json.JSONObject?>(null)}
     val tabs = setOf("home", "map", "favorites", "more")
 
     CompositionLocalProvider(LocalMalakStringsContext provides localizedContext,
@@ -112,7 +113,7 @@ internal fun MalakApp(
                 ) { insets ->
                     Box(Modifier.fillMaxSize().padding(insets)) {
                         when (screen) {
-                            "home" -> MalakHome(query, { query = it }, category, { category = it }, { screen = "seller" })
+                            "home" -> MalakHome(query, { query = it }, category, { category = it }, { resubmission=null; screen = "seller" }, { resubmission=it;screen="seller" })
                             "map" -> MalakEmptyPage(R.string.map_title, R.string.map_unavailable,
                                 R.string.map_unavailable_hint, Icons.Outlined.Map, { screen = "home" })
                             "favorites" -> MalakEmptyPage(R.string.favorites_title, R.string.favorites_empty,
@@ -121,13 +122,14 @@ internal fun MalakApp(
                                 language = it
                                 preferences.edit().putString("language", it).apply()
                             }, onSeller = { screen = "seller" })
-                            "seller" -> key(if (PilotOtpGate.enabled) pilotPhone else "owner") {
+                            "seller" -> key(if (PilotOtpGate.enabled) pilotPhone else "owner",resubmission?.optString("id")) {
                                 // Recreate all seller Compose state when the pilot account changes.
                                 // A document URI, consent checkbox or OCR result must not be
                                 // inherited by a different account on a shared device.
                                 SellerOcrJourney(
                                     onBack = { screen = "home" },
-                                    draftScope = if (PilotOtpGate.enabled) pilotPhone else null
+                                    draftScope = if (PilotOtpGate.enabled) pilotPhone else null,
+                                    resubmission=resubmission
                                 )
                             }
                             else -> LaunchedEffect(Unit) { screen = "home" }
@@ -142,7 +144,8 @@ internal fun MalakApp(
 @Composable
 private fun MalakHome(
     query: String, onQuery: (String) -> Unit,
-    selected: String, onSelected: (String) -> Unit, onSeller: () -> Unit
+    selected: String, onSelected: (String) -> Unit, onSeller: () -> Unit,
+    onReplaceDocuments:(org.json.JSONObject)->Unit
 ) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 18.dp)) {
         Box(Modifier.fillMaxWidth().background(Brush.verticalGradient(listOf(Sea, Color(0xFF35ABC1), SeaLight)))) {
@@ -198,9 +201,7 @@ private fun MalakHome(
         CategoryPills(selected, onSelected)
         Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            val emptyTitle = if (query.isBlank() && selected == "all") R.string.listings_empty_title else R.string.search_empty_title
-            val emptyHint = if (query.isBlank() && selected == "all") R.string.listings_empty_hint else R.string.search_empty_hint
-            PolishedEmptyState(Icons.Outlined.RealEstateAgent, s(emptyTitle), s(emptyHint))
+            PilotListings(query,selected,onReplaceDocuments)
         }
     }
 }

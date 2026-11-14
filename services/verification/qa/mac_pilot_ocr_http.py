@@ -16,6 +16,7 @@ import secrets
 import socket
 import sys
 import time
+import threading
 from collections import defaultdict, deque
 from pathlib import Path
 
@@ -31,7 +32,7 @@ MAX_IMAGE_BYTES = 6 * 1024 * 1024
 SESSION_SECONDS = 12 * 60 * 60
 PORT = 18443
 NULL_FIELDS = {
-    "surname": None, "givenName": None, "cinLast4": None,
+    "surname": None, "givenName": None, "cinLast4": None, "cinFull": None,
     "birthDate": None, "confidencePercent": 0
 }
 
@@ -42,6 +43,8 @@ class MemoryPilot:
         self.alphabet = alphabet
         self.engine = ocr_module
         self.tokens = {}
+        self.store = None
+        self.inference_lock = threading.Lock()
         self.failures = defaultdict(deque)
 
     def login(self, body, ip):
@@ -66,6 +69,8 @@ class MemoryPilot:
             self.tokens = {k:v for k,v in self.tokens.items() if v[0] > now}
         if len(self.tokens) >= 128:
             return None
+        if self.store is not None:
+            return self.store.login(phone,code,device)
         token = secrets.token_urlsafe(32)
         self.tokens[hashlib.sha256(token.encode()).digest()] = [now+SESSION_SECONDS, 0]
         return {
@@ -80,6 +85,8 @@ class MemoryPilot:
         token = value[7:]
         if not BEARER.fullmatch(token):
             return None
+        if self.store is not None:
+            return [time.monotonic()+60,0] if self.store.authenticate(token) else None
         digest = hashlib.sha256(token.encode()).digest()
         session = self.tokens.get(digest)
         if not session or session[0] <= time.monotonic():
@@ -107,9 +114,15 @@ class MemoryPilot:
             h,w = photo.shape[:2]
             if min(h,w) < 175 or max(h,w) > 6000 or h*w > 25_000_000:
                 raise ValueError("invalid dimensions")
-            fields = self.engine.extract_fields(photo,self.recognizer,self.alphabet)
+            if not self.inference_lock.acquire(blocking=False):raise RuntimeError("OCR busy")
+            try:fields = self.engine.extract_fields(photo,self.recognizer,self.alphabet)
+            finally:self.inference_lock.release()
             if not isinstance(fields,dict) or set(fields) != set(NULL_FIELDS):
                 raise ValueError("bad OCR response")
+            full=fields.get("cinFull")
+            if full is not None and (not isinstance(full,str) or
+                    not re.fullmatch(r"[0-9]{8}",full) or fields.get("cinLast4")!=full[-4:]):
+                raise ValueError("inconsistent CIN")
             return {**fields,"ok":True,"pilotOcr":True,"schemaVersion":1,
                     "engine":"arabic-v5","identityVerified":False,
                     "ownershipVerified":False,"mayPublish":False}
@@ -139,6 +152,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.close_connection = True
 
     def do_GET(self):
+        if getattr(self.server,"workflow",None) and self.server.workflow.dispatch(self,"GET"):return
         if self.path == "/healthz":
             self.result(200,{"ok":True,"engine":"arabic-v5",
                              "modelReady":True,"pilotQa":True})
@@ -146,6 +160,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.result(404,{"ok":False})
 
     def do_POST(self):
+        if getattr(self.server,"workflow",None) and self.server.workflow.dispatch(self,"POST"):return
         if self.path not in (LOGIN_PATH,OCR_PATH):
             self.result(404,{"ok":False})
             return
@@ -201,18 +216,32 @@ class Handler(http.server.BaseHTTPRequestHandler):
     def do_PATCH(self): self.result(405,{"ok":False})
 
 
-class Server(http.server.HTTPServer):
-    allow_reuse_address = False
+class Server(http.server.ThreadingHTTPServer):
+    allow_reuse_address = True
+    daemon_threads = True
 
 def main():
-    if len(sys.argv)!=3 or sys.argv[1]!="--model-root":
+    config_path=Path(__file__).with_name("runtime.json")
+    if config_path.exists():
+        config=json.loads(config_path.read_text())
+        for key,value in config.items():
+            if key.startswith("MALAK_") and isinstance(value,str):os.environ.setdefault(key,value)
+    if os.environ.get("MALAK_PYTHON_DEPS"):sys.path.insert(0,os.environ["MALAK_PYTHON_DEPS"])
+    if len(sys.argv)<3 or sys.argv[1]!="--model-root":
         raise SystemExit("usage: mac_pilot_ocr_http.py --model-root /private/ocr/model")
     # Resolve code from public repository with no private samples in the cwd.
     import cin_v5 as v5
     v5.MODEL_ROOT = Path(sys.argv[2])
     recognizer, alphabet = v5.recognizer()
-    with Server(("127.0.0.1",PORT),Handler) as server:
+    with Server(("127.0.0.1",int(os.environ.get("MALAK_PORT",PORT))),Handler) as server:
         server.pilot = MemoryPilot(recognizer,alphabet,v5)
+        if os.environ.get("MALAK_PILOT_DATA"):
+            from pilot_workflow import PilotStore
+            from workflow_http import WorkflowRoutes
+            from mac_pair_runtime import MacPairRuntime
+            server.pilot.store=PilotStore(os.environ["MALAK_PILOT_DATA"])
+            server.workflow=WorkflowRoutes(server.pilot.store,MacPairRuntime(server.pilot,
+                os.environ["MALAK_VISION_BIN"],os.environ["MALAK_NODE_BIN"]))
         server.serve_forever(poll_interval=.5)
 
 if __name__=="__main__":

@@ -46,7 +46,9 @@ internal data class CertificateIdentityReview(
     val mayPublish:Boolean=false,val localFields:LocalOcrFields?=null,
     val detectedKind:String?=null,val unifiedAssessment:String?=null,
     val unifiedRoles:List<UnifiedRoleStatus> = emptyList(),
-    val matchedRightsHolder:MatchedRightsHolder?=null)
+    val matchedRightsHolder:MatchedRightsHolder?=null,
+    val reviewId:String?=null, val propertyFacts:Map<String,String> = emptyMap(),
+    val propertyFactStatuses:Map<String,String> = emptyMap())
 internal class OwnerPairException(val statusCode:Int):Exception("PRIVATE_PAIR_UNAVAILABLE")
 
 private const val DOC_LIMIT=12L*1024L*1024L
@@ -417,6 +419,7 @@ internal suspend fun comparePilotDocumentsAndIdentity(
         val facts=data.optJSONArray("propertyFacts")?:throw OwnerPairException(502)
         if(facts.length()>18)throw OwnerPairException(502)
         val values=mutableMapOf<String,String>()
+        val factStatuses=mutableMapOf<String,String>()
         for(i in 0 until facts.length()){
             val f=facts.optJSONObject(i)?:throw OwnerPairException(502)
             val key=f.optString("key")
@@ -428,6 +431,9 @@ internal suspend fun comparePilotDocumentsAndIdentity(
                 "serviceRequestNumber","serviceRequestDate","rightsDenominator")||
                 value.isBlank()||value.length>100||f.optInt("page") !in 1..pages||
                 values.containsKey(key))throw OwnerPairException(502)
+            val factStatus=f.optString("status","CANDIDATE")
+            if(factStatus !in setOf("CANDIDATE","LOW_CONFIDENCE"))throw OwnerPairException(502)
+            factStatuses[key]=factStatus
             values[key]=value
         }
         val area=when(kind){
@@ -443,7 +449,8 @@ internal suspend fun comparePilotDocumentsAndIdentity(
                 values["parentRegisterReference"],area,pages,
                 null,null,null,null),
             detectedKind=kind,unifiedAssessment=status,unifiedRoles=roles,
-            matchedRightsHolder=holder
+            matchedRightsHolder=holder,reviewId=data.optString("reviewId").takeIf{ID.matches(it)},
+            propertyFacts=values.toMap(),propertyFactStatuses=factStatuses.toMap()
         )
     }finally{c.disconnect()}
 }

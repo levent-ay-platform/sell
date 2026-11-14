@@ -45,6 +45,21 @@ class Contract(unittest.TestCase):
         return self.request("/internal/v1/pilot/login",data,
                  {"Content-Type":"application/json"})
 
+    def test_six_field_v5_result_is_accepted(self):
+        import cv2
+        import numpy as np
+        fields={"surname":"بن سالم","givenName":"ليلى","cinLast4":"1122",
+                "cinFull":"00001122","birthDate":"1990-01-02","confidencePercent":96}
+        class V5:
+            @staticmethod
+            def extract_fields(*args): return dict(fields)
+        pilot=MemoryPilot(None,[],V5())
+        ok,photo=cv2.imencode('.png',np.full((400,650,3),255,dtype=np.uint8))
+        result=pilot.read(photo.tobytes(),'image/png')
+        self.assertEqual(result['cinFull'],'00001122')
+        self.assertEqual(result['birthDate'],'1990-01-02')
+        self.assertFalse(result['identityVerified'])
+
     def test_real_memory_scoped_login(self):
         status,reply=self.login("1234")
         self.assertEqual(status,200)

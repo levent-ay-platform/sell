@@ -36,15 +36,15 @@ internal object LocalDocumentOcr {
         val readyForReview:Boolean get()=
             readableCore&&cinLast4?.matches(Regex("""[0-9]{4}"""))==true
         val readyForManualReview:Boolean get()=readableCore&&cinLast4==null
-        /** Camera capture may be accepted only after all four core fields
-         * are genuinely present and internally consistent. A masked test CIN,
-         * partial four digits, failed OCR or missing birth date is REVIEW
-         * ONLY, not a successfully accepted identity capture.
-         */
-        val readyForCameraAcceptance:Boolean get()=
-            readableCore &&
-            cinFull?.matches(Regex("""[0-9]{8}"""))==true &&
-            cinFull?.takeLast(4)==cinLast4
+        /** Completed extraction may have missing fields; admin reviews originals.
+         * Transport/inference failures still require retry before submission. */
+        val readyForCameraAcceptance:Boolean get()=issue==null &&
+            (cinFull==null||(cinFull.matches(Regex("[0-9]{8}"))&&cinFull.takeLast(4)==cinLast4)) &&
+            (birthDate==null||runCatching{
+                val parsed=java.time.LocalDate.parse(birthDate)
+                !parsed.isBefore(java.time.LocalDate.of(1900,1,1))&&!parsed.isAfter(java.time.LocalDate.now())
+            }.getOrDefault(false))
+
     }
     private const val MAX_IMAGE=6L*1024L*1024L
     private val UUID=Regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$")

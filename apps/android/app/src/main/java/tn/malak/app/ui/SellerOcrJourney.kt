@@ -80,7 +80,7 @@ private val Capacities = listOf(
  * raw OCR models remain on the isolated private Huawei service.
  */
 @Composable
-fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
+fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmission:org.json.JSONObject?=null) {
     val context=LocalContext.current
     val ownerSession=LocalOwnerEvidenceSession.current
     val authenticatedOwnerSession=LocalAuthenticatedOwnerSession.current
@@ -116,13 +116,18 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
     var pairReport by remember(draftFile) {mutableStateOf<CertificateIdentityReview?>(null)}
     var provisionedCase by remember(draftFile) {mutableStateOf<OwnerEvidenceSession?>(null)}
     var pairError by remember(draftFile) {mutableIntStateOf(0)}
+    var customerName by remember(draftFile){mutableStateOf(resubmission?.optString("customerName").orEmpty())}
+    var sending by remember(draftFile){mutableStateOf(false)}
+    var submitted by remember(draftFile){mutableStateOf(false)}
+    var submissionMessage by remember(draftFile){mutableIntStateOf(0)}
+    var submissionKey by remember(draftFile){mutableStateOf(UUID.randomUUID().toString())}
     // A dedicated and clearly labelled send action records consent.
     // No redundant checkbox in addition to the explicit action.
     var step by rememberSaveable(draftFile) {mutableIntStateOf(0)}
-    var name by rememberSaveable(draftFile) {mutableStateOf(prefs.getString("title","") ?: "")}
-    var region by rememberSaveable(draftFile) {mutableStateOf(prefs.getString("region","") ?: "")}
-    var area by rememberSaveable(draftFile) {mutableStateOf(prefs.getString("area","") ?: "")}
-    var price by rememberSaveable(draftFile) {mutableStateOf(prefs.getString("price","") ?: "")}
+    var name by rememberSaveable(draftFile) {mutableStateOf(resubmission?.optString("title") ?: prefs.getString("title","") ?: "")}
+    var region by rememberSaveable(draftFile) {mutableStateOf(resubmission?.optString("region") ?: prefs.getString("region","") ?: "")}
+    var area by rememberSaveable(draftFile) {mutableStateOf(resubmission?.optString("area") ?: prefs.getString("area","") ?: "")}
+    var price by rememberSaveable(draftFile) {mutableStateOf(resubmission?.optString("price") ?: prefs.getString("price","") ?: "")}
     // Legacy drafts could contain an automatically selected "owner".
     // Without a recorded explicit user choice, do not assert legal capacity.
     var capacityConfirmed by rememberSaveable(draftFile) {
@@ -163,7 +168,7 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
     val listingPhotos=remember(draftFile){mutableStateListOf<DraftListingPhoto>()}
     var listingLatitude by remember(draftFile){mutableStateOf("")}
     var listingLongitude by remember(draftFile){mutableStateOf("")}
-    var listingDescription by remember(draftFile){mutableStateOf("")}
+    var listingDescription by remember(draftFile){mutableStateOf(resubmission?.optString("description").orEmpty())}
     // Never persist private OCR values or even the document URI with the draft.
     var familyReadings by remember(draftFile) {mutableStateOf<List<ReadOcrResult>>(emptyList())}
     var familyReadBusy by remember(draftFile) {mutableStateOf(false)}
@@ -248,6 +253,9 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
         requestJob?.cancel()
         provisionedCase=null
         pairReport=null
+        submitted=false
+        submissionMessage=0
+        submissionKey=UUID.randomUUID().toString()
         pairProgress=null
         pairError=0
     }
@@ -542,6 +550,15 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                     SectionHeading(s(R.string.review_status_title),
                         s(if(pairReport==null)R.string.review_status_intro
                             else R.string.pair_review_received))
+                    pairReport?.detectedKind?.let{kind->
+                        Text(s(when(kind){
+                            "OWNERSHIP_CERTIFICATE","SHARED_OWNERSHIP_CERTIFICATE"->R.string.strength_strong
+                            "SALE_DEED","TRANSFER_CARD"->R.string.strength_intermediate
+                            "POSSESSION_REPORT"->R.string.strength_supporting
+                            "FINANCIAL_RECEIPT","PROPERTY_SERVICE_RECEIPT"->R.string.strength_receipt
+                            else->R.string.strength_unknown
+                        }),color=Brand.Muted,fontSize=13.sp)
+                    }
                     VerificationStage(Icons.Outlined.CompareArrows,
                         s(R.string.match_status),
                         s(when(pairReport?.unifiedAssessment?:pairReport?.assessment){
@@ -713,6 +730,14 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                                             identityFiles.map{it.uploadKey}==
                                                 idDocs.map{it.idempotencyKey}){
                                             pairReport=pilotResult
+                                            submissionKey=UUID.randomUUID().toString()
+                                            if(customerName.isBlank())customerName=acceptedRead?.fullName.orEmpty()
+                                            val extracted=pilotResult.propertyFacts
+                                            if(area.isBlank()&&pilotResult.detectedKind=="SALE_DEED"&&
+                                                pilotResult.propertyFactStatuses["soldAreaM2"]=="CANDIDATE")
+                                                area=extracted["soldAreaM2"].orEmpty()
+                                            if(price.isBlank()&&pilotResult.propertyFactStatuses["salePriceTnd"]=="CANDIDATE")
+                                                price=extracted["salePriceTnd"].orEmpty()
                                         }
                                         return@launch
                                     }
@@ -992,6 +1017,14 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                                 color=Brand.Muted,lineHeight=19.sp)
                         }
                     }
+                    if(pilotOcrSession!=null){
+                        OutlinedTextField(customerName,{customerName=it.take(120)},
+                            label={Text(s(R.string.submission_customer_name))},
+                            singleLine=true,modifier=Modifier.fillMaxWidth())
+                        Text(draftScope.orEmpty(),color=Brand.Muted,fontSize=13.sp)
+                        Text(s(R.string.submission_review_hint),color=Brand.Muted,fontSize=12.sp)
+                        if(submissionMessage!=0)PlainNotice(Icons.Outlined.Info,s(submissionMessage))
+                    }
                     SmartListingMediaStep(
                         photos=listingPhotos,
                         latitude=listingLatitude,onLatitude={listingLatitude=it},
@@ -1047,7 +1080,7 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                 else Icons.Outlined.CheckCircle,
                 s(saveMessage)
             )
-            if(step==3) Text(s(R.string.draft_local),color=Brand.Muted,fontSize=12.sp)
+            if(step==3&&pilotOcrSession==null) Text(s(R.string.draft_local),color=Brand.Muted,fontSize=12.sp)
         }
         Column(Modifier.fillMaxWidth().padding(horizontal=17.dp,vertical=12.dp),verticalArrangement=Arrangement.spacedBy(7.dp)) {
             // Never show "Continue" under a failed scan: keep retake in reach.
@@ -1089,11 +1122,43 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null) {
                 else if(step==1&&(!identitySelected||pendingPhoto!=null)){
                     identityMessage=R.string.identity_required
                 }
+                else if(step==2&&pilotOcrSession!=null&&pairReport?.reviewId==null){
+                    submissionMessage=R.string.submission_scan_required
+                    pairError=R.string.submission_scan_required
+                }
                 else if(step<3){step++;showInvalid=false;saveMessage=0}
-                else saveLocalDraft()
-            }, modifier=Modifier.fillMaxWidth().heightIn(min=54.dp),
+                else if(pilotOcrSession!=null&&!sending&&!submitted){
+                    val review=pairReport?.reviewId
+                    if(review==null){submissionMessage=R.string.submission_scan_required}
+                    else if(customerName.trim().length<2){submissionMessage=R.string.submission_name_required}
+                    else{
+                        sending=true
+                        val data=org.json.JSONObject().put("reviewId",review)
+                            .put("requestKey",submissionKey).put("customerName",customerName.trim())
+                            .put("submissionId",resubmission?.optString("id"))
+                            .put("title",listingTitle).put("region",region.trim())
+                            .put("area",normalizedArea).put("price",price)
+                            .put("description",listingDescription).put("latitude",listingLatitude)
+                            .put("longitude",listingLongitude)
+                        scope.launch{
+                            try{
+                                listingPhotos.toList().forEach{photo->
+                                    PilotListingClient.photo(context,pilotOcrSession,review,photo.uri,photo.length)
+                                }
+                                PilotListingClient.call(pilotOcrSession,"/api/pilot/submissions",data)
+                                submitted=true;submissionMessage=R.string.submission_sent
+                            }catch(cancel:CancellationException){throw cancel}
+                            catch(_:Exception){submissionMessage=R.string.submission_failed}
+                            finally{sending=false}
+                        }
+                    }
+                }
+                else if(pilotOcrSession==null)saveLocalDraft()
+            }, enabled=!sending&&!submitted, modifier=Modifier.fillMaxWidth().heightIn(min=54.dp),
                 shape=RoundedCornerShape(17.dp),colors=ButtonDefaults.buttonColors(containerColor=Brand.Crimson)) {
-                Text(s(if(step==3)R.string.save_draft else R.string.continue_label),fontWeight=FontWeight.SemiBold,fontSize=15.sp)
+                Text(s(if(step==3&&pilotOcrSession!=null)
+                    if(sending)R.string.submission_sending else if(submitted)R.string.submission_sent else R.string.submission_send
+                    else if(step==3)R.string.save_draft else R.string.continue_label),fontWeight=FontWeight.SemiBold,fontSize=15.sp)
                 Spacer(Modifier.width(9.dp))
                 Icon(if(step==3)Icons.Outlined.Save else Icons.AutoMirrored.Filled.ArrowForward,
                     null,Modifier.size(21.dp))

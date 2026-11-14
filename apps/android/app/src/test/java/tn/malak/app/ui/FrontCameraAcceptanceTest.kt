@@ -15,28 +15,28 @@ class FrontCameraAcceptanceTest {
         assertTrue(complete().readyForCameraAcceptance)
     }
 
-    @Test fun missingCinCannotBeAcceptedEvenWhenNameAndBirthdayArePerfect() {
-        assertFalse(complete().copy(cinFull=null).readyForCameraAcceptance)
-        assertFalse(complete().copy(cinLast4=null,cinFull=null).readyForCameraAcceptance)
+    @Test fun missingCinMayProceedForAdminReviewButContradictionCannot() {
+        assertTrue(complete().copy(cinFull=null).readyForCameraAcceptance)
+        assertTrue(complete().copy(cinLast4=null,cinFull=null).readyForCameraAcceptance)
         assertFalse(complete().copy(cinLast4="9999").readyForCameraAcceptance)
     }
 
-    @Test fun missingOrImpossibleBirthdayCannotBeAccepted() {
-        assertFalse(complete().copy(birthDate=null).readyForCameraAcceptance)
+    @Test fun missingBirthdayMayProceedButImpossibleDateCannot() {
+        assertTrue(complete().copy(birthDate=null).readyForCameraAcceptance)
         assertFalse(complete().copy(birthDate="1990-02-31").readyForCameraAcceptance)
     }
 
-    @Test fun readingFailedNameMissingOrLowConfidenceCannotBeAccepted() {
-        assertFalse(complete().copy(givenName=null).readyForCameraAcceptance)
-        assertFalse(complete().copy(surname=null).readyForCameraAcceptance)
-        assertFalse(complete().copy(confidence=48).readyForCameraAcceptance)
+    @Test fun completedIncompleteReadMayProceedButServiceFailureRequiresRetry() {
+        assertTrue(complete().copy(givenName=null).readyForCameraAcceptance)
+        assertTrue(complete().copy(surname=null).readyForCameraAcceptance)
+        assertTrue(complete().copy(confidence=48).readyForCameraAcceptance)
         assertFalse(complete().copy(issue=LocalDocumentOcr.FrontIssue.SERVICE_UNAVAILABLE)
             .readyForCameraAcceptance)
     }
 
-    @Test fun incompleteMaskedTestCardIsReviewOnlyNotAcceptedIdentity() {
+    @Test fun maskedTestCardMayBeSubmittedForAdminReview() {
         val masked=complete().copy(cinFull=null)
         assertTrue(masked.readyForReview)
-        assertFalse(masked.readyForCameraAcceptance)
+        assertTrue(masked.readyForCameraAcceptance)
     }
 }

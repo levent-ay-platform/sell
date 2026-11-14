@@ -23,8 +23,8 @@ android {
         applicationId = "tn.malak.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 6
-        versionName = "0.3.3-huawei-ocr-qa"
+        versionCode = 7
+        versionName = "0.4.0-mac-review-pilot"
         buildConfigField("String", "MALAK_PRIVATE_SERVICE_URL", "\"$malakPrivateBaseUrl\"")
     }
 
@@ -54,7 +54,7 @@ dependencies {
     implementation("androidx.compose.ui:ui-tooling-preview")
     debugImplementation("androidx.compose.ui:ui-tooling")
     // OCR and perspective rectification execute inside the authorized
-    // isolated Huawei service. No Tesseract, OpenCV, ONNX or model files in APK.
+    // Mac service. No Tesseract, OpenCV, ONNX or model files in APK.
     implementation("androidx.camera:camera-camera2:1.6.2")
     implementation("androidx.camera:camera-lifecycle:1.6.2")
     implementation("androidx.camera:camera-view:1.6.2")
