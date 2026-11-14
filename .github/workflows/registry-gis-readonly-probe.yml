@@ -9,39 +9,27 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 3
     steps:
-      - name: Read only public ArcGIS Web App config and linked service references
+      - name: Resolve GeoPAU public Web App map item and actual configured layers
         run: |
           python3 - <<'PYCODE'
-          import urllib.request,urllib.parse,json,re,time,concurrent.futures
-          root="https://geopau.gov.tn/app_sig_pau_tunisie_public/"
-          paths=["config.json","index.html","apps/","configs/","widgets/LayerList/config.json"]
-          def fetch(p):
-            t=time.monotonic()
+          import urllib.request,json,time
+          url="https://geopau.gov.tn/app_sig_pau_tunisie_public/config.json"
+          with urllib.request.urlopen(urllib.request.Request(url,headers={"User-Agent":"Mozilla/5.0"}),timeout=25) as r:j=json.load(r)
+          for k in ("portalUrl","appId","map","geometryService","httpProxy","dataSource"):
+           print("SETTING",k,json.dumps(j.get(k),ensure_ascii=False)[:3000],flush=True)
+          for col in ("widgetOnScreen","widgetPool"):
+           w=j.get(col,{})
+           print("WIDGET_COLLECTION",col,json.dumps([{"uri":x.get("uri"),"name":x.get("name"),"config":x.get("config")} for x in w.get("widgets",[]) if any(y in str(x).lower() for y in ("search","layer","attribute","query","filter"))],ensure_ascii=False)[:3000],flush=True)
+          item=(j.get("map") or {}).get("itemId") or (j.get("map") or {}).get("id")
+          portal=j.get("portalUrl","https://www.arcgis.com")
+          if item:
+           import urllib.parse
+           candidates=[portal.rstrip("/")+"/sharing/rest/content/items/"+str(item)+"/data?f=json",portal.rstrip("/")+"/sharing/rest/content/items/"+str(item)+"?f=json"]
+           for u in candidates:
             try:
-              req=urllib.request.Request(urllib.parse.urljoin(root,p),headers={"User-Agent":"Mozilla/5.0","Accept":"application/json,text/html,*/*"})
-              with urllib.request.urlopen(req,timeout=13) as r:
-                data=r.read(500000);code=r.status;ctype=r.headers.get("content-type");final=r.url
-              x=data.decode("utf8","replace")
-              out={"path":p,"status":code,"type":ctype,"bytes":len(data),"final":final,"time":round(time.monotonic()-t,1)}
-              try:
-                j=json.loads(x)
-                out["json_keys"]=list(j.keys())[:20]
-                refs=[]
-                def walk(v,k=""):
-                  if isinstance(v,dict):
-                    for key,val in v.items():walk(val,key)
-                  elif isinstance(v,list):
-                    for val in v:walk(val,k)
-                  elif isinstance(v,str) and ("arcgisserver" in v or "MapServer" in v or "FeatureServer" in v):
-                    refs.append({"key":k,"url":v[:200]})
-                walk(j)
-                out["GIS_REFERENCES"]=refs[:55]
-              except Exception:
-                out["title"]=re.findall(r"<title[^>]*>(.*?)</title>",x,re.I|re.S)[:1]
-                out["script_src"]=re.findall(r'<script[^>]+src=[\'"]([^\'"]+)',x,re.I)[:18]
-                out["snippet"]=x[:100] if "<html" not in x.lower() else ""
-              print("APP",json.dumps(out,ensure_ascii=False)[:12000],flush=True)
-            except Exception as e:print("APP_ERROR",p,type(e).__name__,str(e)[:140],"secs",round(time.monotonic()-t,1),flush=True)
-          with concurrent.futures.ThreadPoolExecutor(max_workers=4) as ex:list(ex.map(fetch,paths))
+             with urllib.request.urlopen(urllib.request.Request(u,headers={"User-Agent":"Mozilla/5.0"}),timeout=25) as r:
+              q=json.load(r)
+             print("WEBMAP_ITEM",u,"keys",list(q)[:15],"layers",json.dumps(q.get("operationalLayers",[]),ensure_ascii=False)[:8000],flush=True)
+            except Exception as e:print("WEBMAP_ERROR",str(e)[:120],flush=True)
 
           PYCODE
