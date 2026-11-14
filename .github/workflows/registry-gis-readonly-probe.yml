@@ -33,7 +33,7 @@ jobs:
              result["body_head"]=s[:240] if "image" not in (ct or "") else "binary image"
              if "<html" in s.lower():
               result["directory_listing"]=bool(re.search("Index of|Directory Listing|Directory of|^<h1>.*docs|href=[\"']\\d+/?[\"']",s,re.I|re.M))
-              result["hrefs"]=re.findall(r'href=["\\']([^"\\']+)',s,re.I)[:35]
+              result["hrefs"]=re.findall(r"href=[^ >]+",s,re.I)[:35]
               if save:
                with open("geopau_docs_and_portal/"+label+".html","w",encoding="utf8") as w:w.write(s)
             print("TEST",json.dumps(result,ensure_ascii=False)[:6500],flush=True)
