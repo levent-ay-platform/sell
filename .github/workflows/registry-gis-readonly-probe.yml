@@ -9,60 +9,48 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 4
     steps:
-      - name: Build complete source-backed GIS layers fields value-domain inventory (metadata only)
+      - name: Check actual candidate parcel-like vector layers and GIS server service catalog
         run: |
           python3 - <<'PYCODE'
-          import urllib.request,json,csv,collections,datetime,os
-          B="https://geopau.gov.tn/arcgisserver/rest/services/public/PAUs_public/MapServer"
-          def fetch(s):
-           u=B+s
-           with urllib.request.urlopen(urllib.request.Request(u,headers={"User-Agent":"Malak GIS public metadata research","Accept":"application/json"}),timeout=50) as r:
-            raw=r.read(1200000)
-            print("SOURCE",s,r.status,len(raw),r.headers.get("Content-Type"),flush=True)
-           return json.loads(raw)
-          root=fetch("?f=pjson"); data=fetch("/layers?f=pjson")
-          layers=data["layers"]
-          groups={x["id"]:x for x in layers}
-          counts=collections.Counter(x["type"] for x in layers)
-          geometry=collections.Counter(x.get("geometryType") for x in layers if x.get("type")=="Feature Layer")
-          print("COUNTS",json.dumps({"types":counts,"geometry":geometry,"root_maxRecordCount":root.get("maxRecordCount"),"root_spatialReference":root.get("spatialReference"),"tables":len(data.get("tables",[]))},ensure_ascii=False),flush=True)
-          outdir="geopau_catalog";os.makedirs(outdir,exist_ok=True)
-          with open(outdir+"/service.json","w",encoding="utf8") as w:json.dump(root,w,ensure_ascii=False,indent=2)
-          with open(outdir+"/layers_metadata.json","w",encoding="utf8") as w:json.dump(data,w,ensure_ascii=False,indent=1)
-          summary={"source":B,"root_capabilities":root.get("capabilities"),"supportedQueryFormats":root.get("supportedQueryFormats"),"root_maxRecordCount":root.get("maxRecordCount"),"root_spatialReference":root.get("spatialReference"),"layer_types":dict(counts),"feature_geometries":dict(geometry),"tables":len(data.get("tables",[])),"features_metadata_count":0,"records_retrieved":0,"record_validation":"NOT_VERIFIED_Query500"}
-          with open(outdir+"/summary.json","w",encoding="utf8") as w:json.dump(summary,w,ensure_ascii=False,indent=2)
-          rows=[]; fields=[]; codes=[]; seen=set()
-          for x in layers:
-           parent=x.get("parentLayer") or {}
-           flds=x.get("fields") or []
-           rows.append({"ID":x["id"],"Layer":x["name"],"Parent":parent.get("name",""),"Type":x.get("type"),"Geometry":x.get("geometryType",""),"Fields_count":len(flds),"Fields":", ".join(y.get("name","") for y in flds),"CanQuery":x.get("capabilities"),"MaxRecordCount":x.get("maxRecordCount"),"supportsPagination":(x.get("advancedQueryCapabilities") or {}).get("supportsPagination"),"HasAttachments":x.get("hasAttachments"),"SRC_Ref":B+"/"+str(x["id"])+"?f=pjson"})
-           for ff in flds:
-            fields.append({"layer_id":x["id"],"layer_name":x["name"],"field_name":ff.get("name"),"field_type":ff.get("type"),"alias":ff.get("alias"),"length":ff.get("length"),"nullable":ff.get("nullable"),"domain_name":(ff.get("domain") or {}).get("name")})
-            for item in (ff.get("domain") or {}).get("codedValues",[]):
-             key=(x["id"],ff.get("name"),"layer",item.get("code"),item.get("name"))
-             if key not in seen:
-              seen.add(key); codes.append({"layer_id":x["id"],"layer_name":x["name"],"field":ff.get("name"),"subtype_id":"","subtype_name":"","numeric_code":item.get("code"),"display_name":item.get("name"),"origin":"field-domain"})
-           for subtype in x.get("types",[]) + x.get("subtypes",[]):
-            for fname,dom in (subtype.get("domains") or {}).items():
-             for item in (dom or {}).get("codedValues",[]):
-              key=(x["id"],fname,subtype.get("id",subtype.get("code")),item.get("code"),item.get("name"))
-              if key not in seen:
-               seen.add(key);codes.append({"layer_id":x["id"],"layer_name":x["name"],"field":fname,"subtype_id":subtype.get("id",subtype.get("code")),"subtype_name":subtype.get("name"),"numeric_code":item.get("code"),"display_name":item.get("name"),"origin":"subtype-domain"})
-          def csvout(name,items,cols):
-           with open(outdir+"/"+name,"w",encoding="utf-8-sig",newline="") as f:
-            w=csv.DictWriter(f,fieldnames=cols,extrasaction="ignore");w.writeheader();w.writerows(items)
-          csvout("layers_79.csv",rows,list(rows[0].keys()))
-          csvout("fields_all.csv",fields,list(fields[0].keys()))
-          csvout("coded_values.csv",codes,["layer_id","layer_name","field","subtype_id","subtype_name","numeric_code","display_name","origin"])
-          print("DATA_COUNTS",json.dumps({"layers":len(rows),"fields":len(fields),"coded_pairs":len(codes),"layer60_codes":len([a for a in codes if a["layer_id"]==60]),"layer138_codes":len([a for a in codes if a["layer_id"]==138]),"unique_fields":len(set(a["field_name"] for a in fields))},ensure_ascii=False),flush=True)
-          for id in [60,138,69,66,12,22,23,41,43,53,135,133,4,64,65,11]:
-           x=groups[id]
-           print("SPOTLIGHT",json.dumps({"id":id,"name":x["name"],"geom":x.get("geometryType"),"fields":[{"name":q.get("name"),"type":q.get("type")} for q in x.get("fields",[])],"subtype_count":len(x.get("types",[])+x.get("subtypes",[])),"renderer":(x.get("drawingInfo") or {}).get("renderer",{}).get("type"),"supportsPagination":(x.get("advancedQueryCapabilities") or {}).get("supportsPagination")},ensure_ascii=False)[:3000],flush=True)
+          import urllib.request,urllib.parse,urllib.error,json,time,concurrent.futures,collections
+          base="https://geopau.gov.tn/arcgisserver/rest"
+          url=base+"/services/public/PAUs_public/MapServer"
+          layer_tests=[
+          (66,"Lotissement","OBJECTID,Intitule,Lotisseur,Date_Approb,Zone_ID,PAU_ID"),
+          (12,"Contour_Reg_Ilots","OBJECTID,PAU_ID"),
+          (68,"Limite_PAD","OBJECTID,PAD_ID,PIF"),
+          (67,"SDA","OBJECTID,PAU_ID,Date_"),
+          (137,"Equipements(Polygones)","OBJECTID,EquipPt_ID,PAU_ID"),
+          (69,"Limite_PAU","OBJECTID,PAU_ID,Libelle"),
+          (60,"Zones_Codes","OBJECTID,Zone_id,Code,Vocation,PAU_ID"),
+          (138,"Zones","OBJECTID,Zone_id,Code,Vocation,PAU_ID"),
+          (51,"DPF","OBJECTID,PA_ID,NOM"),
+          ]
+          def test(item):
+           typ,tag,u,form=item
+           t=time.monotonic()
+           try:
+            req=urllib.request.Request(u+(("?"+urllib.parse.urlencode(form)) if form else ""),headers={"Accept":"application/json","User-Agent":"Mozilla/5.0 GeoPAU-Public-Data-Audit"})
+            with urllib.request.urlopen(req,timeout=14) as r:
+             b=r.read(100000);ct=r.headers.get("Content-Type");status=r.status
+            try:
+             j=json.loads(b)
+             out={"http":status,"type":ct,"error":j.get("error"),"keys":list(j.keys())[:12],"feature_count":len(j.get("features",[])) if isinstance(j.get("features"),list) else None,"sample_keys":list((j.get("features") or [{}])[0].get("attributes",{}).keys()) if j.get("features") else [],"layers_count":len(j.get("services",[])) if isinstance(j.get("services"),list) else None,"services":j.get("services",[])[:18]}
+            except Exception:out={"http":status,"type":ct,"snippet":b[:160].decode("utf8","replace")}
+            print("RESULT",json.dumps({"check":tag,"kind":typ,"seconds":round(time.monotonic()-t,1),**out},ensure_ascii=False)[:3500],flush=True)
+           except urllib.error.HTTPError as e:
+            print("RESULT",json.dumps({"check":tag,"kind":typ,"http":e.code,"seconds":round(time.monotonic()-t,1),"body":e.read(180).decode("utf8","replace")},ensure_ascii=False),flush=True)
+           except Exception as e:
+            print("RESULT",json.dumps({"check":tag,"kind":typ,"error":type(e).__name__,"details":str(e)[:120],"seconds":round(time.monotonic()-t,1)},ensure_ascii=False),flush=True)
+          jobs=[]
+          for id,name,fields in layer_tests:
+           jobs.append(("QUERY",str(id)+" "+name,url+"/"+str(id)+"/query",{"where":"OBJECTID=1","outFields":fields,"returnGeometry":"false","f":"json"}))
+          jobs.extend([
+          ("DIRECTORY","public_services",base+"/services/public",{"f":"pjson"}),
+          ("DIRECTORY","root_services",base+"/services",{"f":"pjson"}),
+          ("METADATA","Lotissement_layer66",url+"/66",{"f":"pjson"}),
+          ("METADATA","ContourRegIlots_layer12",url+"/12",{"f":"pjson"}),
+          ])
+          with concurrent.futures.ThreadPoolExecutor(max_workers=5) as p:list(p.map(test,jobs))
 
           PYCODE
-      - name: Save complete GeoPAU metadata catalog CSV JSON
-        uses: actions/upload-artifact@v4
-        with:
-          name: geopau-detailed-79-layer-data-dictionary
-          path: geopau_catalog/
-          retention-days: 7
