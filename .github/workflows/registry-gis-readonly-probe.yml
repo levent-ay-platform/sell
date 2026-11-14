@@ -7,36 +7,41 @@ permissions:
 jobs:
   probe:
     runs-on: ubuntu-latest
-    timeout-minutes: 4
+    timeout-minutes: 5
     steps:
-      - name: Inspect COMPLETE OTC public pages and actual outbound GIS links
+      - name: Check open Tunisia admin-level GeoJSON against certificate toponym
         run: |
           python3 - <<'PYCODE'
-          import urllib.request,urllib.parse,html.parser,re,collections,json,concurrent.futures,time
-          BASE="https://www.otc.nat.tn"
-          PAGES=["/products","/docs","/geoportail","/tlis"]
-          class P(html.parser.HTMLParser):
-           def __init__(self):super().__init__();self.links=[];self.scripts=[];self.forms=[];self.depth=0
-           def handle_starttag(self,t,attrs):
-            a=dict(attrs)
-            if t=="script":
-             if a.get("src"):self.scripts.append(urllib.parse.urljoin(BASE,a["src"]))
-            if t=="a":
-             v=a.get("href")
-             if v:self.links.append(v)
-            if t=="form":self.forms.append({"method":a.get("method"),"action":a.get("action")})
-          def get(path):
+          import urllib.request,urllib.parse,urllib.error,json,zipfile,io,re,unicodedata,time,os
+          URL="https://www.data4tunisia.org/api/1/datasets/r/ebe19593-9438-4d14-8291-e65f811e2671"
+          def norm(s):
+           s=str(s or "").lower()
+           s="".join(c for c in unicodedata.normalize("NFKD",s) if not unicodedata.combining(c))
+           return re.sub(r'[^a-z0-9\u0600-\u06ff]+'," ",s)
+          try:
            t=time.monotonic()
-           try:
-            with urllib.request.urlopen(urllib.request.Request(BASE+path,headers={"User-Agent":"Mozilla/5.0","Accept":"text/html"}),timeout=17) as r:
-             raw=r.read(1100000);ct=r.headers.get("Content-Type");cl=r.headers.get("Content-Length")
-            s=raw.decode("utf8","replace");p=P();p.feed(s)
-            def relevant(v):return bool(re.search(r"(api|wms|wfs|geo|plan|parc|cadas|fonc|renseign|archives?|carts|documents?|otc)",v,re.I))
-            refs=list(dict.fromkeys(p.links))
-            scripts=list(dict.fromkeys(p.scripts))
-            match=list(dict.fromkeys(re.findall(r'(?:/|https?://)[^\s\"\'<>]{0,120}(?:api|geoportail|cadas|foncier|parcelle|renseignement|/carts/)[^\s\"\'<>]{0,120}',s,re.I)))[:30]
-            print("PUBLIC_PAGE",json.dumps({"path":path,"duration":round(time.monotonic()-t,1),"bytes":len(raw),"content_length":cl,"type":ct,"title":re.findall(r'<title[^>]*>(.*?)</title>',s,re.I|re.S)[:1],"scripts":scripts[:22],"relevant_a_href":[v for v in refs if relevant(v)][:45],"forms":p.forms,"references":match,"html_ends":s[-80:]},ensure_ascii=False),flush=True)
-           except Exception as e:print("PUBLIC_PAGE_ERR",path,type(e).__name__,str(e)[:120],flush=True)
-          with concurrent.futures.ThreadPoolExecutor(max_workers=3) as ex:list(ex.map(get,PAGES))
+           req=urllib.request.Request(URL,headers={"User-Agent":"MalakOpenGeo/1.0 public dataset research"})
+           with urllib.request.urlopen(req,timeout=85) as r:
+            raw=r.read(80_000_001);print("DOWNLOAD",r.status,len(raw),"type",r.headers.get("content-type"),"seconds",round(time.monotonic()-t,1),flush=True)
+           if len(raw)>80000000:raise ValueError("Dataset too large for bounded probe")
+           z=zipfile.ZipFile(io.BytesIO(raw))
+           names=z.namelist()
+           print("ZIP_CONTENTS",json.dumps([{"file":n,"size":z.getinfo(n).file_size} for n in names],ensure_ascii=False),flush=True)
+           for fn in names:
+            if not fn.lower().endswith((".json",".geojson")):continue
+            if z.getinfo(fn).file_size>70000000:continue
+            try:
+             with z.open(fn) as rd:obj=json.load(rd)
+             ff=obj.get("features") or []
+             matches=[]
+             for feat in ff:
+              p=feat.get("properties") or {}
+              tnorm=norm(" ".join(str(v) for v in p.values() if isinstance(v,(str,int))))
+              if any(k in tnorm for k in ("mrada","ferj","sidi jedidi","sidi djedidi","hammamet","حمامات","فرجان","مرادة","سيدي الجديدي","nabeul")):
+               c=feat.get("geometry",{}).get("coordinates",[])
+               matches.append({"p":p,"geom_type":feat.get("geometry",{}).get("type"),"geometry_present":bool(c)})
+             print("GEOJSON_FILE",fn,"total",len(ff),"matched",len(matches),"SAMPLE_MATCHES",json.dumps(matches[:55],ensure_ascii=False)[:20000],flush=True)
+            except Exception as e:print("FILE_ERROR",fn,type(e).__name__,str(e)[:150],flush=True)
+          except Exception as e:print("DOWNLOAD_ERROR",type(e).__name__,str(e)[:250],flush=True)
 
           PYCODE
