@@ -7,36 +7,62 @@ permissions:
 jobs:
   probe:
     runs-on: ubuntu-latest
-    timeout-minutes: 3
+    timeout-minutes: 4
     steps:
-      - name: Identify the three active map services and search widget endpoints
+      - name: Build complete source-backed GIS layers fields value-domain inventory (metadata only)
         run: |
           python3 - <<'PYCODE'
-          import urllib.request,json
-          root="https://geopau.gov.tn/app_sig_pau_tunisie_public/"
-          def get(url):
-           with urllib.request.urlopen(urllib.request.Request(url,headers={"User-Agent":"Mozilla/5.0"}),timeout=25) as r:return json.load(r)
-          app=get(root+"config.json")
-          portal=app["map"]["portalUrl"]
-          m=get(portal+"/sharing/rest/content/items/"+app["map"]["itemId"]+"/data?f=json")
-          for layer in m.get("operationalLayers",[]):
-           print("OPERATIONAL",json.dumps({"title":layer.get("title"),"id":layer.get("id"),"url":layer.get("url"),"visibility":layer.get("visibility"),"layerType":layer.get("layerType"),"visibleLayers":layer.get("visibleLayers",[])[:15],"layer_count":len(layer.get("layers",[]))},ensure_ascii=False),flush=True)
-          for section in ("widgetOnScreen","widgetPool"):
-           for w in (app.get(section) or {}).get("widgets",[]):
-            if any(t in str(w.get("uri")).lower() for t in ("esearch","search","layerlist")):
-             path=w.get("config")
-             if isinstance(path,str) and path.endswith(".json"):
-              try:
-               data=get(root+path)
-               refs=[]
-               def find(x,k=""):
-                if isinstance(x,dict):
-                 for key,value in x.items():find(value,key)
-                elif isinstance(x,list):
-                 for value in x:find(value,k)
-                elif isinstance(x,str) and ("MapServer" in x or "FeatureServer" in x):refs.append({"field":k,"url":x[:230]})
-               find(data)
-               print("WIDGET",json.dumps({"name":w.get("uri"),"config_path":path,"keys":list(data)[:20],"GIS_URLS":refs[:20]},ensure_ascii=False)[:4500],flush=True)
-              except Exception as e:print("WIDGET_ERR",path,str(e)[:150],flush=True)
+          import urllib.request,json,csv,collections,datetime,os
+          B="https://geopau.gov.tn/arcgisserver/rest/services/public/PAUs_public/MapServer"
+          def fetch(s):
+           u=B+s
+           with urllib.request.urlopen(urllib.request.Request(u,headers={"User-Agent":"Malak GIS public metadata research","Accept":"application/json"}),timeout=50) as r:
+            raw=r.read(1200000)
+            print("SOURCE",s,r.status,len(raw),r.headers.get("Content-Type"),flush=True)
+           return json.loads(raw)
+          root=fetch("?f=pjson"); data=fetch("/layers?f=pjson")
+          layers=data["layers"]
+          groups={x["id"]:x for x in layers}
+          counts=collections.Counter(x["type"] for x in layers)
+          geometry=collections.Counter(x.get("geometryType") for x in layers if x.get("type")=="Feature Layer")
+          print("COUNTS",json.dumps({"types":counts,"geometry":geometry,"root_maxRecordCount":root.get("maxRecordCount"),"root_spatialReference":root.get("spatialReference"),"tables":len(data.get("tables",[]))},ensure_ascii=False),flush=True)
+          outdir="geopau_catalog";os.makedirs(outdir,exist_ok=True)
+          with open(outdir+"/service.json","w",encoding="utf8") as w:json.dump(root,w,ensure_ascii=False,indent=2)
+          with open(outdir+"/layers_metadata.json","w",encoding="utf8") as w:json.dump(data,w,ensure_ascii=False,indent=1)
+          summary={"source":B,"root_capabilities":root.get("capabilities"),"supportedQueryFormats":root.get("supportedQueryFormats"),"root_maxRecordCount":root.get("maxRecordCount"),"root_spatialReference":root.get("spatialReference"),"layer_types":dict(counts),"feature_geometries":dict(geometry),"tables":len(data.get("tables",[])),"features_metadata_count":0,"records_retrieved":0,"record_validation":"NOT_VERIFIED_Query500"}
+          with open(outdir+"/summary.json","w",encoding="utf8") as w:json.dump(summary,w,ensure_ascii=False,indent=2)
+          rows=[]; fields=[]; codes=[]; seen=set()
+          for x in layers:
+           parent=x.get("parentLayer") or {}
+           flds=x.get("fields") or []
+           rows.append({"ID":x["id"],"Layer":x["name"],"Parent":parent.get("name",""),"Type":x.get("type"),"Geometry":x.get("geometryType",""),"Fields_count":len(flds),"Fields":", ".join(y.get("name","") for y in flds),"CanQuery":x.get("capabilities"),"MaxRecordCount":x.get("maxRecordCount"),"supportsPagination":(x.get("advancedQueryCapabilities") or {}).get("supportsPagination"),"HasAttachments":x.get("hasAttachments"),"SRC_Ref":B+"/"+str(x["id"])+"?f=pjson"})
+           for ff in flds:
+            fields.append({"layer_id":x["id"],"layer_name":x["name"],"field_name":ff.get("name"),"field_type":ff.get("type"),"alias":ff.get("alias"),"length":ff.get("length"),"nullable":ff.get("nullable"),"domain_name":(ff.get("domain") or {}).get("name")})
+            for item in (ff.get("domain") or {}).get("codedValues",[]):
+             key=(x["id"],ff.get("name"),"layer",item.get("code"),item.get("name"))
+             if key not in seen:
+              seen.add(key); codes.append({"layer_id":x["id"],"layer_name":x["name"],"field":ff.get("name"),"subtype_id":"","subtype_name":"","numeric_code":item.get("code"),"display_name":item.get("name"),"origin":"field-domain"})
+           for subtype in x.get("types",[]) + x.get("subtypes",[]):
+            for fname,dom in (subtype.get("domains") or {}).items():
+             for item in (dom or {}).get("codedValues",[]):
+              key=(x["id"],fname,subtype.get("id",subtype.get("code")),item.get("code"),item.get("name"))
+              if key not in seen:
+               seen.add(key);codes.append({"layer_id":x["id"],"layer_name":x["name"],"field":fname,"subtype_id":subtype.get("id",subtype.get("code")),"subtype_name":subtype.get("name"),"numeric_code":item.get("code"),"display_name":item.get("name"),"origin":"subtype-domain"})
+          def csvout(name,items,cols):
+           with open(outdir+"/"+name,"w",encoding="utf-8-sig",newline="") as f:
+            w=csv.DictWriter(f,fieldnames=cols,extrasaction="ignore");w.writeheader();w.writerows(items)
+          csvout("layers_79.csv",rows,list(rows[0].keys()))
+          csvout("fields_all.csv",fields,list(fields[0].keys()))
+          csvout("coded_values.csv",codes,["layer_id","layer_name","field","subtype_id","subtype_name","numeric_code","display_name","origin"])
+          print("DATA_COUNTS",json.dumps({"layers":len(rows),"fields":len(fields),"coded_pairs":len(codes),"layer60_codes":len([a for a in codes if a["layer_id"]==60]),"layer138_codes":len([a for a in codes if a["layer_id"]==138]),"unique_fields":len(set(a["field_name"] for a in fields))},ensure_ascii=False),flush=True)
+          for id in [60,138,69,66,12,22,23,41,43,53,135,133,4,64,65,11]:
+           x=groups[id]
+           print("SPOTLIGHT",json.dumps({"id":id,"name":x["name"],"geom":x.get("geometryType"),"fields":[{"name":q.get("name"),"type":q.get("type")} for q in x.get("fields",[])],"subtype_count":len(x.get("types",[])+x.get("subtypes",[])),"renderer":(x.get("drawingInfo") or {}).get("renderer",{}).get("type"),"supportsPagination":(x.get("advancedQueryCapabilities") or {}).get("supportsPagination")},ensure_ascii=False)[:3000],flush=True)
 
           PYCODE
+      - name: Save complete GeoPAU metadata catalog CSV JSON
+        uses: actions/upload-artifact@v4
+        with:
+          name: geopau-detailed-79-layer-data-dictionary
+          path: geopau_catalog/
+          retention-days: 7
