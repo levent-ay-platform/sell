@@ -7,31 +7,41 @@ permissions:
 jobs:
   probe:
     runs-on: ubuntu-latest
-    timeout-minutes: 4
+    timeout-minutes: 3
     steps:
-      - name: Compare HTTP and HTTPS for direct PAU Data feature query
+      - name: Read only public ArcGIS Web App config and linked service references
         run: |
           python3 - <<'PYCODE'
-          import urllib.request,urllib.error,urllib.parse,json,time
-          base="geopau.gov.tn/arcgisserver/rest/services/public/PAUs_public/MapServer"
-          tests=[
-          ("http_metadata","http://"+base+"/60?f=json"),
-          ("http_query","http://"+base+"/60/query?where=OBJECTID%3D1&outFields=Zone_id%2CCode%2CVocation%2CPAU_ID&returnGeometry=false&f=json"),
-          ("https_query_exact","https://"+base+"/60/query?where=OBJECTID%3D1&outFields=Zone_id%2CCode%2CVocation%2CPAU_ID&returnGeometry=false&f=json"),
-          ("https_query_gov_0","https://"+base+"/0/query?where=OBJECTID%3D1&outFields=Nom&returnGeometry=false&f=json"),
-          ]
-          class NoRedirect(urllib.request.HTTPRedirectHandler):
-           def redirect_request(self,*args):return None
-          for tag,url in tests:
-           t=time.monotonic()
-           try:
-            with urllib.request.build_opener(NoRedirect()).open(urllib.request.Request(url,headers={"Accept":"application/json","User-Agent":"Mozilla/5.0"}),timeout=13) as r:body=r.read(10000);code=r.status;location=r.headers.get("Location")
-            try:parsed=json.loads(body)
-            except Exception:parsed={"raw_start":body.decode("utf8","replace")[:120]}
-            print("DIFF",json.dumps({"tag":tag,"http":code,"location":location,"keys":list(parsed)[:10],"error":parsed.get("error"),"nfeatures":len(parsed.get("features",[])) if isinstance(parsed.get("features"),list) else None,"secs":round(time.monotonic()-t,1)},ensure_ascii=False),flush=True)
-           except urllib.error.HTTPError as e:
-            print("DIFF",json.dumps({"tag":tag,"http":e.code,"location":e.headers.get("Location"),"preview":e.read(150).decode("utf8","replace"),"secs":round(time.monotonic()-t,1)},ensure_ascii=False),flush=True)
-           except Exception as e:
-            print("DIFF",json.dumps({"tag":tag,"exception":type(e).__name__,"message":str(e)[:130],"secs":round(time.monotonic()-t,1)},ensure_ascii=False),flush=True)
+          import urllib.request,urllib.parse,json,re,time,concurrent.futures
+          root="https://geopau.gov.tn/app_sig_pau_tunisie_public/"
+          paths=["config.json","index.html","apps/","configs/","widgets/LayerList/config.json"]
+          def fetch(p):
+            t=time.monotonic()
+            try:
+              req=urllib.request.Request(urllib.parse.urljoin(root,p),headers={"User-Agent":"Mozilla/5.0","Accept":"application/json,text/html,*/*"})
+              with urllib.request.urlopen(req,timeout=13) as r:
+                data=r.read(500000);code=r.status;ctype=r.headers.get("content-type");final=r.url
+              x=data.decode("utf8","replace")
+              out={"path":p,"status":code,"type":ctype,"bytes":len(data),"final":final,"time":round(time.monotonic()-t,1)}
+              try:
+                j=json.loads(x)
+                out["json_keys"]=list(j.keys())[:20]
+                refs=[]
+                def walk(v,k=""):
+                  if isinstance(v,dict):
+                    for key,val in v.items():walk(val,key)
+                  elif isinstance(v,list):
+                    for val in v:walk(val,k)
+                  elif isinstance(v,str) and ("arcgisserver" in v or "MapServer" in v or "FeatureServer" in v):
+                    refs.append({"key":k,"url":v[:200]})
+                walk(j)
+                out["GIS_REFERENCES"]=refs[:55]
+              except Exception:
+                out["title"]=re.findall(r"<title[^>]*>(.*?)</title>",x,re.I|re.S)[:1]
+                out["script_src"]=re.findall(r'<script[^>]+src=[\'"]([^\'"]+)',x,re.I)[:18]
+                out["snippet"]=x[:100] if "<html" not in x.lower() else ""
+              print("APP",json.dumps(out,ensure_ascii=False)[:12000],flush=True)
+            except Exception as e:print("APP_ERROR",p,type(e).__name__,str(e)[:140],"secs",round(time.monotonic()-t,1),flush=True)
+          with concurrent.futures.ThreadPoolExecutor(max_workers=4) as ex:list(ex.map(fetch,paths))
 
           PYCODE
