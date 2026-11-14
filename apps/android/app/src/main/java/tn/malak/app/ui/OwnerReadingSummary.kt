@@ -17,7 +17,7 @@ internal fun OwnerReadingSummary(report:CertificateIdentityReview?,scan:LocalDoc
     busy:Boolean,error:Int,details:Boolean,onDetails:()->Unit,onRetry:()->Unit,onPages:()->Unit) {
     Surface(color=if(busy)Brand.Rose else MaterialTheme.colorScheme.surface,
         shape=RoundedCornerShape(22.dp),tonalElevation=2.dp){
-        Column(Modifier.fillMaxWidth().padding(18.dp),verticalArrangement=Arrangement.spacedBy(12.dp)){
+        Column(Modifier.fillMaxWidth().padding(18.dp),verticalArrangement=Arrangement.spacedBy(8.dp)){
             Icon(Icons.Outlined.AutoAwesome,null,tint=Brand.Crimson)
             Text(s(when{busy->R.string.owner_reading;report!=null->R.string.owner_reading_ready;else->R.string.owner_reading_retry}),
                 fontWeight=FontWeight.Bold,fontSize=20.sp)
@@ -39,7 +39,7 @@ internal fun OwnerReadingSummary(report:CertificateIdentityReview?,scan:LocalDoc
                     else->R.string.owner_match_review
                 }),color=if(conflict)MaterialTheme.colorScheme.error else Brand.Ink)
                 report.sourceFacts.firstOrNull{it.key=="registerReference"}?.let{
-                    Text(s(R.string.local_title_ref),fontSize=12.sp,color=Brand.Muted)
+                    Text(s(R.string.owner_reference_label),fontSize=12.sp,color=Brand.Muted)
                     Text(it.value,fontWeight=FontWeight.SemiBold)
                     if(it.status=="LOW_CONFIDENCE")Text(s(R.string.smart_read_needs_review),color=Brand.Muted,fontSize=12.sp)
                 }

@@ -378,13 +378,13 @@
     <string name="owner_edit_presenter">Modifier le nom du demandeur</string>
     <string name="owner_listing_extras">Photos, position et description</string>
     <string name="owner_reading">Nous préparons les informations de votre annonce</string>
-    <string name="owner_reading_ready">Vos informations disponibles sont prêtes</string>
+    <string name="owner_reading_ready">Les informations sont prêtes</string>
     <string name="owner_reading_retry">Terminons la lecture de vos documents</string>
     <string name="owner_reading_hint">La lecture peut prendre un moment. Le résultat sera conservé.</string>
     <string name="owner_match_difference">Un nom ou numéro diffère. Consultez les détails avant l’envoi.</string>
     <string name="owner_match_candidate">Concordance textuelle préliminaire. Le document reste à examiner.</string>
-    <string name="owner_match_review">La comparaison nécessite un examen humain. Vous pouvez compléter la demande avec les informations disponibles.</string>
-    <string name="owner_next_details">Vérifiez les informations et complétez votre offre.</string>
+    <string name="owner_match_review">Comparaison à vérifier par notre équipe.</string>
+    <string name="owner_next_details">Complétez votre offre ci-dessous.</string>
     <string name="owner_hide_details">Masquer les détails de lecture</string>
     <string name="owner_show_details">Voir les détails de lecture</string>
     <string name="owner_review_pages">Vérifier les pages</string>
@@ -394,6 +394,7 @@
     <string name="owner_area_confirm">Oui, je propose cette superficie</string>
     <string name="owner_all_requests">Voir toutes mes demandes</string>
     <string name="owner_latest_request">Votre demande envoyée</string>
-    <string name="owner_type_review">Le type du document reste à confirmer lors de l’examen.</string>
+    <string name="owner_type_review">Type à confirmer.</string>
     <string name="owner_page_removed">Seule l’image choisie a été retirée. Vérifiez l’ordre des images restantes.</string>
+    <string name="owner_reference_label">Référence du bien</string>
 </resources>

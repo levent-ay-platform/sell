@@ -378,13 +378,13 @@
     <string name="owner_edit_presenter">تعديل اسم مقدم الطلب</string>
     <string name="owner_listing_extras">صور الأرض والموقع والوصف</string>
     <string name="owner_reading">نقرأ وثائقك ونجهّز معلومات الإعلان</string>
-    <string name="owner_reading_ready">جهّزنا المعلومات المتاحة</string>
+    <string name="owner_reading_ready">قرأنا المعلومات المتاحة</string>
     <string name="owner_reading_retry">لنُكمل قراءة وثائقك</string>
     <string name="owner_reading_hint">قد تستغرق القراءة قليلاً. سنحتفظ بالنتيجة لتكمل عليها.</string>
     <string name="owner_match_difference">يوجد اختلاف في الاسم أو الرقم يحتاج مراجعة. افتح التفاصيل قبل الإرسال.</string>
     <string name="owner_match_candidate">وجدنا توافقاً نصياً مبدئياً مع الهوية؛ تبقى مراجعة الوثيقة مطلوبة.</string>
-    <string name="owner_match_review">المقارنة تحتاج مراجعة بشرية. يمكنك إكمال الطلب بالمعلومات المتاحة.</string>
-    <string name="owner_next_details">راجع البيانات الجاهزة وأكمل معلومات عرضك للبيع.</string>
+    <string name="owner_match_review">المقارنة بحاجة إلى مراجعة فريقنا.</string>
+    <string name="owner_next_details">أكمل معلومات العرض أدناه.</string>
     <string name="owner_hide_details">إخفاء تفاصيل القراءة</string>
     <string name="owner_show_details">عرض تفاصيل القراءة</string>
     <string name="owner_review_pages">مراجعة صفحات الوثيقة</string>
@@ -394,6 +394,7 @@
     <string name="owner_area_confirm">نعم، أعرض هذه المساحة</string>
     <string name="owner_all_requests">عرض كل طلباتي</string>
     <string name="owner_latest_request">طلبك الذي أرسلته الآن</string>
-    <string name="owner_type_review">نوع الوثيقة يحتاج تأكيداً ضمن المراجعة.</string>
+    <string name="owner_type_review">نوع الوثيقة مبدئي.</string>
     <string name="owner_page_removed">حُذفت الصورة المحددة فقط. راجع ترتيب الصور المتبقية.</string>
+    <string name="owner_reference_label">المرجع العقاري</string>
 </resources>

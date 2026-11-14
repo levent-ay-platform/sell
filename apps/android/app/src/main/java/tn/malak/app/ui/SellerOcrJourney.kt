@@ -756,7 +756,7 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmission:org.j
                     if(hasPilotReviewSession){
                         OwnerReadingSummary(pairReport,acceptedRead,pairProgress!=null,pairError,
                             showAnalysisDetails,{showAnalysisDetails=!showAnalysisDetails},
-                            {startPairComparison()},{step=0})
+                            {if(files.isEmpty()){step=0;pickMessage=R.string.certificate_required}else startPairComparison()},{step=0})
                     }
                     if(!hasPilotReviewSession||showAnalysisDetails){
                     Surface(shape=RoundedCornerShape(18.dp),color=Color.White,
@@ -1246,6 +1246,7 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmission:org.j
             )
             if(step==3&&pilotOcrSession==null) Text(s(R.string.draft_local),color=Brand.Muted,fontSize=12.sp)
         }
+        key(step){
         Column(Modifier.fillMaxWidth().padding(horizontal=17.dp,vertical=12.dp),verticalArrangement=Arrangement.spacedBy(7.dp)) {
             // Never show "Continue" under a failed scan: keep retake in reach.
             if(step==1&&pendingPhoto!=null){
@@ -1345,6 +1346,7 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmission:org.j
                     color=Brand.Muted,lineHeight=17.sp)
             }
             }
+        }
         }
     }
 }

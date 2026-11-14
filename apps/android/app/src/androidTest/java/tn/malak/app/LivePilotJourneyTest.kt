@@ -36,23 +36,46 @@ class LivePilotJourneyTest{
         }
         throw AssertionError("Missing UI text: "+text)
     }
-    private fun tap(text:String){visible(text).click();device.waitForIdle()}
-    private fun hideKeyboard(){
-        val keyboard=By.pkg(java.util.regex.Pattern.compile("com\\.(?:google\\.android|android)\\.inputmethod\\.latin"))
-        device.waitForIdle(500)
-        if(!device.wait(Until.hasObject(keyboard),1500))return
+    private fun tap(text:String){
         repeat(3){
-            device.pressBack()
-            if(device.wait(Until.gone(keyboard),1500))return
+            try{visible(text).click();device.waitForIdle();return}
+            catch(_:androidx.test.uiautomator.StaleObjectException){device.waitForIdle(1000)}
         }
-        throw AssertionError("Keyboard did not close; stopping before any swipe")
+        throw AssertionError("Control kept changing: "+text)
+    }
+    private fun hideKeyboard(){
+        instrumentation.runOnMainSync {
+            val activity=androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry.getInstance()
+                .getActivitiesInStage(androidx.test.runner.lifecycle.Stage.RESUMED).firstOrNull()
+            activity?.let {
+                it.currentFocus?.clearFocus()
+                (it.getSystemService(android.content.Context.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager)
+                    .hideSoftInputFromWindow(it.window.decorView.windowToken,0)
+            }
+        }
+        repeat(10){
+            var showing=false
+            instrumentation.runOnMainSync {
+                val activity=androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry.getInstance()
+                    .getActivitiesInStage(androidx.test.runner.lifecycle.Stage.RESUMED).firstOrNull()
+                if(android.os.Build.VERSION.SDK_INT>=30)
+                    showing=activity?.window?.decorView?.rootWindowInsets?.isVisible(android.view.WindowInsets.Type.ime())==true
+            }
+            if(!showing)return
+            android.os.SystemClock.sleep(150)
+        }
+        throw AssertionError("Keyboard did not close; stopping before gestures")
     }
     private fun fill(label:String,value:String){
-        var node=visible(label)
-        repeat(4){
-            if(node.className=="android.widget.EditText"){node.click();node.text=value;hideKeyboard();return}
-            node.findObject(By.clazz("android.widget.EditText"))?.let{it.click();it.text=value;hideKeyboard();return}
-            node=node.parent?:throw AssertionError("Missing text input for "+label)
+        repeat(3){
+            try{
+                var node=visible(label)
+                repeat(4){
+                    if(node.className=="android.widget.EditText"){node.click();node.text=value;hideKeyboard();return}
+                    node.findObject(By.clazz("android.widget.EditText"))?.let{it.click();it.text=value;hideKeyboard();return}
+                    node=node.parent?:throw AssertionError("Missing text input for "+label)
+                }
+            }catch(_:androidx.test.uiautomator.StaleObjectException){device.waitForIdle(1000)}
         }
         throw AssertionError("Missing editable field "+label)
     }
@@ -70,9 +93,9 @@ class LivePilotJourneyTest{
         ctx.startActivity(intent)
         try{
             device.wait(Until.hasObject(By.clazz("android.widget.EditText")),30000)
-            device.findObject(By.clazz("android.widget.EditText")).text="23456789"
+            fill("Numéro tunisien","23456789")
             tap("Continuer")
-            device.findObject(By.clazz("android.widget.EditText")).text="1234"
+            fill("Code d’accès","1234")
             tap("Accéder à Malak")
             visible("Déposer un terrain",40000);shot("01-connected-home")
             if(InstrumentationRegistry.getArguments().getString("stage")=="feed"){
@@ -83,7 +106,8 @@ class LivePilotJourneyTest{
             tap("Choisir des fichiers")
             if(!device.wait(Until.hasObject(By.text("malak-synthetic-sale.png")),3000)){
                 device.findObject(By.desc("Show roots"))?.click()
-                device.wait(Until.findObject(By.text("Downloads")),5000)?.click()
+                device.waitForIdle(1000)
+                tap("Downloads")
             }
             tap("malak-synthetic-sale.png")
             // Android's picker can retain multi-select mode after a previous run.
@@ -109,10 +133,18 @@ class LivePilotJourneyTest{
                 shot("06-analysis-saved");return
             }
 
+            val draft=ctx.getSharedPreferences("malak_pilot_land_draft_"+phoneHash,0)
+            val alreadyEntered=draft.getString("title","")=="EMULATOR QA - not for sale"&&
+                draft.getString("region","")=="Tunis"&&draft.getString("area","")=="185.25"&&
+                draft.getString("price","")=="50000"
+            if(!alreadyEntered){
+            if(ctx.getSharedPreferences("malak_pilot_land_draft_"+phoneHash,0).getString("price","").isNullOrBlank()){
             tap("Continuer")
             assertNotNull(device.wait(Until.findObject(By.textStartsWith("Complétez ces champs :")),5000))
+            }
             // Personalize the public title so test data cannot be mistaken for a real listing.
-            tap("Modifier")
+            visible("Votre titre est créé automatiquement")
+            if(device.wait(Until.hasObject(By.text("Modifier")),1000))tap("Modifier")
             fill("Titre de l’annonce","EMULATOR QA - not for sale")
             fill("Région / délégation","Tunis")
             fill("Superficie (m²)","185.25")
@@ -121,8 +153,10 @@ class LivePilotJourneyTest{
             fill("Votre nom","SYNTHETIC EMULATOR QA")
             tap("Photos, position et description")
             visible("SYNTHETIC DRAFT DESCRIPTION")
+            }
             hideKeyboard()
             tap("Continuer")
+            visible("SYNTHETIC DRAFT DESCRIPTION")
             tap("Envoyer pour examen")
             visible("Envoyé pour examen",45000);shot("07-submitted-to-admin")
             visible("Mes demandes")
