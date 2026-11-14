@@ -9,48 +9,44 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 4
     steps:
-      - name: Check actual candidate parcel-like vector layers and GIS server service catalog
+      - name: Audit other ArcGIS public feature services and one-row nongeometric queries
         run: |
           python3 - <<'PYCODE'
-          import urllib.request,urllib.parse,urllib.error,json,time,concurrent.futures,collections
-          base="https://geopau.gov.tn/arcgisserver/rest"
-          url=base+"/services/public/PAUs_public/MapServer"
-          layer_tests=[
-          (66,"Lotissement","OBJECTID,Intitule,Lotisseur,Date_Approb,Zone_ID,PAU_ID"),
-          (12,"Contour_Reg_Ilots","OBJECTID,PAU_ID"),
-          (68,"Limite_PAD","OBJECTID,PAD_ID,PIF"),
-          (67,"SDA","OBJECTID,PAU_ID,Date_"),
-          (137,"Equipements(Polygones)","OBJECTID,EquipPt_ID,PAU_ID"),
-          (69,"Limite_PAU","OBJECTID,PAU_ID,Libelle"),
-          (60,"Zones_Codes","OBJECTID,Zone_id,Code,Vocation,PAU_ID"),
-          (138,"Zones","OBJECTID,Zone_id,Code,Vocation,PAU_ID"),
-          (51,"DPF","OBJECTID,PA_ID,NOM"),
+          import urllib.request,urllib.parse,urllib.error,json,time,concurrent.futures
+          base="https://geopau.gov.tn/arcgisserver/rest/services/public"
+          svc=[
+           ("LimitesAdmin_FS",base+"/LimitesAdmin/FeatureServer"),
+           ("OSM_FS",base+"/OSM_FS/FeatureServer"),
+           ("LimitesAdmin_MS",base+"/LimitesAdmin/MapServer"),
+           ("OSMMap",base+"/OSM/MapServer"),
+           ("VoiriesLeKram",base+"/VoiriesLeKram/MapServer"),
+           ("OSM_ALL_TN_ND",base+"/OSM_ALL_TN_ND/MapServer")
           ]
-          def test(item):
-           typ,tag,u,form=item
-           t=time.monotonic()
+          def q(item):
+           label,url=item;t=time.monotonic()
            try:
-            req=urllib.request.Request(u+(("?"+urllib.parse.urlencode(form)) if form else ""),headers={"Accept":"application/json","User-Agent":"Mozilla/5.0 GeoPAU-Public-Data-Audit"})
-            with urllib.request.urlopen(req,timeout=14) as r:
-             b=r.read(100000);ct=r.headers.get("Content-Type");status=r.status
-            try:
-             j=json.loads(b)
-             out={"http":status,"type":ct,"error":j.get("error"),"keys":list(j.keys())[:12],"feature_count":len(j.get("features",[])) if isinstance(j.get("features"),list) else None,"sample_keys":list((j.get("features") or [{}])[0].get("attributes",{}).keys()) if j.get("features") else [],"layers_count":len(j.get("services",[])) if isinstance(j.get("services"),list) else None,"services":j.get("services",[])[:18]}
-            except Exception:out={"http":status,"type":ct,"snippet":b[:160].decode("utf8","replace")}
-            print("RESULT",json.dumps({"check":tag,"kind":typ,"seconds":round(time.monotonic()-t,1),**out},ensure_ascii=False)[:3500],flush=True)
-           except urllib.error.HTTPError as e:
-            print("RESULT",json.dumps({"check":tag,"kind":typ,"http":e.code,"seconds":round(time.monotonic()-t,1),"body":e.read(180).decode("utf8","replace")},ensure_ascii=False),flush=True)
+            with urllib.request.urlopen(urllib.request.Request(url+"?f=pjson",headers={"User-Agent":"Mozilla/5.0 (GeoPAU public service inventory)" ,"Accept":"application/json"}),timeout=21) as r:b=r.read(650000)
+            j=json.loads(b)
+            arr=j.get("layers",[])
+            print("SERVICE",json.dumps({"label":label,"url":url,"elapsed":round(time.monotonic()-t,1),"err":j.get("error"),"capabilities":j.get("capabilities"),"layers":[{"id":x.get("id"),"name":x.get("name"),"type":x.get("type"),"subLayerIds":x.get("subLayerIds")} for x in arr],"tables":j.get("tables",[])[:8]},ensure_ascii=False)[:8500],flush=True)
+            return (label,url,arr)
            except Exception as e:
-            print("RESULT",json.dumps({"check":tag,"kind":typ,"error":type(e).__name__,"details":str(e)[:120],"seconds":round(time.monotonic()-t,1)},ensure_ascii=False),flush=True)
-          jobs=[]
-          for id,name,fields in layer_tests:
-           jobs.append(("QUERY",str(id)+" "+name,url+"/"+str(id)+"/query",{"where":"OBJECTID=1","outFields":fields,"returnGeometry":"false","f":"json"}))
-          jobs.extend([
-          ("DIRECTORY","public_services",base+"/services/public",{"f":"pjson"}),
-          ("DIRECTORY","root_services",base+"/services",{"f":"pjson"}),
-          ("METADATA","Lotissement_layer66",url+"/66",{"f":"pjson"}),
-          ("METADATA","ContourRegIlots_layer12",url+"/12",{"f":"pjson"}),
-          ])
-          with concurrent.futures.ThreadPoolExecutor(max_workers=5) as p:list(p.map(test,jobs))
+            print("SERVICE_ERR",label,type(e).__name__,str(e)[:160],flush=True)
+            return (label,url,[])
+          with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:results=list(pool.map(q,svc))
+          tasks=[]
+          for label,url,arr in results:
+           ids=[x["id"] for x in arr if x.get("subLayerIds") is None and isinstance(x.get("id"),int)][:2]
+           for id in ids:
+            tasks.append((label,id,url+"/"+str(id)+"/query"))
+          def probe(item):
+           label,id,u=item;t=time.monotonic()
+           try:
+            params=urllib.parse.urlencode({"where":"1=1","outFields":"*","returnGeometry":"false","resultRecordCount":"1","f":"json"})
+            with urllib.request.urlopen(urllib.request.Request(u+"?"+params,headers={"User-Agent":"Mozilla/5.0 (read-only public query)" ,"Accept":"application/json"}),timeout=14) as r:raw=r.read(16000)
+            j=json.loads(raw)
+            print("FEATURE",json.dumps({"service":label,"layer_id":id,"elapsed":round(time.monotonic()-t,1),"error":j.get("error"),"features":len(j.get("features",[])) if isinstance(j.get("features"),list) else None,"sample":(j.get("features") or [None])[0]},ensure_ascii=False)[:1500],flush=True)
+           except Exception as e:print("FEATURE_ERROR",json.dumps({"service":label,"layer_id":id,"error":type(e).__name__,"msg":str(e)[:150],"elapsed":round(time.monotonic()-t,1)},ensure_ascii=False),flush=True)
+          with concurrent.futures.ThreadPoolExecutor(max_workers=5) as pool:list(pool.map(probe,tasks))
 
           PYCODE
