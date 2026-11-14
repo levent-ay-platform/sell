@@ -11,6 +11,7 @@ import secrets
 import sqlite3
 import time
 import uuid
+from datetime import date
 from contextlib import contextmanager
 from pathlib import Path
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
@@ -107,6 +108,40 @@ CREATE INDEX IF NOT EXISTS analysis_cache_inputs ON analysis_cache(account_id,fi
             submission=db.execute('SELECT id,status FROM submissions WHERE review_id=? AND account_id=?',(review,user)).fetchone()
             return {'comparison':{**json.loads(row['report']),'reviewId':review},
                     'submission':dict(submission) if submission else None}
+    def identity_for_review(self,user,review):
+        with self.db() as db:
+            if not db.execute('SELECT 1 FROM reviews WHERE id=? AND account_id=?',(review,user)).fetchone():raise WorkflowError(404,'NOT_FOUND')
+            closed=db.execute("SELECT 1 FROM submissions WHERE review_id=? AND status NOT IN ('PENDING_REVIEW','CHANGES_REQUESTED')",(review,)).fetchone()
+            if closed:raise WorkflowError(409,'REVIEW_CLOSED')
+            rows=db.execute("SELECT * FROM evidence WHERE review_id=? AND kind='IDENTITY'",(review,)).fetchall()
+            if len(rows)!=1:raise WorkflowError(422,'IDENTITY_UNAVAILABLE')
+            row=rows[0];sealed=row['sealed']
+            raw=self.cipher.decrypt(sealed[:12],sealed[12:],(review+':'+row['id']).encode())
+            return row['mime'],bytearray(raw)
+    def refine_identity_date(self,user,review,fields):
+        with self.db() as db:
+            db.execute('BEGIN IMMEDIATE')
+            row=db.execute('SELECT report FROM reviews WHERE id=? AND account_id=?',(review,user)).fetchone()
+            if not row:raise WorkflowError(404,'NOT_FOUND')
+            sub=db.execute('SELECT id,status FROM submissions WHERE review_id=?',(review,)).fetchone()
+            if sub and sub['status'] not in ('PENDING_REVIEW','CHANGES_REQUESTED'):raise WorkflowError(409,'REVIEW_CLOSED')
+            report=json.loads(row['report']);old=report.get('identityFields',{})
+            if any(old.get(k)!=fields.get(k) for k in ('surname','givenName','cinFull')):raise WorkflowError(409,'IDENTITY_TEXT_CHANGED')
+            value=fields.get('birthDate');updated=False
+            if value is not None:
+                if not isinstance(value,str) or not re.fullmatch(r'[0-9]{4}-[0-9]{2}-[0-9]{2}',value):raise WorkflowError()
+                try:parsed=date.fromisoformat(value)
+                except ValueError:raise WorkflowError()
+                if not date(1900,1,1)<=parsed<=date.today():raise WorkflowError()
+                if old.get('birthDate') is not None and old['birthDate']!=value:raise WorkflowError(409,'BIRTH_DATE_CONFLICT')
+                if old.get('birthDate') is None:
+                    report['identityFields']={**old,'birthDate':value}
+                    report['identityDateRevision']=os.environ.get('MALAK_SOURCE_SHA','development')
+                    db.execute('UPDATE reviews SET report=? WHERE id=?',(json.dumps(report,ensure_ascii=False),review))
+                    if sub:db.execute('UPDATE submissions SET version=version+1,updated=? WHERE id=?',(now(),sub['id']))
+                    db.execute('INSERT INTO audit VALUES(?,?,?,?,?)',(ident(),user,sub['id'] if sub else None,'OCR_BIRTH_DATE_REFINED:'+review,now()))
+                    updated=True
+            return {'comparison':{**report,'reviewId':review},'identityDateUpdated':updated}
     def record_review(self,user,files,report,analysis=None):
         review=ident()
         with self.db() as db:

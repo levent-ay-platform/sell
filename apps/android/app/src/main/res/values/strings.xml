@@ -397,4 +397,10 @@
     <string name="owner_type_review">Type à confirmer.</string>
     <string name="owner_page_removed">Seule l’image choisie a été retirée. Vérifiez l’ordre des images restantes.</string>
     <string name="owner_reference_label">Référence du bien</string>
+    <string name="owner_extracted_heading">Informations lues sur la carte et le document</string>
+    <string name="owner_value_unavailable">Non disponible</string>
+    <string name="owner_date_refresh">Relire la date dans la carte conservée</string>
+    <string name="owner_date_reading">Lecture de la date sur la carte…</string>
+    <string name="owner_date_not_updated">La date reste inchangée. L’équipe peut examiner la carte originale.</string>
+    <string name="owner_read_request_documents">Voir les informations lues sur mes documents</string>
 </resources>

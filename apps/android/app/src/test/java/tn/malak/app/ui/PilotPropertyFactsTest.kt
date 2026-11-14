@@ -2,6 +2,14 @@ package tn.malak.app.ui
 import org.junit.Assert.*
 import org.junit.Test
 class PilotPropertyFactsTest{
+    @Test fun unavailableCertificateValuesStayExplicitAndDeedAreaIsNotRelabelledRegistered(){
+        val ref=PilotPropertyFact("registerReference","555941",1,"ocr-ar","LOW_CONFIDENCE")
+        val fields=ownerExtractedValues("OWNERSHIP_CERTIFICATE",listOf(ref))
+        assertEquals(listOf("registerReference","registeredAreaM2","registeredPlotNumber"),fields.map{it.key})
+        assertEquals("555941",fields[0].fact?.value)
+        assertNull(fields[1].fact);assertNull(fields[2].fact)
+        assertEquals("soldAreaM2",ownerExtractedValues("SALE_DEED",emptyList())[1].key)
+    }
     @Test fun registeredAreaNeedsExplicitConfirmationAndSharedOrUncertainAreaIsNotOffered(){
         val fact=PilotPropertyFact("registeredAreaM2","9000",1,"ocr-ar","CANDIDATE")
         assertEquals("9000",pilotConfirmableArea("OWNERSHIP_CERTIFICATE",listOf(fact))?.value)

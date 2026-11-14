@@ -77,6 +77,7 @@ internal fun PilotListings(query:String,category:String,onReplaceDocuments:(JSON
         if(onlyOwn&&failed)Text(s(R.string.listing_load_failed),color=MaterialTheme.colorScheme.error)
         own.sortedByDescending{it.optString("id")==focusId}.forEach{item->
             var editing by remember(item.optString("id"),item.optInt("version")){mutableStateOf(false)}
+            var reading by remember(item.optString("id")){mutableStateOf(false)}
             Surface(color=MaterialTheme.colorScheme.surface,shape=RoundedCornerShape(16.dp),border=BorderStroke(1.dp,Brand.Muted.copy(alpha=.2f))){
                 Column(Modifier.fillMaxWidth().padding(14.dp),verticalArrangement=Arrangement.spacedBy(8.dp)){
                     if(item.optString("id")==focusId)Text(s(R.string.owner_latest_request),color=Brand.Crimson)
@@ -89,6 +90,9 @@ internal fun PilotListings(query:String,category:String,onReplaceDocuments:(JSON
                         else->R.string.status_pending
                     }),color=Brand.Crimson)
                     if(item.optString("note").isNotBlank())Text(item.optString("note"),fontSize=13.sp)
+                    TextButton(onClick={reading=!reading}){Text(s(R.string.owner_read_request_documents))}
+                    if(reading)OwnerStoredDocumentReadout(session,item.optString("reviewId"),
+                        item.optString("status") in setOf("PENDING_REVIEW","CHANGES_REQUESTED"))
                     if(item.optString("status")=="CHANGES_REQUESTED"){
                         TextButton(onClick={editing=!editing}){Text(s(R.string.edit_property))}
                         TextButton(onClick={onReplaceDocuments(item)}){Text(s(R.string.submission_replace_documents))}

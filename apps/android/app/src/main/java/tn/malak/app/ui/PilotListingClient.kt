@@ -10,7 +10,7 @@ import javax.net.ssl.HttpsURLConnection
 
 internal const val PILOT_PHOTO_MAX_BYTES=6L*1024*1024
 internal object PilotListingClient {
-    suspend fun call(session:PilotOcrSession?,path:String,data:JSONObject?=null):JSONObject=
+    suspend fun call(session:PilotOcrSession?,path:String,data:JSONObject?=null,privateReadConsent:Boolean=false):JSONObject=
         withContext(Dispatchers.IO) {
             val base=session?.httpsBaseUrl?:PilotOcrLogin.configuredBase()?:throw OwnerPairException(503)
             val c=URL(base+path).openConnection() as HttpsURLConnection
@@ -18,6 +18,7 @@ internal object PilotListingClient {
                 c.requestMethod=if(data==null)"GET" else "POST"
                 c.connectTimeout=10000;c.readTimeout=30000;c.instanceFollowRedirects=false;c.useCaches=false
                 c.setRequestProperty("Cache-Control","no-store")
+                if(privateReadConsent)c.setRequestProperty("X-Pilot-Ocr-Consent","1")
                 session?.let{c.setRequestProperty("Authorization","Bearer "+it.bearer)}
                 if(data!=null){
                     val raw=data.toString().toByteArray(Charsets.UTF_8)

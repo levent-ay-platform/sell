@@ -64,6 +64,18 @@ class WorkflowRoutes:
                 restored=self.store.restore_review(self.actor(h),match[1])
                 h.result(200,{'ok':True,'pilotOcr':True,**restored,
                     'identityVerified':False,'ownershipVerified':False,'mayPublish':False});return True
+            match=re.fullmatch('/api/pilot/reviews/('+ID+')/identity-date',path)
+            if match and method=='POST':
+                user=self.actor(h)
+                if h.headers.get('X-Pilot-Ocr-Consent')!='1':raise WorkflowError(400,'CONSENT_REQUIRED')
+                if self.body(h)!={}:raise WorkflowError(400,'INVALID_REQUEST')
+                mime,raw=self.store.identity_for_review(user,match[1])
+                try:fields=self.pair.pilot.read(raw,mime,cache_scope=user)
+                finally:raw[:]=b'\x00'*len(raw)
+                if self.actor(h)!=user:raise WorkflowError(401,'SESSION_REQUIRED')
+                refined=self.store.refine_identity_date(user,match[1],fields)
+                h.result(200,{'ok':True,'pilotOcr':True,**refined,
+                    'identityVerified':False,'ownershipVerified':False,'mayPublish':False});return True
             if method=='POST' and path=='/api/admin/login':
                 ip=h.client_address[0];t=time.monotonic();recent=[x for x in self.attempts.get(ip,[]) if t-x<900]
                 if len(recent)>=8:raise WorkflowError(429,'TRY_LATER')

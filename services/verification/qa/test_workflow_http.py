@@ -23,6 +23,7 @@ class HttpWorkflow(unittest.TestCase):
                 from mac_pair_runtime import frame
                 return frame(data),{'detectedKind':'UNKNOWN','assessment':'INSUFFICIENT_EVIDENCE','propertyFacts':[]}
         self.pair=Pair()
+        self.pair.pilot=self.server.pilot
         self.server.workflow=WorkflowRoutes(self.store,self.pair)
         self.thread=threading.Thread(target=self.server.serve_forever,daemon=True);self.thread.start()
     def tearDown(self):self.server.shutdown();self.server.server_close();self.thread.join();self.tmp.cleanup()
@@ -96,5 +97,21 @@ class HttpWorkflow(unittest.TestCase):
         self.assertEqual(self.request('/api/admin/login',data,headers={'Origin':'https://malak-api.ayasofia.shop'})[0],200)
         self.assertEqual(self.request('/api/admin/login',data,headers={'Origin':'https://evil.test'})[0],400)
         self.assertEqual(self.request('/admin')[0],200)
+    def test_identity_date_refresh_requires_owner_consent_and_accepts_no_manual_fields(self):
+        from unittest.mock import patch
+        token=self.store.login('+21623456789','1234','A'*43)['bearer']
+        user=self.store.authenticate(token)['id']
+        fields={'surname':'TEST','givenName':'PERSON','cinFull':'00001122','birthDate':None,'confidencePercent':90}
+        rid=self.store.record_review(user,[('IDENTITY','image/jpeg',b'fictional')],{'identityFields':fields})
+        path='/api/pilot/reviews/'+rid+'/identity-date'
+        with patch.object(self.server.pilot,'read',return_value={**fields,'birthDate':'2000-12-05'}) as read:
+            self.assertEqual(self.request(path,{},token)[0],400)
+            self.assertEqual(self.request(path,{},None,{'X-Pilot-Ocr-Consent':'1'})[0],401)
+            self.assertEqual(self.request(path,{'birthDate':'2000-12-05'},token,{'X-Pilot-Ocr-Consent':'1'})[0],400)
+            self.assertEqual(read.call_count,0)
+            status,result=self.request(path,{},token,{'X-Pilot-Ocr-Consent':'1'})
+            self.assertEqual(status,200)
+            self.assertEqual(result['comparison']['identityFields']['birthDate'],'2000-12-05')
+            self.assertFalse(result['ownershipVerified'])
 
 if __name__=='__main__':unittest.main()

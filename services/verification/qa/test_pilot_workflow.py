@@ -4,6 +4,24 @@ from pathlib import Path
 from pilot_workflow import PilotStore, WorkflowError
 
 class Workflow(unittest.TestCase):
+    def test_owner_date_refinement_is_audited_and_cannot_change_identity_or_closed_review(self):
+        user=self.store.authenticate(self.store.login('+21623456789','1234','A'*43)['bearer'])['id']
+        fields={'surname':'TEST','givenName':'PERSON','cinFull':'00001122','birthDate':None,'confidencePercent':90}
+        rid=self.store.record_review(user,[('IDENTITY','image/jpeg',b'synthetic')],{'identityFields':fields,'assessment':'INSUFFICIENT_EVIDENCE'})
+        data={'reviewId':rid,'requestKey':'date-test-request-20261114','customerName':'Test Person','title':'Test land','region':'Tunis','area':'100','price':'50000','description':''}
+        sub=self.store.submit(user,data)
+        changed=self.store.refine_identity_date(user,rid,{**fields,'birthDate':'2000-12-05'})
+        self.assertEqual(changed['comparison']['identityFields']['birthDate'],'2000-12-05')
+        self.assertTrue(changed['identityDateUpdated'])
+        self.assertEqual(self.store.own_submissions(user)[0]['version'],2)
+        self.assertFalse(self.store.refine_identity_date(user,rid,{**fields,'birthDate':'2000-12-05'})['identityDateUpdated'])
+        with self.assertRaises(WorkflowError):self.store.refine_identity_date(user,rid,{**fields,'birthDate':'2000-12-06'})
+        with self.assertRaises(WorkflowError):self.store.refine_identity_date(user,rid,{**fields,'surname':'OTHER','birthDate':'2000-12-05'})
+        with self.assertRaises(WorkflowError):self.store.refine_identity_date('other-account',rid,{**fields,'birthDate':'2000-12-05'})
+        with self.store.db() as db:
+            self.assertEqual(db.execute("SELECT count(*) FROM audit WHERE action LIKE 'OCR_BIRTH_DATE_REFINED:%'").fetchone()[0],1)
+            db.execute("UPDATE submissions SET status='PUBLISHED' WHERE id=?",(sub['id'],))
+        with self.assertRaises(WorkflowError):self.store.refine_identity_date(user,rid,{**fields,'birthDate':'2000-12-05'})
     def setUp(self):
         self.tmp=tempfile.TemporaryDirectory()
         self.root=Path(self.tmp.name)

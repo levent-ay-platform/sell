@@ -72,14 +72,35 @@ def corroborated_birth_date(numeric_votes,native_views,*,today=None):
     return value if day_agrees and year_agrees and days=={birth.day} and years=={birth.year} else None
 
 
-def read_mac_birth_date(card,given_name_row,numeric_votes):
+def guided_year_votes(document,card,given_name_row,candidate,numeric_reader):
+    """Use native geometry only; v5 still independently decodes the pixels."""
+    h,w=card.shape[:2]
+    year=str(date.fromisoformat(candidate).year)
+    pages=document.get('pages',[])
+    if len(pages)!=1:return []
+    boxes=[]
+    for word in pages[0].get('ocrWords',[]):
+        if word.get('text')!=year:continue
+        box=word.get('bbox',{})
+        if not all(type(box.get(k)) is int for k in ('left','top','right','bottom')):continue
+        l,t,r,b=(box[k] for k in ('left','top','right','bottom'))
+        if not (.25*w<=l<r<=.65*w and .035*w<=r-l<=.35*w and
+                .67*h<=t<b<=.94*h and 12<=b-t<=.22*h and
+                .10*h<=(t+b)/2-given_name_row<=.27*h):continue
+        boxes.append((max(0,l-8),max(0,t-7),min(w,r+8),min(h,b+7)))
+    if len(boxes)!=1:return []
+    l,t,r,b=boxes[0]
+    return [([],numeric_reader(card[t:b,l:r]))]
+
+
+def read_mac_birth_date(card,given_name_row,numeric_votes,*,numeric_reader=None):
     executable=os.environ.get('MALAK_VISION_BIN')
     if not executable or not Path(executable).is_file():return None
     import cv2
     h,w=card.shape[:2]
     gray=cv2.cvtColor(cv2.cvtColor(card,cv2.COLOR_BGR2GRAY),cv2.COLOR_GRAY2BGR)
     try:
-        views=[]
+        views=[];documents=[]
         with tempfile.TemporaryDirectory(prefix='malak-birth-row-') as directory:
             os.chmod(directory,0o700)
             path=Path(directory)/'front.png'
@@ -90,7 +111,15 @@ def read_mac_birth_date(card,given_name_row,numeric_votes):
                 result=subprocess.run([executable,str(path)],stdout=subprocess.PIPE,
                     stderr=subprocess.DEVNULL,timeout=10,check=True)
                 if len(result.stdout)>4_000_000:return None
-                views.append(native_birth_dates(json.loads(result.stdout),w,h,given_name_row))
-        return corroborated_birth_date(numeric_votes,views)
+                document=json.loads(result.stdout);documents.append(document)
+                views.append(native_birth_dates(document,w,h,given_name_row))
+        value=corroborated_birth_date(numeric_votes,views)
+        if value is not None:return value
+        if numeric_reader is None or len(views)!=2 or len(views[0])!=1 or views[0]!=views[1]:return None
+        candidate=next(iter(views[0]))
+        extra=[]
+        for document in documents:
+            extra.extend(guided_year_votes(document,card,given_name_row,candidate,numeric_reader))
+        return corroborated_birth_date(numeric_votes+extra,views)
     except (OSError,ValueError,TypeError,KeyError,subprocess.SubprocessError):return None
     finally:gray.fill(0)

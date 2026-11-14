@@ -143,6 +143,8 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmission:org.j
     var restoreAttempt by remember(draftFile){mutableIntStateOf(0)}
     var restoredReview by remember(draftFile){mutableStateOf(false)}
     var showAnalysisDetails by remember(draftFile){mutableStateOf(false)}
+    var identityDateBusy by remember(draftFile){mutableStateOf(false)}
+    var identityDateError by remember(draftFile){mutableIntStateOf(0)}
     var showListingExtras by rememberSaveable(draftFile){mutableStateOf(false)}
     var editCustomerName by remember(draftFile){mutableStateOf(false)}
     var submissionMessage by remember(draftFile){mutableIntStateOf(0)}
@@ -294,6 +296,7 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmission:org.j
         requestJob?.cancel()
         provisionedCase=null
         pairReport=null
+        identityDateBusy=false;identityDateError=0
         restoredReview=false
         showAnalysisDetails=false
         prefs.edit().remove("review_id").remove("request_key").remove("review_scope").apply()
@@ -500,6 +503,25 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmission:org.j
                                 }
                             }
 
+    }
+    fun refreshIdentityDate(){
+        val review=pairReport?.reviewId?:return
+        val session=pilotOcrSession?:return
+        if(identityDateBusy)return
+        identityDateBusy=true;identityDateError=0
+        val epoch=++requestEpoch
+        requestJob=scope.launch{
+            try{
+                val refined=parsePilotComparison(PilotListingClient.call(session,
+                    "/api/pilot/reviews/"+review+"/identity-date",org.json.JSONObject(),privateReadConsent=true))
+                if(requestEpoch==epoch&&pairReport?.reviewId==review){
+                    pairReport=refined;acceptedRead=refined.identityScan
+                    if(refined.identityScan?.birthDate==null)identityDateError=R.string.owner_date_not_updated
+                }
+            }catch(cancel:CancellationException){throw cancel}
+            catch(_:Exception){if(requestEpoch==epoch)identityDateError=R.string.owner_date_not_updated}
+            finally{if(requestEpoch==epoch)identityDateBusy=false}
+        }
     }
     LaunchedEffect(draftFile,restoreAttempt){
         if(savedReview==null||pilotOcrSession==null)return@LaunchedEffect
@@ -756,7 +778,8 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmission:org.j
                     if(hasPilotReviewSession){
                         OwnerReadingSummary(pairReport,acceptedRead,pairProgress!=null,pairError,
                             showAnalysisDetails,{showAnalysisDetails=!showAnalysisDetails},
-                            {if(files.isEmpty()){step=0;pickMessage=R.string.certificate_required}else startPairComparison()},{step=0})
+                            {if(files.isEmpty()){step=0;pickMessage=R.string.certificate_required}else startPairComparison()},{step=0},
+                            onDateRefresh={refreshIdentityDate()},dateBusy=identityDateBusy,dateError=identityDateError)
                     }
                     if(!hasPilotReviewSession||showAnalysisDetails){
                     Surface(shape=RoundedCornerShape(18.dp),color=Color.White,
@@ -1331,7 +1354,7 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmission:org.j
                     }
                 }
                 else if(pilotOcrSession==null)saveLocalDraft()
-            }, enabled=!sending&&!submitted&&!(step==2&&pilotOcrSession!=null&&pairReport==null), modifier=Modifier.fillMaxWidth().heightIn(min=54.dp),
+            }, enabled=!sending&&!submitted&&!identityDateBusy&&!(step==2&&pilotOcrSession!=null&&pairReport==null), modifier=Modifier.fillMaxWidth().heightIn(min=54.dp),
                 shape=RoundedCornerShape(17.dp),colors=ButtonDefaults.buttonColors(containerColor=Brand.Crimson)) {
                 Text(s(if(step==3&&pilotOcrSession!=null)
                     if(sending)R.string.submission_sending else if(submitted)R.string.submission_sent else R.string.submission_send
@@ -1453,7 +1476,7 @@ internal fun documentFamilyLabel(kind:String):Int=when(kind){
     "PROPERTY_SERVICE_RECEIPT"->R.string.smart_kind_service
     else->R.string.smart_kind_unknown
 }
-private fun familyFactLabel(key:String):Int=when(key){
+internal fun familyFactLabel(key:String):Int=when(key){
     "registerReference"->R.string.smart_fact_register
     "registeredAreaM2"->R.string.smart_fact_registered_area
     "soldAreaM2"->R.string.smart_fact_sold_area

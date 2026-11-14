@@ -24,8 +24,8 @@ android {
         minSdk = 26
         targetSdk = 35
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        versionCode = 10
-        versionName = "0.5.0-guided-owner-pilot"
+        versionCode = 11
+        versionName = "0.5.1-date-readout-pilot"
         buildConfigField("String", "MALAK_PRIVATE_SERVICE_URL", "\"$malakPrivateBaseUrl\"")
     }
 

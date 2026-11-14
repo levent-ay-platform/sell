@@ -14,7 +14,8 @@ import tn.malak.app.R
 
 @Composable
 internal fun OwnerReadingSummary(report:CertificateIdentityReview?,scan:LocalDocumentOcr.FrontScan?,
-    busy:Boolean,error:Int,details:Boolean,onDetails:()->Unit,onRetry:()->Unit,onPages:()->Unit) {
+    busy:Boolean,error:Int,details:Boolean,onDetails:()->Unit,onRetry:()->Unit,onPages:()->Unit,
+    onDateRefresh:(()->Unit)?=null,dateBusy:Boolean=false,dateError:Int=0) {
     Surface(color=if(busy)Brand.Rose else MaterialTheme.colorScheme.surface,
         shape=RoundedCornerShape(22.dp),tonalElevation=2.dp){
         Column(Modifier.fillMaxWidth().padding(18.dp),verticalArrangement=Arrangement.spacedBy(8.dp)){
@@ -38,11 +39,7 @@ internal fun OwnerReadingSummary(report:CertificateIdentityReview?,scan:LocalDoc
                     report.unifiedAssessment in setOf("ROLE_TEXT_MATCH_ONLY","NAME_ONLY_REVIEW")->R.string.owner_match_candidate
                     else->R.string.owner_match_review
                 }),color=if(conflict)MaterialTheme.colorScheme.error else Brand.Ink)
-                report.sourceFacts.firstOrNull{it.key=="registerReference"}?.let{
-                    Text(s(R.string.owner_reference_label),fontSize=12.sp,color=Brand.Muted)
-                    Text(it.value,fontWeight=FontWeight.SemiBold)
-                    if(it.status=="LOW_CONFIDENCE")Text(s(R.string.smart_read_needs_review),color=Brand.Muted,fontSize=12.sp)
-                }
+                OwnerDocumentReadout(report,onDateRefresh,dateBusy,dateError)
                 if("CERTIFICATE_PAGES_MISSING" in report.reasons){
                     Text(s(R.string.pair_reason_pages_missing),color=MaterialTheme.colorScheme.error)
                     OutlinedButton(onClick=onPages){Text(s(R.string.owner_review_pages))}

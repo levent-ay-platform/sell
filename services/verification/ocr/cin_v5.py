@@ -366,7 +366,8 @@ def birth_date(session,letters,card,given_name_row):
     if dates:return next(iter(dates)) if len(dates)==1 else None
     if numeric_votes:
         from cin_mac_date import read_mac_birth_date
-        return read_mac_birth_date(card,given_name_row,numeric_votes)
+        return read_mac_birth_date(card,given_name_row,numeric_votes,
+            numeric_reader=lambda crop:numeric_pair(session,letters,crop))
     return None
 
 def extract_fields(photo,session,letters):

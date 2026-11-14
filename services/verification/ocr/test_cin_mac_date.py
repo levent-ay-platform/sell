@@ -10,6 +10,22 @@ def document(text='ولد في 05 ديسمبر 2000', top=550, confidence=.5):
 
 
 class MacDateTests(unittest.TestCase):
+    def test_native_year_geometry_guides_v5_without_accepting_a_guessed_year(self):
+        import numpy as np
+        from cin_mac_date import guided_year_votes,corroborated_birth_date
+        card=np.full((760,1200,3),230,dtype=np.uint8)
+        doc=document()
+        doc['pages'][0]['ocrWords']=[{'text':'2000','bbox':{'left':490,'top':545,'right':655,'bottom':649}}]
+        crops=[]
+        def reader(crop):
+            crops.append(crop.shape)
+            return [('0002',.99),('0002',.98)]
+        votes=guided_year_votes(doc,card,455,'2000-12-05',reader)
+        self.assertEqual(crops,[(118,181,3)])
+        self.assertEqual(corroborated_birth_date([([('50',.99)]*2,[('',0.)]*2)]+votes,
+            [{'2000-12-05'},{'2000-12-05'}]),'2000-12-05')
+        doc['pages'][0]['ocrWords'][0]['bbox']['top']=100
+        self.assertEqual(guided_year_votes(doc,card,455,'2000-12-05',reader),[])
     def test_exact_month_in_birth_row_and_real_calendar_only(self):
         from cin_mac_date import native_birth_dates
         self.assertEqual(native_birth_dates(document(),1200,760,455),{'2000-12-05'})

@@ -397,4 +397,10 @@
     <string name="owner_type_review">نوع الوثيقة مبدئي.</string>
     <string name="owner_page_removed">حُذفت الصورة المحددة فقط. راجع ترتيب الصور المتبقية.</string>
     <string name="owner_reference_label">المرجع العقاري</string>
+    <string name="owner_extracted_heading">المتاح من قراءة الهوية والوثيقة</string>
+    <string name="owner_value_unavailable">غير متاح من القراءة</string>
+    <string name="owner_date_refresh">إعادة قراءة التاريخ من الهوية المحفوظة</string>
+    <string name="owner_date_reading">نقرأ التاريخ من الصورة المحفوظة…</string>
+    <string name="owner_date_not_updated">لم نحدّث التاريخ. تبقى الصورة الأصلية متاحة لمراجعة الإدارة.</string>
+    <string name="owner_read_request_documents">ما الذي استُخرج من وثائق هذا الطلب؟</string>
 </resources>
