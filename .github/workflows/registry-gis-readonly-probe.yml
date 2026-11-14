@@ -7,34 +7,65 @@ permissions:
 jobs:
   probe:
     runs-on: ubuntu-latest
-    timeout-minutes: 3
+    timeout-minutes: 4
     steps:
-      - name: Check exact user-supplied map service and raster layer 166 routes
+      - name: Download all SCANs layer metadata and convert geographic coverage into KML GeoJSON CSV
         run: |
           python3 - <<'PYCODE'
-          import urllib.request,urllib.parse,urllib.error,json,time,concurrent.futures,hashlib
-          base="https://geopau.gov.tn/arcgisserver/rest/services/public/SCANs_public/MapServer"
-          endpoints=[
-           ("root_query",base+"/query",{"where":"1=1","outFields":"*","f":"json"}),
-           ("layer_166_query",base+"/166/query",{"where":"1=1","outFields":"*","returnGeometry":"true","f":"json"}),
-           ("layer_166_metadata",base+"/166",{"f":"pjson"}),
-           ("export_166_small",base+"/export",{"bbox":"1234049.300467637,4418990.733423825,1240853.2223591008,4426690.888020831","bboxSR":"3857","imageSR":"3857","size":"480,480","dpi":"96","layers":"show:166","format":"png32","transparent":"true","f":"json"}),
-          ]
-          def probe(i):
-           tag,url,params=i
-           u=url+"?"+urllib.parse.urlencode(params)
-           start=time.monotonic()
-           try:
-            with urllib.request.urlopen(urllib.request.Request(u,headers={"User-Agent":"Mozilla/5.0","Accept":"application/json"}),timeout=17) as r:
-             body=r.read(16000); status=r.status; ctype=r.headers.get("Content-Type")
-            try:
-             j=json.loads(body)
-             output={"error":j.get("error"),"result_keys":list(j.keys())[:15],"layers":len(j.get("layers",[])) if isinstance(j.get("layers"),list) else None,"features":len(j.get("features",[])) if isinstance(j.get("features"),list) else None,"image_href":j.get("href"),"type":j.get("type"),"fields":j.get("fields")}
-            except Exception:output={"snippet":body[:400].decode("utf8","replace")}
-            print("PROBE",json.dumps({"tag":tag,"status":status,"content_type":ctype,"duration":round(time.monotonic()-start,2),"payload":output},ensure_ascii=False)[:2700],flush=True)
-           except urllib.error.HTTPError as e:
-            print("PROBE",json.dumps({"tag":tag,"status":e.code,"body":e.read(650).decode("utf8","replace"),"duration":round(time.monotonic()-start,2)},ensure_ascii=False),flush=True)
-           except Exception as e:print("PROBE",json.dumps({"tag":tag,"error":type(e).__name__,"message":str(e)[:120],"duration":round(time.monotonic()-start,2)},ensure_ascii=False),flush=True)
-          with concurrent.futures.ThreadPoolExecutor(max_workers=4) as ex:list(ex.map(probe,endpoints))
+          import urllib.request, json, math, csv, os, sys, xml.etree.ElementTree as ET
+          from collections import Counter
+          u="https://geopau.gov.tn/arcgisserver/rest/services/public/SCANs_public/MapServer/layers?f=pjson"
+          req=urllib.request.Request(u,headers={"User-Agent":"Mozilla/5.0 (Malak read-only public GIS footprint audit)","Accept":"application/json"})
+          with urllib.request.urlopen(req,timeout=105) as response:
+              data=response.read(3_000_000)
+              print("REMOTE_HTTP",response.status,"BYTES",len(data),flush=True)
+          j=json.loads(data)
+          layers=j.get("layers",[])
+          print("LAYERS_TOTAL",len(layers),"TYPES",dict(Counter(x.get("type") for x in layers)),flush=True)
+          R=6378137
+          def convert(x,y):
+              return [round(x/R*180/math.pi,8),round((2*math.atan(math.exp(y/R))-math.pi/2)*180/math.pi,8)]
+          def poly(b):
+              a=convert(b["xmin"],b["ymin"]);bb=convert(b["xmax"],b["ymax"])
+              return [a,[bb[0],a[1]],bb,[a[0],bb[1]],a]
+          def good(b):
+              return isinstance(b,dict) and all(isinstance(b.get(k),(int,float)) and math.isfinite(b[k]) for k in ("xmin","ymin","xmax","ymax")) and b["xmin"]<b["xmax"] and b["ymin"]<b["ymax"] and (b.get("spatialReference") or {}).get("latestWkid", (b.get("spatialReference") or {}).get("wkid")) in (3857,102100,102113)
+          features=[];miss=[];rows=[]
+          for l in layers:
+              if l.get("type")!="Raster Layer":continue
+              b=l.get("extent")
+              if not good(b):miss.append({"id":l.get("id"),"name":l.get("name"),"reason":"invalid_or_missing_extent"});continue
+              gov=(l.get("parentLayer") or {}).get("name") or "Unknown"
+              pts=poly(b)
+              props={"layer_id":l["id"],"name":l["name"],"governorate":gov,"data_kind":"urban_plan_scanned_raster_coverage","cadastral_parcel":False,"source_url":"https://geopau.gov.tn/arcgisserver/rest/services/public/SCANs_public/MapServer/"+str(l["id"])}
+              features.append({"type":"Feature","properties":props,"geometry":{"type":"Polygon","coordinates":[pts]}})
+              rows.append({"layer_id":l["id"],"name":l["name"],"governorate":gov,"west":pts[0][0],"south":pts[0][1],"east":pts[2][0],"north":pts[2][1],"source_url":props["source_url"]})
+          output={"type":"FeatureCollection","name":"GeoPAU public scanned PAU layers: geographic coverage (NOT cadastral parcel boundaries)","source":u,"features":features}
+          with open("Tunisia_GeoPAU_SCANs_Coverage.geojson","w",encoding="utf8") as fp:json.dump(output,fp,ensure_ascii=False,indent=1)
+          with open("Tunisia_GeoPAU_SCANs_Coverage.csv","w",newline="",encoding="utf-8-sig") as fp:
+              cw=csv.DictWriter(fp,fieldnames=["layer_id","name","governorate","west","south","east","north","source_url"]);cw.writeheader();cw.writerows(rows)
+          root=ET.Element("kml",xmlns="http://www.opengis.net/kml/2.2");doc=ET.SubElement(root,"Document")
+          ET.SubElement(doc,"name").text="Tunisia GeoPAU SCANs coverage - NOT property boundaries"
+          sty=ET.SubElement(doc,"Style",id="raster");ls=ET.SubElement(sty,"LineStyle");ET.SubElement(ls,"color").text="ff0000ff";ET.SubElement(ls,"width").text="2"
+          ps=ET.SubElement(sty,"PolyStyle");ET.SubElement(ps,"color").text="330000ff"
+          for f in features:
+              p=f["properties"];geom=f["geometry"]["coordinates"][0]
+              place=ET.SubElement(doc,"Placemark")
+              ET.SubElement(place,"name").text=p["governorate"]+" / "+p["name"]+" ["+str(p["layer_id"])+"]"
+              ET.SubElement(place,"description").text="Raster plan coverage only. NOT registered land boundaries. Source: "+p["source_url"]
+              ET.SubElement(place,"styleUrl").text="#raster"
+              polygon=ET.SubElement(place,"Polygon");outer=ET.SubElement(polygon,"outerBoundaryIs");ring=ET.SubElement(outer,"LinearRing")
+              ET.SubElement(ring,"coordinates").text=" ".join(str(x)+","+str(y)+",0" for x,y in geom)
+          ET.ElementTree(root).write("Tunisia_GeoPAU_SCANs_Coverage.kml",encoding="utf-8",xml_declaration=True)
+          print("SUCCESS",json.dumps({"raster_total":sum(l.get("type")=="Raster Layer" for l in layers),"raster_geo":len(features),"skipped":miss,"by_governorate":dict(sorted(Counter(f["properties"]["governorate"] for f in features).items())),"sample_166":[f for f in features if f["properties"]["layer_id"]==166]},ensure_ascii=False)[:16000],flush=True)
 
           PYCODE
+      - name: Save public nationwide scanned-map footprint files
+        uses: actions/upload-artifact@v4
+        with:
+          name: nationwide-geopau-scan-coverage-kml-geojson-csv
+          path: |
+            Tunisia_GeoPAU_SCANs_Coverage.geojson
+            Tunisia_GeoPAU_SCANs_Coverage.kml
+            Tunisia_GeoPAU_SCANs_Coverage.csv
+          retention-days: 7
