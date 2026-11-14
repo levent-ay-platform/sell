@@ -9,49 +9,58 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 6
     steps:
-      - name: Public GET requests only; no cookies or credentials
+      - name: Analyze OTC public route and ArcGIS fields via bounded GET
         run: |
           python3 - <<'PYCODE'
-          import urllib.request, urllib.error, urllib.parse, json, re, time
-          B="https://geopau.gov.tn/arcgisserver/rest/services"
-          U={
-           "cpf_title":"https://www.cpf.gov.tn/CPFWebSite/Arabe/DescriptionTitre.php?nt=555941&gt=4&dt=0",
+          import urllib.request, urllib.parse, urllib.error, json, hashlib, re, ssl, time
+          from html.parser import HTMLParser
+          BASE="https://geopau.gov.tn/arcgisserver/rest/services/public"
+          urls={
            "otc_renseignements":"https://www.otc.nat.tn/Renseignements",
-           "gis_root":B+"?f=json",
-           "gis_public":B+"/public?f=json",
-           "gis_pau":B+"/pau?f=json",
-           "gis_pau_layers":B+"/public/PAUs_public/MapServer/layers?f=json",
-           "gis_scans_layers":B+"/public/SCANs_public/MapServer/layers?f=json",
-           "gis_limites_layers":B+"/public/LimitesAdmin/FeatureServer/layers?f=json",
-           "gis_find":B+"/public/PAUs_public/MapServer/find?"+urllib.parse.urlencode({"searchText":"555941","contains":"false","layers":"all","returnGeometry":"false","f":"json"})
+           "otc_home":"https://www.otc.nat.tn/",
+           "otc_products":"https://www.otc.nat.tn/products",
+           "pau_layers":BASE+"/PAUs_public/MapServer/layers?f=json",
+           "scan_layers":BASE+"/SCANs_public/MapServer/layers?f=json",
+           "query_equip_id524":BASE+"/PAUs_public/MapServer/137/query?"+urllib.parse.urlencode({"where":"OBJECTID=524","outFields":"OBJECTID,PAU_ID,Theme_ID","returnGeometry":"false","f":"json"}),
+           "query_equip_count":BASE+"/PAUs_public/MapServer/137/query?"+urllib.parse.urlencode({"where":"1=1","returnCountOnly":"true","f":"json"}),
+           "find_555941_layer66":BASE+"/PAUs_public/MapServer/find?"+urllib.parse.urlencode({"searchText":"555941","contains":"false","layers":"66","returnGeometry":"false","f":"json"})
           }
-          keyword=re.compile("cadast|foncier|titre|title|parcel|parcell|immatric|matricul|registre|numero.?tf",re.I)
-          for label,url in U.items():
-           st=time.monotonic()
+          class Page(HTMLParser):
+           def __init__(self):super().__init__();self.title=False;self.titleText=[];self.forms=[];self.scripts=[];self.links=[];self.hints=[]
+           def handle_starttag(self,tag,attrs):
+            d=dict(attrs)
+            if tag=="title":self.title=True
+            if tag=="form":self.forms.append({"method":d.get("method"),"action":d.get("action")})
+            if tag=="script" and d.get("src"):self.scripts.append(d["src"])
+            if tag=="a" and d.get("href"):self.links.append(d["href"])
+           def handle_endtag(self,tag):
+            if tag=="title":self.title=False
+           def handle_data(self,d):
+            if self.title:self.titleText.append(d)
+          for key,url in urls.items():
+           t=time.monotonic()
            try:
-            req=urllib.request.Request(url,headers={"User-Agent":"MalakReadOnlyResearch/1.0","Accept":"application/json,text/html,*/*"})
-            with urllib.request.urlopen(req,timeout=12) as r:
-             raw=r.read(4500000);status=r.status;ctype=r.headers.get("Content-Type","")
-            s=raw.decode("utf-8","replace")
-            print("RESULT",label,status,ctype,"bytes",len(raw),"elapsed",round(time.monotonic()-st,1),flush=True)
-            if label=="cpf_title":
-             print("CPF_MARKERS",{k:k in s for k in ["555941","504219","متعامل به","الرسوم الأم","الرسوم المحدثة"]},flush=True)
-            if "json" not in ctype and not s.lstrip().startswith("{"):continue
-            try:d=json.loads(s)
-            except Exception as e:print("PARSE_ERROR",label,str(e)[:100],flush=True);continue
-            if label in ("gis_root","gis_public","gis_pau"):
-             print("DIRECTORY",label,"folders",d.get("folders",[]),"services",[x.get("name") for x in d.get("services",[])],flush=True)
-            if label.endswith("_layers"):
-             ls=d.get("layers",[]);found=[]
-             for layer in ls:
-              fields=[x.get("name","") for x in layer.get("fields",[])]
-              matches=[f for f in fields if keyword.search(f)]
-              if keyword.search(layer.get("name","")) or matches:found.append({"layer":layer.get("name"),"id":layer.get("id"),"fields":matches})
-             print("FIELD_AUDIT",label,"layer_count",len(ls),"cadastral_candidates",found[:60],flush=True)
-            if label=="gis_find":
-             res=d.get("results",[])
-             print("FIND_555941", "count",len(res),"error",d.get("error"),"first_matches",[{"layer":x.get("layerName"),"field":x.get("foundFieldName"),"value":str(x.get("value"))[:40]} for x in res[:10]],flush=True)
-           except urllib.error.HTTPError as e:print("HTTP_ERROR",label,e.code,"elapsed",round(time.monotonic()-st,1),flush=True)
-           except Exception as e:print("ERROR",label,type(e).__name__,str(e)[:120],"elapsed",round(time.monotonic()-st,1),flush=True)
+            req=urllib.request.Request(url,headers={"User-Agent":"Mozilla/5.0 (compatible; MalakGISReadOnly/1.0)"})
+            with urllib.request.urlopen(req,timeout=15) as r:
+             payload=r.read(3_000_000)
+             code=r.status; ctype=r.headers.get("Content-Type"); final=r.url
+            print("FETCH",key,"status",code,"type",ctype,"bytes",len(payload),"seconds",round(time.monotonic()-t,1),"final_path",urllib.parse.urlsplit(final).path,flush=True)
+            if key.startswith("otc"):
+             html=payload.decode("utf8","replace"); p=Page();p.feed(html)
+             print("OTC_PAGE",key,"sha256",hashlib.sha256(payload).hexdigest()[:16],"title","".join(p.titleText)[:130],"forms",p.forms[:8],"script_paths",p.scripts[-12:],"candidate_links",[x[:150] for x in p.links if re.search("renseign|api|cadast|geo|plan|product|cart|service|map",x,re.I)][:35],flush=True)
+             print("OTC_MARKERS",key,{w:html.lower().count(w) for w in ["renseignements","copie de plan","geoportail","api/","iframe","404","not found"]},flush=True)
+            else:
+             d=json.loads(payload.decode("utf8","replace"))
+             if key.endswith("layers"):
+              layers=d.get("layers") or []
+              hits=[]
+              for l in layers:
+               fn=[x.get("name","") for x in (l.get("fields") or []) if isinstance(x,dict)]
+               name=l.get("name","")
+               words=[w for w in fn if re.search("cadast|foncier|titre|parcell|matric|immatric|num.?tf|n.?titre|no.?titre|lot|reference|registre",w,re.I)]
+               if words or re.search("cadast|foncier|parcell|matric",name,re.I):hits.append({"id":l.get("id"),"name":name,"matched_fields":words[:20]})
+              print("GIS_LAYERS",key,"count",len(layers),"matched_layers",hits[:80],flush=True)
+             else:print("GIS_QUERY",key,"error",d.get("error"),"count",d.get("count"),"results_count",len(d.get("results",[])),"features_count",len(d.get("features",[])),"first_properties",[(x.get("attributes") or {}) for x in d.get("features",[])[:2]],flush=True)
+           except Exception as e:print("FETCH_ERROR",key,type(e).__name__,str(e)[:150],flush=True)
 
           PYCODE
