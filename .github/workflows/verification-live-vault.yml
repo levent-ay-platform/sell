@@ -1,0 +1,49 @@
+name: Malak F1 isolated real Vault Transit acceptance
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'services/verification/src/vault-transit.ts'
+      - 'services/verification/src/evidence-upload.ts'
+      - 'services/verification/ci/vault-live.integration.ts'
+      - 'services/verification/ci/setup-vault-dev.py'
+      - '.github/workflows/verification-live-vault.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  vault-dev-synthetic-only:
+    name: Actual Vault derived keys + rotation + ciphertext-only storage (disposable)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Start isolated, throwaway Vault DEV mode (never production)
+        run: |
+          set -euo pipefail
+          docker run -d --rm --name malak-vault-ci --cap-add=IPC_LOCK \
+            -e VAULT_DEV_ROOT_TOKEN_ID=MALAK_CI_DEV_ROOT_ONLY \
+            -p 127.0.0.1:18200:8200 \
+            hashicorp/vault:1.21.4 server -dev -dev-listen-address=0.0.0.0:8200 >/dev/null
+      - name: Configure derived non-exportable Transit key and minimal CI ACL
+        env:
+          MALAK_DISPOSABLE_VAULT: 'yes'
+        run: python3 services/verification/ci/setup-vault-dev.py
+      - name: Prove real Vault key wrapping, recovery, rotation and fail-closed private storage
+        env:
+          MALAK_DISPOSABLE_VAULT: 'yes'
+          MALAK_VAULT_TEST_PORT: '18200'
+        run: node --experimental-strip-types --test services/verification/ci/vault-live.integration.ts
+      - name: Stop and remove test-only Vault
+        if: always()
+        run: |
+          docker stop malak-vault-ci >/dev/null 2>&1 || true
+          rm -rf "$RUNNER_TEMP/malak-vault-ci" || true

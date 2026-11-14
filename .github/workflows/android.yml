@@ -25,7 +25,7 @@ concurrency:
 jobs:
   native-preview:
     name: Android debug APK — GitHub-hosted Ubuntu
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 40
     steps:
       - name: Checkout (no persisted credentials)
@@ -50,12 +50,49 @@ jobs:
         with:
           gradle-version: '8.13'
           cache-provider: basic
-      - name: Assemble synthetic QA Android APK
-        run: gradle -p apps/android :app:assembleDebug --no-daemon --stacktrace
+      - name: Test Tunisian OCR name parser and assemble QA APK
+        run: gradle -p apps/android :app:testDebugUnitTest :app:assembleDebug --no-daemon --stacktrace
+      - name: Enforce strict 60MB APK and prohibit embedded OCR engines
+        run: |
+          set -euo pipefail
+          apk=apps/android/app/build/outputs/apk/debug/app-debug.apk
+          size="$(stat -c %s "$apk")"
+          echo "Malak APK bytes: $size; hard limit: 60000000"
+          test "$size" -le 60000000
+          if unzip -Z1 "$apk" | grep -Ei '(^|/)(inference\.onnx|.*\.traineddata|libonnxruntime.*\.so|libopencv.*\.so|libtesseract.*\.so)$'; then
+            echo 'HEAVY_OCR_ASSET_IN_APK' >&2
+            exit 1
+          fi
       - name: Upload QA APK (no signing keys, no personal data)
         uses: actions/upload-artifact@v4
         with:
           name: malak-PROTOTYPE-NOT-VISUALLY-APPROVED-${{ github.sha }}
+          path: apps/android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 3
+          if-no-files-found: error
+      - name: Build public HTTPS Malak OCR QA APK (Draft PR only)
+        if: ${{ github.event_name == 'pull_request' && github.head_ref == 'feat/individual-property-triage-20261110' }}
+        run: |
+          set -euo pipefail
+          url=https://malak-api.ayasofia.shop
+          gradle -p apps/android :app:assembleDebug "-PmalakPrivateBaseUrl=$url" --no-daemon
+          apk=apps/android/app/build/outputs/apk/debug/app-debug.apk
+          size="$(stat -c %s "$apk")"
+          echo "Connected Malak public HTTPS QA APK bytes: $size; hard limit 60000000"
+          test "$size" -le 60000000
+          unzip -p "$apk" 'classes*.dex' | strings | grep -F 'malak-api.ayasofia.shop' >/dev/null || {
+            echo "MISSING_REAL_QA_ENDPOINT_IN_APK" >&2
+            exit 1
+          }
+          if unzip -Z1 "$apk" | grep -Ei '(^|/)(inference\.onnx|.*\\.traineddata|libonnxruntime.*\\.so|libopencv.*\\.so|libtesseract.*\\.so)$'; then
+            echo 'HEAVY_OCR_ASSET_IN_APK' >&2
+            exit 1
+          fi
+      - name: Upload Malak public HTTPS OCR pilot QA APK
+        if: ${{ github.event_name == 'pull_request' && github.head_ref == 'feat/individual-property-triage-20261110' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: malak-PUBLIC-HTTPS-OCR-PILOT-QA-${{ github.sha }}
           path: apps/android/app/build/outputs/apk/debug/app-debug.apk
           retention-days: 3
           if-no-files-found: error

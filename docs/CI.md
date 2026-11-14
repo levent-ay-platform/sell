@@ -2,7 +2,7 @@
 
 Repository is PUBLIC to use GitHub standard hosted Actions, not to make production data public.
 
-- Allow jobs with `runs-on: ubuntu-latest` only; forbid `self-hosted`, Mac/macos, organization runner labels.
+- Allow only GitHub-managed `runs-on: ubuntu-latest` or pinned `runs-on: ubuntu-24.04` (supported LTS fallback after hosted Ubuntu 26.04 mirror DNS failure); forbid `self-hosted`, Mac/macos, Windows and organization runner labels.
 - Use `pull_request`, `push` and optional manual `workflow_dispatch`, not `pull_request_target` for untrusted code.
 - Workflow token is `contents: read`; never make a PR job access secrets or deployment/signing credentials.
 - Workflow must not upload real customer documents, build logs containing identity data, or live connection strings.

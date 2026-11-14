@@ -1,0 +1,25 @@
+# Explicit manual synthetic canary only. No public ports, secrets, data volumes
+# or dependency on CRM/MySQL/Asterisk. Never run with real CIN/CPF evidence.
+services:
+  malak-ocr-synthetic-canary:
+    image: malak-ocr-synthetic-canary:local
+    build:
+      context: ../../..
+      dockerfile: services/verification/docker/OcrCanary.Dockerfile
+    profiles: ["manual"]
+    network_mode: "none"
+    restart: "no"
+    user: "10001:10001"
+    read_only: true
+    cap_drop: ["ALL"]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 64
+    cpus: 1.0
+    mem_limit: 768m
+    memswap_limit: 768m
+    tmpfs:
+      - /work:rw,nosuid,nodev,noexec,size=128m,uid=10001,gid=10001,mode=0700
+    ulimits:
+      nofile:
+        soft: 128
+        hard: 128
