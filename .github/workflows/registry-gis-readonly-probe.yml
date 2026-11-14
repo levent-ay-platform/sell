@@ -7,91 +7,95 @@ permissions:
 jobs:
   probe:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 6
     steps:
-      - name: Validate ArcGIS hosted cadastre and urban lots actual schema/count/geometry plus PAU_ID document folders
+      - name: Verify exact cadastral title/field population and municipal zone/lot geometry; inventory all public PAU documents
         run: |
           python3 - <<'PYCODE'
-          import urllib.request,urllib.error,urllib.parse,json,time,re,collections,concurrent.futures,os,math
-          os.makedirs("geopau_cadastre_discovery",exist_ok=True)
-          BASE="https://services1.arcgis.com/zcZDLWCe77bUzzw7/arcgis/rest/services"
-          names=["cadastre","URB_LOT_S","Map_DarChaabane","BenArousEUV_WFL1","Projet_Municipalité_Raoued"]
-          def download(url,timeout=18):
-           with urllib.request.urlopen(urllib.request.Request(url,headers={"User-Agent":"Mozilla/5.0 (public ArcGIS API research read-only)","Accept":"application/json,text/html,*/*;q=0.5"}),timeout=timeout) as r:
-            return r.status,r.headers.get("content-type"),r.read(600000)
-          def getjson(label,url,timeout=18):
+          import urllib.request,urllib.parse,urllib.error,json,time,concurrent.futures,collections,re,csv,os
+          outdir="geopau_targeted_validation";os.makedirs(outdir,exist_ok=True)
+          S="https://services1.arcgis.com/zcZDLWCe77bUzzw7/arcgis/rest/services"
+          def fetch(url,timeout=16):
+           with urllib.request.urlopen(urllib.request.Request(url,headers={"User-Agent":"Mozilla/5.0 GeoPAU evidence audit read-only","Accept":"application/json,text/html,*/*"}),timeout=timeout) as r:return r.status,r.headers.get("content-type"),r.read(300000)
+          def q(label,base,params,timeout=12):
            start=time.monotonic()
            try:
-            status,ct,raw=download(url,timeout)
+            url=base+("?" if "?" not in base else "&")+urllib.parse.urlencode(params)
+            st,ct,raw=fetch(url,timeout)
             j=json.loads(raw)
-            print("CALL",json.dumps({"tag":label,"status":status,"size":len(raw),"elapsed":round(time.monotonic()-start,1),"error":j.get("error"),"keys":list(j.keys())[:12]},ensure_ascii=False),flush=True)
-            return j
+            d={"test":label,"http":st,"elapsed":round(time.monotonic()-start,1),"error":j.get("error"),"count":j.get("count"),"rows":len(j.get("features",[])) if "features" in j else None}
+            if j.get("features"):
+             # non-sensitive only, no owner names or identifying people
+             d["sample_attributes"]=j["features"][0].get("attributes")
+             d["has_polygon"]=bool(j["features"][0].get("geometry",{}).get("rings"))
+            print("QUERY",json.dumps(d,ensure_ascii=False)[:3500],flush=True)
+            return d
            except Exception as e:
-            print("CALL_ERROR",json.dumps({"tag":label,"type":type(e).__name__,"message":str(e)[:120],"elapsed":round(time.monotonic()-start,1)},ensure_ascii=False),flush=True)
-            return None
-          all_summaries={}
-          for name in names:
-           url=BASE+"/"+urllib.parse.quote(name)+"/FeatureServer"
-           j=getjson(name+"_root",url+"?f=json")
-           if not j or j.get("error"):
-            all_summaries[name]={"available":False,"error":(j or {}).get("error")};continue
-           layers=j.get("layers",[]);tables=j.get("tables",[])
-           info={"available":True,"service_url":url,"description":str(j.get("description",""))[:300],"capabilities":j.get("capabilities"),"spatialReference":j.get("spatialReference"),"layers":[{"id":x.get("id"),"name":x.get("name"),"geometryType":x.get("geometryType"),"minScale":x.get("minScale"),"maxScale":x.get("maxScale")} for x in layers],"tables":[{"id":x.get("id"),"name":x.get("name")} for x in tables]}
-           print("SERVICE",json.dumps({"name":name,**info},ensure_ascii=False)[:4500],flush=True)
-           for l in layers[:3]:
-            id=l["id"];d=getjson(name+"_layer_"+str(id),url+"/"+str(id)+"?f=json")
-            if not d or d.get("error"):continue
-            ll={"id":id,"name":d.get("name"),"type":d.get("type"),"geometryType":d.get("geometryType"),"objectIdField":d.get("objectIdField"),"extent":d.get("extent"),"fields":[{"name":ff.get("name"),"type":ff.get("type")} for ff in d.get("fields",[])],"capabilities":d.get("capabilities"),"maxRecordCount":d.get("maxRecordCount"),"supportsQuery":d.get("capabilities"),"relationships":d.get("relationships")}
-            print("LAYER",json.dumps({"service":name,**ll},ensure_ascii=False)[:5500],flush=True)
-            info.setdefault("layer_schemas",[]).append(ll)
-            qc=getjson(name+"_count_"+str(id),url+"/"+str(id)+"/query?"+urllib.parse.urlencode({"where":"1=1","returnCountOnly":"true","f":"json"}),timeout=16)
-            ll["live_count"]=qc.get("count") if qc else None
-            ll["count_error"]=(qc or {}).get("error")
-            if qc and isinstance(qc.get("count"),int) and qc["count"]>0 and d.get("geometryType") in ("esriGeometryPolygon","esriGeometryPolyline","esriGeometryPoint"):
-             # only innocuous ID and geometry; do not download owner-identifying fields
-             oid=d.get("objectIdField") or next((f["name"] for f in d.get("fields",[]) if f.get("type")=="esriFieldTypeOID"),"OBJECTID")
-             params=urllib.parse.urlencode({"where":"1=1","outFields":oid,"returnGeometry":"true","resultRecordCount":"1","outSR":"4326","f":"json"})
-             sample=getjson(name+"_geometry_"+str(id),url+"/"+str(id)+"/query?"+params,timeout=18)
-             if sample and sample.get("features"):
-              feature=sample["features"][0]
-              geo=feature.get("geometry")
-              geomsize=len(json.dumps(geo)) if geo is not None else None
-              ll["sample_geometry"]={"retrieved":True,"attributes":feature.get("attributes"),"geometry_size":geomsize,"geometry_keys":list(geo.keys()) if isinstance(geo,dict) else [],"spatialReference":sample.get("spatialReference")}
-              # store geometry single feature publicly sourced; no owner name fields
-              with open("geopau_cadastre_discovery/"+name+"_layer_"+str(id)+"_one_geometry.json","w",encoding="utf8") as out:
-               json.dump({"type":"FeatureCollection","features":[feature],"source_url":url+"/"+str(id)},out,ensure_ascii=False,indent=2)
-            print("VERDICT",json.dumps({"name":name,"layer":id,"count":ll.get("live_count"),"sample":ll.get("sample_geometry"),"count_error":ll.get("count_error")},ensure_ascii=False)[:2200],flush=True)
-           all_summaries[name]=info
-          with open("geopau_cadastre_discovery/service_inventory.json","w",encoding="utf8") as out:json.dump(all_summaries,out,ensure_ascii=False,indent=2)
-          # Server's public per-PAU document folders. Read only directory listings, not file contents.
-          docs="https://geopau.gov.tn/apps/docs/"
+            d={"test":label,"error_type":type(e).__name__,"message":str(e)[:120],"elapsed":round(time.monotonic()-start,1)}
+            print("QUERY",json.dumps(d,ensure_ascii=False),flush=True);return d
+          c=S+"/cadastre/FeatureServer/0/query"
+          l=S+"/URB_LOT_S/FeatureServer/0/query"
+          tests=[
+           ("cadastre_title_555941",c,{"where":"Titre_Foncier=555941","returnCountOnly":"true","f":"json"}),
+           ("cadastre_titre_555941",c,{"where":"TITRE=555941","returnCountOnly":"true","f":"json"}),
+           ("cadastre_titre_foncier_non_null",c,{"where":"Titre_Foncier IS NOT NULL","returnCountOnly":"true","f":"json"}),
+           ("cadastre_titre_non_null",c,{"where":"TITRE IS NOT NULL","returnCountOnly":"true","f":"json"}),
+           ("cadastre_plan_url_non_null",c,{"where":"Plan_URL IS NOT NULL AND Plan_URL <> ''","returnCountOnly":"true","f":"json"}),
+           ("cadastre_P_OTC_non_null",c,{"where":"P_OTC IS NOT NULL","returnCountOnly":"true","f":"json"}),
+           ("cadastre_non_sensitive_sample",c,{"where":"1=1","outFields":"OBJECTID,TITRE,Titre_Foncier,CONTENANCE,Surface,LOTISSEMEN","resultRecordCount":"3","returnGeometry":"false","f":"json"}),
+           ("urb_lot_titre_555941",l,{"where":"ttr_fcier='555941'","returnCountOnly":"true","f":"json"}),
+           ("urb_lot_title_non_null",l,{"where":"ttr_fcier IS NOT NULL","returnCountOnly":"true","f":"json"}),
+           ("urb_lot_non_sensitive_sample",l,{"where":"1=1","outFields":"OBJECTID,ttr_fcier,superficie,id_lot,id_lotss","resultRecordCount":"3","returnGeometry":"false","f":"json"}),
+          ]
+          for layerid in (11,13):
+           base=S+"/Map_DarChaabane/FeatureServer/"+str(layerid)
+           try:
+            st,ct,raw=fetch(base+"?f=json",timeout=12);j=json.loads(raw)
+            print("DAR_LAYER",json.dumps({"id":layerid,"name":j.get("name"),"geom":j.get("geometryType"),"extent":j.get("extent"),"fields":[f.get("name") for f in j.get("fields",[])]},ensure_ascii=False)[:4000],flush=True)
+            tests.append(("DarChaabane_layer"+str(layerid)+"_count",base+"/query",{"where":"1=1","returnCountOnly":"true","f":"json"}))
+            # non-sensitive sample polygon
+            oid=j.get("objectIdField") or "OBJECTID"
+            tests.append(("DarChaabane_layer"+str(layerid)+"_sample_geometry",base+"/query",{"where":"1=1","outFields":oid,"outSR":"4326","resultRecordCount":"1","returnGeometry":"true","f":"json"}))
+           except Exception as e:print("DAR_LAYER_ERROR",layerid,type(e).__name__,str(e)[:130],flush=True)
+          results=[]
+          with concurrent.futures.ThreadPoolExecutor(max_workers=3) as pool:
+           fs=[pool.submit(q,label,url,p,12) for label,url,p in tests]
+           for x in fs:results.append(x.result())
+          with open(outdir+"/targeted_feature_results.json","w",encoding="utf8") as f:json.dump(results,f,ensure_ascii=False,indent=2)
+          # All 148 public directory labels: no PDF contents or owner info
+          start=time.monotonic()
           try:
-           status,ct,raw=download(docs,timeout=15)
-           s=raw.decode("utf8","replace")
-           dirs=sorted(set(re.findall(r'/apps/docs/([0-9]{4,10})/',s)))
-           filenames=re.findall(r'/apps/docs/([^"<> ]+)',s)
-           print("DOCS_INDEX",json.dumps({"status":status,"dirs":len(dirs),"sample_15_Nabeul_prefix":[x for x in dirs if x.startswith("15")][:50],"first_dir_codes":dirs[:30],"file_entries":len(filenames)},ensure_ascii=False),flush=True)
-           doc_summary={"index_http_status":status,"published_folder_count":len(dirs),"public_folder_codes":dirs,"nabeul_prefix_15":[x for x in dirs if x.startswith("15")]}
-           selected=[x for x in dirs if x.startswith("15")][:3]
-           if not selected:selected=dirs[:2]
-           for name in selected:
-            start=time.monotonic()
-            try:
-             st,ct,b=download(docs+name+"/",timeout=16)
-             s=b.decode("utf8","replace")
-             hrefs=re.findall(r'<A HREF="([^"]+)"',s,re.I)
-             ext=collections.Counter([(x.split("?")[0].rsplit(".",1)[-1].lower() if "." in x.rsplit("/",1)[-1] else "directory") for x in hrefs if x.startswith("/apps/docs/"+name+"/")])
-             doc_summary.setdefault("folder_samples",[]).append({"PAU_ID_folder":name,"http":st,"entry_count":len(hrefs),"extensions":dict(ext),"sample_paths":hrefs[:16]})
-             print("FOLDER",json.dumps(doc_summary["folder_samples"][-1],ensure_ascii=False)[:3200],flush=True)
-            except Exception as e:print("FOLDER_ERROR",name,type(e).__name__,str(e)[:100],flush=True)
-           with open("geopau_cadastre_discovery/public_docs_folder_index.json","w",encoding="utf8") as out:json.dump(doc_summary,out,ensure_ascii=False,indent=2)
-          except Exception as e:print("DOCS_INDEX_ERROR",type(e).__name__,str(e)[:140],flush=True)
+           st,ct,raw=fetch("https://geopau.gov.tn/apps/docs/",timeout=13)
+           folders=sorted(set(re.findall(r'/apps/docs/([0-9]{6})/',raw.decode("utf8","replace"))))
+           print("FOLDERS_ROOT",json.dumps({"status":st,"folders_count":len(folders),"nabeul_15_prefix_count":sum(z.startswith("15") for z in folders)},ensure_ascii=False),flush=True)
+          except Exception as e:folders=[];print("FOLDERS_ROOT_ERROR",str(e)[:120],flush=True)
+          def folder(code):
+           t=time.monotonic()
+           try:
+            url="https://geopau.gov.tn/apps/docs/"+code+"/"
+            st,ct,raw=fetch(url,timeout=10)
+            s=raw.decode("utf8","replace")
+            anchors=re.findall(r'<A HREF="([^"]+)"',s,re.I)
+            files=[urllib.parse.unquote(x.rsplit("/",1)[-1]) for x in anchors if x.startswith("/apps/docs/"+code+"/") and not x.endswith("/")]
+            suffix=collections.Counter([x.rsplit(".",1)[-1].lower() if "." in x else "unknown" for x in files])
+            return {"PAU_ID":code,"index_url":url,"http":st,"pdf_count":suffix.get("pdf",0),"image_count":sum(v for k,v in suffix.items() if k in ("jpg","jpeg","png","tif","tiff")),"file_count":len(files),"suffixes":";".join(k+":"+str(v) for k,v in sorted(suffix.items())),"reglement_file_count":len([z for z in files if "reglement" in z.casefold() or "règlement" in z.casefold()]),"rapport_file_count":len([z for z in files if "rapport" in z.casefold()]),"file_names":files[:60],"latency":round(time.monotonic()-t,1)}
+           except Exception as e:return {"PAU_ID":code,"index_url":"https://geopau.gov.tn/apps/docs/"+code+"/","error":type(e).__name__,"http":None}
+          r=[]
+          with concurrent.futures.ThreadPoolExecutor(max_workers=3) as pool:
+           for x in pool.map(folder,folders):r.append(x)
+          stats={"folders":len(folders),"success":sum(v.get("http")==200 for v in r),"errors":sum(v.get("http")!=200 for v in r),"total_pdf_files":sum(v.get("pdf_count",0) for v in r),"all_files_count":sum(v.get("file_count",0) for v in r),"folders_with_reglement":sum(v.get("reglement_file_count",0)>0 for v in r),"folders_with_rapport":sum(v.get("rapport_file_count",0)>0 for v in r),"Nabeul_prefix15_folders":sum(str(v.get("PAU_ID","")).startswith("15") for v in r),"elapsed":round(time.monotonic()-start,1)}
+          print("FOLDER_SUMMARY",json.dumps(stats,ensure_ascii=False),flush=True)
+          print("FOLDER_NABEUL",json.dumps([{"PAU_ID":v["PAU_ID"],"file_count":v.get("file_count"),"pdf_count":v.get("pdf_count"),"titles":v.get("file_names",[])[:9]} for v in r if v["PAU_ID"].startswith("15")],ensure_ascii=False)[:18000],flush=True)
+          with open(outdir+"/public_documents_index.json","w",encoding="utf8") as f:json.dump({"summary":stats,"folders":r},f,ensure_ascii=False,indent=2)
+          cols=["PAU_ID","index_url","http","file_count","pdf_count","image_count","reglement_file_count","rapport_file_count","suffixes","error"]
+          with open(outdir+"/PAU_ID_document_directories.csv","w",encoding="utf-8-sig",newline="") as f:
+           w=csv.DictWriter(f,fieldnames=cols,extrasaction="ignore");w.writeheader();w.writerows(r)
 
           PYCODE
-      - name: Save cadastre layer and public docs results with no owner details
+      - name: Store non-personal feature evidence and PAU_ID document indexes
         uses: actions/upload-artifact@v4
         with:
-          name: geopau-official-org-cadastre-geometry-test
-          path: geopau_cadastre_discovery/
+          name: geopau-cadastre-and-all-148-document-folders
+          path: geopau_targeted_validation/
           retention-days: 7
           if-no-files-found: error
