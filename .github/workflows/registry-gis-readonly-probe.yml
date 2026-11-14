@@ -9,54 +9,87 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: GeoMatch spatial screening for open OSM rural polygons near Sidi Djedidi
+      - name: Run bounded coverage of independent GIS capabilities and ArcGIS hosted alternatives
         run: |
           python3 - <<'PYCODE'
-          import urllib.request,urllib.parse,json,time,math,os,csv,sys
-          query='[out:json][timeout:22];(way["landuse"~"^(farmland|orchard|vineyard|farmyard|meadow|grass|residential)$"](36.393,10.423,36.446,10.486);way["highway"~"^(primary|secondary|tertiary|unclassified|residential|track)$"](36.393,10.423,36.446,10.486););out geom;'
-          servers=["https://overpass.kumi.systems/api/interpreter","https://overpass-api.de/api/interpreter","https://overpass.private.coffee/api/interpreter"]
-          raw=None; endpoint=None
-          for host in servers:
-           t=time.monotonic()
+          import urllib.request,urllib.parse,urllib.error,json,time,concurrent.futures,os,re
+          os.makedirs("geopau_live_capability_audit",exist_ok=True)
+          base="https://geopau.gov.tn/arcgisserver/rest/services/public/PAUs_public/MapServer"
+          tests=[
+          ("BASELINE","layer69_metadata",base+"/69",{"f":"json"},12),
+          ("BASELINE","layer66_metadata",base+"/66",{"f":"json"},12),
+          ("RENDER","PAU_legend",base+"/legend",{"f":"json"},16),
+          ("RENDER","export_near_sidi_json",base+"/export",{"bbox":"628500,4029200,632500,4033200","bboxSR":"32632","imageSR":"32632","size":"256,256","layers":"show:69,60,66","format":"png32","transparent":"true","f":"json"},19),
+          ("RENDER","export_near_sidi_image",base+"/export",{"bbox":"628500,4029200,632500,4033200","bboxSR":"32632","imageSR":"32632","size":"256,256","layers":"show:69,60,66","format":"png32","transparent":"true","f":"image"},19),
+          ("QUERY_NEW","zone_geojson",base+"/60/query",{"where":"OBJECTID=1","outFields":"OBJECTID,Code,Vocation,PAU_ID","returnGeometry":"true","outSR":"4326","f":"geojson"},16),
+          ("QUERY_NEW","limite_count",base+"/69/query",{"where":"1=1","returnCountOnly":"true","f":"json"},16),
+          ("QUERY_NEW","lotissement_count",base+"/66/query",{"where":"1=1","returnCountOnly":"true","f":"json"},16),
+          ("QUERY_NEW","ilots_extent",base+"/12/query",{"where":"1=1","returnExtentOnly":"true","f":"json"},16),
+          ("ALTERNATE","LimitesAdmin_FS_root","https://geopau.gov.tn/arcgisserver/rest/services/public/LimitesAdmin/FeatureServer",{"f":"json"},16),
+          ("ALTERNATE","OSM_FS_root","https://geopau.gov.tn/arcgisserver/rest/services/public/OSM_FS/FeatureServer",{"f":"json"},16),
+          ("ALTERNATE","LimitesAdmin_FS_0","https://geopau.gov.tn/arcgisserver/rest/services/public/LimitesAdmin/FeatureServer/0",{"f":"json"},16),
+          ("ALTERNATE","OSM_FS_0","https://geopau.gov.tn/arcgisserver/rest/services/public/OSM_FS/FeatureServer/0",{"f":"json"},16),
+          ("PORTAL","tunisia_search_pau","https://tunisia.maps.arcgis.com/sharing/rest/search",{"q":"PAU","num":"30","f":"json"},20),
+          ("PORTAL","tunisia_search_cadastre","https://tunisia.maps.arcgis.com/sharing/rest/search",{"q":"cadastre","num":"30","f":"json"},20),
+          ("APP","eSearch_config","https://geopau.gov.tn/app_sig_pau_tunisie_public/configs/eSearch/config_widgets_eSearch_Widget_41.json",None,16),
+          ("APP","Search_config","https://geopau.gov.tn/app_sig_pau_tunisie_public/configs/Search/config_widgets_Search_Widget_22.json",None,16)
+          ]
+          def probe(t):
+           category,label,url,params,timeout=t
+           start=time.monotonic(); u=url+("?" +urllib.parse.urlencode(params) if params else "")
            try:
-            req=urllib.request.Request(host,data=urllib.parse.urlencode({"data":query}).encode(),headers={"User-Agent":"MalakGeoMatchAcademicResearch/1.0","Accept":"application/json"},method="POST")
-            with urllib.request.urlopen(req,timeout=38) as r:
-             data=r.read(3000000)
-            j=json.loads(data)
-            if isinstance(j.get("elements"),list):raw=j;endpoint=host;break
-            print("ERROR",host,str(j)[:120],"secs",round(time.monotonic()-t,2),flush=True)
-           except Exception as e:print("OVERPASS_FAILURE",host,type(e).__name__,str(e)[:140],"secs",round(time.monotonic()-t,2),flush=True)
-          os.makedirs("geomatch",exist_ok=True)
-          def area_m2(coords):
-           lat0=sum(p[1] for p in coords)/len(coords);c=math.cos(math.radians(lat0));R=6371008.8
-           pts=[(math.radians(lon)*R*c,math.radians(lat)*R) for lon,lat in coords]
-           return abs(sum(pts[i][0]*pts[(i+1)%len(pts)][1]-pts[(i+1)%len(pts)][0]*pts[i][1] for i in range(len(pts)))/2)
-          if raw:
-           features=[];roads=[]; all_agri=0
-           for el in raw["elements"]:
-            geo=el.get("geometry") or [];tags=el.get("tags") or {}
-            coords=[[round(p["lon"],7),round(p["lat"],7)] for p in geo if "lon" in p and "lat" in p]
-            if tags.get("landuse"):
-             if len(coords)<4 or coords[0]!=coords[-1]:continue
-             all_agri+=1; area=area_m2(coords)
-             f={"type":"Feature","properties":{"source":"OpenStreetMap","source_id":el.get("id"),"osm_url":"https://www.openstreetmap.org/way/"+str(el.get("id")),"landuse":tags.get("landuse"),"name":tags.get("name"),"approx_area_m2":round(area,1),"area_delta_pct":round((area-42910)/42910*100,1),"not_cadastral":True},"geometry":{"type":"Polygon","coordinates":[coords]}}
-             if abs(area-42910)/42910<=0.35:features.append(f)
-            if tags.get("highway") and len(coords)>1:
-             roads.append({"type":"Feature","properties":{"osm_id":el.get("id"),"name":tags.get("name"),"ref":tags.get("ref"),"highway":tags.get("highway"),"source":"OpenStreetMap"},"geometry":{"type":"LineString","coordinates":coords}})
-           features.sort(key=lambda f:abs(f["properties"]["area_delta_pct"]))
-           with open("geomatch/osm_candidates_area_42910.geojson","w",encoding="utf8") as f:json.dump({"type":"FeatureCollection","features":features[:100]},f,ensure_ascii=False)
-           with open("geomatch/osm_roads_local.geojson","w",encoding="utf8") as f:json.dump({"type":"FeatureCollection","features":roads[:450]},f,ensure_ascii=False)
-           with open("geomatch/summary.json","w",encoding="utf8") as f:json.dump({"api":endpoint,"query_bbox":[36.393,10.423,36.446,10.486],"anchor":"Sidi Jedidi OSM village 36.41714,10.45575","search_purpose":"area-based visual screening, not ownership proof","official_title_area_m2":42910,"osm_farmland_like_polygons_closed":all_agri,"road_segments":len(roads),"candidates_within_35pct":len(features),"top_area_candidates":[x["properties"] for x in features[:12]]},f,ensure_ascii=False,indent=2)
-           print("OSM_RESULT",json.dumps({"endpoint":endpoint,"elements_total":len(raw["elements"]),"closed_landuse_polygons":all_agri,"road_segments":len(roads),"area_match_candidates_35pct":len(features),"top_candidates":[x["properties"] for x in features[:12]]},ensure_ascii=False)[:4500],flush=True)
-          else:
-           with open("geomatch/summary.json","w") as f:json.dump({"status":"OVERPASS_INACCESSIBLE","bbox":[36.393,10.423,36.446,10.486]},f)
-           print("OSM_RESULT",json.dumps({"status":"unavailable","comment":"Did not get actual OSM candidate geometry; no result invented"}),flush=True)
+            with urllib.request.urlopen(urllib.request.Request(u,headers={"User-Agent":"Mozilla/5.0 (Malak read-only independent GIS capability audit)","Accept":"application/json,image/png,*/*;q=0.5"}),timeout=timeout) as r: 
+             b=r.read(500000);meta={"status":r.status,"content_type":r.headers.get("content-type"),"bytes":len(b),"final_url":r.url.split("?")[0]}
+            r={"category":category,"test":label,"secs":round(time.monotonic()-start,1),"http":meta,"success":False}
+            try:
+             v=json.loads(b)
+             r["json_error"]=v.get("error")
+             r["json_keys"]=list(v.keys())[:16]
+             if "results" in v: r["results_count"]=len(v["results"]) if isinstance(v["results"],list) else None
+             if "features" in v:
+              r["feature_count"]=len(v["features"]) if isinstance(v["features"],list) else None
+              r["sample_feature"]=(v.get("features") or [None])[0]
+             if "layers" in v:
+              r["layer_count"]=len(v["layers"])
+              r["layers_sample"]=[{"id":x.get("id"),"name":x.get("name")} for x in v["layers"][:25]]
+             if "count" in v:r["count"]=v["count"]
+             if "extent" in v:r["extent"]=v["extent"]
+             if "objectIds" in v:r["objectIds_count"]=len(v.get("objectIds") or [])
+             if "href" in v:r["href"]=v["href"]
+             if "total" in v:r["total"]=v["total"]
+             if label.startswith("tunisia_search"):r["items_sample"]=[{"id":x.get("id"),"title":x.get("title"),"type":x.get("type"),"url":x.get("url"),"access":x.get("access")} for x in v.get("results",[])[:14]]
+             if label in ("eSearch_config","Search_config"):
+              r["top_keys"]=list(v.keys())[:25]
+              r["static_config"]=json.dumps(v,ensure_ascii=False)[:13000]
+             r["success"]=not bool(v.get("error")) and bool("features" in v or "count" in v or "extent" in v or "layers" in v or "services" in v or "href" in v or "results" in v or "sources" in v)
+             if label in ("eSearch_config","Search_config") or r["success"] and label in ("PAU_legend","LimitesAdmin_FS_root","OSM_FS_root","LimitesAdmin_FS_0","OSM_FS_0","tunisia_search_pau","tunisia_search_cadastre"):
+              with open("geopau_live_capability_audit/"+label+".json","w",encoding="utf8") as f:json.dump(v,f,ensure_ascii=False,indent=2)
+            except Exception:
+             r["body_signature"]=b[:20].hex()
+             r["html_like"]=b[:300].lstrip().lower().startswith((b"<!doctype",b"<html"))
+             r["image_png"]=b[:8]==b"\x89PNG\r\n\x1a\n"
+             if r["image_png"]:
+              with open("geopau_live_capability_audit/"+label+".png","wb") as f:f.write(b)
+             r["success"]=r["image_png"]
+            print("PROBE",json.dumps(r,ensure_ascii=False)[:14500],flush=True)
+            return r
+           except urllib.error.HTTPError as e:
+            r={"category":category,"test":label,"secs":round(time.monotonic()-start,1),"http_status":e.code,"error":str(e)[:130]}
+           except Exception as e:
+            r={"category":category,"test":label,"secs":round(time.monotonic()-start,1),"error_type":type(e).__name__,"error":str(e)[:130]}
+           print("PROBE",json.dumps(r,ensure_ascii=False),flush=True)
+           return r
+          # low concurrency avoids stressing the public service, 3 jobs max; each path distinct
+          with concurrent.futures.ThreadPoolExecutor(max_workers=3) as pool:
+           results=list(pool.map(probe,tests))
+          with open("geopau_live_capability_audit/results.json","w",encoding="utf8") as f:json.dump(results,f,ensure_ascii=False,indent=2)
+          print("SUMMARY",json.dumps({"total":len(results),"successes":[x["test"] for x in results if x.get("success")],"feature_row_successes":[x["test"] for x in results if isinstance(x.get("feature_count"),int) and x["feature_count"]>0],"failure_count":len([x for x in results if not x.get("success")])},ensure_ascii=False),flush=True)
 
           PYCODE
-      - name: Save source-backed OpenStreetMap geospatial screening
+      - name: Save actual responses and result matrix
         uses: actions/upload-artifact@v4
         with:
-          name: geomatch-sidi-jedidi-osm-screening
-          path: geomatch/
-          if-no-files-found: warn
+          name: geopau-malak-capability-audit
+          path: geopau_live_capability_audit/
           retention-days: 7
+          if-no-files-found: error
