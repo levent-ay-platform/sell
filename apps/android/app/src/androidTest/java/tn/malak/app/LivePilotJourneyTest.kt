@@ -101,6 +101,18 @@ class LivePilotJourneyTest{
             if(InstrumentationRegistry.getArguments().getString("stage")=="feed"){
                 visible("EMULATOR QA - not for sale",40000);shot("08-public-listing");return
             }
+            if(stage=="date-readout"){
+                tap("Voir toutes mes demandes")
+                visible("EMULATOR DATE REPAIR QA - not for sale",30000)
+                tap("Voir les informations lues sur mes documents")
+                visible("Date de naissance",20000)
+                visible("Non disponible",10000)
+                shot("09-stored-date-missing")
+                tap("Relire la date dans la carte conservée")
+                visible("1984-01-02",90000)
+                shot("10-stored-date-recovered")
+                return
+            }
             tap("Déposer un terrain")
             if(stage!="resume"){
             tap("Choisir des fichiers")
