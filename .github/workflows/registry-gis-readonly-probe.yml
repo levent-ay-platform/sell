@@ -9,63 +9,51 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 4
     steps:
-      - name: Download all SCANs layer metadata and convert geographic coverage into KML GeoJSON CSV
+      - name: Verify PAUs vector schema and lightweight zone query endpoints
         run: |
           python3 - <<'PYCODE'
-          import urllib.request, json, math, csv, os, sys, xml.etree.ElementTree as ET
-          from collections import Counter
-          u="https://geopau.gov.tn/arcgisserver/rest/services/public/SCANs_public/MapServer/layers?f=pjson"
-          req=urllib.request.Request(u,headers={"User-Agent":"Mozilla/5.0 (Malak read-only public GIS footprint audit)","Accept":"application/json"})
-          with urllib.request.urlopen(req,timeout=105) as response:
-              data=response.read(3_000_000)
-              print("REMOTE_HTTP",response.status,"BYTES",len(data),flush=True)
-          j=json.loads(data)
-          layers=j.get("layers",[])
-          print("LAYERS_TOTAL",len(layers),"TYPES",dict(Counter(x.get("type") for x in layers)),flush=True)
-          R=6378137
-          def convert(x,y):
-              return [round(x/R*180/math.pi,8),round((2*math.atan(math.exp(y/R))-math.pi/2)*180/math.pi,8)]
-          def poly(b):
-              a=convert(b["xmin"],b["ymin"]);bb=convert(b["xmax"],b["ymax"])
-              return [a,[bb[0],a[1]],bb,[a[0],bb[1]],a]
-          def good(b):
-              return isinstance(b,dict) and all(isinstance(b.get(k),(int,float)) and math.isfinite(b[k]) for k in ("xmin","ymin","xmax","ymax")) and b["xmin"]<b["xmax"] and b["ymin"]<b["ymax"] and (b.get("spatialReference") or {}).get("latestWkid", (b.get("spatialReference") or {}).get("wkid")) in (3857,102100,102113)
-          features=[];miss=[];rows=[]
-          for l in layers:
-              if l.get("type")!="Raster Layer":continue
-              b=l.get("extent")
-              if not good(b):miss.append({"id":l.get("id"),"name":l.get("name"),"reason":"invalid_or_missing_extent"});continue
-              gov=(l.get("parentLayer") or {}).get("name") or "Unknown"
-              pts=poly(b)
-              props={"layer_id":l["id"],"name":l["name"],"governorate":gov,"data_kind":"urban_plan_scanned_raster_coverage","cadastral_parcel":False,"source_url":"https://geopau.gov.tn/arcgisserver/rest/services/public/SCANs_public/MapServer/"+str(l["id"])}
-              features.append({"type":"Feature","properties":props,"geometry":{"type":"Polygon","coordinates":[pts]}})
-              rows.append({"layer_id":l["id"],"name":l["name"],"governorate":gov,"west":pts[0][0],"south":pts[0][1],"east":pts[2][0],"north":pts[2][1],"source_url":props["source_url"]})
-          output={"type":"FeatureCollection","name":"GeoPAU public scanned PAU layers: geographic coverage (NOT cadastral parcel boundaries)","source":u,"features":features}
-          with open("Tunisia_GeoPAU_SCANs_Coverage.geojson","w",encoding="utf8") as fp:json.dump(output,fp,ensure_ascii=False,indent=1)
-          with open("Tunisia_GeoPAU_SCANs_Coverage.csv","w",newline="",encoding="utf-8-sig") as fp:
-              cw=csv.DictWriter(fp,fieldnames=["layer_id","name","governorate","west","south","east","north","source_url"]);cw.writeheader();cw.writerows(rows)
-          root=ET.Element("kml",xmlns="http://www.opengis.net/kml/2.2");doc=ET.SubElement(root,"Document")
-          ET.SubElement(doc,"name").text="Tunisia GeoPAU SCANs coverage - NOT property boundaries"
-          sty=ET.SubElement(doc,"Style",id="raster");ls=ET.SubElement(sty,"LineStyle");ET.SubElement(ls,"color").text="ff0000ff";ET.SubElement(ls,"width").text="2"
-          ps=ET.SubElement(sty,"PolyStyle");ET.SubElement(ps,"color").text="330000ff"
-          for f in features:
-              p=f["properties"];geom=f["geometry"]["coordinates"][0]
-              place=ET.SubElement(doc,"Placemark")
-              ET.SubElement(place,"name").text=p["governorate"]+" / "+p["name"]+" ["+str(p["layer_id"])+"]"
-              ET.SubElement(place,"description").text="Raster plan coverage only. NOT registered land boundaries. Source: "+p["source_url"]
-              ET.SubElement(place,"styleUrl").text="#raster"
-              polygon=ET.SubElement(place,"Polygon");outer=ET.SubElement(polygon,"outerBoundaryIs");ring=ET.SubElement(outer,"LinearRing")
-              ET.SubElement(ring,"coordinates").text=" ".join(str(x)+","+str(y)+",0" for x,y in geom)
-          ET.ElementTree(root).write("Tunisia_GeoPAU_SCANs_Coverage.kml",encoding="utf-8",xml_declaration=True)
-          print("SUCCESS",json.dumps({"raster_total":sum(l.get("type")=="Raster Layer" for l in layers),"raster_geo":len(features),"skipped":miss,"by_governorate":dict(sorted(Counter(f["properties"]["governorate"] for f in features).items())),"sample_166":[f for f in features if f["properties"]["layer_id"]==166]},ensure_ascii=False)[:16000],flush=True)
+          import urllib.request,urllib.parse,urllib.error,json,time,concurrent.futures,collections,os
+          base="https://geopau.gov.tn/arcgisserver/rest/services/public/PAUs_public/MapServer"
+          def fetch(tag,url,params=None,timeout=17):
+            u=url+(("?"+urllib.parse.urlencode(params)) if params else "")
+            start=time.monotonic()
+            try:
+              with urllib.request.urlopen(urllib.request.Request(u,headers={"User-Agent":"Mozilla/5.0 (Malak read-only vector audit)","Accept":"application/json"}),timeout=timeout) as r:
+                data=r.read(1600000);type_=r.headers.get("content-type");code=r.status
+              result=json.loads(data)
+              print("HTTP",json.dumps({"label":tag,"status":code,"bytes":len(data),"type":type_,"elapsed":round(time.monotonic()-start,1),"error":result.get("error"),"keys":list(result.keys())[:15],"features":len(result.get("features",[])) if isinstance(result.get("features"),list) else None,"objectIds_count":len(result.get("objectIds",[])) if isinstance(result.get("objectIds"),list) else None,"sample_feature":result.get("features",[None])[0] if result.get("features") else None},ensure_ascii=False)[:4500],flush=True)
+              return result
+            except Exception as e:
+              print("ERROR",json.dumps({"label":tag,"exception":type(e).__name__,"details":str(e)[:120],"elapsed":round(time.monotonic()-start,1)},ensure_ascii=False),flush=True)
+          j=fetch("full_vector_metadata",base+"/layers",{"f":"pjson"},timeout=50)
+          if j:
+            layers=j.get("layers",[]);print("LAYER_COUNTS",json.dumps(dict(collections.Counter(l.get("type") for l in layers)),ensure_ascii=False),flush=True)
+            summary={"source":base+"/layers?f=pjson","query_api_status":"unverified","layers":[]}
+            for l in layers:
+              fields=l.get("fields") or []
+              summary["layers"].append({"id":l.get("id"),"name":l.get("name"),"type":l.get("type"),"geometryType":l.get("geometryType"),"parent":(l.get("parentLayer") or {}).get("name"),"fields":[f.get("name") for f in fields]})
+            for id in (60,138,69,4,66):
+              x=next((l for l in layers if l.get("id")==id),{})
+              fields=x.get("fields") or []
+              keys=("Code","Vocation","Type","PAU_ID","Zone_id","Libelle","Nom","Intitule","Shape.STArea()")
+              interesting=[{"name":f["name"],"domain_count":len((f.get("domain") or {}).get("codedValues",[])),"first_domains":(f.get("domain") or {}).get("codedValues",[])[:8]} for f in fields if f.get("name") in keys]
+              print("LAYER_METADATA",json.dumps({"id":id,"name":x.get("name"),"type":x.get("type"),"geometry":x.get("geometryType"),"fields":[f.get("name") for f in fields],"selected":interesting},ensure_ascii=False)[:4600],flush=True)
+            with open("GeoPAU_PAUs_public_Vector_Schema_20261114.json","w",encoding="utf-8") as out:json.dump(summary,out,ensure_ascii=False,indent=2)
+          else:print("VECTOR_SCHEMA_UNAVAILABLE",flush=True)
+          cases=[
+            ("zones_60_empty",60,{"where":"1=0","outFields":"OBJECTID","returnGeometry":"false","f":"json"}),
+            ("zones_138_point",138,{"where":"1=1","geometry":"11.090,36.843","geometryType":"esriGeometryPoint","inSR":"4326","spatialRel":"esriSpatialRelIntersects","outFields":"OBJECTID,Code,Vocation,PAU_ID","returnGeometry":"false","resultRecordCount":"1","f":"json"}),
+            ("zones_60_point",60,{"where":"1=1","geometry":"11.090,36.843","geometryType":"esriGeometryPoint","inSR":"4326","spatialRel":"esriSpatialRelIntersects","outFields":"OBJECTID,Code,Vocation,PAU_ID","returnGeometry":"false","resultRecordCount":"1","f":"json"})
+          ]
+          with concurrent.futures.ThreadPoolExecutor(max_workers=3) as pool:
+            futs=[pool.submit(fetch,tag,base+"/"+str(id)+"/query",params) for tag,id,params in cases]
+            for f in futs:f.result()
 
           PYCODE
-      - name: Save public nationwide scanned-map footprint files
+      - name: Archive verified public vector GIS layer schema
         uses: actions/upload-artifact@v4
         with:
-          name: nationwide-geopau-scan-coverage-kml-geojson-csv
-          path: |
-            Tunisia_GeoPAU_SCANs_Coverage.geojson
-            Tunisia_GeoPAU_SCANs_Coverage.kml
-            Tunisia_GeoPAU_SCANs_Coverage.csv
+          name: geopau-vector-layer-schema-public
+          path: GeoPAU_PAUs_public_Vector_Schema_20261114.json
           retention-days: 7
+          if-no-files-found: ignore
