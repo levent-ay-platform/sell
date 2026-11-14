@@ -7,28 +7,59 @@ permissions:
 jobs:
   probe:
     runs-on: ubuntu-latest
-    timeout-minutes: 4
+    timeout-minutes: 5
     steps:
-      - name: Verify official INS code 156651 against ArcGIS sector field and basic query health
+      - name: Audit OTC publicly linked HTML forms routes and static JS
         run: |
           python3 - <<'PYCODE'
-          import urllib.request,urllib.parse,json,time,concurrent.futures
-          root="https://geopau.gov.tn/arcgisserver/rest/services/public/PAUs_public/MapServer"
-          requests=[
-          ("COUNT_SECTEUR",4,{"where":"1=1","returnCountOnly":"true","f":"json"}),
-          ("EXACT_SECT_ID",4,{"where":"Sect_id=156651","outFields":"Sect_id,Nom,Deleg_id","returnGeometry":"false","f":"json"}),
-          ("EXACT_DELEG_ID",1,{"where":"Deleg_id=1566","outFields":"Deleg_id,Nom,Gouv_id","returnGeometry":"false","f":"json"}),
-          ("OBJECTID_GOUV",0,{"objectIds":"1","outFields":"Gouv_id,Nom","returnGeometry":"false","f":"json"}),
-          ("OBJECTID_SECT",4,{"objectIds":"1","outFields":"Sect_id,Nom,Deleg_id","returnGeometry":"false","f":"json"})]
-          def run(x):
-           name,lid,p=x;u=f"{root}/{lid}/query?"+urllib.parse.urlencode(p)
-           t=time.monotonic()
+          from urllib.request import build_opener,HTTPRedirectHandler,Request
+          from urllib.parse import urljoin,urlsplit
+          from html.parser import HTMLParser
+          import json,re,concurrent.futures,time
+          base="https://www.otc.nat.tn"
+          pages=["/","/products","/carts/2","/login","/Renseignements","/docs","/geoportail","/tlis"]
+          class Parser(HTMLParser):
+           def __init__(self):super().__init__();self.assets=[];self.forms=[];self.in_form=False
+           def handle_starttag(self,t,a):
+            x=dict(a)
+            if t in ("script","link"):
+             v=x.get("src") or x.get("href")
+             if v:self.assets.append((t,v))
+            if t=="form":self.in_form=True;self.forms.append({"method":x.get("method"),"action":x.get("action"),"inputs":[]})
+            if self.in_form and t in ("input","select","textarea") and self.forms:
+             v=x.get("name");typ=x.get("type")
+             self.forms[-1]["inputs"].append({"name":v,"type":typ} if v else {"unnamed":t,"type":typ})
+           def handle_endtag(self,t):
+            if t=="form":self.in_form=False
+          class Tracker(HTTPRedirectHandler):
+           def __init__(self):self.redirects=[]
+           def redirect_request(self,req,fp,code,msg,h,newurl):
+            self.redirects.append({"status":code,"from_path":urlsplit(req.full_url).path,"to_path":urlsplit(newurl).path})
+            return super().redirect_request(req,fp,code,msg,h,newurl)
+          def get(path):
+           tr=Tracker();op=build_opener(tr)
            try:
-            with urllib.request.urlopen(urllib.request.Request(u,headers={"User-Agent":"Mozilla/5.0 MalakCheckJoin/1.0","Accept":"application/json"}),timeout=17) as r:
-             raw=r.read(90000);status=r.status
-            d=json.loads(raw)
-            print("JOIN_PROBE",name,"http",status,"elapsed",round(time.monotonic()-t,1),"data",json.dumps({"count":d.get("count"),"features":[y.get("attributes") for y in d.get("features",[])[:5]],"error":d.get("error")},ensure_ascii=False),flush=True)
-           except Exception as e:print("JOIN_PROBE_ERROR",name,type(e).__name__,str(e)[:120],"elapsed",round(time.monotonic()-t,1),flush=True)
-          with concurrent.futures.ThreadPoolExecutor(max_workers=3) as ex:list(ex.map(run,requests))
+            with op.open(Request(base+path,headers={"User-Agent":"Mozilla/5.0","Accept":"text/html"}),timeout=13) as r:
+             raw=r.read(250000); status=r.status;ctype=r.headers.get("Content-Type");end=r.url
+            body=raw.decode("utf8","replace");p=Parser();p.feed(body)
+            scripts=[urljoin(base,v) for k,v in p.assets if k=="script"]
+            local_scripts=[x for x in scripts if urlsplit(x).netloc in ("www.otc.nat.tn","otc.nat.tn")]
+            print("PAGE",json.dumps({"page":path,"http":status,"redirects":tr.redirects,"final":end,"content_type":ctype,"bytes":len(raw),"forms":p.forms,"scripts":local_scripts[:18],"clues":sorted(set(re.findall(r'(?:laravel|livewire|vue|angular|jquery|axios|inertia|csrf)',body,re.I)))[:15]},ensure_ascii=False),flush=True)
+            return local_scripts
+           except Exception as e:
+            print("PAGE_ERROR",path,type(e).__name__,str(e)[:130],flush=True);return []
+          scripts=[]
+          with concurrent.futures.ThreadPoolExecutor(max_workers=4) as ex:
+           for group in ex.map(get,pages):scripts+=group
+          scripts=list(dict.fromkeys(scripts));print("SCRIPTS_COUNT",len(scripts),flush=True)
+          def inspect(u):
+           try:
+            with build_opener().open(Request(u,headers={"User-Agent":"Mozilla/5.0"}),timeout=15) as r:b=r.read(900000)
+            s=b.decode("utf8","replace")
+            p=re.compile(r'(?:https?://[a-z0-9_.:-]+)?/[a-zA-Z0-9/_.:-]*(?:api|cadas|parcell|fonci|plan|recherch|renseign|geoport|cart|paiement|titre|requisition)[a-zA-Z0-9/_.:-]*',re.I)
+            matches=list(dict.fromkeys(p.findall(s)))[:30]
+            print("SCRIPT",json.dumps({"path":urlsplit(u).path,"bytes":len(b),"hits":matches,"has_ajax":bool(re.search(r'fetch\(|axios\.|\.ajax\(',s,re.I))},ensure_ascii=False),flush=True)
+           except Exception as e:print("SCRIPT_ERROR",urlsplit(u).path,type(e).__name__,str(e)[:120],flush=True)
+          with concurrent.futures.ThreadPoolExecutor(max_workers=4) as ex:list(ex.map(inspect,scripts[:14]))
 
           PYCODE
