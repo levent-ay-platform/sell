@@ -9,27 +9,34 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 3
     steps:
-      - name: Resolve GeoPAU public Web App map item and actual configured layers
+      - name: Identify the three active map services and search widget endpoints
         run: |
           python3 - <<'PYCODE'
-          import urllib.request,json,time
-          url="https://geopau.gov.tn/app_sig_pau_tunisie_public/config.json"
-          with urllib.request.urlopen(urllib.request.Request(url,headers={"User-Agent":"Mozilla/5.0"}),timeout=25) as r:j=json.load(r)
-          for k in ("portalUrl","appId","map","geometryService","httpProxy","dataSource"):
-           print("SETTING",k,json.dumps(j.get(k),ensure_ascii=False)[:3000],flush=True)
-          for col in ("widgetOnScreen","widgetPool"):
-           w=j.get(col,{})
-           print("WIDGET_COLLECTION",col,json.dumps([{"uri":x.get("uri"),"name":x.get("name"),"config":x.get("config")} for x in w.get("widgets",[]) if any(y in str(x).lower() for y in ("search","layer","attribute","query","filter"))],ensure_ascii=False)[:3000],flush=True)
-          item=(j.get("map") or {}).get("itemId") or (j.get("map") or {}).get("id")
-          portal=j.get("portalUrl","https://www.arcgis.com")
-          if item:
-           import urllib.parse
-           candidates=[portal.rstrip("/")+"/sharing/rest/content/items/"+str(item)+"/data?f=json",portal.rstrip("/")+"/sharing/rest/content/items/"+str(item)+"?f=json"]
-           for u in candidates:
-            try:
-             with urllib.request.urlopen(urllib.request.Request(u,headers={"User-Agent":"Mozilla/5.0"}),timeout=25) as r:
-              q=json.load(r)
-             print("WEBMAP_ITEM",u,"keys",list(q)[:15],"layers",json.dumps(q.get("operationalLayers",[]),ensure_ascii=False)[:8000],flush=True)
-            except Exception as e:print("WEBMAP_ERROR",str(e)[:120],flush=True)
+          import urllib.request,json
+          root="https://geopau.gov.tn/app_sig_pau_tunisie_public/"
+          def get(url):
+           with urllib.request.urlopen(urllib.request.Request(url,headers={"User-Agent":"Mozilla/5.0"}),timeout=25) as r:return json.load(r)
+          app=get(root+"config.json")
+          portal=app["map"]["portalUrl"]
+          m=get(portal+"/sharing/rest/content/items/"+app["map"]["itemId"]+"/data?f=json")
+          for layer in m.get("operationalLayers",[]):
+           print("OPERATIONAL",json.dumps({"title":layer.get("title"),"id":layer.get("id"),"url":layer.get("url"),"visibility":layer.get("visibility"),"layerType":layer.get("layerType"),"visibleLayers":layer.get("visibleLayers",[])[:15],"layer_count":len(layer.get("layers",[]))},ensure_ascii=False),flush=True)
+          for section in ("widgetOnScreen","widgetPool"):
+           for w in (app.get(section) or {}).get("widgets",[]):
+            if any(t in str(w.get("uri")).lower() for t in ("esearch","search","layerlist")):
+             path=w.get("config")
+             if isinstance(path,str) and path.endswith(".json"):
+              try:
+               data=get(root+path)
+               refs=[]
+               def find(x,k=""):
+                if isinstance(x,dict):
+                 for key,value in x.items():find(value,key)
+                elif isinstance(x,list):
+                 for value in x:find(value,k)
+                elif isinstance(x,str) and ("MapServer" in x or "FeatureServer" in x):refs.append({"field":k,"url":x[:230]})
+               find(data)
+               print("WIDGET",json.dumps({"name":w.get("uri"),"config_path":path,"keys":list(data)[:20],"GIS_URLS":refs[:20]},ensure_ascii=False)[:4500],flush=True)
+              except Exception as e:print("WIDGET_ERR",path,str(e)[:150],flush=True)
 
           PYCODE
