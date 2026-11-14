@@ -41,7 +41,7 @@ import tn.malak.app.R
  */
 internal data class DraftListingPhoto(val uri:Uri,val name:String,val length:Long)
 private const val MAX_PHOTOS=8
-private const val MAX_PHOTO_BYTES=12L*1024L*1024L
+private const val MAX_PHOTO_BYTES=PILOT_PHOTO_MAX_BYTES
 private val PHOTO_MIMES=setOf("image/jpeg","image/png","image/webp")
 
 @Composable

@@ -59,6 +59,18 @@ internal object LocalDocumentOcr {
             throw IllegalStateException("HUAWEI_OCR_BAD_FIELD")
         return v
     }
+    internal fun fromPilotReport(json:JSONObject):FrontScan {
+        val surname=field(json,"surname");val given=field(json,"givenName")
+        val full=if(json.isNull("cinFull"))null else json.getString("cinFull")
+        if(full!=null&&!Regex("[0-9]{8}").matches(full))throw OwnerPairException(502)
+        val birth=if(json.isNull("birthDate"))null else json.getString("birthDate")
+        val confidence=json.optInt("confidencePercent",-1)
+        if(confidence !in 0..100)throw OwnerPairException(502)
+        val scan=FrontScan(surname,given,if(surname!=null&&given!=null)"$surname $given" else null,
+            full?.takeLast(4),birth,confidence,cinFull=full)
+        if(!scan.readyForCameraAcceptance)throw OwnerPairException(502)
+        return scan
+    }
     suspend fun inspectFront(context:Context,uri:Uri,length:Long,mime:String,
         session:OwnerEvidenceSession?):FrontScan {
         if(session==null)return no(FrontIssue.SESSION_REQUIRED)

@@ -8,6 +8,7 @@ import org.json.JSONObject
 import java.net.URL
 import javax.net.ssl.HttpsURLConnection
 
+internal const val PILOT_PHOTO_MAX_BYTES=6L*1024*1024
 internal object PilotListingClient {
     suspend fun call(session:PilotOcrSession?,path:String,data:JSONObject?=null):JSONObject=
         withContext(Dispatchers.IO) {
@@ -35,7 +36,7 @@ internal object PilotListingClient {
         }
     suspend fun photo(context:Context,session:PilotOcrSession,reviewId:String,uri:Uri,length:Long)=
         withContext(Dispatchers.IO){
-            if(length !in 20..6L*1024*1024)throw OwnerPairException(413)
+            if(length !in 20..PILOT_PHOTO_MAX_BYTES)throw OwnerPairException(413)
             val c=URL(session.httpsBaseUrl+"/api/pilot/reviews/"+reviewId+"/photos").openConnection() as HttpsURLConnection
             try{
                 c.requestMethod="POST";c.connectTimeout=10000;c.readTimeout=30000

@@ -15,7 +15,7 @@ import androidx.compose.ui.unit.sp
 import tn.malak.app.R
 
 @Composable
-internal fun PilotSubmissionComplete(reference:String,title:String,onDone:()->Unit) {
+internal fun PilotSubmissionComplete(reference:String,title:String,onDone:()->Unit,status:String="PENDING_REVIEW") {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),verticalArrangement=Arrangement.Center,
         horizontalAlignment=Alignment.CenterHorizontally) {
         Icon(Icons.Outlined.CheckCircle,null,Modifier.size(64.dp),tint=MaterialTheme.colorScheme.primary)
@@ -24,6 +24,12 @@ internal fun PilotSubmissionComplete(reference:String,title:String,onDone:()->Un
         Spacer(Modifier.height(12.dp))
         Text(title,fontSize=18.sp)
         Text(String.format(java.util.Locale.ROOT,s(R.string.submission_receipt_reference),reference))
+        if(status!="PENDING_REVIEW")Text(s(when(status){
+            "PUBLISHED"->R.string.status_published
+            "CHANGES_REQUESTED"->R.string.status_changes
+            "REJECTED"->R.string.status_rejected
+            else->R.string.status_paused
+        }))
         Spacer(Modifier.height(16.dp))
         Text(s(R.string.submission_receipt_hint))
         Spacer(Modifier.height(24.dp))

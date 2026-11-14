@@ -100,6 +100,13 @@ CREATE INDEX IF NOT EXISTS analysis_cache_inputs ON analysis_cache(account_id,fi
             if row and row['analyzed_at']>now()-43200:return row['review_id'],json.loads(row['report']),True,row['analyzed_at']
             row=db.execute('SELECT c.review_id,r.report,c.analyzed_at FROM analysis_cache c JOIN reviews r ON r.id=c.review_id AND r.account_id=c.account_id WHERE c.account_id=? AND c.fingerprint=? AND c.revision=? AND c.analyzed_at>? ORDER BY c.analyzed_at DESC LIMIT 1',(user,fingerprint,revision,now()-43200)).fetchone()
             return (row['review_id'],json.loads(row['report']),False,row['analyzed_at']) if row else None
+    def restore_review(self,user,review):
+        with self.db() as db:
+            row=db.execute('SELECT report FROM reviews WHERE id=? AND account_id=?',(review,user)).fetchone()
+            if not row:raise WorkflowError(404,'NOT_FOUND')
+            submission=db.execute('SELECT id,status FROM submissions WHERE review_id=? AND account_id=?',(review,user)).fetchone()
+            return {'comparison':{**json.loads(row['report']),'reviewId':review},
+                    'submission':dict(submission) if submission else None}
     def record_review(self,user,files,report,analysis=None):
         review=ident()
         with self.db() as db:

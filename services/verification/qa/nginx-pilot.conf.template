@@ -77,6 +77,11 @@ server {
   limit_except GET { deny all; }
   proxy_pass https://__MAC_TLS_HOST__:10000;
  }
+ location ~ ^/api/pilot/reviews/[0-9a-f-]+$ {
+  limit_except GET { deny all; }
+  limit_req zone=malak_ocr_rate burst=12 nodelay;
+  proxy_pass https://__MAC_TLS_HOST__:10000;
+ }
  location ~ ^/api/pilot/reviews/[0-9a-f-]+/photos$ {
   limit_except POST { deny all; }
   limit_req zone=malak_ocr_rate burst=12 nodelay;

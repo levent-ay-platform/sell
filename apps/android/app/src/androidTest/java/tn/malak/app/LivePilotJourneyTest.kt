@@ -58,10 +58,11 @@ class LivePilotJourneyTest{
     }
     @Test fun installedApkUsesRealMacService(){
         assumeTrue(InstrumentationRegistry.getArguments().getString("livePilot")=="true")
+        val stage=InstrumentationRegistry.getArguments().getString("stage")
         val ctx=instrumentation.targetContext
         val phoneHash=java.security.MessageDigest.getInstance("SHA-256")
             .digest("+21623456789".toByteArray(Charsets.UTF_8)).joinToString(""){"%02x".format(it.toInt() and 255)}
-        ctx.getSharedPreferences("malak_pilot_land_draft_"+phoneHash,0).edit().clear()
+        if(stage!="resume")ctx.getSharedPreferences("malak_pilot_land_draft_"+phoneHash,0).edit().clear()
             .putString("description","SYNTHETIC DRAFT DESCRIPTION")
             .putString("latitude","36.8").putString("longitude","10.18").commit()
         ctx.getSharedPreferences("malak_public_preferences",0).edit().putString("language","fr").commit()
@@ -77,7 +78,9 @@ class LivePilotJourneyTest{
             if(InstrumentationRegistry.getArguments().getString("stage")=="feed"){
                 visible("EMULATOR QA - not for sale",40000);shot("08-public-listing");return
             }
-            tap("Déposer un terrain");tap("Choisir des fichiers")
+            tap("Déposer un terrain")
+            if(stage!="resume"){
+            tap("Choisir des fichiers")
             if(!device.wait(Until.hasObject(By.text("malak-synthetic-sale.png")),3000)){
                 device.findObject(By.desc("Show roots"))?.click()
                 device.wait(Until.findObject(By.text("Downloads")),5000)?.click()
@@ -93,14 +96,19 @@ class LivePilotJourneyTest{
                 "Restez immobile, puis photographiez|CIN illisible.*"))),45000)
             shot("03-camera");assertTrue("Camera should reach a stable capture hint",ready)
             device.findObject(By.desc("Prendre la photo")).click()
-            visible("Utiliser cette photo",60000)
-            device.wait(Until.findObject(By.text("Utiliser cette photo").enabled(true)),60000)
+            visible("Confirmer et analyser",60000)
+            device.wait(Until.findObject(By.text("Confirmer et analyser").enabled(true)),60000)
             visible("بن سالم",60000)
             shot("04-real-identity-result")
-            tap("Utiliser cette photo");tap("Continuer")
+            tap("Confirmer et analyser")
             shot("05-before-comparison")
-            tap("Lire et comparer les documents")
+            }
             visible("555941",45000);shot("06-real-document-result")
+            if(stage=="analysis-only"){
+                assertNotNull(ctx.getSharedPreferences("malak_pilot_land_draft_"+phoneHash,0).getString("review_id",null))
+                shot("06-analysis-saved");return
+            }
+
             tap("Continuer")
             assertNotNull(device.wait(Until.findObject(By.textStartsWith("Complétez ces champs :")),5000))
             // Personalize the public title so test data cannot be mistaken for a real listing.
@@ -109,22 +117,20 @@ class LivePilotJourneyTest{
             fill("Région / délégation","Tunis")
             fill("Superficie (m²)","185.25")
             fill("Prix (TND)","50000")
-            hideKeyboard()
-            tap("Continuer")
-            // The form can retain the property's scroll offset across steps.
-            repeat(4){device.swipe(device.displayWidth/2,
-                (device.displayHeight*.35).toInt(),device.displayWidth/2,
-                (device.displayHeight*.78).toInt(),14)}
+            tap("Modifier le nom du demandeur")
             fill("Votre nom","SYNTHETIC EMULATOR QA")
+            tap("Photos, position et description")
             visible("SYNTHETIC DRAFT DESCRIPTION")
             hideKeyboard()
+            tap("Continuer")
             tap("Envoyer pour examen")
             visible("Envoyé pour examen",45000);shot("07-submitted-to-admin")
             visible("Mes demandes")
             assertFalse(ctx.getSharedPreferences("malak_pilot_land_draft_"+phoneHash,0).contains("title"))
             tap("Mes demandes")
-            visible("Déposer un terrain",30000)
-            shot("08-returned-home")
+            visible("Votre demande envoyée",30000)
+            visible("EMULATOR QA - not for sale")
+            shot("08-my-requests")
         }catch(e:Throwable){shot("failure");throw e}
     }
 }

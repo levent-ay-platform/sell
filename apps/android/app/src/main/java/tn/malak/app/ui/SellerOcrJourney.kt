@@ -91,7 +91,8 @@ private val Capacities = listOf(
  * raw OCR models remain on the isolated private Huawei service.
  */
 @Composable
-fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmission:org.json.JSONObject?=null) {
+fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmission:org.json.JSONObject?=null,
+                     onSubmitted:(String)->Unit={onBack()}) {
     val context=LocalContext.current
     val ownerSession=LocalOwnerEvidenceSession.current
     val authenticatedOwnerSession=LocalAuthenticatedOwnerSession.current
@@ -131,8 +132,21 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmission:org.j
     var sending by remember(draftFile){mutableStateOf(false)}
     var submitted by remember(draftFile){mutableStateOf(false)}
     var submittedReference by remember(draftFile){mutableStateOf<String?>(null)}
+    var submittedId by remember(draftFile){mutableStateOf<String?>(null)}
+    var submittedStatus by remember(draftFile){mutableStateOf("PENDING_REVIEW")}
+    val recoveryScope=resubmission?.optString("id")?:prefs.getString("review_scope","").orEmpty()
+    val savedReview=remember(draftFile,recoveryScope){
+        prefs.getString("review_id",null)?.takeIf{prefs.getString("review_scope","")==recoveryScope}
+    }
+    var restoring by remember(draftFile){mutableStateOf(savedReview!=null&&pilotOcrSession!=null)}
+    var restoreFailed by remember(draftFile){mutableStateOf(false)}
+    var restoreAttempt by remember(draftFile){mutableIntStateOf(0)}
+    var restoredReview by remember(draftFile){mutableStateOf(false)}
+    var showAnalysisDetails by remember(draftFile){mutableStateOf(false)}
+    var showListingExtras by rememberSaveable(draftFile){mutableStateOf(false)}
+    var editCustomerName by remember(draftFile){mutableStateOf(false)}
     var submissionMessage by remember(draftFile){mutableIntStateOf(0)}
-    var submissionKey by remember(draftFile){mutableStateOf(UUID.randomUUID().toString())}
+    var submissionKey by remember(draftFile){mutableStateOf(prefs.getString("request_key",null)?:UUID.randomUUID().toString())}
     // A dedicated and clearly labelled send action records consent.
     // No redundant checkbox in addition to the explicit action.
     var step by rememberSaveable(draftFile) {mutableIntStateOf(0)}
@@ -177,6 +191,7 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmission:org.j
     var saveMessage by remember(draftFile) {mutableIntStateOf(0)}
     var pickMessage by remember(draftFile) {mutableIntStateOf(0)}
     val files=remember(draftFile) {mutableStateListOf<ChosenDocument>()}
+    var replacingPage by remember(draftFile){mutableStateOf<Int?>(null)}
     // Future listing media is preview-only, never private owner title evidence.
     val listingPhotos=remember(draftFile){mutableStateListOf<DraftListingPhoto>()}
     var listingLatitude by rememberSaveable(draftFile){mutableStateOf(resubmission?.optString("latitude")?:prefs.getString("latitude","").orEmpty())}
@@ -210,12 +225,15 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmission:org.j
     var identityMessage by remember(draftFile) {mutableIntStateOf(0)}
     // Private in-memory picture gets scanned on this step before acceptance.
     var cameraVisible by remember(draftFile){mutableStateOf(false)}
+    val keyboard=androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
+    val focusManager=androidx.compose.ui.platform.LocalFocusManager.current
 
     var pendingPhoto by remember(draftFile){mutableStateOf<ChosenDocument?>(null)}
     var frontRead by remember(draftFile){
         mutableStateOf<LocalDocumentOcr.FrontScan?>(null)
     }
     var frontReadBusy by remember(draftFile){mutableStateOf(false)}
+    var frontReadRetry by remember(draftFile){mutableIntStateOf(0)}
     suspend fun ensureEvidenceIntakeCase():OwnerEvidenceSession {
         ownerSession?.let{return it}
         provisionedCase?.let{return it}
@@ -228,7 +246,7 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmission:org.j
         return provisionOwnerEvidenceIntakeCase(auth,key).also{provisionedCase=it}
     }
     LaunchedEffect(draftFile,pendingPhoto?.uploadKey,
-        ownerSession,authenticatedOwnerSession,pilotOcrSession,canReadPrivateId){
+        ownerSession,authenticatedOwnerSession,pilotOcrSession,canReadPrivateId,frontReadRetry){
         val pending=pendingPhoto
         frontRead=null;frontReadBusy=false
         if(pending!=null){
@@ -267,11 +285,18 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmission:org.j
     }
     // Never let a stale comparison be displayed after selecting other documents,
     // navigation, account or case changes. Private report is memory-only.
+    var observedSelection by remember(draftFile){mutableStateOf<List<String>?>(null)}
     LaunchedEffect(draftFile,files.toList(),identityFiles.toList(),ownerSession,authenticatedOwnerSession) {
+        val selection=files.map{it.uploadKey}+identityFiles.map{it.uploadKey}
+        if(observedSelection==null){observedSelection=selection;return@LaunchedEffect}
+        observedSelection=selection
         requestEpoch++
         requestJob?.cancel()
         provisionedCase=null
         pairReport=null
+        restoredReview=false
+        showAnalysisDetails=false
+        prefs.edit().remove("review_id").remove("request_key").remove("review_scope").apply()
         submitted=false
         sending=false
         submissionMessage=0
@@ -295,7 +320,10 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmission:org.j
     val pickDocuments=rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if(uri!=null) {
             var refused=false
-            if(files.any{it.uri==uri}||files.size>=8)refused=true
+            val replacement=replacingPage
+            replacingPage=null
+            if(files.withIndex().any{it.index!=replacement&&it.value.uri==uri}||
+                (replacement==null&&files.size>=8))refused=true
             else try {
                 var label=""
                 var length=0L
@@ -312,11 +340,13 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmission:org.j
                 val mime=context.contentResolver.getType(uri)
                 if(length !in 20..MAX_DOC_BYTES || mime==null ||
                    mime !in setOf("application/pdf","image/png","image/jpeg","image/tiff") ||
-                   (mime=="application/pdf"&&files.isNotEmpty()) ||
-                   (mime!="application/pdf"&&files.any{it.mime=="application/pdf"})) {
+                   (mime=="application/pdf"&&files.withIndex().any{it.index!=replacement}) ||
+                   (mime!="application/pdf"&&files.withIndex().any{it.index!=replacement&&it.value.mime=="application/pdf"})) {
                     refused=true
-                } else files.add(ChosenDocument(
-                    uri,label.ifBlank{uri.lastPathSegment?.take(50)?:"Document"},length,mime))
+                } else {
+                    val page=ChosenDocument(uri,label.ifBlank{uri.lastPathSegment?.take(50)?:"Document"},length,mime)
+                    if(replacement!=null&&replacement in files.indices)files[replacement]=page else files.add(page)
+                }
             }catch(_:Exception){refused=true}
             pickMessage=if(refused)R.string.file_rejected
                 else R.string.file_selected
@@ -329,12 +359,12 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmission:org.j
             text={LinearProgressIndicator(Modifier.fillMaxWidth())})
     }
     // Only a freshly captured private in-memory front JPEG is admissible.
-    val identitySelected=identityFiles.size==1&&
+    val identitySelected=(restoredReview&&pairReport?.reviewId!=null)|| (identityFiles.size==1&&
         acceptedRead?.readyForCameraAcceptance==true&&
         acceptedFrontKey==identityFiles[0].uploadKey&&
         identityFiles[0].mime=="image/jpeg"&&
         PrivateCaptureMemory.isPrivate(identityFiles[0].uri)&&
-        PrivateCaptureMemory.length(identityFiles[0].uri)==identityFiles[0].length
+        PrivateCaptureMemory.length(identityFiles[0].uri)==identityFiles[0].length)
     // Front-only secure comparison requires explicit consent and genuine login.
     val identityReadyForRemote=identitySelected
     // One private matcher for the seven document classes. Mixed document
@@ -350,7 +380,8 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmission:org.j
     val normalizedArea=area.replace(',', '.')
     val validArea=normalizedArea.matches(ValidLandArea)
     val validPrice=price.matches(ValidLandPrice)
-    val missingListingFields=pilotMissingListingFields(listingTitle,region,area,price)
+    val missingListingFields=pilotMissingListingFields(listingTitle,region,area,price)+
+        if(hasPilotReviewSession&&customerName.trim().length<2)listOf("customer") else emptyList()
     val validFirst=missingListingFields.isEmpty()
     // Saving a private local draft must work BEFORE document selection or OCR.
     // Do not pretend success when the device fails to persist these fields.
@@ -373,6 +404,148 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmission:org.j
     val missingFieldsTarget=remember{BringIntoViewRequester()}
     LaunchedEffect(step) { if(step>3) step=3;stepScroll.scrollTo(0) }
 
+    fun startPairComparison(){
+                            if(pairProgress!=null||pairReport!=null||files.isEmpty()||!identityReadyForRemote||
+                                !canRunPrivateMatching||familyReadBusy)
+                                return
+                            val selected=files.toList()
+                            val idDocs=identityFiles.toList().map{
+                                PairEvidenceFile(it.uri,it.length,it.mime,it.uploadKey)
+                            }
+                            pairError=0
+                            pairReport=null
+                                                                    pairProgress=PairProgress.CASE_PROVISION
+                            val thisRequest=++requestEpoch
+                            requestJob=scope.launch {
+                                try {
+                                    // The current Malak login directly scans ONLY these
+                                    // newly submitted files. No owner case or extra sign-in.
+                                    if(hasPilotReviewSession&&pilotOcrSession!=null){
+                                        val pilotResult=comparePilotDocumentsAndIdentity(
+                                            context,pilotOcrSession,
+                                            selected.map{item->PairEvidenceFile(
+                                                item.uri,item.length,item.mime,item.uploadKey,
+                                                "OTHER_LEGAL_PROOF")},
+                                            idDocs){progress->
+                                                if(requestEpoch==thisRequest)
+                                                    pairProgress=progress
+                                            }
+                                        if(requestEpoch==thisRequest&&
+                                            files.map{it.uploadKey}==selected.map{it.uploadKey}&&
+                                            identityFiles.map{it.uploadKey}==
+                                                idDocs.map{it.idempotencyKey}){
+                                            pairReport=pilotResult
+                                            submissionKey=UUID.randomUUID().toString()
+                                            prefs.edit().putString("review_id",pilotResult.reviewId)
+                                                .putString("review_scope",recoveryScope)
+                                                .putString("request_key",submissionKey).commit()
+                                            if(customerName.isBlank())customerName=acceptedRead?.fullName.orEmpty()
+                                            val suggestions=pilotAutofill(pilotResult.detectedKind,pilotResult.sourceFacts)
+                                            if(area.isBlank())area=suggestions["area"].orEmpty()
+                                            if(price.isBlank())price=suggestions["price"].orEmpty()
+                                        }
+                                        return@launch
+                                    }
+                                    // A separately provisioned owner case is needed only
+                                    // for pre-existing case-based, legally reviewed paths.
+                                    val activeCase=ensureEvidenceIntakeCase()
+                                    val readings=if(familyReadings.size==selected.size&&
+                                        familyReadings.all{it.status=="READY"})familyReadings
+                                    else selected.mapIndexed{index,item->
+                                        readOcrForOwner(context,item.uri,item.length,item.mime,
+                                            if(item.mime=="application/pdf")null else index+1,
+                                            item.uploadKey+"-ocr",normalizedArea,
+                                            QaOcrSession(activeCase.httpsBaseUrl,
+                                                activeCase.caseId,activeCase.bearer))
+                                    }
+                                    if(requestEpoch!=thisRequest)return@launch
+                                    val recognized=readings.map{it.familyKind}
+                                        .filter{it!="UNKNOWN"}.distinct()
+                                    if(recognized.size!=1||readings.any{it.status!="READY"}){
+                                        pairError=R.string.unified_review_separately
+                                        return@launch
+                                    }
+                                    familyReadings=readings
+                                    val cert=selected.mapIndexed{index,item->
+                                        val kind=readings[index].familyKind
+                                        PairEvidenceFile(item.uri,item.length,item.mime,item.uploadKey,
+                                            if(kind=="UNKNOWN")"OTHER_LEGAL_PROOF" else kind)
+                                    }
+                                    val result=compareOwnerDocumentsAndIdentity(
+                                        context,activeCase,cert,idDocs){
+                                        if(requestEpoch==thisRequest)pairProgress=it
+                                    }
+                                    if(requestEpoch==thisRequest &&
+                                       files.map{it.uploadKey}==cert.map{it.idempotencyKey} &&
+                                       identityFiles.map{it.uploadKey}==idDocs.map{it.idempotencyKey}) {
+                                        pairReport=result
+                                    }
+                                }catch(cancel:CancellationException) {
+                                    throw cancel
+                                }catch(err:OwnerPairException) {
+                                    // Never show tokens, provider URLs or internal service errors.
+                                    if(requestEpoch==thisRequest)pairError=when(err.statusCode) {
+                                        401->R.string.pair_session_invalid
+                                        403->R.string.pair_case_forbidden
+                                        413,415,422->R.string.pair_document_rejected
+                                        429->R.string.pair_rate_limited
+                                        502,503,504->R.string.pair_service_unavailable
+                                        else->R.string.pair_request_failed
+                                    }
+                                }catch(_:Exception){
+                                    if(requestEpoch==thisRequest)
+                                        pairError=R.string.pair_request_failed
+                                }finally{
+                                    if(requestEpoch==thisRequest)pairProgress=null
+                                }
+                            }
+
+    }
+    LaunchedEffect(draftFile,restoreAttempt){
+        if(savedReview==null||pilotOcrSession==null)return@LaunchedEffect
+        restoring=true;restoreFailed=false
+        try{
+            val response=PilotListingClient.call(pilotOcrSession,"/api/pilot/reviews/"+savedReview)
+            val report=parsePilotComparison(response)
+            val receipt=response.optJSONObject("submission")
+            if(receipt!=null){
+                val reference=pilotSubmissionReference(receipt.optString("id"),receipt.optString("status"))?:throw OwnerPairException(502)
+                submittedReference=reference;submittedId=receipt.optString("id")
+                submittedStatus=receipt.optString("status");submitted=true
+            }else{
+                pairReport=report;acceptedRead=report.identityScan;restoredReview=true
+                if(customerName.isBlank())customerName=report.identityScan?.fullName.orEmpty()
+                step=2
+            }
+        }catch(cancel:CancellationException){throw cancel}
+        catch(_:Exception){restoreFailed=true}
+        finally{restoring=false}
+    }
+    var autoAnalysisFor by remember(draftFile){mutableStateOf<String?>(null)}
+    LaunchedEffect(step,files.map{it.uploadKey},identityFiles.map{it.uploadKey},restoring){
+        val selection=(files.map{it.uploadKey}+identityFiles.map{it.uploadKey}).joinToString("|")
+        if(step==2&&hasPilotReviewSession&&!restoring&&!restoreFailed&&!restoredReview&&
+            identitySelected&&pairReport==null&&pairProgress==null&&autoAnalysisFor!=selection){
+            autoAnalysisFor=selection
+            startPairComparison()
+        }
+    }
+
+    if(restoring||restoreFailed){
+        Column(Modifier.fillMaxSize().padding(24.dp),verticalArrangement=Arrangement.Center,
+            horizontalAlignment=Alignment.CenterHorizontally){
+            Text(s(if(restoring)R.string.owner_restoring else R.string.owner_restore_failed),fontSize=18.sp)
+            if(restoring)LinearProgressIndicator(Modifier.fillMaxWidth().padding(top=16.dp))
+            else{
+                Button(onClick={restoreAttempt++}){Text(s(R.string.owner_retry))}
+                TextButton(onClick={
+                    prefs.edit().remove("review_id").remove("request_key").remove("review_scope").apply()
+                    restoreFailed=false;step=0
+                }){Text(s(R.string.owner_start_fresh))}
+            }
+        }
+        return
+    }
     if(cameraVisible){
         TunisianIdCamera(onClose={cameraVisible=false},
             onPhoto={uri,length->
@@ -386,7 +559,7 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmission:org.j
         return
     }
     if(submitted&&submittedReference!=null){
-        PilotSubmissionComplete(submittedReference!!,listingTitle,onBack)
+        PilotSubmissionComplete(submittedReference!!,listingTitle,{onSubmitted(submittedId!!)},submittedStatus)
         return
     }
 
@@ -423,11 +596,11 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmission:org.j
                             Text(s(R.string.file_rules),color=Brand.Muted,fontSize=12.sp)
                             Text(s(R.string.certificate_page_order_hint),color=Brand.Muted,
                                 fontSize=12.sp,lineHeight=18.sp)
-                            OutlinedButton(onClick={pickDocuments.launch(
+                            OutlinedButton(onClick={replacingPage=null;pickDocuments.launch(
                                 if(files.isEmpty())arrayOf("application/pdf","image/jpeg","image/png","image/tiff")
                                 else arrayOf("image/jpeg","image/png","image/tiff"))},
-                                enabled=files.isEmpty()||
-                                    (files.size<8&&files.none{it.mime=="application/pdf"}),
+                                enabled=pairProgress==null&&(files.isEmpty()||
+                                    (files.size<8&&files.none{it.mime=="application/pdf"})),
                                 modifier=Modifier.fillMaxWidth().heightIn(min=52.dp),shape=RoundedCornerShape(16.dp)) {
                                 Icon(Icons.Outlined.FolderOpen,null,Modifier.size(21.dp))
                                 Spacer(Modifier.width(8.dp))
@@ -438,7 +611,7 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmission:org.j
                     }
                     if(pickMessage!=0) Text(s(pickMessage),color=Brand.Muted,fontSize=12.sp)
                     if(files.isEmpty()) {
-                        PlainNotice(Icons.Outlined.Description,s(R.string.file_none))
+                        PlainNotice(Icons.Outlined.Description,s(if(restoredReview)R.string.owner_saved_analysis else R.string.file_none))
                     } else {
                         Text(s(R.string.documents_selected),color=Brand.Ink,fontSize=16.sp,fontWeight=FontWeight.SemiBold)
                         files.toList().forEachIndexed { index,file ->
@@ -456,16 +629,23 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmission:org.j
                                             overflow=TextOverflow.Ellipsis,fontSize=11.sp)
                                     }
                                     IconButton(onClick={
-                                        // A later image's apparent page number must not change
-                                        // silently after deleting an earlier page.
                                         if(index<files.size&&files[index].uri==file.uri){
-                                            val following=files.size-index-1
-                                            while(files.size>index)files.removeAt(files.lastIndex)
-                                            pickMessage=if(following>0)
-                                                R.string.certificate_following_pages_removed else 0
+                                            val kept=removeDocumentPage(files.toList(),index)
+                                            files.clear();files.addAll(kept);pickMessage=R.string.owner_page_removed
                                         }
-                                    },modifier=Modifier.size(48.dp)) {
+                                    },enabled=pairProgress==null,modifier=Modifier.size(48.dp)) {
                                         Icon(Icons.Outlined.DeleteOutline,s(R.string.remove),tint=Brand.Muted)
+                                    }
+                                    IconButton(onClick={replacingPage=index;pickDocuments.launch(arrayOf("application/pdf","image/jpeg","image/png","image/tiff"))},enabled=pairProgress==null){
+                                        Icon(Icons.Outlined.Edit,s(R.string.owner_replace_page),tint=Brand.Muted)
+                                    }
+                                    if(files.size>1){
+                                        IconButton(onClick={val ordered=moveDocumentPage(files.toList(),index,index-1);files.clear();files.addAll(ordered)},enabled=index>0&&pairProgress==null){
+                                            Icon(Icons.Outlined.KeyboardArrowUp,s(R.string.owner_move_page_up))
+                                        }
+                                        IconButton(onClick={val ordered=moveDocumentPage(files.toList(),index,index+1);files.clear();files.addAll(ordered)},enabled=index<files.lastIndex&&pairProgress==null){
+                                            Icon(Icons.Outlined.KeyboardArrowDown,s(R.string.owner_move_page_down))
+                                        }
                                     }
                                 }
                             }
@@ -547,6 +727,10 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmission:org.j
                                 }
                                 Text(s(message),color=Brand.Muted,
                                     fontSize=12.sp,lineHeight=19.sp)
+                                if(frontRead?.issue==LocalDocumentOcr.FrontIssue.SERVICE_UNAVAILABLE&&!frontReadBusy){
+                                    OutlinedButton(onClick={frontReadRetry++}){Text(s(R.string.owner_retry))}
+                                }
+                                if(hasPilotReviewSession)Text(s(R.string.owner_analysis_consent),color=Brand.Muted,fontSize=12.sp)
                             }
                         }
                     }else if(identitySelected){
@@ -569,6 +753,12 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmission:org.j
                     if(identityMessage!=0) PlainNotice(Icons.Outlined.Info,s(identityMessage))
                 }
                 2 -> {
+                    if(hasPilotReviewSession){
+                        OwnerReadingSummary(pairReport,acceptedRead,pairProgress!=null,pairError,
+                            showAnalysisDetails,{showAnalysisDetails=!showAnalysisDetails},
+                            {startPairComparison()},{step=0})
+                    }
+                    if(!hasPilotReviewSession||showAnalysisDetails){
                     Surface(shape=RoundedCornerShape(18.dp),color=Color.White,
                         border=BorderStroke(1.dp,CardBorder)){
                         Column(Modifier.fillMaxWidth().padding(14.dp),
@@ -738,99 +928,8 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmission:org.j
                         Text(s(if(familyReadings.isEmpty())R.string.smart_pair_first_read
                             else R.string.unified_identity_hint),
                             color=Brand.Muted,fontSize=12.sp,lineHeight=18.sp)
-                        Button(onClick={
-                            if(pairProgress!=null||pairReport!=null||files.isEmpty()||!identityReadyForRemote||
-                                !canRunPrivateMatching||familyReadBusy)
-                                return@Button
-                            val selected=files.toList()
-                            val idDocs=identityFiles.toList().map{
-                                PairEvidenceFile(it.uri,it.length,it.mime,it.uploadKey)
-                            }
-                            pairError=0
-                            pairReport=null
-                                                                    pairProgress=PairProgress.CASE_PROVISION
-                            val thisRequest=++requestEpoch
-                            requestJob=scope.launch {
-                                try {
-                                    // The current Malak login directly scans ONLY these
-                                    // newly submitted files. No owner case or extra sign-in.
-                                    if(hasPilotReviewSession&&pilotOcrSession!=null){
-                                        val pilotResult=comparePilotDocumentsAndIdentity(
-                                            context,pilotOcrSession,
-                                            selected.map{item->PairEvidenceFile(
-                                                item.uri,item.length,item.mime,item.uploadKey,
-                                                "OTHER_LEGAL_PROOF")},
-                                            idDocs){progress->
-                                                if(requestEpoch==thisRequest)
-                                                    pairProgress=progress
-                                            }
-                                        if(requestEpoch==thisRequest&&
-                                            files.map{it.uploadKey}==selected.map{it.uploadKey}&&
-                                            identityFiles.map{it.uploadKey}==
-                                                idDocs.map{it.idempotencyKey}){
-                                            pairReport=pilotResult
-                                            submissionKey=UUID.randomUUID().toString()
-                                            if(customerName.isBlank())customerName=acceptedRead?.fullName.orEmpty()
-                                            val suggestions=pilotAutofill(pilotResult.detectedKind,pilotResult.sourceFacts)
-                                            if(area.isBlank())area=suggestions["area"].orEmpty()
-                                            if(price.isBlank())price=suggestions["price"].orEmpty()
-                                        }
-                                        return@launch
-                                    }
-                                    // A separately provisioned owner case is needed only
-                                    // for pre-existing case-based, legally reviewed paths.
-                                    val activeCase=ensureEvidenceIntakeCase()
-                                    val readings=if(familyReadings.size==selected.size&&
-                                        familyReadings.all{it.status=="READY"})familyReadings
-                                    else selected.mapIndexed{index,item->
-                                        readOcrForOwner(context,item.uri,item.length,item.mime,
-                                            if(item.mime=="application/pdf")null else index+1,
-                                            item.uploadKey+"-ocr",normalizedArea,
-                                            QaOcrSession(activeCase.httpsBaseUrl,
-                                                activeCase.caseId,activeCase.bearer))
-                                    }
-                                    if(requestEpoch!=thisRequest)return@launch
-                                    val recognized=readings.map{it.familyKind}
-                                        .filter{it!="UNKNOWN"}.distinct()
-                                    if(recognized.size!=1||readings.any{it.status!="READY"}){
-                                        pairError=R.string.unified_review_separately
-                                        return@launch
-                                    }
-                                    familyReadings=readings
-                                    val cert=selected.mapIndexed{index,item->
-                                        val kind=readings[index].familyKind
-                                        PairEvidenceFile(item.uri,item.length,item.mime,item.uploadKey,
-                                            if(kind=="UNKNOWN")"OTHER_LEGAL_PROOF" else kind)
-                                    }
-                                    val result=compareOwnerDocumentsAndIdentity(
-                                        context,activeCase,cert,idDocs){
-                                        if(requestEpoch==thisRequest)pairProgress=it
-                                    }
-                                    if(requestEpoch==thisRequest &&
-                                       files.map{it.uploadKey}==cert.map{it.idempotencyKey} &&
-                                       identityFiles.map{it.uploadKey}==idDocs.map{it.idempotencyKey}) {
-                                        pairReport=result
-                                    }
-                                }catch(cancel:CancellationException) {
-                                    throw cancel
-                                }catch(err:OwnerPairException) {
-                                    // Never show tokens, provider URLs or internal service errors.
-                                    if(requestEpoch==thisRequest)pairError=when(err.statusCode) {
-                                        401->R.string.pair_session_invalid
-                                        403->R.string.pair_case_forbidden
-                                        413,415,422->R.string.pair_document_rejected
-                                        429->R.string.pair_rate_limited
-                                        502,503,504->R.string.pair_service_unavailable
-                                        else->R.string.pair_request_failed
-                                    }
-                                }catch(_:Exception){
-                                    if(requestEpoch==thisRequest)
-                                        pairError=R.string.pair_request_failed
-                                }finally{
-                                    if(requestEpoch==thisRequest)pairProgress=null
-                                }
-                            }
-                        },enabled=pairProgress==null&&pairReport==null&&files.isNotEmpty()&&identityReadyForRemote&&
+                        Button(onClick={startPairComparison()}
+                        ,enabled=pairProgress==null&&pairReport==null&&files.isNotEmpty()&&identityReadyForRemote&&
                             canRunPrivateMatching&&!familyReadBusy,
                             modifier=Modifier.fillMaxWidth().heightIn(min=54.dp),
                             colors=ButtonDefaults.buttonColors(containerColor=Brand.Crimson),
@@ -842,6 +941,7 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmission:org.j
                     }
                     if(pairReport==null)
                         PlainNotice(Icons.Outlined.Info,s(R.string.legal_pending))
+                    }
 
                     Column(Modifier.bringIntoViewRequester(missingFieldsTarget)){
                     SectionHeading(s(R.string.property_section),s(R.string.property_section_hint))
@@ -850,6 +950,7 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmission:org.j
                             "title"->R.string.property_name
                             "region"->R.string.property_region
                             "area"->R.string.area_m2
+                            "customer"->R.string.submission_customer_name
                             else->R.string.price_tnd
                         })}
                         PlainNotice(Icons.Outlined.Info,s(R.string.listing_missing_fields)+" "+labels.joinToString("، "))
@@ -888,6 +989,15 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmission:org.j
                         label={Text(s(R.string.property_region))},modifier=Modifier.fillMaxWidth(),singleLine=true,
                         isError=showInvalid&&region.trim().length<2,
                         supportingText=if(showInvalid&&region.trim().length<2){{Text(s(R.string.field_required))}}else null)
+                    if(area.isBlank())pilotConfirmableArea(pairReport?.detectedKind,pairReport?.sourceFacts.orEmpty())?.let{fact->
+                        Surface(color=Brand.Rose,shape=RoundedCornerShape(16.dp)){
+                            Column(Modifier.padding(14.dp)){
+                                Text(s(R.string.owner_area_question)+" "+fact.value+" m²")
+                                Text(s(R.string.owner_area_part_hint),fontSize=12.sp,color=Brand.Muted)
+                                TextButton(onClick={area=fact.value}){Text(s(R.string.owner_area_confirm))}
+                            }
+                        }
+                    }
                     OutlinedTextField(area,{area=it.filter { char->char.isDigit()||char=='.'||char==',' }.take(16);saveMessage=0},
                         label={Text(s(R.string.area_m2))},modifier=Modifier.fillMaxWidth(),singleLine=true,
                         textStyle=TextStyle(textDirection=TextDirection.Ltr,textAlign=TextAlign.Start,fontSize=16.sp),
@@ -917,6 +1027,7 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmission:org.j
                     }
                     HorizontalDivider(color=CardBorder)
 
+                    if(!hasPilotReviewSession){
                     Surface(color=Color(0xFFF2F8F5),shape=RoundedCornerShape(19.dp)) {
                         Column(Modifier.fillMaxWidth().padding(15.dp),
                             verticalArrangement=Arrangement.spacedBy(10.dp)) {
@@ -1044,9 +1155,41 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmission:org.j
                             }
                         }
                     }
+                    }
+                    if(pilotOcrSession!=null){
+                        if(customerName.isBlank()||editCustomerName){
+                            OutlinedTextField(customerName,{customerName=it.take(120)},
+                                label={Text(s(R.string.submission_customer_name))},
+                                isError=showInvalid&&customerName.trim().length<2,
+                                singleLine=true,modifier=Modifier.fillMaxWidth())
+                        }else{
+                            Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){
+                                Text(customerName,Modifier.weight(1f),color=Brand.Muted)
+                                TextButton(onClick={editCustomerName=true}){Text(s(R.string.owner_edit_presenter))}
+                            }
+                        }
+                    }
+                    OutlinedButton(onClick={showListingExtras=!showListingExtras},modifier=Modifier.fillMaxWidth()){
+                        Icon(Icons.Outlined.AddPhotoAlternate,null)
+                        Spacer(Modifier.width(8.dp));Text(s(R.string.owner_listing_extras))
+                    }
+                    if(showListingExtras){
+                        SmartListingMediaStep(photos=listingPhotos,
+                            latitude=listingLatitude,onLatitude={listingLatitude=it},
+                            longitude=listingLongitude,onLongitude={listingLongitude=it},
+                            description=listingDescription,onDescription={listingDescription=it},
+                            region=region,area=area,price=price)
+                    }
                 }
                 else -> {
                     SectionHeading(s(R.string.summary_title),s(R.string.summary_hint))
+                    if(pilotOcrSession!=null){
+                        OwnerListingPreview(listingTitle,region,area,price,listingDescription,listingPhotos.toList())
+                        Text(s(R.string.submission_customer_name)+": "+customerName,color=Brand.Muted)
+                        Text(s(R.string.summary_docs)+": "+(pairReport?.certificatePages?:files.size),color=Brand.Muted)
+                        Text(s(R.string.submission_review_hint),color=Brand.Muted,fontSize=12.sp)
+                        if(submissionMessage!=0)PlainNotice(Icons.Outlined.Info,s(submissionMessage))
+                    }else{
                     Surface(color=Brand.Rose,shape=RoundedCornerShape(20.dp)){
                         Column(Modifier.fillMaxWidth().padding(17.dp),
                             verticalArrangement=Arrangement.spacedBy(9.dp)){
@@ -1064,20 +1207,6 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmission:org.j
                                 color=Brand.Muted,lineHeight=19.sp)
                         }
                     }
-                    if(pilotOcrSession!=null){
-                        OutlinedTextField(customerName,{customerName=it.take(120)},
-                            label={Text(s(R.string.submission_customer_name))},
-                            singleLine=true,modifier=Modifier.fillMaxWidth())
-                        Text(draftScope.orEmpty(),color=Brand.Muted,fontSize=13.sp)
-                        Text(s(R.string.submission_review_hint),color=Brand.Muted,fontSize=12.sp)
-                        if(submissionMessage!=0)PlainNotice(Icons.Outlined.Info,s(submissionMessage))
-                    }
-                    SmartListingMediaStep(
-                        photos=listingPhotos,
-                        latitude=listingLatitude,onLatitude={listingLatitude=it},
-                        longitude=listingLongitude,onLongitude={listingLongitude=it},
-                        description=listingDescription,onDescription={listingDescription=it},
-                        region=region,area=area,price=price)
                     Surface(shape=RoundedCornerShape(20.dp),color=Color.White,
                         border=BorderStroke(1.dp,CardBorder)){
                         Column(Modifier.fillMaxWidth().padding(14.dp)){
@@ -1096,23 +1225,11 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmission:org.j
                                     ?:R.string.malak_capacity_not_declared))
                             HorizontalDivider(color=CardBorder)
                             OcrDataRow(s(R.string.summary_docs),
-                                if(files.isNotEmpty())files.size.toString() else
+                                pairReport?.certificatePages?.toString()?:if(files.isNotEmpty())files.size.toString() else
                                     s(R.string.not_uploaded))
                         }
                     }
-                    if(identitySelected){
-                        Surface(shape=RoundedCornerShape(20.dp),color=Color.White,
-                            border=BorderStroke(1.dp,CardBorder)){
-                            Column(Modifier.fillMaxWidth().padding(14.dp),
-                                verticalArrangement=Arrangement.spacedBy(7.dp)){
-                                Text(s(R.string.identity_section),fontWeight=FontWeight.Bold,
-                                    fontSize=16.sp,color=Brand.Ink)
-                                IdFieldsReadout(acceptedRead,
-                                    s(R.string.camera_field_missing))
-                            }
-                        }
                     }
-
                     OutlinedButton(onClick={step=2;showInvalid=false},
                         modifier=Modifier.fillMaxWidth().heightIn(min=51.dp)) {
                         Icon(Icons.Outlined.Edit,null,Modifier.size(20.dp))
@@ -1153,18 +1270,20 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmission:org.j
                             pendingPhoto=null
                             frontRead=null
                             identityMessage=0
+                            if(hasPilotReviewSession)step=2
                         } else {
                             identityMessage=R.string.camera_review_required_fields
                         }
                     },enabled=!frontReadBusy&&
                         frontRead?.readyForCameraAcceptance==true,
                         modifier=Modifier.weight(1f).heightIn(min=54.dp)){
-                        Text(s(R.string.camera_review_accept))
+                        Text(s(if(hasPilotReviewSession)R.string.owner_confirm_analyze else R.string.camera_review_accept))
                     }
                 }
             }else{
             Button(onClick={
-                if(step==0&&files.isEmpty()){pickMessage=R.string.certificate_required}
+                focusManager.clearFocus();keyboard?.hide()
+                if(step==0&&files.isEmpty()&&!restoredReview){pickMessage=R.string.certificate_required}
                 else if(step==2&&!validFirst){
                     showInvalid=true
                     scope.launch{withFrameNanos{};missingFieldsTarget.bringIntoView()}
@@ -1185,7 +1304,7 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmission:org.j
                         sending=true
                         val data=org.json.JSONObject().put("reviewId",review)
                             .put("requestKey",submissionKey).put("customerName",customerName.trim())
-                            .put("submissionId",resubmission?.optString("id"))
+                            .put("submissionId",recoveryScope.takeIf{it.isNotBlank()})
                             .put("title",listingTitle).put("region",region.trim())
                             .put("area",normalizedArea).put("price",price)
                             .put("description",listingDescription).put("latitude",listingLatitude)
@@ -1201,6 +1320,7 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmission:org.j
                                 val reference=pilotSubmissionReference(receipt.optString("id"),receipt.optString("status"))?:throw OwnerPairException(502)
                                 if(requestEpoch==sendEpoch&&pairReport?.reviewId==review){
                                     submittedReference=reference
+                                    submittedId=receipt.optString("id");submittedStatus=receipt.optString("status")
                                     submitted=true;submissionMessage=R.string.submission_sent
                                 }
                             }catch(cancel:CancellationException){throw cancel}
@@ -1210,11 +1330,12 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmission:org.j
                     }
                 }
                 else if(pilotOcrSession==null)saveLocalDraft()
-            }, enabled=!sending&&!submitted, modifier=Modifier.fillMaxWidth().heightIn(min=54.dp),
+            }, enabled=!sending&&!submitted&&!(step==2&&pilotOcrSession!=null&&pairReport==null), modifier=Modifier.fillMaxWidth().heightIn(min=54.dp),
                 shape=RoundedCornerShape(17.dp),colors=ButtonDefaults.buttonColors(containerColor=Brand.Crimson)) {
                 Text(s(if(step==3&&pilotOcrSession!=null)
                     if(sending)R.string.submission_sending else if(submitted)R.string.submission_sent else R.string.submission_send
-                    else if(step==3)R.string.save_draft else R.string.continue_label),fontWeight=FontWeight.SemiBold,fontSize=15.sp)
+                    else if(step==3)R.string.save_draft else if(step==1&&hasPilotReviewSession)R.string.owner_confirm_analyze
+                    else R.string.continue_label),fontWeight=FontWeight.SemiBold,fontSize=15.sp)
                 Spacer(Modifier.width(9.dp))
                 Icon(if(step==3)Icons.Outlined.Save else Icons.AutoMirrored.Filled.ArrowForward,
                     null,Modifier.size(21.dp))
@@ -1320,7 +1441,7 @@ private fun VerificationStage(
     }
 }
 
-private fun documentFamilyLabel(kind:String):Int=when(kind){
+internal fun documentFamilyLabel(kind:String):Int=when(kind){
     "OWNERSHIP_CERTIFICATE"->R.string.smart_kind_title
     "SHARED_OWNERSHIP_CERTIFICATE"->R.string.smart_kind_shared
     "SALE_DEED"->R.string.smart_kind_sale

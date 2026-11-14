@@ -74,9 +74,19 @@ class HttpWorkflow(unittest.TestCase):
         status,result=self.request(endpoint,data,token,headers.copy())
         self.assertEqual(status,200)
         rid=result['comparison']['reviewId']
+        restore='/api/pilot/reviews/'+rid
+        self.assertEqual(self.request(restore)[0],401)
+        other=self.store.login('+21698765432','1234','B'*43)['bearer']
+        self.assertEqual(self.request(restore,token=other)[0],404)
+        restored=self.request(restore,token=token)
+        self.assertEqual(restored[0],200)
+        self.assertEqual(restored[1]['comparison']['reviewId'],rid)
+        self.assertIsNone(restored[1]['submission'])
+        self.assertNotIn('evidence',restored[1])
         status,result=self.request('/api/pilot/submissions',{'reviewId':rid,'requestKey':'a'*32,'customerName':'Test Person','title':'Test land','region':'Tunis','area':'100','price':'50000','description':'Test'},token)
         self.assertEqual(status,200)
         self.assertEqual(result['submission']['status'],'PENDING_REVIEW')
+        self.assertEqual(self.request(restore,token=token)[1]['submission']['id'],result['submission']['id'])
         self.assertEqual(len(self.request('/api/pilot/submissions',token=token)[1]['submissions']),1)
         self.assertEqual(self.request('/api/admin/submissions',token=token)[0],401)
         self.assertEqual(self.request('/api/public/listings')[1]['listings'],[])

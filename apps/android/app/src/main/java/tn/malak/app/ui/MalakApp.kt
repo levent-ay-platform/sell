@@ -77,6 +77,7 @@ internal fun MalakApp(
     var pilotPhone by remember { mutableStateOf<String?>(null) }
     var pilotOcrSession by remember { mutableStateOf<PilotOcrSession?>(null) }
     var resubmission by remember{mutableStateOf<org.json.JSONObject?>(null)}
+    var focusedRequest by rememberSaveable{mutableStateOf<String?>(null)}
     val tabs = setOf("home", "map", "favorites", "more")
 
     CompositionLocalProvider(LocalMalakStringsContext provides localizedContext,
@@ -113,7 +114,11 @@ internal fun MalakApp(
                 ) { insets ->
                     Box(Modifier.fillMaxSize().padding(insets)) {
                         when (screen) {
-                            "home" -> MalakHome(query, { query = it }, category, { category = it }, { resubmission=null; screen = "seller" }, { resubmission=it;screen="seller" })
+                            "home" -> MalakHome(query, { query = it }, category, { category = it }, { resubmission=null; screen = "seller" }, { resubmission=it;screen="seller" },{focusedRequest=null;screen="requests"})
+                            "requests" -> Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(18.dp)){
+                                TextButton(onClick={screen="home"}){Text(s(R.string.back))}
+                                PilotListings("","all",{resubmission=it;screen="seller"},onlyOwn=true,focusId=focusedRequest)
+                            }
                             "map" -> MalakEmptyPage(R.string.map_title, R.string.map_unavailable,
                                 R.string.map_unavailable_hint, Icons.Outlined.Map, { screen = "home" })
                             "favorites" -> MalakEmptyPage(R.string.favorites_title, R.string.favorites_empty,
@@ -129,7 +134,8 @@ internal fun MalakApp(
                                 SellerOcrJourney(
                                     onBack = { screen = "home" },
                                     draftScope = if (PilotOtpGate.enabled) pilotPhone else null,
-                                    resubmission=resubmission
+                                    resubmission=resubmission,
+                                    onSubmitted={focusedRequest=it;screen="requests"}
                                 )
                             }
                             else -> LaunchedEffect(Unit) { screen = "home" }
@@ -145,7 +151,7 @@ internal fun MalakApp(
 private fun MalakHome(
     query: String, onQuery: (String) -> Unit,
     selected: String, onSelected: (String) -> Unit, onSeller: () -> Unit,
-    onReplaceDocuments:(org.json.JSONObject)->Unit
+    onReplaceDocuments:(org.json.JSONObject)->Unit,onRequests:()->Unit
 ) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 18.dp)) {
         Box(Modifier.fillMaxWidth().background(Brush.verticalGradient(listOf(Sea, Color(0xFF35ABC1), SeaLight)))) {
@@ -201,7 +207,7 @@ private fun MalakHome(
         CategoryPills(selected, onSelected)
         Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            PilotListings(query,selected,onReplaceDocuments)
+            PilotListings(query,selected,onReplaceDocuments,onOpenRequests=onRequests)
         }
     }
 }

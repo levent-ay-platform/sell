@@ -10,3 +10,8 @@ internal fun pilotAutofill(kind:String?,facts:List<PilotPropertyFact>):Map<Strin
         // A historical transaction price is evidence, not today's asking price.
     }
 }
+internal fun pilotConfirmableArea(kind:String?,facts:List<PilotPropertyFact>):PilotPropertyFact? =
+    if(kind=="OWNERSHIP_CERTIFICATE")facts.singleOrNull{
+        it.key=="registeredAreaM2"&&it.status=="CANDIDATE"&&
+            Regex("^[1-9][0-9]{0,8}(?:\\.[0-9]{1,3})?$").matches(it.value)
+    } else null

@@ -49,7 +49,8 @@ internal data class CertificateIdentityReview(
     val matchedRightsHolder:MatchedRightsHolder?=null,
     val reviewId:String?=null, val propertyFacts:Map<String,String> = emptyMap(),
     val propertyFactStatuses:Map<String,String> = emptyMap(),
-    val sourceFacts:List<PilotPropertyFact> = emptyList())
+    val sourceFacts:List<PilotPropertyFact> = emptyList(),
+    val identityScan:LocalDocumentOcr.FrontScan?=null)
 internal class OwnerPairException(val statusCode:Int):Exception("PRIVATE_PAIR_UNAVAILABLE")
 
 private const val DOC_LIMIT=12L*1024L*1024L
@@ -376,7 +377,11 @@ internal suspend fun comparePilotDocumentsAndIdentity(
             }finally{buffer.fill(0)}
         }
         withContext(Dispatchers.Main){onProgress(PairProgress.COMPARING)}
-        val envelope=readJson(c,200)
+        parsePilotComparison(readJson(c,200))
+    }finally{c.disconnect()}
+}
+
+internal fun parsePilotComparison(envelope:JSONObject):CertificateIdentityReview {
         safeEnvelope(envelope)
         if(envelope.optBoolean("identityVerified",true)||!envelope.optBoolean("pilotOcr",false))
             throw OwnerPairException(502)
@@ -459,7 +464,7 @@ internal suspend fun comparePilotDocumentsAndIdentity(
             "TRANSFER_CARD"->values["transferredAreaM2"]
             else->values["registeredAreaM2"]
         }
-        CertificateIdentityReview(
+        return CertificateIdentityReview(
             "INSUFFICIENT_OR_AMBIGUOUS",null,null,"NOT_COMPARABLE",
             diagnostics.reasons,FRONT_CAPTURE,pages,1,
             localFields=LocalOcrFields(values["registerReference"]?:
@@ -467,7 +472,7 @@ internal suspend fun comparePilotDocumentsAndIdentity(
                 null,null,null,null),
             detectedKind=kind,unifiedAssessment=status,unifiedRoles=roles,
             matchedRightsHolder=holder,reviewId=reviewId,
-            propertyFacts=values.toMap(),propertyFactStatuses=factStatuses.toMap(),sourceFacts=sourceFacts.toList()
+            propertyFacts=values.toMap(),propertyFactStatuses=factStatuses.toMap(),sourceFacts=sourceFacts.toList(),
+            identityScan=data.optJSONObject("identityFields")?.let{LocalDocumentOcr.fromPilotReport(it)}
         )
-    }finally{c.disconnect()}
 }

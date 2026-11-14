@@ -20,7 +20,8 @@ import java.util.UUID
 import tn.malak.app.R
 
 @Composable
-internal fun PilotListings(query:String,category:String,onReplaceDocuments:(JSONObject)->Unit){
+internal fun PilotListings(query:String,category:String,onReplaceDocuments:(JSONObject)->Unit,
+    onlyOwn:Boolean=false,focusId:String?=null,onOpenRequests:()->Unit={}){
     val session=LocalPilotOcrSession.current
     val scope=rememberCoroutineScope()
     var refresh by remember{mutableIntStateOf(0)}
@@ -31,8 +32,10 @@ internal fun PilotListings(query:String,category:String,onReplaceDocuments:(JSON
     LaunchedEffect(refresh,session){
         loading=true;failed=false
         try{
-            val result=PilotListingClient.call(null,"/api/public/listings").getJSONArray("listings")
-            public=(0 until result.length()).map{result.getJSONObject(it)}
+            if(!onlyOwn){
+                val result=PilotListingClient.call(null,"/api/public/listings").getJSONArray("listings")
+                public=(0 until result.length()).map{result.getJSONObject(it)}
+            }
             if(session!=null){
                 val mine=PilotListingClient.call(session,"/api/pilot/submissions").getJSONArray("submissions")
                 own=(0 until mine.length()).map{mine.getJSONObject(it)}
@@ -41,6 +44,7 @@ internal fun PilotListings(query:String,category:String,onReplaceDocuments:(JSON
         catch(_:Exception){failed=true}
         finally{loading=false}
     }
+    if(!onlyOwn){
     Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){
         Text(s(R.string.public_listings),fontSize=19.sp)
         TextButton(onClick={refresh++},enabled=!loading){Text(s(R.string.listing_refresh))}
@@ -62,12 +66,20 @@ internal fun PilotListings(query:String,category:String,onReplaceDocuments:(JSON
             }
         }
     }
+    }
     if(session!=null){
-        Text(s(R.string.my_submissions),fontSize=19.sp,modifier=Modifier.padding(top=14.dp))
-        own.forEach{item->
+        Row(Modifier.fillMaxWidth().padding(top=14.dp),horizontalArrangement=Arrangement.SpaceBetween){
+            Text(s(R.string.my_submissions),fontSize=19.sp)
+            if(!onlyOwn)TextButton(onClick=onOpenRequests){Text(s(R.string.owner_all_requests))}
+            else TextButton(onClick={refresh++},enabled=!loading){Text(s(R.string.listing_refresh))}
+        }
+        if(onlyOwn&&loading)LinearProgressIndicator(Modifier.fillMaxWidth())
+        if(onlyOwn&&failed)Text(s(R.string.listing_load_failed),color=MaterialTheme.colorScheme.error)
+        own.sortedByDescending{it.optString("id")==focusId}.forEach{item->
             var editing by remember(item.optString("id"),item.optInt("version")){mutableStateOf(false)}
             Surface(color=MaterialTheme.colorScheme.surface,shape=RoundedCornerShape(16.dp),border=BorderStroke(1.dp,Brand.Muted.copy(alpha=.2f))){
                 Column(Modifier.fillMaxWidth().padding(14.dp),verticalArrangement=Arrangement.spacedBy(8.dp)){
+                    if(item.optString("id")==focusId)Text(s(R.string.owner_latest_request),color=Brand.Crimson)
                     Text(item.optString("title"))
                     Text(s(when(item.optString("status")){
                         "PUBLISHED"->R.string.status_published
