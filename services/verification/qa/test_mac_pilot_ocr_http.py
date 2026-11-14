@@ -55,7 +55,11 @@ class Contract(unittest.TestCase):
             def extract_fields(*args): return dict(fields)
         pilot=MemoryPilot(None,[],V5())
         ok,photo=cv2.imencode('.png',np.full((400,650,3),255,dtype=np.uint8))
-        result=pilot.read(photo.tobytes(),'image/png')
+        from unittest.mock import patch
+        with patch.dict('os.environ',{'MALAK_VISION_BIN':'/local/mac-vision'}):
+            result=pilot.read(photo.tobytes(),'image/png')
+        # Installed APKs pin the primary engine; supplemental readers are metadata.
+        self.assertEqual(result['engine'],'arabic-v5')
         self.assertEqual(result['cinFull'],'00001122')
         self.assertEqual(result['birthDate'],'1990-01-02')
         self.assertFalse(result['identityVerified'])
