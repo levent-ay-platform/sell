@@ -167,7 +167,7 @@
     <string name="local_birth_date">تاريخ الولادة (قراءة OCR غير موثّقة)</string>
     <string name="local_surname">اللقب حسب بطاقة التعريف (OCR)</string>
     <string name="local_given_name">الاسم حسب بطاقة التعريف (OCR)</string>
-    <string name="pair_preliminary_only">نتيجة OCR لا تثبت صحة الهوية أو ملكية العقار ولا تسمح بالنشر. يلزم تدقيق مستقل.</string>
+    <string name="pair_preliminary_only">يراجع المدير الوثائق ويقرر نشر الإعلان.</string>
     <string name="pair_creating_case">جارٍ إنشاء طلب التحقق الخاص…</string>
     <string name="pair_upload_cert">جارٍ إرسال شهادة الملكية بأمان…</string>
     <string name="pair_upload_identity">جارٍ إرسال بطاقة الهوية بأمان…</string>
@@ -219,20 +219,20 @@
     <string name="camera_review_title">بيانات بطاقة التعريف</string>
     <string name="camera_review_scanning">جارٍ قراءة الحقول عبر خدمة OCR الخاصة…</string>
     <string name="camera_review_unreadable">حقل واحد أو أكثر ناقص أو غير واضح. أعد تصوير الوجه الأمامي.</string>
-    <string name="camera_review_ready">تم استخراج الحقول الأربعة. تأكّد منها قبل المتابعة.</string>
+    <string name="camera_review_ready">الحقول المقروءة جاهزة، راجعها.</string>
     <string name="camera_review_accept">اعتماد هذه الصورة</string>
     <string name="camera_review_retake">إعادة الالتقاط</string>
     <string name="camera_review_failed">تعذّرت القراءة. أعد تصوير الوجه الأمامي.</string>
     <string name="camera_review_cin">رقم بطاقة التعريف</string>
     <string name="camera_review_birth">تاريخ الولادة</string>
     <string name="camera_review_name">الاسم المقروء</string>
-    <string name="camera_review_privacy">بعد موافقتك فقط: إرسال مشفر إلى Huawei لقراءة الحقول. ليس تحققاً قانونياً من الهوية.</string>
+    <string name="camera_review_privacy">تُرسل الصورة بأمان للقراءة الخاصة.</string>
     <string name="camera_image_low_resolution">دقة الصورة منخفضة للقراءة الموثوقة. قرّب البطاقة وصوّرها مجدداً مع إظهار الزوايا الأربع.</string>
-    <string name="camera_huawei_consent">أوافق على معالجة صورة هويتي بشكل خاص وآمن عبر خدمة OCR على Huawei لاستخراج البيانات.</string>
+    <string name="camera_huawei_consent">قراءة هذه الصورة بشكل خاص.</string>
     <string name="camera_huawei_consent_required">وافق على معالجة الصورة الخاصة أعلاه حتى تبدأ القراءة.</string>
-    <string name="camera_huawei_login_required">يلزم تسجيل دخول موثّق قبل إرسال أي صورة هوية.</string>
-    <string name="camera_huawei_unavailable">خدمة OCR الخاصة على Huawei غير متاحة. الصورة بقيت هنا، ويمكن إعادة المحاولة.</string>
-    <string name="camera_huawei_review_hint">قراءة الهوية تتم بشكل خاص على Huawei، وليست تحققاً قانونياً من الهوية.</string>
+    <string name="camera_huawei_login_required">انتهت جلسة الدخول، سجّل الدخول مجدداً.</string>
+    <string name="camera_huawei_unavailable">خدمة القراءة غير متاحة، أعد المحاولة.</string>
+    <string name="camera_huawei_review_hint">قراءة خاصة للصورة؛ راجع الحقول المستخرجة.</string>
     <string name="camera_field_missing">لم يُستخرج</string>
     <string name="camera_field_pending">جارٍ القراءة…</string>
     <string name="camera_photo_accepted">تمت إضافة صورة الهوية</string>
@@ -320,7 +320,7 @@
     <string name="malak_holder_parts">حصتك المطبـوعة (أجزاء لا أمتار مربعة)</string>
     <string name="malak_holder_row">رقم صفّك في وثيقة الملكية</string>
     <string name="malak_holder_preliminary">ظهرت حصتك من الصف المرتبط باسمك وCIN. هذه مطابقة نصية أولية وليست تأكيداً قانونياً.</string>
-    <string name="camera_review_required_fields">لا يمكن اعتماد الصورة بعد: يلزم استخراج الاسم واللقب ورقم الهوية الكامل (8 أرقام) وتاريخ الميلاد بوضوح. اقترب من البطاقة وأعد التصوير.</string>
+    <string name="camera_review_required_fields">انتظر انتهاء القراءة، أو أعد التصوير.</string>
     <string name="smart_read_pilot_only">أنت متصل بجلسة OCR تجريبية للهوية فقط. قراءة وثائق الملكية ومطابقتها تتطلب جلسة مالك مخوّلة وخادم تحقق مفعّلاً؛ الحساب التجريبي لا يمنح هذه الصلاحية.</string>
     <string name="malak_name_only_review">تطابق اسم أولي فقط — يحتاج مراجعة</string>
     <string name="malak_role_cin_conflict">تعارض رقم الهوية مع صفة الشخص — يحتاج مراجعة</string>
@@ -359,4 +359,6 @@
     <string name="status_paused">متوقف</string>
     <string name="submission_resend">إعادة الإرسال</string>
     <string name="submission_replace_documents">استبدال الوثائق وإعادة التحليل</string>
+    <string name="source_pdf_text">نص الوثيقة</string>
+    <string name="source_scan_text">مقروء من الصورة</string>
 </resources>

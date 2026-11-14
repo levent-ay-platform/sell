@@ -167,7 +167,7 @@
     <string name="local_birth_date">Date de naissance (OCR, non vérifiée)</string>
     <string name="local_surname">Nom de famille depuis la CIN (OCR)</string>
     <string name="local_given_name">Prénom depuis la CIN (OCR)</string>
-    <string name="pair_preliminary_only">L’OCR ne vérifie ni l’identité ni la propriété et n’autorise pas une publication. Contrôle indépendant obligatoire.</string>
+    <string name="pair_preliminary_only">L’administrateur examine les documents et décide de la publication.</string>
     <string name="pair_creating_case">Création de la demande de vérification privée…</string>
     <string name="pair_upload_cert">Envoi sécurisé du certificat…</string>
     <string name="pair_upload_identity">Envoi sécurisé de la pièce d’identité…</string>
@@ -219,20 +219,20 @@
     <string name="camera_review_title">Informations de la carte</string>
     <string name="camera_review_scanning">Lecture sécurisée des champs de la CIN…</string>
     <string name="camera_review_unreadable">Un ou plusieurs champs sont illisibles. Reprenez le recto.</string>
-    <string name="camera_review_ready">Les quatre champs ont été lus. Vérifiez-les.</string>
+    <string name="camera_review_ready">Les champs lus sont prêts. Vérifiez-les.</string>
     <string name="camera_review_accept">Utiliser cette photo</string>
     <string name="camera_review_retake">Reprendre la photo</string>
     <string name="camera_review_failed">Lecture impossible. Reprenez le recto.</string>
     <string name="camera_review_cin">Numéro de CIN</string>
     <string name="camera_review_birth">Date de naissance</string>
     <string name="camera_review_name">Nom lu par OCR</string>
-    <string name="camera_review_privacy">Après votre accord uniquement : envoi chiffré vers Huawei pour OCR. Pas une vérification légale.</string>
+    <string name="camera_review_privacy">La photo est envoyée de façon sécurisée pour une lecture privée.</string>
     <string name="camera_image_low_resolution">Image trop petite pour une lecture fiable. Rapprochez la carte et reprenez les quatre coins.</string>
-    <string name="camera_huawei_consent">J’autorise le traitement privé et sécurisé de la photo par le service OCR Huawei.</string>
+    <string name="camera_huawei_consent">Lire cette photo en privé.</string>
     <string name="camera_huawei_consent_required">Autorisez le traitement OCR privé ci-dessus pour lire cette photo.</string>
-    <string name="camera_huawei_login_required">Une connexion propriétaire vérifiée est nécessaire avant tout envoi de CIN.</string>
-    <string name="camera_huawei_unavailable">Le service OCR privé Huawei est indisponible. La photo reste ici. Réessayez.</string>
-    <string name="camera_huawei_review_hint">Lecture privée sur Huawei, pas sur le téléphone. Aucune identité n’est certifiée automatiquement.</string>
+    <string name="camera_huawei_login_required">Votre session a expiré. Reconnectez-vous.</string>
+    <string name="camera_huawei_unavailable">Le service de lecture est indisponible. Réessayez.</string>
+    <string name="camera_huawei_review_hint">Lecture privée de la photo ; vérifiez les champs extraits.</string>
     <string name="camera_field_missing">Non extrait</string>
     <string name="camera_field_pending">Lecture…</string>
     <string name="camera_photo_accepted">Photo ajoutée</string>
@@ -320,7 +320,7 @@
     <string name="malak_holder_parts">Votre quote-part imprimée (parts, pas m²)</string>
     <string name="malak_holder_row">Numéro de votre ligne dans le titre</string>
     <string name="malak_holder_preliminary">Votre part apparaît sur la ligne associée à votre nom et votre CIN. Correspondance textuelle préliminaire uniquement.</string>
-    <string name="camera_review_required_fields">Photo non validable : le nom, le prénom, le CIN complet (8 chiffres) et la date de naissance doivent être lisibles. Rapprochez la carte et reprenez la photo.</string>
+    <string name="camera_review_required_fields">Attendez la fin de la lecture ou reprenez la photo.</string>
     <string name="smart_read_pilot_only">Votre session OCR pilote permet seulement de tester la lecture du recto. Pour lire et comparer les titres, il faut une session propriétaire autorisée et un serveur de vérification actif.</string>
     <string name="malak_name_only_review">Concordance provisoire du nom uniquement — à vérifier</string>
     <string name="malak_role_cin_conflict">Conflit de CIN avec le rôle déclaré — vérification requise</string>
@@ -359,4 +359,6 @@
     <string name="status_paused">Suspendu</string>
     <string name="submission_resend">Renvoyer</string>
     <string name="submission_replace_documents">Remplacer les documents et relancer l’analyse</string>
+    <string name="source_pdf_text">Texte du document</string>
+    <string name="source_scan_text">Lecture de l’image</string>
 </resources>

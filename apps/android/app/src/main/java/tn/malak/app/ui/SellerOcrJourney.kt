@@ -515,7 +515,8 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmission:org.j
                                     frontRead?.issue!=null->
                                         R.string.camera_review_failed
                                     scan?.readyForCameraAcceptance==true->
-                                        R.string.camera_review_ready
+                                        if(scan.cinFull!=null&&scan.birthDate!=null&&scan.fullName!=null)
+                                            R.string.camera_review_ready else R.string.camera_review_manual
                                     else->R.string.camera_review_required_fields
                                 }
                                 Text(s(message),color=Brand.Muted,
@@ -647,7 +648,7 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmission:org.j
                                         HorizontalDivider(color=CardBorder)
                                         OcrDataRow(s(familyFactLabel(fact.key)),fact.value)
                                         Text(s(R.string.smart_read_page)+" "+fact.page+" · "+
-                                            fact.source+" · "+s(if(fact.status=="LOW_CONFIDENCE")
+                                            s(if(fact.source=="pdf-text")R.string.source_pdf_text else R.string.source_scan_text)+" · "+s(if(fact.status=="LOW_CONFIDENCE")
                                                 R.string.smart_read_needs_review else R.string.smart_read_source_available),
                                             color=Brand.Muted,fontSize=11.sp)
                                     }

@@ -53,7 +53,6 @@ class Workflow(unittest.TestCase):
         self.store.decide(admin['id'],sub['id'],'PAUSED',data,'Paused',2)
         self.assertEqual(self.store.public_listings(),[])
 
-if __name__=='__main__':unittest.main()
 
 class PhotoProtection(unittest.TestCase):
     def test_only_sanitized_property_photos_become_public(self):
@@ -118,3 +117,5 @@ class PreserveListingMedia(unittest.TestCase):
             self.assertEqual(s.evidence(admin,photos[0]['id'])[1][:2],b'\xff\xd8')
             s.decide(admin,first['id'],'PUBLISHED',changed,'Reviewed incomplete data',3)
             self.assertEqual(len(s.public_listings()[0]['photos']),1)
+
+if __name__=='__main__':unittest.main()

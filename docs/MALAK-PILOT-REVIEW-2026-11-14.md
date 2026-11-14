@@ -21,8 +21,25 @@ Install `qa/requirements-runtime.txt` alongside the existing v5 packages; compil
 - Python: `PYTHONPATH=<runtime-deps>:services/verification/qa <v5-python> -B -m unittest discover -s services/verification/qa -p 'test_*.py'`
 - TS: `TMPDIR=<real-non-symlink-directory> node --experimental-strip-types --test services/verification/test/*.test.ts`
 - Android: Gradle 8.13/JDK17, `:app:testDebugUnitTest :app:assembleDebug -PmalakPrivateBaseUrl=https://malak-api.ayasofia.shop`.
-- A generated fictional sale image was actually read on Mac; test identity did not yield reliable name/CIN/DOB. Do not claim real identity accuracy or installed-device acceptance without a handset and a legible authorized sample.
+- A generated fictional sale image was actually read on Mac. A synthetic camera-shaped ID returned the actual surname/given name from v5; a unique-digit direct preview returned the full CIN, while that sample’s DOB remained null. Do not claim real identity accuracy from that fixture.
 
 ## Current limitations
 
 Customer "changes requested" editing supports listing fields and a fresh OCR request that replaces evidence on that same submission. Administration currently retains an all-submissions queue without pagination. The pilot SQLite adapter needs a migration path when the production database/OTP provider is adopted. No automatic official registry verification is implemented.
+
+## Live HTTPS acceptance checkpoint
+
+Runtime code revision: `2f4c1aa75c61686694e05bbb27b74522ef184a48`. Mac listener and existing isolated Huawei proxy updated with code/config backups; other services untouched. The public HTTPS journey passed 17 requests: same-login preview/compare, encrypted original retrieval by admin, durable phone account across devices, other-phone isolation, property-photo upload, submission, admin publish, redacted public listing/photo, then pause. The synthetic test listing was removed from public visibility by pausing it.
+
+- `/internal/v1/pilot/preview-cin` → 200, request `d0dd266d1f5a7e605da1afdb`.
+- `/internal/v1/pilot/compare-pair` → 200, request `75f92c9c7e23a2fc189071a9`.
+
+Automated results: Python workflow/HTTP/bridge tests 17/17; existing TS tests 387/387; Android JVM tests 57/57 and connected debug APK build passed (about 24 MB). Installed-emulator acceptance PASSED: login → selected sale image → CameraX capture → real v5 surname/given name/DOB → real Vision document facts → customer submission → admin browser publication → published card rendered in the installed APK. Camera-captured CIN remained unreadable and was not fabricated. A separate direct synthetic preview returned the complete eight-digit CIN. After screenshots, the test listing was PAUSED and removed from public visibility.
+
+## Installed Android acceptance
+
+`LivePilotJourneyTest` runs only with `livePilot=true`; it uses the genuine configured HTTPS service and a synthetic image-file emulator camera, with no mocked OCR or injected success. The journey test and the separate public-feed test both passed (`OK (1 test)` each). Run the manually built test APK with `adb shell am instrument -w -e livePilot true tn.malak.app.test/androidx.test.runner.AndroidJUnitRunner`; for the already-published feed assertion add `-e stage feed`. Test originals are generated locally and are never committed.
+
+The native CameraX quality guidance remained intact. Early diagnostic failures were emulator image path/placement and test-driver accessibility/keyboard issues; they were corrected in test setup without faking inference or changing model thresholds.
+
+A regression also ensures that a second photographed continuation page retains the first page’s document-family context and correct page provenance.

@@ -4,8 +4,9 @@
 Development purpose: exercise a genuine in-memory, time-limited server session
 from the debug +216 phone / 1234, through the REAL pinned Arabic v5 ONNX
 recognizer. NOT legal ID verification, not public signup, not a production API.
-No image persistence, no image/text debug output, no client-supplied file paths,
-no public TCP bind, and no OCR or DB secrets in the Android APK.
+Preview images remain transient. Completed comparisons retain encrypted private
+review evidence for administrator submission. No image/text debug output, client
+file paths, public TCP bind, or OCR/database secrets in the Android APK.
 """
 import hashlib
 import http.server

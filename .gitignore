@@ -29,3 +29,10 @@ local.properties
 *.log
 coverage/
 .tmp/
+
+# Local Mac pilot runtime and Android tooling
+.runtime/
+apps/android/.kotlin/
+services/verification/qa/runtime.json
+*.sqlite3
+*.sqlite3-journal

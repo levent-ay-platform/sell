@@ -167,7 +167,7 @@
     <string name="local_birth_date">Date of birth (OCR, not verified)</string>
     <string name="local_surname">Surname from CIN (OCR)</string>
     <string name="local_given_name">Given name from CIN (OCR)</string>
-    <string name="pair_preliminary_only">OCR does not verify identity or title ownership, and does not permit publication. Independent review required.</string>
+    <string name="pair_preliminary_only">The administrator reviews the documents and decides publication.</string>
     <string name="pair_creating_case">Creating private verification request…</string>
     <string name="pair_upload_cert">Securely uploading certificate…</string>
     <string name="pair_upload_identity">Securely uploading identity card…</string>
@@ -219,20 +219,20 @@
     <string name="camera_review_title">Card details</string>
     <string name="camera_review_scanning">Reading identity fields with the private OCR service…</string>
     <string name="camera_review_unreadable">One or more fields are missing or unclear. Retake the front photograph.</string>
-    <string name="camera_review_ready">Four fields were read. Check them against the card.</string>
+    <string name="camera_review_ready">Read fields are ready. Please review them.</string>
     <string name="camera_review_accept">Use this photo</string>
     <string name="camera_review_retake">Retake photo</string>
     <string name="camera_review_failed">Reading failed. Retake the front photo.</string>
     <string name="camera_review_cin">ID number</string>
     <string name="camera_review_birth">Date of birth</string>
     <string name="camera_review_name">OCR name</string>
-    <string name="camera_review_privacy">Only after your consent: encrypted upload to Huawei for OCR. Not a legal identity check.</string>
+    <string name="camera_review_privacy">The image is sent securely for private reading.</string>
     <string name="camera_image_low_resolution">Image too small for reliable reading. Photograph the card closer and keep all four corners visible.</string>
-    <string name="camera_huawei_consent">I agree to have this photo processed securely by the private Huawei OCR service to read its fields.</string>
+    <string name="camera_huawei_consent">Read this image privately.</string>
     <string name="camera_huawei_consent_required">Allow private Huawei OCR processing above to read this photo.</string>
-    <string name="camera_huawei_login_required">Verified owner sign-in is required before sending any identity photo.</string>
-    <string name="camera_huawei_unavailable">The private Huawei OCR service is unavailable. The photo stays here; retry later.</string>
-    <string name="camera_huawei_review_hint">Reading is performed privately on Huawei, not on the phone. No verification is automatic.</string>
+    <string name="camera_huawei_login_required">Your session has ended. Sign in again.</string>
+    <string name="camera_huawei_unavailable">The reading service is unavailable. Retry the photo.</string>
+    <string name="camera_huawei_review_hint">Private reading of the image; review the extracted fields.</string>
     <string name="camera_field_missing">Not extracted</string>
     <string name="camera_field_pending">Reading…</string>
     <string name="camera_photo_accepted">Photo added</string>
@@ -320,7 +320,7 @@
     <string name="malak_holder_parts">Your printed rights parts (not square metres)</string>
     <string name="malak_holder_row">Your row number on the ownership paper</string>
     <string name="malak_holder_preliminary">Your share was found in the row associated with your name and CIN. This is preliminary text agreement only.</string>
-    <string name="camera_review_required_fields">This photo cannot be accepted: surname, given name, full 8-digit CIN and date of birth must all be clearly extracted. Move closer and retake.</string>
+    <string name="camera_review_required_fields">Wait for the reading to finish, or retake the photo.</string>
     <string name="smart_read_pilot_only">You are signed into the ID OCR pilot only. Reading and matching title documents requires an authorized owner session and deployed verification service; pilot access does not grant those permissions.</string>
     <string name="malak_name_only_review">Preliminary name-only agreement — review required</string>
     <string name="malak_role_cin_conflict">Role-specific CIN conflict — review required</string>
@@ -359,4 +359,6 @@
     <string name="status_paused">Paused</string>
     <string name="submission_resend">Resubmit</string>
     <string name="submission_replace_documents">Replace documents and analyze again</string>
+    <string name="source_pdf_text">Document text</string>
+    <string name="source_scan_text">Read from image</string>
 </resources>
