@@ -7,21 +7,35 @@ permissions:
 jobs:
   probe:
     runs-on: ubuntu-latest
-    timeout-minutes: 4
+    timeout-minutes: 5
     steps:
-      - name: Search public ArcGIS catalogue for cadastral parcel layers
+      - name: Export 3 Nabeul urban planning scanned map samples via public API
         run: |
           python3 - <<'PYCODE'
-          import urllib.request,urllib.parse,json,time
-          terms=[
-           'cadastre Tunisie','parcel cadastral Tunisia','parcelle nabeul','titre foncier Hammamet','foncier Tunisie'
-          ]
-          for query in terms:
-           url='https://www.arcgis.com/sharing/rest/search?'+urllib.parse.urlencode({'q':query,'f':'json','num':20,'sortField':'score'})
+          import urllib.request,urllib.parse,urllib.error,json,time,math,concurrent.futures
+          ROOT="https://geopau.gov.tn/arcgisserver/rest/services/public/SCANs_public/MapServer"
+          L=[("Beni_Khaled",157),("Kelibia",155701),("Korba",168)]
+          def process(item):
+           name,lid=item
+           t=time.monotonic()
            try:
-            with urllib.request.urlopen(urllib.request.Request(url,headers={'User-Agent':'MalakGISResearch/1.0'}),timeout=9) as r:data=json.loads(r.read(350000))
-            results=[{'title':x.get('title'),'type':x.get('type'),'owner':x.get('owner'),'id':x.get('id'),'url':x.get('url')} for x in data.get('results',[]) if any(w in (str(x.get('title',''))+' '+str(x.get('description',''))).lower() for w in ['cadast','parcell','foncier','hammamet','tunisie','tunisia','nabeul'])]
-            print('ARCGIS_SEARCH',query,'total',data.get('total'),'relevant',json.dumps(results[:12],ensure_ascii=False),flush=True)
-           except Exception as e:print('ARCGIS_SEARCH_ERROR',query,type(e).__name__,str(e)[:95],flush=True)
+            meta_url=f"{ROOT}/{lid}?f=json"
+            with urllib.request.urlopen(urllib.request.Request(meta_url,headers={"User-Agent":"Mozilla/5.0 MalakGISReadOnly"}),timeout=30) as r:d=json.loads(r.read(120000))
+            ext=d.get("extent")
+            if not ext:return {"name":name,"error":"no_extent","meta":str(d)[:250]}
+            bbox=",".join(str(ext[k]) for k in ["xmin","ymin","xmax","ymax"])
+            p={"bbox":bbox,"bboxSR":3857,"imageSR":3857,"size":"450,450","dpi":72,"format":"jpg","transparent":"false","layers":"show:"+str(lid),"f":"json"}
+            url=ROOT+"/export?"+urllib.parse.urlencode(p)
+            print("EXPORT_REQUEST",name,lid,"url",url,"flush",True,flush=True)
+            try:
+             with urllib.request.urlopen(urllib.request.Request(url,headers={"User-Agent":"Mozilla/5.0","Accept":"application/json"}),timeout=95) as r:
+              payload=r.read(300000)
+              status=r.status
+             obj=json.loads(payload)
+             return {"name":name,"status":status,"seconds":round(time.monotonic()-t,1),"extent":ext,"export":obj}
+            except Exception as e:return {"name":name,"error":type(e).__name__+":"+str(e)[:140],"seconds":round(time.monotonic()-t,1),"bbox":bbox}
+           except Exception as e:return {"name":name,"error":"meta "+type(e).__name__+":"+str(e)[:140]}
+          with concurrent.futures.ThreadPoolExecutor(max_workers=3) as ex:
+           for a in ex.map(process,L):print("EXPORT_RESULT",json.dumps(a,ensure_ascii=False),flush=True)
 
           PYCODE
