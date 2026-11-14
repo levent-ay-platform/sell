@@ -9,39 +9,30 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Check open Tunisia admin-level GeoJSON against certificate toponym
+      - name: Download open OCHA Tunisian administrative polygons and isolate Hammamet sectors
         run: |
           python3 - <<'PYCODE'
-          import urllib.request,urllib.parse,urllib.error,json,zipfile,io,re,unicodedata,time,os
-          URL="https://www.data4tunisia.org/api/1/datasets/r/ebe19593-9438-4d14-8291-e65f811e2671"
-          def norm(s):
-           s=str(s or "").lower()
-           s="".join(c for c in unicodedata.normalize("NFKD",s) if not unicodedata.combining(c))
-           return re.sub(r'[^a-z0-9\u0600-\u06ff]+'," ",s)
-          try:
-           t=time.monotonic()
-           req=urllib.request.Request(URL,headers={"User-Agent":"MalakOpenGeo/1.0 public dataset research"})
-           with urllib.request.urlopen(req,timeout=85) as r:
-            raw=r.read(80_000_001);print("DOWNLOAD",r.status,len(raw),"type",r.headers.get("content-type"),"seconds",round(time.monotonic()-t,1),flush=True)
-           if len(raw)>80000000:raise ValueError("Dataset too large for bounded probe")
-           z=zipfile.ZipFile(io.BytesIO(raw))
-           names=z.namelist()
-           print("ZIP_CONTENTS",json.dumps([{"file":n,"size":z.getinfo(n).file_size} for n in names],ensure_ascii=False),flush=True)
-           for fn in names:
-            if not fn.lower().endswith((".json",".geojson")):continue
-            if z.getinfo(fn).file_size>70000000:continue
-            try:
-             with z.open(fn) as rd:obj=json.load(rd)
-             ff=obj.get("features") or []
-             matches=[]
-             for feat in ff:
-              p=feat.get("properties") or {}
-              tnorm=norm(" ".join(str(v) for v in p.values() if isinstance(v,(str,int))))
-              if any(k in tnorm for k in ("mrada","ferj","sidi jedidi","sidi djedidi","hammamet","حمامات","فرجان","مرادة","سيدي الجديدي","nabeul")):
-               c=feat.get("geometry",{}).get("coordinates",[])
-               matches.append({"p":p,"geom_type":feat.get("geometry",{}).get("type"),"geometry_present":bool(c)})
-             print("GEOJSON_FILE",fn,"total",len(ff),"matched",len(matches),"SAMPLE_MATCHES",json.dumps(matches[:55],ensure_ascii=False)[:20000],flush=True)
-            except Exception as e:print("FILE_ERROR",fn,type(e).__name__,str(e)[:150],flush=True)
-          except Exception as e:print("DOWNLOAD_ERROR",type(e).__name__,str(e)[:250],flush=True)
+          import urllib.request,json,zipfile,io
+          u="https://www.data4tunisia.org/api/1/datasets/r/ebe19593-9438-4d14-8291-e65f811e2671"
+          with urllib.request.urlopen(urllib.request.Request(u,headers={"User-Agent":"MalakPublicGeodataResearch/1.0"}),timeout=75) as r:data=r.read(65000000)
+          print("DATASET_DOWNLOAD",len(data),flush=True)
+          z=zipfile.ZipFile(io.BytesIO(data))
+          for f in ["tun_admin4.geojson","tun_admin3.geojson"]:
+           d=json.loads(z.read(f));matches=[]
+           for feat in d.get("features",[]):
+            p=feat.get("properties") or {}
+            if p.get("adm3_pcode")=="TN1566" or p.get("adm3_pcode")=="TN1566" and f.endswith("3.geojson"):
+             matches.append({"name":p.get("adm4_name") or p.get("adm3_name"),"arabic":p.get("adm4_name1") or p.get("adm3_name1"),"pcode":p.get("adm4_pcode") or p.get("adm3_pcode"),"parent":p.get("adm3_name"),"area_sqkm":p.get("area_sqkm"),"center_lat":p.get("center_lat"),"center_lon":p.get("center_lon"),"geom_type":(feat.get("geometry") or {}).get("type")})
+           print("HAMMAMET_ADMIN_FEATURES",f,json.dumps(matches,ensure_ascii=False),flush=True)
+           if f=="tun_admin4.geojson":
+            wanted=[feat for feat in d["features"] if (feat.get("properties") or {}).get("adm3_pcode")=="TN1566"]
+            output={"type":"FeatureCollection","name":"Hammamet sector boundaries — OCHA 2022, not land parcel","features":wanted}
+            with open("hammamet_admin4.geojson","w",encoding="utf8") as o:json.dump(output,o,ensure_ascii=False)
 
           PYCODE
+      - name: Publish Hammamet sector polygons research artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: hammamet-open-admin4-geojson
+          path: hammamet_admin4.geojson
+          retention-days: 7
