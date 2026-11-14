@@ -7,29 +7,56 @@ permissions:
 jobs:
   probe:
     runs-on: ubuntu-latest
-    timeout-minutes: 4
+    timeout-minutes: 5
     steps:
-      - name: Inspect remaining public service layer names (distinct metadata endpoints)
+      - name: GeoMatch spatial screening for open OSM rural polygons near Sidi Djedidi
         run: |
           python3 - <<'PYCODE'
-          import urllib.request,urllib.error,json,time,concurrent.futures,collections
-          base="https://geopau.gov.tn/arcgisserver/rest/services/public"
-          urls=[
-          ("LimitesAdmin_FeatureServer",base+"/LimitesAdmin/FeatureServer?f=json"),
-          ("OSM_FS_FeatureServer",base+"/OSM_FS/FeatureServer?f=json"),
-          ("OSM_MapServer_layers",base+"/OSM/MapServer/layers?f=json"),
-          ("VoiriesLeKram_MapServer_layers",base+"/VoiriesLeKram/MapServer/layers?f=json"),
-          ("LimitesAdmin_MapServer",base+"/LimitesAdmin/MapServer?f=json")]
-          def run(v):
-           label,url=v;t=time.monotonic()
+          import urllib.request,urllib.parse,json,time,math,os,csv,sys
+          query='[out:json][timeout:22];(way["landuse"~"^(farmland|orchard|vineyard|farmyard|meadow|grass|residential)$"](36.393,10.423,36.446,10.486);way["highway"~"^(primary|secondary|tertiary|unclassified|residential|track)$"](36.393,10.423,36.446,10.486););out geom;'
+          servers=["https://overpass.kumi.systems/api/interpreter","https://overpass-api.de/api/interpreter","https://overpass.private.coffee/api/interpreter"]
+          raw=None; endpoint=None
+          for host in servers:
+           t=time.monotonic()
            try:
-            with urllib.request.urlopen(urllib.request.Request(url,headers={"Accept":"application/json","User-Agent":"Mozilla/5.0 public read-only layer inventory"}),timeout=28) as r:raw=r.read(500000)
-            j=json.loads(raw)
-            a=j.get("layers",[])
-            def summarise(x):
-             return {"id":x.get("id"),"name":x.get("name"),"type":x.get("type"),"geometry":x.get("geometryType"),"fields":[f.get("name") for f in (x.get("fields") or [])][:25]}
-            print("PUBLIC_SERVICE",json.dumps({"source":label,"elapsed":round(time.monotonic()-t,1),"error":j.get("error"),"count":len(a),"layers":[summarise(x) for x in a][:60]},ensure_ascii=False)[:14000],flush=True)
-           except Exception as e:print("PUBLIC_SERVICE_ERROR",json.dumps({"source":label,"elapsed":round(time.monotonic()-t,1),"type":type(e).__name__,"error":str(e)[:180]},ensure_ascii=False),flush=True)
-          with concurrent.futures.ThreadPoolExecutor(max_workers=3) as ex:list(ex.map(run,urls))
+            req=urllib.request.Request(host,data=urllib.parse.urlencode({"data":query}).encode(),headers={"User-Agent":"MalakGeoMatchAcademicResearch/1.0","Accept":"application/json"},method="POST")
+            with urllib.request.urlopen(req,timeout=38) as r:
+             data=r.read(3000000)
+            j=json.loads(data)
+            if isinstance(j.get("elements"),list):raw=j;endpoint=host;break
+            print("ERROR",host,str(j)[:120],"secs",round(time.monotonic()-t,2),flush=True)
+           except Exception as e:print("OVERPASS_FAILURE",host,type(e).__name__,str(e)[:140],"secs",round(time.monotonic()-t,2),flush=True)
+          os.makedirs("geomatch",exist_ok=True)
+          def area_m2(coords):
+           lat0=sum(p[1] for p in coords)/len(coords);c=math.cos(math.radians(lat0));R=6371008.8
+           pts=[(math.radians(lon)*R*c,math.radians(lat)*R) for lon,lat in coords]
+           return abs(sum(pts[i][0]*pts[(i+1)%len(pts)][1]-pts[(i+1)%len(pts)][0]*pts[i][1] for i in range(len(pts)))/2)
+          if raw:
+           features=[];roads=[]; all_agri=0
+           for el in raw["elements"]:
+            geo=el.get("geometry") or [];tags=el.get("tags") or {}
+            coords=[[round(p["lon"],7),round(p["lat"],7)] for p in geo if "lon" in p and "lat" in p]
+            if tags.get("landuse"):
+             if len(coords)<4 or coords[0]!=coords[-1]:continue
+             all_agri+=1; area=area_m2(coords)
+             f={"type":"Feature","properties":{"source":"OpenStreetMap","source_id":el.get("id"),"osm_url":"https://www.openstreetmap.org/way/"+str(el.get("id")),"landuse":tags.get("landuse"),"name":tags.get("name"),"approx_area_m2":round(area,1),"area_delta_pct":round((area-42910)/42910*100,1),"not_cadastral":True},"geometry":{"type":"Polygon","coordinates":[coords]}}
+             if abs(area-42910)/42910<=0.35:features.append(f)
+            if tags.get("highway") and len(coords)>1:
+             roads.append({"type":"Feature","properties":{"osm_id":el.get("id"),"name":tags.get("name"),"ref":tags.get("ref"),"highway":tags.get("highway"),"source":"OpenStreetMap"},"geometry":{"type":"LineString","coordinates":coords}})
+           features.sort(key=lambda f:abs(f["properties"]["area_delta_pct"]))
+           with open("geomatch/osm_candidates_area_42910.geojson","w",encoding="utf8") as f:json.dump({"type":"FeatureCollection","features":features[:100]},f,ensure_ascii=False)
+           with open("geomatch/osm_roads_local.geojson","w",encoding="utf8") as f:json.dump({"type":"FeatureCollection","features":roads[:450]},f,ensure_ascii=False)
+           with open("geomatch/summary.json","w",encoding="utf8") as f:json.dump({"api":endpoint,"query_bbox":[36.393,10.423,36.446,10.486],"anchor":"Sidi Jedidi OSM village 36.41714,10.45575","search_purpose":"area-based visual screening, not ownership proof","official_title_area_m2":42910,"osm_farmland_like_polygons_closed":all_agri,"road_segments":len(roads),"candidates_within_35pct":len(features),"top_area_candidates":[x["properties"] for x in features[:12]]},f,ensure_ascii=False,indent=2)
+           print("OSM_RESULT",json.dumps({"endpoint":endpoint,"elements_total":len(raw["elements"]),"closed_landuse_polygons":all_agri,"road_segments":len(roads),"area_match_candidates_35pct":len(features),"top_candidates":[x["properties"] for x in features[:12]]},ensure_ascii=False)[:4500],flush=True)
+          else:
+           with open("geomatch/summary.json","w") as f:json.dump({"status":"OVERPASS_INACCESSIBLE","bbox":[36.393,10.423,36.446,10.486]},f)
+           print("OSM_RESULT",json.dumps({"status":"unavailable","comment":"Did not get actual OSM candidate geometry; no result invented"}),flush=True)
 
           PYCODE
+      - name: Save source-backed OpenStreetMap geospatial screening
+        uses: actions/upload-artifact@v4
+        with:
+          name: geomatch-sidi-jedidi-osm-screening
+          path: geomatch/
+          if-no-files-found: warn
+          retention-days: 7
