@@ -7,77 +7,81 @@ permissions:
 jobs:
   probe:
     runs-on: ubuntu-latest
-    timeout-minutes: 7
+    timeout-minutes: 5
     steps:
-      - name: Enumerate public GIS organization items, hidden parcel layers, Tunisian open data hub
+      - name: Verify AFH land maps, cadastral alternatives, Nabeul blocks and genuine parcel features
         run: |
           python3 - <<'PYCODE'
-          import urllib.request,urllib.parse,urllib.error,json,re,time,os,collections,concurrent.futures,html
-          os.makedirs("arcgis_catalog_discovery",exist_ok=True)
-          org="zcZDLWCe77bUzzw7"
-          base="https://www.arcgis.com/sharing/rest"
-          def fetch(url,timeout=18):
-           with urllib.request.urlopen(urllib.request.Request(url,headers={"User-Agent":"Mozilla/5.0 MalakGISPublicCatalogAudit","Accept":"application/json,text/html"}),timeout=timeout) as r:
-            data=r.read(650000)
-            return r.status,r.headers.get("content-type"),data
-          def search(label,phrase,n=100):
-           ids=[];entries=[];total=0
-           for start in (1,101,201,301,401):
-            u=base+"/search?"+urllib.parse.urlencode({"f":"json","q":phrase,"num":100,"start":start,"sortField":"modified","sortOrder":"desc"})
-            t=time.monotonic()
-            try:
-             code,ct,b=fetch(u,18);v=json.loads(b)
-             if v.get("error"):print("SEARCH_ERROR",label,v["error"],flush=True);break
-             total=v.get("total",0)
-             for x in v.get("results",[]):
-              entries.append({"id":x.get("id"),"title":x.get("title"),"type":x.get("type"),"url":x.get("url"),"owner":x.get("owner"),"access":x.get("access"),"tags":x.get("tags",[])[:8],"extent":x.get("extent"),"description":(x.get("description") or "")[:180]})
-             print("SEARCH_PAGE",json.dumps({"label":label,"status":code,"total":total,"start":start,"returned":len(v.get("results",[])),"elapsed":round(time.monotonic()-t,1)},ensure_ascii=False),flush=True)
-             if not v.get("results") or start+len(v["results"])>min(total,500):break
-            except Exception as e:print("SEARCH_FAIL",label,type(e).__name__,str(e)[:100],flush=True);break
-           return entries,total
-          queries=[
-           ("org_all","orgid:"+org),
-           ("org_features","orgid:"+org+' AND type:"Feature Service"'),
-           ("owner_items","owner:omargaafar"),
-           ("nabeul_lot","(title:Nabeul OR title:Hammamet OR title:Lotissement OR title:Cadastre OR title:Parcelle) AND type:\"Feature Service\""),
-           ("tunisia_title_lot","(Tunisie OR Tunisia) AND (cadastre OR parcel OR parcellaire OR lotissement) AND type:\"Feature Service\"")]
-          output={};allmap={}
-          for lab,query in queries:
-           rows,total=search(lab,query)
-           output[lab]={"query":query,"total":total,"returned":len(rows),"items":rows}
-           for item in rows:
-            if item.get("id"):allmap[item["id"]]=item
-           print("QUERY_SUMMARY",json.dumps({"name":lab,"total":total,"retrieved":len(rows),"interesting":[{"title":x["title"],"type":x["type"],"url":x["url"],"owner":x["owner"]} for x in rows if any(t in (x["title"] or "").casefold() for t in ("cadast","lot","parc","fonc","hamm","nabeul","urban","zone","map_","pizz","khir","brous","raoued"))][:55]},ensure_ascii=False)[:9000],flush=True)
-          with open("arcgis_catalog_discovery/portal_search_inventory.json","w",encoding="utf8") as w:json.dump(output,w,ensure_ascii=False,indent=2)
-          feature_entries=[x for x in allmap.values() if x.get("type")=="Feature Service" and (org in (x.get("url") or "") or x.get("owner")=="omargaafar" or x.get("id") in [j["id"] for j in output["org_features"]["items"]])]
-          print("FEATURE_SERVICE_TO_SCAN",len(feature_entries),flush=True)
-          def inspect(x):
-           u=x.get("url")
-           if not u:return {"title":x.get("title"),"error":"no url"}
-           t=time.monotonic()
+          import urllib.request,urllib.parse,json,time,os,concurrent.futures
+          os.makedirs("gis_focused_source_verification",exist_ok=True)
+          ORG="zcZDLWCe77bUzzw7"
+          S="https://services1.arcgis.com/"+ORG+"/arcgis/rest/services"
+          P="https://www.arcgis.com/sharing/rest/"
+          def req(url,timeout=18):
+           with urllib.request.urlopen(urllib.request.Request(url,headers={"User-Agent":"Mozilla/5.0 (Malak GIS public read-only search)","Accept":"application/json"}),timeout=timeout) as r:return json.load(r)
+          maps=[
+           ("AFH_Foncier","423773a3de374791b47f2e31b5ff61fa"),
+           ("AFI_Zones","c43c6b315b14483caba3d913a5ddc134"),
+           ("SNITCadastre_Map","cd416e5432c64fe69ce451bc997f31af"),
+           ("Cadastre_Map","ba422be89b954fb1a97e81eb15b0d5d4"),
+           ("Nabeul_Archeo",""), 
+          ]
+          for label,id in maps:
+           if not id:continue
            try:
-            code,ct,raw=fetch(u+"?f=json",14);j=json.loads(raw)
-            if j.get("error"):return {"title":x.get("title"),"url":u,"err":j.get("error")}
-            return {"title":x.get("title"),"url":u,"owner":x.get("owner"),"layers":[{"id":z.get("id"),"name":z.get("name"),"geometryType":z.get("geometryType")} for z in j.get("layers",[])],"tables":[{"id":z.get("id"),"name":z.get("name")} for z in j.get("tables",[])],"description":str(j.get("description") or j.get("serviceDescription") or "")[:180],"secs":round(time.monotonic()-t,1)}
-           except Exception as e:return {"title":x.get("title"),"url":u,"err":type(e).__name__}
-          with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
-           info=list(pool.map(inspect,feature_entries[:80]))
-          with open("arcgis_catalog_discovery/feature_service_layers.json","w",encoding="utf8") as w:json.dump(info,w,ensure_ascii=False,indent=2)
-          for z in info:
-           print("CATALOG_SERVICE",json.dumps(z,ensure_ascii=False)[:4000],flush=True)
-          # Hub is separate public site; extract link to organization and portal
-          hub="https://geo-tunisie-tunisia.opendata.arcgis.com/"
-          try:
-           code,ct,raw=fetch(hub,20);body=raw.decode("utf8","replace")
-           matches={term:re.findall(r".{0,85}"+re.escape(term)+r".{0,110}",body,re.I)[:5] for term in ("orgId","organizationId","hubSite","siteId","arcgisOnlineUrl","zcZDLWCe77bUzzw7")}
-           print("HUB",json.dumps({"http":code,"bytes":len(raw),"ctype":ct,"title":re.findall(r"<title[^>]*>(.*?)</title>",body,re.I|re.S)[:2],"clues":matches},ensure_ascii=False)[:6500],flush=True)
-           with open("arcgis_catalog_discovery/geo_open_data_hub_meta.json","w",encoding="utf8") as w:json.dump({"http":code,"title":re.findall(r"<title[^>]*>(.*?)</title>",body,re.I|re.S)[:2],"clues":matches},w,ensure_ascii=False,indent=2)
-          except Exception as e:print("HUB_FAIL",type(e).__name__,str(e)[:120],flush=True)
+            j=req(P+"content/items/"+id+"/data?f=json")
+            layers=[]
+            for x in j.get("operationalLayers",[]):
+             layers.append({"title":x.get("title"),"id":x.get("id"),"type":x.get("layerType"),"url":x.get("url"),"n":len(x.get("layers",[]))})
+            print("MAP",json.dumps({"label":label,"itemId":id,"error":j.get("error"),"layers":layers,"baseMap":str(j.get("baseMap",{}).get("title"))[:80]},ensure_ascii=False)[:9500],flush=True)
+            with open("gis_focused_source_verification/"+label+"_webmap.json","w",encoding="utf8") as o:json.dump(j,o,ensure_ascii=False,indent=2)
+           except Exception as e:print("MAP_ERR",label,type(e).__name__,str(e)[:120],flush=True)
+          slugs=[
+           ("ilot_4326",10),
+           ("7ccef08f511740fc92ce9763afb32d66_view_1589283511312",5),
+           ("c0bd8d559041438eb06f9e08761d9052_view_1588678607727",5),
+           ("0f6dacfdb821449582f6f0472016b241_view_1565793602360",5),
+           ("ZONES_IND",0),
+           ("Monuments_sites_archeologiques_Nabeul_2019",0),
+           ("Projet_Municipalité_Raoued",4)]
+          def inspect(x):
+           name,id=x
+           b=S+"/"+urllib.parse.quote(name)+"/FeatureServer/"+str(id)
+           t=time.monotonic();r={"service":name,"layer_id":id,"url":b}
+           try:
+            m=req(b+"?f=json")
+            r.update({"error":m.get("error"),"name":m.get("name"),"geometry":m.get("geometryType"),"extent":m.get("extent"),"fields":[{"name":v.get("name"),"type":v.get("type")} for v in m.get("fields",[])],"description":str(m.get("description",""))[:150]})
+            if not m.get("error"):
+             q=req(b+"/query?"+urllib.parse.urlencode({"where":"1=1","returnCountOnly":"true","f":"json"}))
+             r["count"]=q.get("count");r["count_error"]=q.get("error")
+             if isinstance(q.get("count"),int) and q["count"]>0:
+              oid=m.get("objectIdField","OBJECTID")
+              j=req(b+"/query?"+urllib.parse.urlencode({"where":"1=1","outFields":oid,"returnGeometry":"true","outSR":"4326","resultRecordCount":"1","f":"json"}))
+              v=(j.get("features") or [{}])[0];g=v.get("geometry") or {}
+              r["sample_geometry_verified"]=bool(g.get("rings") or g.get("x") is not None or g.get("paths"))
+              r["geometry_type"]=list(g)[:4];r["sample_error"]=j.get("error")
+           except Exception as e:r["request_error"]=type(e).__name__+":"+str(e)[:120]
+           r["elapsed"]=round(time.monotonic()-t,1)
+           print("VECTOR",json.dumps(r,ensure_ascii=False)[:6500],flush=True)
+           return r
+          with concurrent.futures.ThreadPoolExecutor(max_workers=4) as p:vectors=list(p.map(inspect,slugs))
+          with open("gis_focused_source_verification/candidate_layers.json","w",encoding="utf8") as o:json.dump(vectors,o,ensure_ascii=False,indent=2)
+          queries=[
+           ("org_hammamet","orgid:"+ORG+" AND (Hammamet OR Nabeul OR Kelibia OR Kélibia)"),
+           ("org_cadastre","orgid:"+ORG+" AND (cadastre OR parcel OR parcelle OR foncier OR lotissement)"),
+           ("org_afh","orgid:"+ORG+" AND (AFH OR AFI OR AFT OR ilot OR îlot)")]
+          for label,phrase in queries:
+           try:
+            j=req(P+"search?"+urllib.parse.urlencode({"q":phrase,"num":"100","f":"json"}))
+            res=[{"title":v.get("title"),"id":v.get("id"),"type":v.get("type"),"url":v.get("url"),"owner":v.get("owner")} for v in j.get("results",[])]
+            print("ORG_QUERY",json.dumps({"label":label,"total":j.get("total"),"results":res[:90]},ensure_ascii=False)[:9800],flush=True)
+            with open("gis_focused_source_verification/"+label+"_search.json","w",encoding="utf8") as o:json.dump({"total":j.get("total"),"results":res},o,ensure_ascii=False,indent=2)
+           except Exception as e:print("ORG_QUERY_ERR",label,type(e).__name__,str(e)[:130],flush=True)
 
           PYCODE
-      - name: Archive public GIS catalog and service schemas
+      - name: Archive scoped verified ArcGIS datasets
         uses: actions/upload-artifact@v4
         with:
-          name: malak-gis-arcgis-org-public-catalog-20261114
-          path: arcgis_catalog_discovery/
+          name: malak-gis-targeted-afh-parcel-verification
+          path: gis_focused_source_verification/
           retention-days: 7
