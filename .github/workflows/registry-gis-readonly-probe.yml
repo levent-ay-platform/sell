@@ -7,89 +7,66 @@ permissions:
 jobs:
   probe:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 4
     steps:
-      - name: Run bounded coverage of independent GIS capabilities and ArcGIS hosted alternatives
+      - name: Inspect public PAU linked documents and filter ArcGIS portal catalog to issuing org
         run: |
           python3 - <<'PYCODE'
-          import urllib.request,urllib.parse,urllib.error,json,time,concurrent.futures,os,re
-          os.makedirs("geopau_live_capability_audit",exist_ok=True)
-          base="https://geopau.gov.tn/arcgisserver/rest/services/public/PAUs_public/MapServer"
-          tests=[
-          ("BASELINE","layer69_metadata",base+"/69",{"f":"json"},12),
-          ("BASELINE","layer66_metadata",base+"/66",{"f":"json"},12),
-          ("RENDER","PAU_legend",base+"/legend",{"f":"json"},16),
-          ("RENDER","export_near_sidi_json",base+"/export",{"bbox":"628500,4029200,632500,4033200","bboxSR":"32632","imageSR":"32632","size":"256,256","layers":"show:69,60,66","format":"png32","transparent":"true","f":"json"},19),
-          ("RENDER","export_near_sidi_image",base+"/export",{"bbox":"628500,4029200,632500,4033200","bboxSR":"32632","imageSR":"32632","size":"256,256","layers":"show:69,60,66","format":"png32","transparent":"true","f":"image"},19),
-          ("QUERY_NEW","zone_geojson",base+"/60/query",{"where":"OBJECTID=1","outFields":"OBJECTID,Code,Vocation,PAU_ID","returnGeometry":"true","outSR":"4326","f":"geojson"},16),
-          ("QUERY_NEW","limite_count",base+"/69/query",{"where":"1=1","returnCountOnly":"true","f":"json"},16),
-          ("QUERY_NEW","lotissement_count",base+"/66/query",{"where":"1=1","returnCountOnly":"true","f":"json"},16),
-          ("QUERY_NEW","ilots_extent",base+"/12/query",{"where":"1=1","returnExtentOnly":"true","f":"json"},16),
-          ("ALTERNATE","LimitesAdmin_FS_root","https://geopau.gov.tn/arcgisserver/rest/services/public/LimitesAdmin/FeatureServer",{"f":"json"},16),
-          ("ALTERNATE","OSM_FS_root","https://geopau.gov.tn/arcgisserver/rest/services/public/OSM_FS/FeatureServer",{"f":"json"},16),
-          ("ALTERNATE","LimitesAdmin_FS_0","https://geopau.gov.tn/arcgisserver/rest/services/public/LimitesAdmin/FeatureServer/0",{"f":"json"},16),
-          ("ALTERNATE","OSM_FS_0","https://geopau.gov.tn/arcgisserver/rest/services/public/OSM_FS/FeatureServer/0",{"f":"json"},16),
-          ("PORTAL","tunisia_search_pau","https://tunisia.maps.arcgis.com/sharing/rest/search",{"q":"PAU","num":"30","f":"json"},20),
-          ("PORTAL","tunisia_search_cadastre","https://tunisia.maps.arcgis.com/sharing/rest/search",{"q":"cadastre","num":"30","f":"json"},20),
-          ("APP","eSearch_config","https://geopau.gov.tn/app_sig_pau_tunisie_public/configs/eSearch/config_widgets_eSearch_Widget_41.json",None,16),
-          ("APP","Search_config","https://geopau.gov.tn/app_sig_pau_tunisie_public/configs/Search/config_widgets_Search_Widget_22.json",None,16)
-          ]
-          def probe(t):
-           category,label,url,params,timeout=t
-           start=time.monotonic(); u=url+("?" +urllib.parse.urlencode(params) if params else "")
+          import urllib.request,urllib.parse,urllib.error,json,time,re,html,os
+          os.makedirs("geopau_docs_and_portal",exist_ok=True)
+          def read(label,url,timeout=16,save=False):
+           st=time.monotonic()
            try:
-            with urllib.request.urlopen(urllib.request.Request(u,headers={"User-Agent":"Mozilla/5.0 (Malak read-only independent GIS capability audit)","Accept":"application/json,image/png,*/*;q=0.5"}),timeout=timeout) as r: 
-             b=r.read(500000);meta={"status":r.status,"content_type":r.headers.get("content-type"),"bytes":len(b),"final_url":r.url.split("?")[0]}
-            r={"category":category,"test":label,"secs":round(time.monotonic()-start,1),"http":meta,"success":False}
+            with urllib.request.urlopen(urllib.request.Request(url,headers={"User-Agent":"Mozilla/5.0 (Malak public GeoPAU evidence audit)","Accept":"text/html,application/json,image/png,*/*;q=0.2"}),timeout=timeout) as r:
+             b=r.read(250000);code=r.status;ct=r.headers.get("content-type");final=r.url
+            s=b.decode("utf8","replace")
+            result={"test":label,"http":code,"bytes":len(b),"content_type":ct,"final_url":final,"elapsed":round(time.monotonic()-st,1)}
             try:
-             v=json.loads(b)
-             r["json_error"]=v.get("error")
-             r["json_keys"]=list(v.keys())[:16]
-             if "results" in v: r["results_count"]=len(v["results"]) if isinstance(v["results"],list) else None
-             if "features" in v:
-              r["feature_count"]=len(v["features"]) if isinstance(v["features"],list) else None
-              r["sample_feature"]=(v.get("features") or [None])[0]
-             if "layers" in v:
-              r["layer_count"]=len(v["layers"])
-              r["layers_sample"]=[{"id":x.get("id"),"name":x.get("name")} for x in v["layers"][:25]]
-             if "count" in v:r["count"]=v["count"]
-             if "extent" in v:r["extent"]=v["extent"]
-             if "objectIds" in v:r["objectIds_count"]=len(v.get("objectIds") or [])
-             if "href" in v:r["href"]=v["href"]
-             if "total" in v:r["total"]=v["total"]
-             if label.startswith("tunisia_search"):r["items_sample"]=[{"id":x.get("id"),"title":x.get("title"),"type":x.get("type"),"url":x.get("url"),"access":x.get("access")} for x in v.get("results",[])[:14]]
-             if label in ("eSearch_config","Search_config"):
-              r["top_keys"]=list(v.keys())[:25]
-              r["static_config"]=json.dumps(v,ensure_ascii=False)[:13000]
-             r["success"]=not bool(v.get("error")) and bool("features" in v or "count" in v or "extent" in v or "layers" in v or "services" in v or "href" in v or "results" in v or "sources" in v)
-             if label in ("eSearch_config","Search_config") or r["success"] and label in ("PAU_legend","LimitesAdmin_FS_root","OSM_FS_root","LimitesAdmin_FS_0","OSM_FS_0","tunisia_search_pau","tunisia_search_cadastre"):
-              with open("geopau_live_capability_audit/"+label+".json","w",encoding="utf8") as f:json.dump(v,f,ensure_ascii=False,indent=2)
+             j=json.loads(b);result["json_keys"]=list(j)[:15]
+             result["id"]=j.get("id");result["owner"]=j.get("owner");result["orgId"]=j.get("orgId");result["title"]=j.get("title")
+             if "results" in j:
+              result["total"]=j.get("total")
+              result["results"]=[{"id":x.get("id"),"title":x.get("title"),"owner":x.get("owner"),"type":x.get("type"),"url":x.get("url")} for x in j["results"][:22]]
+             if save:
+              with open("geopau_docs_and_portal/"+label+".json","w",encoding="utf8") as w:json.dump(j,w,ensure_ascii=False,indent=2)
             except Exception:
-             r["body_signature"]=b[:20].hex()
-             r["html_like"]=b[:300].lstrip().lower().startswith((b"<!doctype",b"<html"))
-             r["image_png"]=b[:8]==b"\x89PNG\r\n\x1a\n"
-             if r["image_png"]:
-              with open("geopau_live_capability_audit/"+label+".png","wb") as f:f.write(b)
-             r["success"]=r["image_png"]
-            print("PROBE",json.dumps(r,ensure_ascii=False)[:14500],flush=True)
-            return r
+             result["body_head"]=s[:240] if "image" not in (ct or "") else "binary image"
+             if "<html" in s.lower():
+              result["directory_listing"]=bool(re.search("Index of|Directory Listing|Directory of|^<h1>.*docs|href=[\"']\\d+/?[\"']",s,re.I|re.M))
+              result["hrefs"]=re.findall(r'href=["\\']([^"\\']+)',s,re.I)[:35]
+              if save:
+               with open("geopau_docs_and_portal/"+label+".html","w",encoding="utf8") as w:w.write(s)
+            print("TEST",json.dumps(result,ensure_ascii=False)[:6500],flush=True)
+            return result
            except urllib.error.HTTPError as e:
-            r={"category":category,"test":label,"secs":round(time.monotonic()-start,1),"http_status":e.code,"error":str(e)[:130]}
-           except Exception as e:
-            r={"category":category,"test":label,"secs":round(time.monotonic()-start,1),"error_type":type(e).__name__,"error":str(e)[:130]}
-           print("PROBE",json.dumps(r,ensure_ascii=False),flush=True)
-           return r
-          # low concurrency avoids stressing the public service, 3 jobs max; each path distinct
-          with concurrent.futures.ThreadPoolExecutor(max_workers=3) as pool:
-           results=list(pool.map(probe,tests))
-          with open("geopau_live_capability_audit/results.json","w",encoding="utf8") as f:json.dump(results,f,ensure_ascii=False,indent=2)
-          print("SUMMARY",json.dumps({"total":len(results),"successes":[x["test"] for x in results if x.get("success")],"feature_row_successes":[x["test"] for x in results if isinstance(x.get("feature_count"),int) and x["feature_count"]>0],"failure_count":len([x for x in results if not x.get("success")])},ensure_ascii=False),flush=True)
+            result={"test":label,"http":e.code,"location":e.headers.get("Location"),"body_head":e.read(180).decode("utf8","replace"),"elapsed":round(time.monotonic()-st,1)}
+           except Exception as e:result={"test":label,"error":type(e).__name__,"details":str(e)[:140],"elapsed":round(time.monotonic()-st,1)}
+           print("TEST",json.dumps(result,ensure_ascii=False),flush=True)
+           return result
+          base="https://geopau.gov.tn/apps/docs/"
+          read("docs_root",base,15,True)
+          read("docs_folder_icon",base+"folder.png",12,False)
+          read("docs_example_first_index",base+"1/",12,False)
+          item="https://tunisia.maps.arcgis.com/sharing/rest/content/items/95503522a0474dd1ac8fc2a8d4368f02?f=json"
+          it=read("official_webmap_item",item,15,True)
+          org=it.get("orgId")
+          if org:
+           searches=[
+           ("arcgis_org_pau",f"orgid:{org} AND PAU"),
+           ("arcgis_org_cadastre",f"orgid:{org} AND (cadastre OR parcellaire OR lotissement)"),
+           ("arcgis_org_geopau",f"orgid:{org} AND (urbanisme OR amenagement)")
+           ]
+           for label,q in searches:
+            params=urllib.parse.urlencode({"f":"json","q":q,"num":"30","sortField":"modified","sortOrder":"desc"})
+            read(label,"https://www.arcgis.com/sharing/rest/search?"+params,20,True)
+          else:
+           print("NO_ORG_ID: portal items previously returned broad global PAU results; do not treat as Tunisian official.",flush=True)
 
           PYCODE
-      - name: Save actual responses and result matrix
+      - name: Archive documents portal metadata results
         uses: actions/upload-artifact@v4
         with:
-          name: geopau-malak-capability-audit
-          path: geopau_live_capability_audit/
+          name: geopau-doc-links-and-org-scoped-search
+          path: geopau_docs_and_portal/
           retention-days: 7
-          if-no-files-found: error
+          if-no-files-found: warn
