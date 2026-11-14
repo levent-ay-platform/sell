@@ -38,12 +38,14 @@ class LivePilotJourneyTest{
     }
     private fun tap(text:String){visible(text).click();device.waitForIdle()}
     private fun hideKeyboard(){
-        device.waitForIdle(1000)
-        val google=device.wait(Until.hasObject(By.pkg("com.google.android.inputmethod.latin")),2000)
-        if(google||device.hasObject(By.pkg("com.android.inputmethod.latin"))){
+        val keyboard=By.pkg(java.util.regex.Pattern.compile("com\\.(?:google\\.android|android)\\.inputmethod\\.latin"))
+        device.waitForIdle(500)
+        if(!device.wait(Until.hasObject(keyboard),1500))return
+        repeat(3){
             device.pressBack()
-            device.wait(Until.gone(By.pkg("com.google.android.inputmethod.latin")),3000)
+            if(device.wait(Until.gone(keyboard),1500))return
         }
+        throw AssertionError("Keyboard did not close; stopping before any swipe")
     }
     private fun fill(label:String,value:String){
         var node=visible(label)
