@@ -7,42 +7,28 @@ permissions:
 jobs:
   probe:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 4
     steps:
-      - name: Query real Delegation Secteur and PAU localities against certificate
+      - name: Verify official INS code 156651 against ArcGIS sector field and basic query health
         run: |
           python3 - <<'PYCODE'
-          import urllib.request,urllib.parse,urllib.error,json,time,concurrent.futures,re
+          import urllib.request,urllib.parse,json,time,concurrent.futures
           root="https://geopau.gov.tn/arcgisserver/rest/services/public/PAUs_public/MapServer"
-          jobs=[]
-          for id in [0,1,2,4,69]:
-           jobs.append(("META_"+str(id),f"{root}/{id}?f=json"))
-          checks=[
-           ("DELEG_HAMMAMET",1,"Nom LIKE '%Hammamet%'"),
-           ("DELEG_HAMMAM_AR",1,"Nom LIKE '%حمامات%'"),
-           ("SECT_MRADA",4,"Nom LIKE '%Mrada%'"),
-           ("SECT_FERJ",4,"Nom LIKE '%Ferj%'"),
-           ("SECT_MRAD",4,"Nom LIKE '%Mrad%'"),
-           ("SECT_SIDI",4,"Nom LIKE '%Jedidi%'"),
-           ("SECT_AR_MRAD",4,"Nom LIKE '%مرادة%'"),
-           ("SECT_HAMMAM",4,"Nom LIKE '%Hammamet%'"),
-           ("PAU_LIB_HAMMAM",69,"Libelle LIKE '%Hammamet%'"),
-           ("PAU_LIB_MRADA",69,"Libelle LIKE '%Mrada%'")]
-          for label,lid,where in checks:
-           p={"f":"json","where":where,"outFields":"*","returnGeometry":"false","resultRecordCount":20}
-           jobs.append((label,f"{root}/{lid}/query?"+urllib.parse.urlencode(p)))
-          def get(item):
-           k,u=item;t=time.monotonic()
+          requests=[
+          ("COUNT_SECTEUR",4,{"where":"1=1","returnCountOnly":"true","f":"json"}),
+          ("EXACT_SECT_ID",4,{"where":"Sect_id=156651","outFields":"Sect_id,Nom,Deleg_id","returnGeometry":"false","f":"json"}),
+          ("EXACT_DELEG_ID",1,{"where":"Deleg_id=1566","outFields":"Deleg_id,Nom,Gouv_id","returnGeometry":"false","f":"json"}),
+          ("OBJECTID_GOUV",0,{"objectIds":"1","outFields":"Gouv_id,Nom","returnGeometry":"false","f":"json"}),
+          ("OBJECTID_SECT",4,{"objectIds":"1","outFields":"Sect_id,Nom,Deleg_id","returnGeometry":"false","f":"json"})]
+          def run(x):
+           name,lid,p=x;u=f"{root}/{lid}/query?"+urllib.parse.urlencode(p)
+           t=time.monotonic()
            try:
-            with urllib.request.urlopen(urllib.request.Request(u,headers={"User-Agent":"Mozilla/5.0 MalakGeoPublicAudit/1.0","Accept":"application/json"}),timeout=21) as r:raw=r.read(450000);ct=r.headers.get("Content-Type")
-            d=json.loads(raw);return k,d,{"bytes":len(raw),"type":ct,"secs":round(time.monotonic()-t,1)}
-           except Exception as e:return k,{},{"error":type(e).__name__+":"+str(e)[:120],"secs":round(time.monotonic()-t,1)}
-          with concurrent.futures.ThreadPoolExecutor(max_workers=5) as ex:
-           for key,d,info in ex.map(get,jobs):
-            if key.startswith("META_"):
-             print("LAYER_META",key,json.dumps({"status":info,"name":d.get("name"),"type":d.get("type"),"geometry":d.get("geometryType"),"fields":[{"n":z.get("name"),"a":z.get("alias")} for z in (d.get("fields") or [])][:40],"extent":d.get("extent"),"error":d.get("error")},ensure_ascii=False),flush=True)
-            else:
-             ff=d.get("features") or []
-             print("QUERY_MATCH",key,json.dumps({"status":info,"results":len(ff),"exceeded":d.get("exceededTransferLimit"),"features":[x.get("attributes") for x in ff[:20]],"error":d.get("error")},ensure_ascii=False)[:4300],flush=True)
+            with urllib.request.urlopen(urllib.request.Request(u,headers={"User-Agent":"Mozilla/5.0 MalakCheckJoin/1.0","Accept":"application/json"}),timeout=17) as r:
+             raw=r.read(90000);status=r.status
+            d=json.loads(raw)
+            print("JOIN_PROBE",name,"http",status,"elapsed",round(time.monotonic()-t,1),"data",json.dumps({"count":d.get("count"),"features":[y.get("attributes") for y in d.get("features",[])[:5]],"error":d.get("error")},ensure_ascii=False),flush=True)
+           except Exception as e:print("JOIN_PROBE_ERROR",name,type(e).__name__,str(e)[:120],"elapsed",round(time.monotonic()-t,1),flush=True)
+          with concurrent.futures.ThreadPoolExecutor(max_workers=3) as ex:list(ex.map(run,requests))
 
           PYCODE
