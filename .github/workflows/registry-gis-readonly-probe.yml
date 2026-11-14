@@ -9,33 +9,30 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Probe Nabeul raster group and bounded map export (public GET)
+      - name: Geocode land-certificate toponym with bounded public APIs
         run: |
           python3 - <<'PYCODE'
-          import urllib.request,urllib.parse,urllib.error,json,math,time
-          base="https://geopau.gov.tn/arcgisserver/rest/services/public/SCANs_public/MapServer"
-          urls={
-          "nabeul_group":base+"/176?f=json",
-          "beni_khaled":base+"/157?f=json",
-          "kelibia":base+"/155701?f=json",
-          "beni_khaled_export":base+"/export?"+urllib.parse.urlencode({"bbox":"1177017.1273561327,4387922.946581527,1181475.2784676866,4392480.682813505","bboxSR":3857,"imageSR":3857,"layers":"show:157","size":"850,850","format":"png32","transparent":"false","f":"json"})
-          }
-          for label,u in urls.items():
-           st=time.monotonic()
+          import urllib.request,urllib.parse,json,time,ssl
+          S=[
+          ("nominatim_mrada_fr","https://nominatim.openstreetmap.org/search",{"q":"Mrada et Ferjane, Hammamet, Tunisia","format":"jsonv2","limit":"5","addressdetails":"1"}),
+          ("nominatim_mrada_ar","https://nominatim.openstreetmap.org/search",{"q":"مرادة وفرجان الحمامات تونس","format":"jsonv2","limit":"5","addressdetails":"1"}),
+          ("nominatim_mrada_alt","https://nominatim.openstreetmap.org/search",{"q":"Ferjane Nabeul Tunisia","format":"jsonv2","limit":"5"}),
+          ("nominatim_215","https://nominatim.openstreetmap.org/search",{"q":"Khmis Hammamet Nabeul Tunisia","format":"jsonv2","limit":"5"}),
+          ("photon_fr","https://photon.komoot.io/api/",{"q":"Mrada Ferjane Tunisia","limit":"8"}),
+          ("photon_ar","https://photon.komoot.io/api/",{"q":"مرادة فرجان الحمامات","limit":"8"}),
+          ]
+          for name,base,p in S:
+           url=base+"?"+urllib.parse.urlencode(p)
            try:
-            with urllib.request.urlopen(urllib.request.Request(u,headers={"User-Agent":"MalakPublicGISResearch/1.0"}),timeout=18) as r:
-             raw=r.read(300000);typ=r.headers.get("Content-Type")
-            print("RESPONSE",label,typ,len(raw),"secs",round(time.monotonic()-st,1),flush=True)
-            d=json.loads(raw)
-            if "error" in d: print("ARC_ERROR",label,d["error"],flush=True)
-            elif label=="beni_khaled_export":
-             print("MAP_EXPORT",{"href":d.get("href"),"width":d.get("width"),"height":d.get("height"),"extent":d.get("extent")},flush=True)
+            start=time.monotonic()
+            with urllib.request.urlopen(urllib.request.Request(url,headers={"User-Agent":"MalakGeoResearch/1.0 (noncommercial, provenance audit)","Accept":"application/json"}),timeout=12) as r:
+             data=json.loads(r.read(400000));ctype=r.headers.get("content-type")
+            if isinstance(data,list):
+             matches=[{"name":x.get("display_name"),"lat":x.get("lat"),"lon":x.get("lon"),"type":x.get("type"),"boundingbox":x.get("boundingbox"),"osm_id":x.get("osm_id")} for x in data[:6]]
             else:
-             x=d.get("extent") or {}
-             coords=None
-             if x and x.get("spatialReference",{}).get("wkid") in (3857,102100):
-              coords=[round(v,5) for v in [x["xmin"]/6378137*180/math.pi,(2*math.atan(math.exp(x["ymin"]/6378137))-math.pi/2)*180/math.pi,x["xmax"]/6378137*180/math.pi,(2*math.atan(math.exp(x["ymax"]/6378137))-math.pi/2)*180/math.pi]]
-             print("LAYER",label,{"id":d.get("id"),"name":d.get("name"),"type":d.get("type"),"geometryType":d.get("geometryType"),"child_ids":d.get("subLayers"),"field_count":len(d.get("fields") or []),"extent_gps_minlon_minlat_maxlon_maxlat":coords},flush=True)
-           except Exception as e:print("NETWORK_ERROR",label,type(e).__name__,str(e)[:120],flush=True)
+             matches=[{"name":x.get("properties",{}).get("name"),"city":x.get("properties",{}).get("city"),"county":x.get("properties",{}).get("county"),"osm_type":x.get("properties",{}).get("osm_type"),"coordinates":x.get("geometry",{}).get("coordinates")} for x in data.get("features",[])[:6]]
+            print("GEOCODE",name,"count",len(matches),"results",json.dumps(matches,ensure_ascii=False),"elapsed",round(time.monotonic()-start,2),flush=True)
+           except Exception as e:print("GEOCODE_ERROR",name,type(e).__name__,str(e)[:125],flush=True)
+           time.sleep(1.2)
 
           PYCODE
