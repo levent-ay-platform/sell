@@ -7,69 +7,52 @@ permissions:
 jobs:
   probe:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 4
     steps:
-      - name: Discover public AFH land GIS server and related public real estate map sources
+      - name: Validate non-placeholder land title numbers and search national CKAN catalog for cadastral datasets
         run: |
           python3 - <<'PYCODE'
-          import urllib.request,urllib.parse,urllib.error,json,re,time,concurrent.futures,os
-          os.makedirs("graphtech_afh_source_audit",exist_ok=True)
-          root="https://arcgis.graphtech-gis.com/server/rest/services"
-          targets=[
-          ("graphtech_services_root",root+"?f=json"),
-          ("AFH_Demo_root",root+"/AFH/AFH_Demo/MapServer?f=json"),
-          ("AFH_Demo_layers",root+"/AFH/AFH_Demo/MapServer/layers?f=json"),
-          ("AFH_folder",root+"/AFH?f=json"),
-          ("Hammamet_webmap","https://www.arcgis.com/sharing/rest/content/items/38e44ebd99504e728e060c23c9931268/data?f=json"),
-          ("SIF_MDEAF_home","https://www.graphtech-gis.com/MDEAF/"),
-          ]
-          def fetch(q):
-           label,url=q;t=time.monotonic();res={"label":label,"url":url}
+          import urllib.request,urllib.parse,urllib.error,json,re,time,os,collections,statistics
+          os.makedirs("real_data_source_final",exist_ok=True)
+          def get(label,url,timeout=17):
+           t=time.monotonic()
            try:
-            req=urllib.request.Request(url,headers={"User-Agent":"Mozilla/5.0 (public ArcGIS atlas research, read only)","Accept":"application/json,text/html,*/*;q=0.3"})
-            with urllib.request.urlopen(req,timeout=21) as r:
-             b=r.read(1200000)
-             res.update({"http":r.status,"type":r.headers.get("content-type"),"byte_count":len(b),"final_url":r.url})
-            try:
-             j=json.loads(b)
-             res["json_error"]=j.get("error")
-             if "folders" in j:res["folders"]=j["folders"]
-             if "services" in j:res["services"]=[{"name":x.get("name"),"type":x.get("type")} for x in j["services"]]
-             if "layers" in j:res["layers"]=[{"id":x.get("id"),"name":x.get("name"),"type":x.get("type"),"geometryType":x.get("geometryType"),"fields":[f.get("name") for f in x.get("fields",[])]} for x in j["layers"]][:100]
-             if "operationalLayers" in j:res["operationalLayers"]=[{"title":x.get("title"),"url":x.get("url"),"type":x.get("layerType")} for x in j["operationalLayers"]][:30]
-             res["description"]=(j.get("description") or j.get("serviceDescription") or "")[:160]
-             if not j.get("error") and (j.get("layers") is not None or j.get("folders") is not None or j.get("services") is not None):
-              with open("graphtech_afh_source_audit/"+label+".json","w",encoding="utf8") as o:json.dump(j,o,ensure_ascii=False,indent=2)
-            except Exception:
-             s=b.decode("utf8","replace")
-             res["title"]=re.findall("<title[^>]*>(.*?)</title>",s,re.I|re.S)[:2]
-             res["snippet"]=s[:180]
-             res["arcgis_refs"]=re.findall(r'https?://[^"\'<> ]+(?:MapServer|FeatureServer)',s)[:12]
-           except urllib.error.HTTPError as e:
-            res["http"]=e.code;res["body"]=e.read(120).decode("utf8","replace")
-           except Exception as e:res["error"]=type(e).__name__+":"+str(e)[:120]
-           res["time"]=round(time.monotonic()-t,1)
-           print("SITE",json.dumps(res,ensure_ascii=False)[:12500],flush=True)
-           return res
-          with concurrent.futures.ThreadPoolExecutor(max_workers=3) as p:allres=list(p.map(fetch,targets))
-          # Validate specific published cadastral text field richness without reading names/personal info
-          urls=[
-           ("Raoued_approved_lots","https://services1.arcgis.com/zcZDLWCe77bUzzw7/arcgis/rest/services/Projet_Municipalit%C3%A9_Raoued/FeatureServer/4/query", "TFN_رسم"),
-          ]
-          for label,url,field in urls:
-           for suffix,where in (("not_null",field+" IS NOT NULL"),("nonblank",field+" IS NOT NULL AND "+field+" <> ' '"),("target_555941",field+"='555941'")):
-            q=url+"?"+urllib.parse.urlencode({"where":where,"returnCountOnly":"true","f":"json"})
-            t=time.monotonic()
-            try:
-             with urllib.request.urlopen(urllib.request.Request(q,headers={"User-Agent":"Mozilla/5.0"}),timeout=12) as r:j=json.load(r)
-             print("ATTRIBUTE_AUDIT",json.dumps({"service":label,"field":field,"test":suffix,"count":j.get("count"),"error":j.get("error"),"secs":round(time.monotonic()-t,2)},ensure_ascii=False),flush=True)
-            except Exception as e:print("ATTRIBUTE_ERROR",label,suffix,type(e).__name__,str(e)[:120],flush=True)
-          with open("graphtech_afh_source_audit/result_summary.json","w",encoding="utf8") as o:json.dump(allres,o,ensure_ascii=False,indent=2)
+            with urllib.request.urlopen(urllib.request.Request(url,headers={"User-Agent":"Mozilla/5.0 (Malak public official data discovery)","Accept":"application/json"}),timeout=timeout) as r:raw=r.read(700000)
+            j=json.loads(raw);print("GET",label,"OK",len(raw),"elapsed",round(time.monotonic()-t,1),"json_error",j.get("error"),flush=True);return j
+           except Exception as e:print("GET",label,"ERROR",type(e).__name__,str(e)[:110],"elapsed",round(time.monotonic()-t,1),flush=True);return None
+          url="https://services1.arcgis.com/zcZDLWCe77bUzzw7/arcgis/rest/services/Projet_Municipalit%C3%A9_Raoued/FeatureServer/4/query"
+          p={"where":"1=1","outFields":"OBJECTID_12,TFN_رسم,SURFACE","resultRecordCount":"50","returnGeometry":"false","f":"json"}
+          data=get("raoued_lot_numbers",url+"?"+urllib.parse.urlencode(p))
+          if data and data.get("features"):
+           vals=[x.get("attributes",{}).get("TFN_رسم") for x in data["features"]]
+           sizes=[x.get("attributes",{}).get("SURFACE") for x in data["features"]]
+           clean=[str(v).strip() for v in vals if v is not None and str(v).strip()]
+           result={"features":len(vals),"nonblank":len(clean),"numeric_only_count":sum(bool(re.fullmatch(r"\d+",v)) for v in clean),"unique_nonblank":len(set(clean)),"placeholder_count":sum(v in ("0","000","N/A","-") for v in clean),"length_histogram":dict(collections.Counter(len(v) for v in clean)),"surface_numeric_count":len([v for v in sizes if isinstance(v,(int,float))])}
+           print("RAOUED_TITLE_HEALTH",json.dumps(result,ensure_ascii=False),flush=True)
+           with open("real_data_source_final/raoued_title_quality.json","w") as o:json.dump(result,o,ensure_ascii=False,indent=2)
+          # Actual national open data CKAN is separate from vendor-run ArcGIS org
+          terms=["cadastre","parcelle","lotissement","foncier"]
+          ckan=[]
+          for term in terms:
+           u="https://catalog.data.gov.tn/api/3/action/package_search?"+urllib.parse.urlencode({"q":term,"rows":35})
+           j=get("CKAN_"+term,u)
+           if j and j.get("success"):
+            m=j.get("result",{})
+            rows=[{"title":x.get("title"),"name":x.get("name"),"organization":(x.get("organization") or {}).get("title"),"resources":[{"name":q.get("name"),"format":q.get("format"),"url":q.get("url")} for q in x.get("resources",[])][:12]} for x in m.get("results",[])]
+            print("CKAN_FOUND",json.dumps({"term":term,"count":m.get("count"),"returned":len(rows),"items":rows[:25]},ensure_ascii=False)[:14000],flush=True)
+            ckan.append({"term":term,"count":m.get("count"),"items":rows})
+          with open("real_data_source_final/national_open_data_search.json","w",encoding="utf8") as o:json.dump(ckan,o,ensure_ascii=False,indent=2)
+          p=get("CKAN_2025_admin", "https://catalog.data.gov.tn/api/3/action/package_show?id=a04051fe-0b5c-4ff1-bc7d-59dfc2732866")
+          if p and p.get("success"):
+           q=p["result"]
+           resources=[{"name":a.get("name"),"format":a.get("format"),"url":a.get("url"),"size":a.get("size"),"last_modified":a.get("last_modified")} for a in q.get("resources",[])]
+           print("OFFICIAL_ADMIN_GEOJSON",json.dumps({"publisher":(q.get("organization") or {}).get("title"),"title":q.get("title"),"resources":resources},ensure_ascii=False)[:8500],flush=True)
+           with open("real_data_source_final/official_admin_geojson_resources.json","w",encoding="utf8") as o:json.dump(resources,o,ensure_ascii=False,indent=2)
 
           PYCODE
-      - name: Archive public AFH / Hammamet source descriptions
+      - name: Save verified real estate data-source research
         uses: actions/upload-artifact@v4
         with:
-          name: malak-afh-land-map-live-service-verification
-          path: graphtech_afh_source_audit/
+          name: malak-source-discovery-final-ckan-and-titles
+          path: real_data_source_final/
           retention-days: 7
