@@ -19,7 +19,13 @@ try{
  const document={format:'pdf',pages,mayApproveOwnership:false};
  const comparison=compareUnifiedPrivateDocumentIdentity(document,identity);
  // All photographed continuation pages share the first page's document context.
- const facts=readUntrustedOcrDocument(asTextOnlyOcrDocument(document)).privateFamilyFields.facts
+ const reading=readUntrustedOcrDocument(asTextOnlyOcrDocument(document));
+ const missingPages=reading.extraction.missingPages.filter(n=>n>=1&&n<=8);
+ const reasons=[...comparison.reasons];
+ if(reading.extraction.missingPages.length)reasons.push('CERTIFICATE_PAGES_MISSING');
+ if(reading.extraction.issues.includes('INCONSISTENT_PAGE_COUNT'))
+  reasons.push('CERTIFICATE_PAGE_NUMBER_INCONSISTENT');
+ const facts=reading.privateFamilyFields.facts
    .filter(f=>['CANDIDATE','LOW_CONFIDENCE'].includes(f.status)&&f.value!==null&&f.evidence.length>0)
    .map(f=>({key:f.key,value:f.value,page:f.evidence[0].page,status:f.status,source:f.evidence[0].source,confidence:f.evidence[0].confidence,bbox:f.evidence[0].bbox}));
 
@@ -35,6 +41,7 @@ try{
   assessment:comparison.assessment,matchedRole:role?.role??null,
   documentCinStatus:role?.documentCinStatus??null,
   matchedRightsHolder:role?comparison.matchedRightsHolder:null,propertyFacts,
+  reasons:[...new Set(reasons)],missingPages,
   certificatePages:p,identityPages:1,ownershipVerified:false,identityVerified:false,
   mayPublish:false,requiresHumanReview:true}));
 }catch{process.stderr.write('PAIR_PROCESSING_FAILED\n');process.exitCode=1;}

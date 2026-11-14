@@ -125,7 +125,7 @@ class MemoryPilot:
                     not re.fullmatch(r"[0-9]{8}",full) or fields.get("cinLast4")!=full[-4:]):
                 raise ValueError("inconsistent CIN")
             return {**fields,"ok":True,"pilotOcr":True,"schemaVersion":1,
-                    "engine":"arabic-v5","identityVerified":False,
+                    "engine":"arabic-v5+mac-vision" if os.environ.get('MALAK_VISION_BIN') else "arabic-v5","identityVerified":False,
                     "ownershipVerified":False,"mayPublish":False}
         finally:
             photo.fill(0)

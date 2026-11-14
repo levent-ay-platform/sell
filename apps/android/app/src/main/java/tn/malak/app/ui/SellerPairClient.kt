@@ -389,6 +389,12 @@ internal suspend fun comparePilotDocumentsAndIdentity(
             throw OwnerPairException(502)
         val pages=data.optInt("certificatePages")
         if(pages !in 1..8)throw OwnerPairException(502)
+        val diagnostics=try {
+            val reasonArray=data.optJSONArray("reasons")
+            val missingArray=data.optJSONArray("missingPages")
+            pilotReviewDiagnostics(reasonArray?.let{a->(0 until a.length()).map{a.getString(it)}},
+                missingArray?.let{a->(0 until a.length()).map{a.getInt(it)}},pages)
+        } catch(_:Exception){throw OwnerPairException(502)}
         val matchedRole=if(data.isNull("matchedRole"))null else data.optString("matchedRole")
         val cinStatus=if(data.isNull("documentCinStatus"))null else
             data.optString("documentCinStatus")
@@ -449,9 +455,9 @@ internal suspend fun comparePilotDocumentsAndIdentity(
         }
         CertificateIdentityReview(
             "INSUFFICIENT_OR_AMBIGUOUS",null,null,"NOT_COMPARABLE",
-            listOf("OFFICIAL_REGISTRY_NOT_CHECKED"),FRONT_CAPTURE,pages,1,
+            diagnostics.reasons,FRONT_CAPTURE,pages,1,
             localFields=LocalOcrFields(values["registerReference"]?:
-                values["parentRegisterReference"],area,pages,
+                values["parentRegisterReference"],area,diagnostics.expectedPageCount,
                 null,null,null,null),
             detectedKind=kind,unifiedAssessment=status,unifiedRoles=roles,
             matchedRightsHolder=holder,reviewId=data.optString("reviewId").takeIf{ID.matches(it)},

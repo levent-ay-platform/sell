@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="pair_reason_document_type">لم تُقرأ تسمية الوثيقة بوضوح كافٍ. أضف نسخة أوضح وكاملة لإجراء المقارنة.</string>
     <string name="app_name">ملاك</string>
     <string name="brand_subtitle">عقارات تونس، مباشرة من أصحابها</string>
     <string name="home">الرئيسية</string>

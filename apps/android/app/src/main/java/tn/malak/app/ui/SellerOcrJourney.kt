@@ -59,6 +59,15 @@ private fun pairReasonText(code:String):Int=when(code){
     "NAME_TEXT_DIFFERS_OR_SCRIPT_MISMATCH"->R.string.pair_reason_name_diff
     "CIN_NUMBER_TEXT_DIFFERS"->R.string.pair_reason_cin_diff
     "CIN_NUMBER_UNCERTAIN"->R.string.pair_reason_cin_uncertain
+    "DOCUMENT_TYPE_NOT_CONFIRMED","DOCUMENT_TYPE_MISMATCH"->R.string.pair_reason_document_type
+    "LOW_CONFIDENCE_OR_CONFLICTING_ROLE","NO_ROLE_LABELED_PERSON",
+    "UNSUPPORTED_ROLE_EXTRACTION"->R.string.pair_reason_name_unreadable
+    "SHARED_RIGHTS_NEED_ROW_REVIEW","MULTIPLE_MATCHING_ROLES",
+    "TARGET_RIGHTS_NOT_READABLE"->R.string.pair_reason_shared_title
+    "DOCUMENT_CIN_UNREADABLE","CIN_UNREADABLE","DOCUMENT_CIN_MASKED"->R.string.pair_reason_cin_uncertain
+    "ROLE_CIN_CONFLICT","CIN_TEXT_DIFFERS"->R.string.pair_reason_cin_diff
+    "DOCUMENT_CIN_NOT_PRINTED"->R.string.pair_cin_missing
+    "OFFICIAL_REGISTRY_NOT_CHECKED","ROLE_MATCH_NOT_OWNERSHIP"->R.string.pair_reason_not_official
     "OFFICIAL_CPF_AND_DOCUMENT_AUTHENTICITY_NOT_CHECKED"->R.string.pair_reason_not_official
     else->R.string.pair_reason_other
 }
@@ -685,9 +694,7 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmission:org.j
                                 }
                             }
                         }
-                        if(result.unifiedAssessment==null||
-                            result.detectedKind=="OWNERSHIP_CERTIFICATE")
-                            result.reasons.distinct().forEach{code->
+                        result.reasons.distinct().forEach{code->
                                 Text(s(pairReasonText(code)),
                                     color=Brand.Muted,fontSize=12.sp,lineHeight=18.sp)
                             }

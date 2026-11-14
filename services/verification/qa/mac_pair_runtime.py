@@ -11,6 +11,18 @@ import time
 ROOT=Path(__file__).resolve().parents[3]
 MAX_TOTAL=12*1024*1024
 
+def identity_document(fields):
+    confidence=fields['confidencePercent']/100
+    lines=[]
+    # Existing matcher understands this explicit combined Arabic label.
+    # Never manufacture a full name from an absent component.
+    if fields['surname'] is not None and fields['givenName'] is not None:
+        lines.append('اللقب والاسم: '+fields['surname']+' '+fields['givenName'])
+    if fields['cinFull'] is not None:lines.append('CIN: '+fields['cinFull'])
+    return {'format':'image','mayApproveOwnership':False,'pages':[{'page':1,
+        'method':'ocr','lines':[{'text':t,'page':1,'confidence':confidence,
+            'source':'ocr-ar'} for t in lines]}]}
+
 def sniff(data):
     if data[:5]==b'%PDF-':return 'application/pdf'
     if data[:8]==b'\x89PNG\r\n\x1a\n':return 'image/png'
@@ -56,13 +68,7 @@ class MacPairRuntime:
                     if len(doc.get('pages',[]))+sum(len(x['pages']) for x in docs)>8:raise ValueError('too many pages')
                     docs.append(doc)
                 fields=self.pilot.read(files[-1][2],files[-1][1])
-                lines=[]
-                confidence=fields['confidencePercent']/100
-                # These are the actual labelled v5 fields, not a second OCR/model.
-                if fields['surname'] is not None:lines.append('اللقب: '+fields['surname'])
-                if fields['givenName'] is not None:lines.append('الاسم: '+fields['givenName'])
-                if fields['cinFull'] is not None:lines.append('CIN: '+fields['cinFull'])
-                front={'format':'image','mayApproveOwnership':False,'pages':[{'page':1,'method':'ocr','lines':[{'text':t,'page':1,'confidence':confidence,'source':'ocr-ar'} for t in lines]}]}
+                front=identity_document(fields)
                 payload=json.dumps({'documents':docs,'front':front},ensure_ascii=False).encode()
                 result=subprocess.run([self.node,'--experimental-strip-types',str(ROOT/'services/verification/qa/compare_mac_pair.mjs')],input=payload,stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,timeout=remaining(),check=True)
                 if len(result.stdout)>64000:raise ValueError('result size')

@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="pair_reason_document_type">Le type du document reste incertain. Ajoutez une copie plus nette et complète pour effectuer la comparaison.</string>
     <string name="app_name">ملاك</string>
     <string name="brand_subtitle">L’immobilier en Tunisie, de propriétaire à acheteur</string>
     <string name="home">Accueil</string>

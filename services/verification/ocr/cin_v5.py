@@ -314,6 +314,7 @@ def birth_date(session,letters,card,given_name_row):
     """
     h,w=card.shape[:2]
     dates=set()
+    numeric_votes=[]
     for offset in (.145,.175,.205):
         center=round(given_name_row+h*offset)
         if not h*.70<=center<=h*.92:
@@ -340,6 +341,7 @@ def birth_date(session,letters,card,given_name_row):
         year=numeric_pair(session,letters,
                           year_tight if year_tight is not None
                           else segment(.28,.54))
+        numeric_votes.append((day,year))
         month_crop=segment(.47,.76)
         gray=cv2.cvtColor(month_crop,cv2.COLOR_BGR2GRAY)
         gray=cv2.cvtColor(gray,cv2.COLOR_GRAY2BGR)
@@ -361,7 +363,11 @@ def birth_date(session,letters,card,given_name_row):
             dates.add(value)
         if len(dates)>1:
             return None
-    return next(iter(dates)) if len(dates)==1 else None
+    if dates:return next(iter(dates)) if len(dates)==1 else None
+    if numeric_votes:
+        from cin_mac_date import read_mac_birth_date
+        return read_mac_birth_date(card,given_name_row,numeric_votes)
+    return None
 
 def extract_fields(photo,session,letters):
     """Read preliminary OCR fields only; never verify legal ownership."""

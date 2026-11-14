@@ -2,6 +2,10 @@ package tn.malak.app.ui
 import org.junit.Assert.*
 import org.junit.Test
 class PilotPropertyFactsTest{
+    @Test fun historicalDeedPriceCannotSetCurrentAskingPrice(){
+        val facts=listOf(PilotPropertyFact("salePriceTnd","72000",1,"ocr-ar","CANDIDATE"))
+        assertFalse(pilotAutofill("SALE_DEED",facts).containsKey("price"))
+    }
     @Test fun uncertaintyKeepsProvenanceButCannotAutofill(){
         val low=PilotPropertyFact("soldAreaM2","185.25",2,"ocr-ar","LOW_CONFIDENCE")
         assertEquals(2,low.page)

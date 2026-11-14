@@ -7,6 +7,6 @@ internal fun pilotAutofill(kind:String?,facts:List<PilotPropertyFact>):Map<Strin
     val trusted=facts.filter{it.status=="CANDIDATE"}.associate{it.key to it.value}
     return buildMap{
         if(kind=="SALE_DEED")trusted["soldAreaM2"]?.let{put("area",it)}
-        trusted["salePriceTnd"]?.let{put("price",it)}
+        // A historical transaction price is evidence, not today's asking price.
     }
 }
