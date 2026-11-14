@@ -23,8 +23,8 @@
 - [x] Reproduce the failed month on the encrypted real sample; inspect the month visually and record sanitized observations.
 - [x] Write failing date-consensus/geometry/conflict tests, then implement bounded optional Mac fallback. Verify existing v5 tests and real sample without saving its values.
 - [x] Write failing Arabic adapter and bridge-reason/missing-page tests; correct the adapter and preserve explanations through the API and Android UI.
-- [ ] Run Python, TypeScript and Android checks. Obtain final independent review; fix important findings.
-- [ ] Build versioned APK, deploy the tested existing Mac runtime, verify live extraction and record honest accuracy limits.
+- [x] Run Python, TypeScript and Android checks. Obtain final independent review; fix important findings.
+- [x] Build versioned APK, deploy the tested existing Mac runtime, verify live extraction and record honest accuracy limits.
 
 ## Ledger
 
@@ -38,3 +38,7 @@ Fresh independent review found two Important edge cases. Both reproduced RED the
 Broader legacy Python suite: 35/40 pass; five environment errors remain in existing Linux/Tesseract ingest tests, unrelated to the active Mac Vision path: test_force_ocr_bypasses_native_fast_path, test_image_ocr_path, test_image_only_pdf_goes_through_ocr, test_native_pdf_fast_path, test_ocr_page_contains_only_advisory_quality_flags. This Mac lacks their Linux fonts, tesseract and pdftotext. Do not report this suite as passing.
 
 Ruling: this is a corroborated field-reading improvement, not model training or a multi-identity accuracy benchmark. Only one available real identity/document pair has been evaluated. Existing encrypted evidence and phone/PIN behaviour stay intact.
+
+Deployment evidence: active Mac code 731fed0; public HTTPS preview request 28004abc2f86edaa017433ba recovered the real DOB and preserved previous name/CIN. Installed APK initially exposed an engine-contract regression: changing primary engine name made existing clients reject valid replies. Added RED→GREEN contract regression, restored engine=arabic-v5, exposed supplemental reader as separate metadata, redeployed and repeated real preview successfully.
+
+Final installed emulator journey PASS: 117.744 seconds, real CameraX → HTTPS → Mac → source-backed document results → customer submission accepted for admin review. Earlier automation failures from retained multi-select picker mode and retained form scroll offset were corrected in the instrumentation driver; production flow was not changed for those cases. Synthetic test submission was not published. Debug APK versionCode 8 / 0.4.1-real-ocr-pilot; SHA-256 1bf8e6e4e814dbc1831d596460c3ff6d14f7a3f78e8c65d6e4489b81150daaf2. Sanitized evidence, screenshots and report: dist/ACCEPTANCE-0.4.1.md (local, ignored).

@@ -78,7 +78,10 @@ class LivePilotJourneyTest{
                 device.findObject(By.desc("Show roots"))?.click()
                 device.wait(Until.findObject(By.text("Downloads")),5000)?.click()
             }
-            tap("malak-synthetic-sale.png");shot("02-document-selected")
+            tap("malak-synthetic-sale.png")
+            // Android's picker can retain multi-select mode after a previous run.
+            device.wait(Until.findObject(By.text("Select")),1500)?.click()
+            shot("02-document-selected")
             tap("Continuer");tap("Photographier et lire la carte")
             val shutter=device.wait(Until.findObject(By.desc("Prendre la photo")),30000)
                 ?:throw AssertionError("Camera shutter unavailable")
@@ -102,6 +105,10 @@ class LivePilotJourneyTest{
             fill("Prix (TND)","50000")
             hideKeyboard()
             tap("Continuer")
+            // The form can retain the property's scroll offset across steps.
+            repeat(4){device.swipe(device.displayWidth/2,
+                (device.displayHeight*.35).toInt(),device.displayWidth/2,
+                (device.displayHeight*.78).toInt(),14)}
             fill("Votre nom","SYNTHETIC EMULATOR QA")
             hideKeyboard()
             tap("Envoyer pour examen")
