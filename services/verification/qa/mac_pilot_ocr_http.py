@@ -142,6 +142,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
     def result(self, status, payload):
         raw = json.dumps(payload,ensure_ascii=False,separators=(",",":")).encode()
         self.send_response(status)
+        self.send_header("X-Request-Id",secrets.token_hex(12))
+        self.send_header("X-Malak-Source-Revision",os.environ.get("MALAK_SOURCE_SHA","development"))
         self.send_header("Content-Type","application/json; charset=utf-8")
         self.send_header("Content-Length",str(len(raw)))
         self.send_header("Cache-Control","no-store, max-age=0")

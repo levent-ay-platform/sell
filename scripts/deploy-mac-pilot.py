@@ -17,7 +17,8 @@ shutil.copytree(ROOT/'.runtime/python',r/'.runtime/python',dirs_exist_ok=True)
 (r/'.runtime').mkdir(exist_ok=True)
 shutil.copy2(ROOT/'.runtime/mac-vision',r/'.runtime/mac-vision')
 a.data_root.mkdir(parents=True,mode=0o700,exist_ok=True);os.chmod(a.data_root,0o700)
-config={'MALAK_PILOT_DATA':str(a.data_root.resolve()),'MALAK_PYTHON_DEPS':str(r/'.runtime/python'),'MALAK_VISION_BIN':str(r/'.runtime/mac-vision'),'MALAK_NODE_BIN':str(Path(a.node).resolve()),'MALAK_PUBLIC_ORIGIN':'https://malak-api.ayasofia.shop'}
+revision=subprocess.run(['git','-C',str(ROOT),'rev-parse','HEAD'],capture_output=True,text=True,check=True).stdout.strip()
+config={'MALAK_SOURCE_SHA':revision,'MALAK_PILOT_DATA':str(a.data_root.resolve()),'MALAK_PYTHON_DEPS':str(r/'.runtime/python'),'MALAK_VISION_BIN':str(r/'.runtime/mac-vision'),'MALAK_NODE_BIN':str(Path(a.node).resolve()),'MALAK_PUBLIC_ORIGIN':'https://malak-api.ayasofia.shop'}
 file=r/'services/verification/qa/runtime.json';file.write_text(json.dumps(config));os.chmod(file,0o600)
 print('Code backup:',backup)
 if a.restart:

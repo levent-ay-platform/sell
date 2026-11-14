@@ -14,6 +14,8 @@ class WorkflowRoutes:
     def __init__(self,store,pair):self.store=store;self.pair=pair;self.attempts={}
     def binary(self,h,status,data,mime):
         h.send_response(status)
+        h.send_header("X-Request-Id",secrets.token_hex(12))
+        h.send_header("X-Malak-Source-Revision",os.environ.get("MALAK_SOURCE_SHA","development"))
         for k,v in [('Content-Type',mime),('Content-Length',str(len(data))),('Cache-Control','no-store'),('X-Content-Type-Options','nosniff'),('Content-Security-Policy',"default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' blob:; frame-src 'self' blob:; object-src 'none'; frame-ancestors 'none'"),('Connection','close')]:h.send_header(k,v)
         h.end_headers();h.wfile.write(data);h.close_connection=True
     def body(self,h,limit=64000,binary=False):

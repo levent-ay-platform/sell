@@ -95,3 +95,26 @@ class ReplacementEvidence(unittest.TestCase):
             self.assertEqual(result['status'],'PENDING_REVIEW')
             self.assertEqual(len(s.own_submissions(u['id'])),1)
             with self.assertRaises(WorkflowError):s.decide(admin,first['id'],'PUBLISHED',data,'Reviewed',2)
+
+class PreserveListingMedia(unittest.TestCase):
+    def test_document_only_correction_keeps_property_photos_and_coordinates(self):
+        import io
+        from PIL import Image
+        with tempfile.TemporaryDirectory() as folder:
+            s=PilotStore(Path(folder));u=s.authenticate(s.login('+21623456789','1234','A'*43)['bearer'])
+            rid=s.record_review(u['id'],[('DOCUMENT','image/png',b'first doc')],{'assessment':'INSUFFICIENT_EVIDENCE'})
+            out=io.BytesIO();Image.new('RGB',(300,200),'green').save(out,format='JPEG');s.add_photo(u['id'],rid,out.getvalue())
+            data={'reviewId':rid,'requestKey':'media-first-request-20261114','customerName':'Test Person','title':'Test land','region':'Tunis','area':'100','price':'50000','description':'','latitude':'36.8','longitude':'10.2'}
+            first=s.submit(u['id'],data)
+            s.bootstrap_admin('admin@example.test','a-long-test-password');admin=s.admin_login('admin@example.test','a-long-test-password')['id']
+            s.decide(admin,first['id'],'CHANGES_REQUESTED',data,'Replace document',1)
+            new=s.record_review(u['id'],[('DOCUMENT','image/png',b'new doc')],{'assessment':'INSUFFICIENT_EVIDENCE'})
+            update={**data,'reviewId':new,'submissionId':first['id'],'requestKey':'media-replacement-request-20261114','latitude':'','longitude':''}
+            changed=s.submit(u['id'],update)
+            self.assertEqual(changed['latitude'],'36.8');self.assertEqual(changed['longitude'],'10.2')
+            reviewed=s.admin_submissions(admin)[0]
+            photos=[x for x in reviewed['evidence'] if x['kind']=='PHOTO']
+            self.assertEqual(len(photos),1)
+            self.assertEqual(s.evidence(admin,photos[0]['id'])[1][:2],b'\xff\xd8')
+            s.decide(admin,first['id'],'PUBLISHED',changed,'Reviewed incomplete data',3)
+            self.assertEqual(len(s.public_listings()[0]['photos']),1)

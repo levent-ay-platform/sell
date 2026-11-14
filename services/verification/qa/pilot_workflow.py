@@ -109,6 +109,9 @@ CREATE TABLE IF NOT EXISTS audit(id TEXT PRIMARY KEY,actor TEXT NOT NULL,submiss
             db.execute('BEGIN IMMEDIATE')
             row=db.execute('SELECT * FROM submissions WHERE account_id=? AND request_key=?',(user,key)).fetchone()
             if row:
+                if data.get('submissionId')==row['id'] and not fields['latitude']:
+                    saved=json.loads(row['listing'])
+                    fields['latitude']=saved.get('latitude','');fields['longitude']=saved.get('longitude','')
                 if row['review_id']!=review or json.loads(row['listing'])!=fields or row['customer_name']!=name.strip():raise WorkflowError(409,'IDEMPOTENCY_CONFLICT')
                 return self._submission(db,row)
             if not db.execute('SELECT 1 FROM reviews WHERE id=? AND account_id=?',(review,user)).fetchone():raise WorkflowError(403,'REVIEW_DENIED')
@@ -119,6 +122,23 @@ CREATE TABLE IF NOT EXISTS audit(id TEXT PRIMARY KEY,actor TEXT NOT NULL,submiss
             if prior:
                 if prior['account_id']!=user or prior['status']!='CHANGES_REQUESTED':raise WorkflowError(409,'ALREADY_SUBMITTED')
                 sid=prior['id']
+                if review!=prior['review_id']:
+                    saved=json.loads(prior['listing'])
+                    if not fields['latitude']:
+                        fields['latitude']=saved.get('latitude','');fields['longitude']=saved.get('longitude','')
+                    # Property media belongs to the listing, not the replaced title/ID.
+                    oldphotos=db.execute("SELECT * FROM evidence WHERE review_id=? AND kind='PHOTO'",(prior['review_id'],)).fetchall()
+                    newphotos=db.execute("SELECT * FROM evidence WHERE review_id=? AND kind='PHOTO'",(review,)).fetchall()
+                    seen=[]
+                    for photo in newphotos:
+                        raw=photo['sealed'];seen.append(self.cipher.decrypt(raw[:12],raw[12:],(review+':'+photo['id']).encode()))
+                    for photo in oldphotos:
+                        raw=photo['sealed'];clear=self.cipher.decrypt(raw[:12],raw[12:],(prior['review_id']+':'+photo['id']).encode())
+                        if clear in seen:continue
+                        if len(seen)>=8:raise WorkflowError(422,'TOO_MANY_PHOTOS')
+                        eid=ident();nonce=os.urandom(12)
+                        sealed=nonce+self.cipher.encrypt(nonce,clear,(review+':'+eid).encode())
+                        db.execute('INSERT INTO evidence VALUES(?,?,?,?,?)',(eid,review,'PHOTO','image/jpeg',sealed));seen.append(clear)
                 db.execute("UPDATE submissions SET review_id=?,listing=?,customer_name=?,status='PENDING_REVIEW',request_key=?,version=version+1,updated=? WHERE id=?",(review,json.dumps(fields),name.strip(),key,now(),sid))
             else:
                 sid=ident()

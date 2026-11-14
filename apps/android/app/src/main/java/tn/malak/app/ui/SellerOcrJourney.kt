@@ -166,8 +166,8 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmission:org.j
     val files=remember(draftFile) {mutableStateListOf<ChosenDocument>()}
     // Future listing media is preview-only, never private owner title evidence.
     val listingPhotos=remember(draftFile){mutableStateListOf<DraftListingPhoto>()}
-    var listingLatitude by remember(draftFile){mutableStateOf("")}
-    var listingLongitude by remember(draftFile){mutableStateOf("")}
+    var listingLatitude by remember(draftFile){mutableStateOf(resubmission?.optString("latitude").orEmpty())}
+    var listingLongitude by remember(draftFile){mutableStateOf(resubmission?.optString("longitude").orEmpty())}
     var listingDescription by remember(draftFile){mutableStateOf(resubmission?.optString("description").orEmpty())}
     // Never persist private OCR values or even the document URI with the draft.
     var familyReadings by remember(draftFile) {mutableStateOf<List<ReadOcrResult>>(emptyList())}
@@ -254,6 +254,7 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmission:org.j
         provisionedCase=null
         pairReport=null
         submitted=false
+        sending=false
         submissionMessage=0
         submissionKey=UUID.randomUUID().toString()
         pairProgress=null
@@ -303,6 +304,11 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmission:org.j
         }
     }
 
+    if(sending){
+        AlertDialog(onDismissRequest={},confirmButton={},
+            title={Text(s(R.string.submission_sending))},
+            text={LinearProgressIndicator(Modifier.fillMaxWidth())})
+    }
     // Only a freshly captured private in-memory front JPEG is admissible.
     val identitySelected=identityFiles.size==1&&
         acceptedRead?.readyForCameraAcceptance==true&&
@@ -637,6 +643,14 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmission:org.j
                                                 holder.page.toString(),numeric=true)
                                         }
                                     }
+                                    result.sourceFacts.forEach{fact->
+                                        HorizontalDivider(color=CardBorder)
+                                        OcrDataRow(s(familyFactLabel(fact.key)),fact.value)
+                                        Text(s(R.string.smart_read_page)+" "+fact.page+" · "+
+                                            fact.source+" · "+s(if(fact.status=="LOW_CONFIDENCE")
+                                                R.string.smart_read_needs_review else R.string.smart_read_source_available),
+                                            color=Brand.Muted,fontSize=11.sp)
+                                    }
                                     Text(s(R.string.unified_not_ownership),
                                         fontSize=12.sp,color=Brand.Muted,lineHeight=18.sp)
                                 }else{
@@ -732,12 +746,9 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmission:org.j
                                             pairReport=pilotResult
                                             submissionKey=UUID.randomUUID().toString()
                                             if(customerName.isBlank())customerName=acceptedRead?.fullName.orEmpty()
-                                            val extracted=pilotResult.propertyFacts
-                                            if(area.isBlank()&&pilotResult.detectedKind=="SALE_DEED"&&
-                                                pilotResult.propertyFactStatuses["soldAreaM2"]=="CANDIDATE")
-                                                area=extracted["soldAreaM2"].orEmpty()
-                                            if(price.isBlank()&&pilotResult.propertyFactStatuses["salePriceTnd"]=="CANDIDATE")
-                                                price=extracted["salePriceTnd"].orEmpty()
+                                            val suggestions=pilotAutofill(pilotResult.detectedKind,pilotResult.sourceFacts)
+                                            if(area.isBlank())area=suggestions["area"].orEmpty()
+                                            if(price.isBlank())price=suggestions["price"].orEmpty()
                                         }
                                         return@launch
                                     }
@@ -1140,16 +1151,19 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmission:org.j
                             .put("area",normalizedArea).put("price",price)
                             .put("description",listingDescription).put("latitude",listingLatitude)
                             .put("longitude",listingLongitude)
-                        scope.launch{
+                        val sendEpoch=++requestEpoch
+                        requestJob=scope.launch{
                             try{
                                 listingPhotos.toList().forEach{photo->
                                     PilotListingClient.photo(context,pilotOcrSession,review,photo.uri,photo.length)
                                 }
                                 PilotListingClient.call(pilotOcrSession,"/api/pilot/submissions",data)
-                                submitted=true;submissionMessage=R.string.submission_sent
+                                if(requestEpoch==sendEpoch&&pairReport?.reviewId==review){
+                                    submitted=true;submissionMessage=R.string.submission_sent
+                                }
                             }catch(cancel:CancellationException){throw cancel}
-                            catch(_:Exception){submissionMessage=R.string.submission_failed}
-                            finally{sending=false}
+                            catch(_:Exception){if(requestEpoch==sendEpoch)submissionMessage=R.string.submission_failed}
+                            finally{if(requestEpoch==sendEpoch)sending=false}
                         }
                     }
                 }
