@@ -9,51 +9,43 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 4
     steps:
-      - name: Verify PAUs vector schema and lightweight zone query endpoints
+      - name: Test real vector feature REST alternatives (group sublayers find identify POST IDs WMS)
         run: |
           python3 - <<'PYCODE'
-          import urllib.request,urllib.parse,urllib.error,json,time,concurrent.futures,collections,os
+          import urllib.request,urllib.parse,urllib.error,json,time,concurrent.futures,re
           base="https://geopau.gov.tn/arcgisserver/rest/services/public/PAUs_public/MapServer"
-          def fetch(tag,url,params=None,timeout=17):
-            u=url+(("?"+urllib.parse.urlencode(params)) if params else "")
-            start=time.monotonic()
-            try:
-              with urllib.request.urlopen(urllib.request.Request(u,headers={"User-Agent":"Mozilla/5.0 (Malak read-only vector audit)","Accept":"application/json"}),timeout=timeout) as r:
-                data=r.read(1600000);type_=r.headers.get("content-type");code=r.status
-              result=json.loads(data)
-              print("HTTP",json.dumps({"label":tag,"status":code,"bytes":len(data),"type":type_,"elapsed":round(time.monotonic()-start,1),"error":result.get("error"),"keys":list(result.keys())[:15],"features":len(result.get("features",[])) if isinstance(result.get("features"),list) else None,"objectIds_count":len(result.get("objectIds",[])) if isinstance(result.get("objectIds"),list) else None,"sample_feature":result.get("features",[None])[0] if result.get("features") else None},ensure_ascii=False)[:4500],flush=True)
-              return result
-            except Exception as e:
-              print("ERROR",json.dumps({"label":tag,"exception":type(e).__name__,"details":str(e)[:120],"elapsed":round(time.monotonic()-start,1)},ensure_ascii=False),flush=True)
-          j=fetch("full_vector_metadata",base+"/layers",{"f":"pjson"},timeout=50)
-          if j:
-            layers=j.get("layers",[]);print("LAYER_COUNTS",json.dumps(dict(collections.Counter(l.get("type") for l in layers)),ensure_ascii=False),flush=True)
-            summary={"source":base+"/layers?f=pjson","query_api_status":"unverified","layers":[]}
-            for l in layers:
-              fields=l.get("fields") or []
-              summary["layers"].append({"id":l.get("id"),"name":l.get("name"),"type":l.get("type"),"geometryType":l.get("geometryType"),"parent":(l.get("parentLayer") or {}).get("name"),"fields":[f.get("name") for f in fields]})
-            for id in (60,138,69,4,66):
-              x=next((l for l in layers if l.get("id")==id),{})
-              fields=x.get("fields") or []
-              keys=("Code","Vocation","Type","PAU_ID","Zone_id","Libelle","Nom","Intitule","Shape.STArea()")
-              interesting=[{"name":f["name"],"domain_count":len((f.get("domain") or {}).get("codedValues",[])),"first_domains":(f.get("domain") or {}).get("codedValues",[])[:8]} for f in fields if f.get("name") in keys]
-              print("LAYER_METADATA",json.dumps({"id":id,"name":x.get("name"),"type":x.get("type"),"geometry":x.get("geometryType"),"fields":[f.get("name") for f in fields],"selected":interesting},ensure_ascii=False)[:4600],flush=True)
-            with open("GeoPAU_PAUs_public_Vector_Schema_20261114.json","w",encoding="utf-8") as out:json.dump(summary,out,ensure_ascii=False,indent=2)
-          else:print("VECTOR_SCHEMA_UNAVAILABLE",flush=True)
-          cases=[
-            ("zones_60_empty",60,{"where":"1=0","outFields":"OBJECTID","returnGeometry":"false","f":"json"}),
-            ("zones_138_point",138,{"where":"1=1","geometry":"11.090,36.843","geometryType":"esriGeometryPoint","inSR":"4326","spatialRel":"esriSpatialRelIntersects","outFields":"OBJECTID,Code,Vocation,PAU_ID","returnGeometry":"false","resultRecordCount":"1","f":"json"}),
-            ("zones_60_point",60,{"where":"1=1","geometry":"11.090,36.843","geometryType":"esriGeometryPoint","inSR":"4326","spatialRel":"esriSpatialRelIntersects","outFields":"OBJECTID,Code,Vocation,PAU_ID","returnGeometry":"false","resultRecordCount":"1","f":"json"})
+          tests=[
+           ("group63_metadata","GET",base+"/63",{"f":"json"}),
+           ("group63_query","GET",base+"/63/query",{"where":"1=1","outFields":"OBJECTID","f":"json"}),
+           ("zone60_ids","GET",base+"/60/query",{"where":"1=1","returnIdsOnly":"true","f":"json"}),
+           ("zone60_one_by_objectid","GET",base+"/60/query",{"objectIds":"1","outFields":"OBJECTID,Zone_id,Code,Vocation,PAU_ID","returnGeometry":"false","f":"json"}),
+           ("zone60_post_query","POST",base+"/60/query",{"where":"OBJECTID=1","outFields":"OBJECTID,Zone_id,Code,Vocation,PAU_ID","returnGeometry":"false","f":"json"}),
+           ("sector4_ids","GET",base+"/4/query",{"where":"1=1","returnIdsOnly":"true","f":"json"}),
+           ("admin0_one","GET",base+"/0/query",{"where":"OBJECTID=1","outFields":"OBJECTID,Nom","returnGeometry":"false","f":"json"}),
+           ("map_find","GET",base+"/find",{"searchText":"Hammam Ghzez","contains":"true","searchFields":"Nom,Libelle","layers":"0,1,2,4,69","returnGeometry":"false","f":"json"}),
+           ("map_identify","GET",base+"/identify",{"geometry":"11.090,36.843","geometryType":"esriGeometryPoint","sr":"4326","layers":"all:60,138","tolerance":"1","mapExtent":"11.08,36.83,11.11,36.86","imageDisplay":"256,256,96","returnGeometry":"false","f":"json"}),
+           ("map_export_json","GET",base+"/export",{"bbox":"11.07,36.83,11.12,36.87","bboxSR":"4326","imageSR":"4326","size":"256,256","layers":"show:60,138","f":"json"}),
+           ("map_wms_capabilities","GET","https://geopau.gov.tn/arcgisserver/services/public/PAUs_public/MapServer/WMSServer",{"service":"WMS","request":"GetCapabilities","version":"1.3.0"}),
+           ("service_feature_endpoint","GET","https://geopau.gov.tn/arcgisserver/rest/services/public/PAUs_public/FeatureServer",{"f":"json"})
           ]
-          with concurrent.futures.ThreadPoolExecutor(max_workers=3) as pool:
-            futs=[pool.submit(fetch,tag,base+"/"+str(id)+"/query",params) for tag,id,params in cases]
-            for f in futs:f.result()
+          def test(row):
+           tag,method,url,params=row;t=time.monotonic()
+           try:
+            data=urllib.parse.urlencode(params).encode() if method=="POST" else None
+            u=url if data is not None else url+"?"+urllib.parse.urlencode(params)
+            req=urllib.request.Request(u,method=method,data=data,headers={"User-Agent":"Mozilla/5.0 (Malak read-only public ArcGIS API diagnostic)","Accept":"application/json,application/xml;q=0.9,*/*;q=0.2"})
+            with urllib.request.urlopen(req,timeout=18) as r:
+             body=r.read(80000);headers=dict(r.headers.items());status=r.status
+            try:
+             obj=json.loads(body)
+             summary={"keys":list(obj.keys())[:10],"error":obj.get("error"),"features":len(obj["features"]) if isinstance(obj.get("features"),list) else None,"objectIds_count":len(obj["objectIds"]) if isinstance(obj.get("objectIds"),list) else None,"results_count":len(obj["results"]) if isinstance(obj.get("results"),list) else None,"sample":(obj.get("features") or obj.get("results") or [None])[0]}
+            except Exception:
+             s=body.decode("utf8","replace");summary={"first_160":s[:160],"has_layer":bool(re.search("zones|PAU",s,re.I))}
+            print("TEST",json.dumps({"name":tag,"url_path":urllib.parse.urlsplit(u).path,"method":method,"http_status":status,"type":headers.get("Content-Type"),"duration":round(time.monotonic()-t,2),"result":summary},ensure_ascii=False)[:1700],flush=True)
+           except urllib.error.HTTPError as e:
+            print("TEST",json.dumps({"name":tag,"method":method,"http_status":e.code,"duration":round(time.monotonic()-t,2),"body":e.read(300).decode("utf8","replace")},ensure_ascii=False),flush=True)
+           except Exception as e:
+            print("TEST",json.dumps({"name":tag,"method":method,"exception":type(e).__name__,"message":str(e)[:140],"duration":round(time.monotonic()-t,2)},ensure_ascii=False),flush=True)
+          with concurrent.futures.ThreadPoolExecutor(max_workers=8) as ex:list(ex.map(test,tests))
 
           PYCODE
-      - name: Archive verified public vector GIS layer schema
-        uses: actions/upload-artifact@v4
-        with:
-          name: geopau-vector-layer-schema-public
-          path: GeoPAU_PAUs_public_Vector_Schema_20261114.json
-          retention-days: 7
-          if-no-files-found: ignore
