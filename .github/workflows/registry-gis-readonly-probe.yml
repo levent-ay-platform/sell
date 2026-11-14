@@ -9,44 +9,27 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 4
     steps:
-      - name: Audit other ArcGIS public feature services and one-row nongeometric queries
+      - name: Inspect remaining public service layer names (distinct metadata endpoints)
         run: |
           python3 - <<'PYCODE'
-          import urllib.request,urllib.parse,urllib.error,json,time,concurrent.futures
+          import urllib.request,urllib.error,json,time,concurrent.futures,collections
           base="https://geopau.gov.tn/arcgisserver/rest/services/public"
-          svc=[
-           ("LimitesAdmin_FS",base+"/LimitesAdmin/FeatureServer"),
-           ("OSM_FS",base+"/OSM_FS/FeatureServer"),
-           ("LimitesAdmin_MS",base+"/LimitesAdmin/MapServer"),
-           ("OSMMap",base+"/OSM/MapServer"),
-           ("VoiriesLeKram",base+"/VoiriesLeKram/MapServer"),
-           ("OSM_ALL_TN_ND",base+"/OSM_ALL_TN_ND/MapServer")
-          ]
-          def q(item):
-           label,url=item;t=time.monotonic()
+          urls=[
+          ("LimitesAdmin_FeatureServer",base+"/LimitesAdmin/FeatureServer?f=json"),
+          ("OSM_FS_FeatureServer",base+"/OSM_FS/FeatureServer?f=json"),
+          ("OSM_MapServer_layers",base+"/OSM/MapServer/layers?f=json"),
+          ("VoiriesLeKram_MapServer_layers",base+"/VoiriesLeKram/MapServer/layers?f=json"),
+          ("LimitesAdmin_MapServer",base+"/LimitesAdmin/MapServer?f=json")]
+          def run(v):
+           label,url=v;t=time.monotonic()
            try:
-            with urllib.request.urlopen(urllib.request.Request(url+"?f=pjson",headers={"User-Agent":"Mozilla/5.0 (GeoPAU public service inventory)" ,"Accept":"application/json"}),timeout=21) as r:b=r.read(650000)
-            j=json.loads(b)
-            arr=j.get("layers",[])
-            print("SERVICE",json.dumps({"label":label,"url":url,"elapsed":round(time.monotonic()-t,1),"err":j.get("error"),"capabilities":j.get("capabilities"),"layers":[{"id":x.get("id"),"name":x.get("name"),"type":x.get("type"),"subLayerIds":x.get("subLayerIds")} for x in arr],"tables":j.get("tables",[])[:8]},ensure_ascii=False)[:8500],flush=True)
-            return (label,url,arr)
-           except Exception as e:
-            print("SERVICE_ERR",label,type(e).__name__,str(e)[:160],flush=True)
-            return (label,url,[])
-          with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:results=list(pool.map(q,svc))
-          tasks=[]
-          for label,url,arr in results:
-           ids=[x["id"] for x in arr if x.get("subLayerIds") is None and isinstance(x.get("id"),int)][:2]
-           for id in ids:
-            tasks.append((label,id,url+"/"+str(id)+"/query"))
-          def probe(item):
-           label,id,u=item;t=time.monotonic()
-           try:
-            params=urllib.parse.urlencode({"where":"1=1","outFields":"*","returnGeometry":"false","resultRecordCount":"1","f":"json"})
-            with urllib.request.urlopen(urllib.request.Request(u+"?"+params,headers={"User-Agent":"Mozilla/5.0 (read-only public query)" ,"Accept":"application/json"}),timeout=14) as r:raw=r.read(16000)
+            with urllib.request.urlopen(urllib.request.Request(url,headers={"Accept":"application/json","User-Agent":"Mozilla/5.0 public read-only layer inventory"}),timeout=28) as r:raw=r.read(500000)
             j=json.loads(raw)
-            print("FEATURE",json.dumps({"service":label,"layer_id":id,"elapsed":round(time.monotonic()-t,1),"error":j.get("error"),"features":len(j.get("features",[])) if isinstance(j.get("features"),list) else None,"sample":(j.get("features") or [None])[0]},ensure_ascii=False)[:1500],flush=True)
-           except Exception as e:print("FEATURE_ERROR",json.dumps({"service":label,"layer_id":id,"error":type(e).__name__,"msg":str(e)[:150],"elapsed":round(time.monotonic()-t,1)},ensure_ascii=False),flush=True)
-          with concurrent.futures.ThreadPoolExecutor(max_workers=5) as pool:list(pool.map(probe,tasks))
+            a=j.get("layers",[])
+            def summarise(x):
+             return {"id":x.get("id"),"name":x.get("name"),"type":x.get("type"),"geometry":x.get("geometryType"),"fields":[f.get("name") for f in (x.get("fields") or [])][:25]}
+            print("PUBLIC_SERVICE",json.dumps({"source":label,"elapsed":round(time.monotonic()-t,1),"error":j.get("error"),"count":len(a),"layers":[summarise(x) for x in a][:60]},ensure_ascii=False)[:14000],flush=True)
+           except Exception as e:print("PUBLIC_SERVICE_ERROR",json.dumps({"source":label,"elapsed":round(time.monotonic()-t,1),"type":type(e).__name__,"error":str(e)[:180]},ensure_ascii=False),flush=True)
+          with concurrent.futures.ThreadPoolExecutor(max_workers=3) as ex:list(ex.map(run,urls))
 
           PYCODE
