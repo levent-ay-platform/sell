@@ -7,32 +7,34 @@ permissions:
 jobs:
   probe:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 3
     steps:
-      - name: Download open OCHA Tunisian administrative polygons and isolate Hammamet sectors
+      - name: Check exact user-supplied map service and raster layer 166 routes
         run: |
           python3 - <<'PYCODE'
-          import urllib.request,json,zipfile,io
-          u="https://www.data4tunisia.org/api/1/datasets/r/ebe19593-9438-4d14-8291-e65f811e2671"
-          with urllib.request.urlopen(urllib.request.Request(u,headers={"User-Agent":"MalakPublicGeodataResearch/1.0"}),timeout=75) as r:data=r.read(65000000)
-          print("DATASET_DOWNLOAD",len(data),flush=True)
-          z=zipfile.ZipFile(io.BytesIO(data))
-          for f in ["tun_admin4.geojson","tun_admin3.geojson"]:
-           d=json.loads(z.read(f));matches=[]
-           for feat in d.get("features",[]):
-            p=feat.get("properties") or {}
-            if p.get("adm3_pcode")=="TN1566" or p.get("adm3_pcode")=="TN1566" and f.endswith("3.geojson"):
-             matches.append({"name":p.get("adm4_name") or p.get("adm3_name"),"arabic":p.get("adm4_name1") or p.get("adm3_name1"),"pcode":p.get("adm4_pcode") or p.get("adm3_pcode"),"parent":p.get("adm3_name"),"area_sqkm":p.get("area_sqkm"),"center_lat":p.get("center_lat"),"center_lon":p.get("center_lon"),"geom_type":(feat.get("geometry") or {}).get("type")})
-           print("HAMMAMET_ADMIN_FEATURES",f,json.dumps(matches,ensure_ascii=False),flush=True)
-           if f=="tun_admin4.geojson":
-            wanted=[feat for feat in d["features"] if (feat.get("properties") or {}).get("adm3_pcode")=="TN1566"]
-            output={"type":"FeatureCollection","name":"Hammamet sector boundaries — OCHA 2022, not land parcel","features":wanted}
-            with open("hammamet_admin4.geojson","w",encoding="utf8") as o:json.dump(output,o,ensure_ascii=False)
+          import urllib.request,urllib.parse,urllib.error,json,time,concurrent.futures,hashlib
+          base="https://geopau.gov.tn/arcgisserver/rest/services/public/SCANs_public/MapServer"
+          endpoints=[
+           ("root_query",base+"/query",{"where":"1=1","outFields":"*","f":"json"}),
+           ("layer_166_query",base+"/166/query",{"where":"1=1","outFields":"*","returnGeometry":"true","f":"json"}),
+           ("layer_166_metadata",base+"/166",{"f":"pjson"}),
+           ("export_166_small",base+"/export",{"bbox":"1234049.300467637,4418990.733423825,1240853.2223591008,4426690.888020831","bboxSR":"3857","imageSR":"3857","size":"480,480","dpi":"96","layers":"show:166","format":"png32","transparent":"true","f":"json"}),
+          ]
+          def probe(i):
+           tag,url,params=i
+           u=url+"?"+urllib.parse.urlencode(params)
+           start=time.monotonic()
+           try:
+            with urllib.request.urlopen(urllib.request.Request(u,headers={"User-Agent":"Mozilla/5.0","Accept":"application/json"}),timeout=17) as r:
+             body=r.read(16000); status=r.status; ctype=r.headers.get("Content-Type")
+            try:
+             j=json.loads(body)
+             output={"error":j.get("error"),"result_keys":list(j.keys())[:15],"layers":len(j.get("layers",[])) if isinstance(j.get("layers"),list) else None,"features":len(j.get("features",[])) if isinstance(j.get("features"),list) else None,"image_href":j.get("href"),"type":j.get("type"),"fields":j.get("fields")}
+            except Exception:output={"snippet":body[:400].decode("utf8","replace")}
+            print("PROBE",json.dumps({"tag":tag,"status":status,"content_type":ctype,"duration":round(time.monotonic()-start,2),"payload":output},ensure_ascii=False)[:2700],flush=True)
+           except urllib.error.HTTPError as e:
+            print("PROBE",json.dumps({"tag":tag,"status":e.code,"body":e.read(650).decode("utf8","replace"),"duration":round(time.monotonic()-start,2)},ensure_ascii=False),flush=True)
+           except Exception as e:print("PROBE",json.dumps({"tag":tag,"error":type(e).__name__,"message":str(e)[:120],"duration":round(time.monotonic()-start,2)},ensure_ascii=False),flush=True)
+          with concurrent.futures.ThreadPoolExecutor(max_workers=4) as ex:list(ex.map(probe,endpoints))
 
           PYCODE
-      - name: Publish Hammamet sector polygons research artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: hammamet-open-admin4-geojson
-          path: hammamet_admin4.geojson
-          retention-days: 7
