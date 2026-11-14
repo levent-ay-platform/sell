@@ -7,47 +7,77 @@ permissions:
 jobs:
   probe:
     runs-on: ubuntu-latest
-    timeout-minutes: 3
+    timeout-minutes: 7
     steps:
-      - name: Check 8 real lot polygon intersections and distinguish duplicated geometry
+      - name: Enumerate public GIS organization items, hidden parcel layers, Tunisian open data hub
         run: |
           python3 - <<'PYCODE'
-          import urllib.request,urllib.parse,json,time,os,math
-          os.makedirs("geopau_lot_join_quality",exist_ok=True)
-          base="https://services1.arcgis.com/zcZDLWCe77bUzzw7/arcgis/rest/services/Map_DarChaabane/FeatureServer"
-          def query(layer,p):
-           u=base+"/"+str(layer)+"/query?"+urllib.parse.urlencode(p)
-           with urllib.request.urlopen(urllib.request.Request(u,headers={"User-Agent":"Mozilla/5.0 (read-only GIS independent geometry validity audit)"}),timeout=17) as r:return json.load(r)
-          counts={}
-          for where in ["ttr_fcier IS NOT NULL AND ttr_fcier <> ' '","Titre_Foncier IS NOT NULL","Type_Zone IS NOT NULL"]:
-           layer=11 if where.startswith("Type_Zone") else 13
-           try:counts[where]=query(layer,{"where":where,"returnCountOnly":"true","f":"json"}).get("count")
-           except Exception as e:counts[where+"_error"]=str(e)[:100]
-          sample=query(13,{"where":"1=1","outFields":"OBJECTID,Titre_Foncier,ttr_fcier","returnGeometry":"true","outSR":"4326","orderByFields":"OBJECTID ASC","resultRecordCount":"30","f":"json"})
-          feats=sample.get("features",[])
-          print("SAMPLED_LOTS",len(feats),"first_ids",[f["attributes"].get("OBJECTID") for f in feats[:20]],flush=True)
-          def canonical(g):
-           return json.dumps(g.get("rings"),sort_keys=True,separators=(",",":")) if g else ""
-          records=[]
-          for ix in [0,2,5,10,15,20,25,29]:
-           if ix>=len(feats):continue
-           f=feats[ix];geom=f.get("geometry") or {}
-           if not geom.get("rings"):continue
+          import urllib.request,urllib.parse,urllib.error,json,re,time,os,collections,concurrent.futures,html
+          os.makedirs("arcgis_catalog_discovery",exist_ok=True)
+          org="zcZDLWCe77bUzzw7"
+          base="https://www.arcgis.com/sharing/rest"
+          def fetch(url,timeout=18):
+           with urllib.request.urlopen(urllib.request.Request(url,headers={"User-Agent":"Mozilla/5.0 MalakGISPublicCatalogAudit","Accept":"application/json,text/html"}),timeout=timeout) as r:
+            data=r.read(650000)
+            return r.status,r.headers.get("content-type"),data
+          def search(label,phrase,n=100):
+           ids=[];entries=[];total=0
+           for start in (1,101,201,301,401):
+            u=base+"/search?"+urllib.parse.urlencode({"f":"json","q":phrase,"num":100,"start":start,"sortField":"modified","sortOrder":"desc"})
+            t=time.monotonic()
+            try:
+             code,ct,b=fetch(u,18);v=json.loads(b)
+             if v.get("error"):print("SEARCH_ERROR",label,v["error"],flush=True);break
+             total=v.get("total",0)
+             for x in v.get("results",[]):
+              entries.append({"id":x.get("id"),"title":x.get("title"),"type":x.get("type"),"url":x.get("url"),"owner":x.get("owner"),"access":x.get("access"),"tags":x.get("tags",[])[:8],"extent":x.get("extent"),"description":(x.get("description") or "")[:180]})
+             print("SEARCH_PAGE",json.dumps({"label":label,"status":code,"total":total,"start":start,"returned":len(v.get("results",[])),"elapsed":round(time.monotonic()-t,1)},ensure_ascii=False),flush=True)
+             if not v.get("results") or start+len(v["results"])>min(total,500):break
+            except Exception as e:print("SEARCH_FAIL",label,type(e).__name__,str(e)[:100],flush=True);break
+           return entries,total
+          queries=[
+           ("org_all","orgid:"+org),
+           ("org_features","orgid:"+org+' AND type:"Feature Service"'),
+           ("owner_items","owner:omargaafar"),
+           ("nabeul_lot","(title:Nabeul OR title:Hammamet OR title:Lotissement OR title:Cadastre OR title:Parcelle) AND type:\"Feature Service\""),
+           ("tunisia_title_lot","(Tunisie OR Tunisia) AND (cadastre OR parcel OR parcellaire OR lotissement) AND type:\"Feature Service\"")]
+          output={};allmap={}
+          for lab,query in queries:
+           rows,total=search(lab,query)
+           output[lab]={"query":query,"total":total,"returned":len(rows),"items":rows}
+           for item in rows:
+            if item.get("id"):allmap[item["id"]]=item
+           print("QUERY_SUMMARY",json.dumps({"name":lab,"total":total,"retrieved":len(rows),"interesting":[{"title":x["title"],"type":x["type"],"url":x["url"],"owner":x["owner"]} for x in rows if any(t in (x["title"] or "").casefold() for t in ("cadast","lot","parc","fonc","hamm","nabeul","urban","zone","map_","pizz","khir","brous","raoued"))][:55]},ensure_ascii=False)[:9000],flush=True)
+          with open("arcgis_catalog_discovery/portal_search_inventory.json","w",encoding="utf8") as w:json.dump(output,w,ensure_ascii=False,indent=2)
+          feature_entries=[x for x in allmap.values() if x.get("type")=="Feature Service" and (org in (x.get("url") or "") or x.get("owner")=="omargaafar" or x.get("id") in [j["id"] for j in output["org_features"]["items"]])]
+          print("FEATURE_SERVICE_TO_SCAN",len(feature_entries),flush=True)
+          def inspect(x):
+           u=x.get("url")
+           if not u:return {"title":x.get("title"),"error":"no url"}
+           t=time.monotonic()
            try:
-            zones=query(11,{"where":"1=1","geometry":json.dumps({"rings":geom["rings"],"spatialReference":{"wkid":4326}},separators=(",",":")),"geometryType":"esriGeometryPolygon","inSR":"4326","spatialRel":"esriSpatialRelIntersects","outFields":"OBJECTID,Type_Zone","returnGeometry":"true","outSR":"4326","f":"json"})
-            zz=zones.get("features",[])
-            rec={"lot_oid":f["attributes"].get("OBJECTID"),"zones_count":len(zz),"zone_labels":[z["attributes"].get("Type_Zone") for z in zz[:10]],"zone_objectids":[z["attributes"].get("OBJECTID") for z in zz[:10]],"geometry_exact_match":any(canonical(z.get("geometry"))==canonical(geom) for z in zz)}
-            records.append(rec)
-            print("JOIN",json.dumps(rec,ensure_ascii=False),flush=True)
-           except Exception as e:print("JOIN_ERROR",f["attributes"].get("OBJECTID"),type(e).__name__,str(e)[:150],flush=True)
-          result={"sampled_lots":len(feats),"tests":records,"counts":counts}
-          with open("geopau_lot_join_quality/results.json","w",encoding="utf8") as w:json.dump(result,w,ensure_ascii=False,indent=2)
-          print("FINAL",json.dumps(result,ensure_ascii=False)[:7000],flush=True)
+            code,ct,raw=fetch(u+"?f=json",14);j=json.loads(raw)
+            if j.get("error"):return {"title":x.get("title"),"url":u,"err":j.get("error")}
+            return {"title":x.get("title"),"url":u,"owner":x.get("owner"),"layers":[{"id":z.get("id"),"name":z.get("name"),"geometryType":z.get("geometryType")} for z in j.get("layers",[])],"tables":[{"id":z.get("id"),"name":z.get("name")} for z in j.get("tables",[])],"description":str(j.get("description") or j.get("serviceDescription") or "")[:180],"secs":round(time.monotonic()-t,1)}
+           except Exception as e:return {"title":x.get("title"),"url":u,"err":type(e).__name__}
+          with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
+           info=list(pool.map(inspect,feature_entries[:80]))
+          with open("arcgis_catalog_discovery/feature_service_layers.json","w",encoding="utf8") as w:json.dump(info,w,ensure_ascii=False,indent=2)
+          for z in info:
+           print("CATALOG_SERVICE",json.dumps(z,ensure_ascii=False)[:4000],flush=True)
+          # Hub is separate public site; extract link to organization and portal
+          hub="https://geo-tunisie-tunisia.opendata.arcgis.com/"
+          try:
+           code,ct,raw=fetch(hub,20);body=raw.decode("utf8","replace")
+           matches={term:re.findall(r".{0,85}"+re.escape(term)+r".{0,110}",body,re.I)[:5] for term in ("orgId","organizationId","hubSite","siteId","arcgisOnlineUrl","zcZDLWCe77bUzzw7")}
+           print("HUB",json.dumps({"http":code,"bytes":len(raw),"ctype":ct,"title":re.findall(r"<title[^>]*>(.*?)</title>",body,re.I|re.S)[:2],"clues":matches},ensure_ascii=False)[:6500],flush=True)
+           with open("arcgis_catalog_discovery/geo_open_data_hub_meta.json","w",encoding="utf8") as w:json.dump({"http":code,"title":re.findall(r"<title[^>]*>(.*?)</title>",body,re.I|re.S)[:2],"clues":matches},w,ensure_ascii=False,indent=2)
+          except Exception as e:print("HUB_FAIL",type(e).__name__,str(e)[:120],flush=True)
 
           PYCODE
-      - name: Save geometry join quality evidence
+      - name: Archive public GIS catalog and service schemas
         uses: actions/upload-artifact@v4
         with:
-          name: geopau-darchaabane-eight-lot-geometry-join-quality
-          path: geopau_lot_join_quality/
+          name: malak-gis-arcgis-org-public-catalog-20261114
+          path: arcgis_catalog_discovery/
           retention-days: 7
