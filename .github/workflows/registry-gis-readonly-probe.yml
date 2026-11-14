@@ -7,32 +7,21 @@ permissions:
 jobs:
   probe:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 4
     steps:
-      - name: Geocode land-certificate toponym with bounded public APIs
+      - name: Search public ArcGIS catalogue for cadastral parcel layers
         run: |
           python3 - <<'PYCODE'
-          import urllib.request,urllib.parse,json,time,ssl
-          S=[
-          ("nominatim_mrada_fr","https://nominatim.openstreetmap.org/search",{"q":"Mrada et Ferjane, Hammamet, Tunisia","format":"jsonv2","limit":"5","addressdetails":"1"}),
-          ("nominatim_mrada_ar","https://nominatim.openstreetmap.org/search",{"q":"مرادة وفرجان الحمامات تونس","format":"jsonv2","limit":"5","addressdetails":"1"}),
-          ("nominatim_mrada_alt","https://nominatim.openstreetmap.org/search",{"q":"Ferjane Nabeul Tunisia","format":"jsonv2","limit":"5"}),
-          ("nominatim_215","https://nominatim.openstreetmap.org/search",{"q":"Khmis Hammamet Nabeul Tunisia","format":"jsonv2","limit":"5"}),
-          ("photon_fr","https://photon.komoot.io/api/",{"q":"Mrada Ferjane Tunisia","limit":"8"}),
-          ("photon_ar","https://photon.komoot.io/api/",{"q":"مرادة فرجان الحمامات","limit":"8"}),
+          import urllib.request,urllib.parse,json,time
+          terms=[
+           'cadastre Tunisie','parcel cadastral Tunisia','parcelle nabeul','titre foncier Hammamet','foncier Tunisie'
           ]
-          for name,base,p in S:
-           url=base+"?"+urllib.parse.urlencode(p)
+          for query in terms:
+           url='https://www.arcgis.com/sharing/rest/search?'+urllib.parse.urlencode({'q':query,'f':'json','num':20,'sortField':'score'})
            try:
-            start=time.monotonic()
-            with urllib.request.urlopen(urllib.request.Request(url,headers={"User-Agent":"MalakGeoResearch/1.0 (noncommercial, provenance audit)","Accept":"application/json"}),timeout=12) as r:
-             data=json.loads(r.read(400000));ctype=r.headers.get("content-type")
-            if isinstance(data,list):
-             matches=[{"name":x.get("display_name"),"lat":x.get("lat"),"lon":x.get("lon"),"type":x.get("type"),"boundingbox":x.get("boundingbox"),"osm_id":x.get("osm_id")} for x in data[:6]]
-            else:
-             matches=[{"name":x.get("properties",{}).get("name"),"city":x.get("properties",{}).get("city"),"county":x.get("properties",{}).get("county"),"osm_type":x.get("properties",{}).get("osm_type"),"coordinates":x.get("geometry",{}).get("coordinates")} for x in data.get("features",[])[:6]]
-            print("GEOCODE",name,"count",len(matches),"results",json.dumps(matches,ensure_ascii=False),"elapsed",round(time.monotonic()-start,2),flush=True)
-           except Exception as e:print("GEOCODE_ERROR",name,type(e).__name__,str(e)[:125],flush=True)
-           time.sleep(1.2)
+            with urllib.request.urlopen(urllib.request.Request(url,headers={'User-Agent':'MalakGISResearch/1.0'}),timeout=9) as r:data=json.loads(r.read(350000))
+            results=[{'title':x.get('title'),'type':x.get('type'),'owner':x.get('owner'),'id':x.get('id'),'url':x.get('url')} for x in data.get('results',[]) if any(w in (str(x.get('title',''))+' '+str(x.get('description',''))).lower() for w in ['cadast','parcell','foncier','hammamet','tunisie','tunisia','nabeul'])]
+            print('ARCGIS_SEARCH',query,'total',data.get('total'),'relevant',json.dumps(results[:12],ensure_ascii=False),flush=True)
+           except Exception as e:print('ARCGIS_SEARCH_ERROR',query,type(e).__name__,str(e)[:95],flush=True)
 
           PYCODE
