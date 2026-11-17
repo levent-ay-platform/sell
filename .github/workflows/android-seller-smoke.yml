@@ -1,0 +1,73 @@
+name: Malak Android offline auth safety smoke
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'apps/android/**'
+      - '.github/workflows/android-seller-smoke.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  emulator-seller:
+    name: Verify offline session gating on disposable emulator
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v4
+        with:
+          packages: 'platform-tools'
+      - run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0'
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: '8.13'
+          cache-provider: basic
+      - name: Build exact source and verify consumer brand
+        run: |
+          python3 scripts/check_malak_brand.py
+          gradle -p apps/android :app:assembleDebug --no-daemon
+      - name: Enforce strict 60MB APK and prohibit embedded OCR engines
+        run: |
+          set -euo pipefail
+          apk=apps/android/app/build/outputs/apk/debug/app-debug.apk
+          size="$(stat -c %s "$apk")"
+          echo "Malak APK bytes: $size; hard limit: 60000000"
+          test "$size" -le 60000000
+          if unzip -Z1 "$apk" | grep -Ei '(^|/)(inference\.onnx|.*\.traineddata|libonnxruntime.*\.so|libopencv.*\.so|libtesseract.*\.so)$'; then
+            echo 'HEAVY_OCR_ASSET_IN_APK' >&2
+            exit 1
+          fi
+      - name: Enable KVM on disposable GitHub-hosted runner
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Launch emulator and verify login cannot fake an OCR session
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          profile: pixel_2
+          emulator-boot-timeout: 600
+          script: |
+            adb install -r apps/android/app/build/outputs/apk/debug/app-debug.apk
+            python3 apps/android/scripts/seller-smoke.py
+      - name: Keep synthetic-only screenshot on success/failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: malak-offline-auth-synthetic-screenshot
+          path: /tmp/malak-android-offline-qa/offline-login.png
+          retention-days: 2
+          if-no-files-found: ignore

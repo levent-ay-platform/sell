@@ -15,7 +15,7 @@
 - **Tunisia first:** Arabic and French from day one, TND, m², +216, Tunisian geography and practical low-bandwidth UX.
 - **Public source code is not public user data.** Never commit identification documents, title deeds, real addresses linked to people, access tokens, signing files, production data or verification evidence.
 - **Android APK first,** with reusable backend contracts for potential iOS/web support.
-- **GitHub-hosted CI only:** `ubuntu-latest`; no Mac/self-hosted runners. No deployment or signing secrets in PR workflows.
+- **GitHub-hosted CI only:** `ubuntu-latest` or the pinned `ubuntu-24.04` LTS fallback during runner image outages; no Mac/self-hosted runners. No deployment or signing secrets in PR workflows.
 - **No brokerage payments, deposits or ownership transfer in V1.**
 
 ## Foundation decisions
@@ -49,7 +49,7 @@ See `docs/` for the design records, `db/` for initial schema, and `.github/workf
 - Default branch: `main`. All features go through short-lived branches and PRs.
 - Do not run production deployment from pull requests.
 - Do not use `pull_request_target`, `workflow_run` with untrusted code or self-hosted runners.
-- CI runs on GitHub-managed `ubuntu-latest`, without accessing secrets.
+- CI runs on GitHub-managed Ubuntu (`ubuntu-latest` or approved `ubuntu-24.04` LTS), without accessing secrets.
 - Keep verification logic server-side and make all decisions auditable.
 
 ## License
