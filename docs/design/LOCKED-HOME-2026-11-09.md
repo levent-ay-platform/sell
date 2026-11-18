@@ -7,7 +7,7 @@
 Use the exact user-uploaded image(4).png, NOT any assistant-generated variant and NOT the previous screenshot references.
 Reference size **543×1176 px**. SHA-256 **7cb5ea83bc0831d0d16ac6d0a219bd650c3ab668cbff19bc48e318b857d7bb47**.
 Portable exact original: MALAK-APPROVED-DESIGN-LOCK.zip supplied in this conversation.
-NOTE: screenshot PNG bytes have NOT been checked into this public GitHub repository. Never claim otherwise.
+The exact source PNG is now in this public repository at `docs/design/reference/MALAK-HOME-APPROVED-EXACT.png`, with SHA-256 checked before any QA comparison.
 
 ## Non-negotiable visual contract
 

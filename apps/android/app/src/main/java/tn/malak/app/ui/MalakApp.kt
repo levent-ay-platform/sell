@@ -1,6 +1,10 @@
 package tn.malak.app.ui
 
 import androidx.compose.foundation.*
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.horizontalScroll
@@ -20,6 +24,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
+import androidx.compose.foundation.Image
+import tn.malak.app.R
 
 private val PreviewLand = PreviewListing(
     title = "أرض مطلّة على البحر",
@@ -39,23 +47,49 @@ private data class PreviewListing(
 fun MalakApp() {
     var screen by rememberSaveable { mutableStateOf("home") }
     var search by rememberSaveable { mutableStateOf("") }
-    var category by rememberSaveable { mutableStateOf("أراضي") }
+    var category by rememberSaveable { mutableStateOf("Terrains") }
     var favorite by rememberSaveable { mutableStateOf(false) }
     var compare by rememberSaveable { mutableStateOf(false) }
     var map3d by rememberSaveable { mutableStateOf(true) }
     var notice by rememberSaveable { mutableStateOf("") }
+    var immersiveMap by rememberSaveable { mutableStateOf(false) }
 
     MaterialTheme(colorScheme = lightColorScheme(primary = Brand.Crimson, background = Brand.Pearl)) {
-        Surface(color = Brand.Pearl, modifier = Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
+        Box(Modifier.fillMaxSize().background(Brand.Pearl)) {
+            if (screen == "home") {
+                Image(
+                    painter = painterResource(R.drawable.malak_locked_backdrop),
+                    contentDescription = null,
+                    contentScale = ContentScale.FillBounds,
+                    modifier = Modifier.fillMaxSize()
+                )
+                if (!immersiveMap) {
+                    LockedPhotoDecorations(Modifier.fillMaxSize())
+                }
+                AnimatedVisibility(
+                    visible = immersiveMap,
+                    modifier = Modifier.fillMaxSize(),
+                    enter = fadeIn(tween(360)),
+                    exit = fadeOut(tween(240))
+                ) {
+                    // Include Android system bars: don't expose the photo's old
+                    // baked blurred card behind the bottom gesture handle.
+                    CleanImmersivePhoto(Modifier.fillMaxSize())
+                }
+            }
+            Surface(color = Color.Transparent,
+                modifier = Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
             when(screen) {
-                "home" -> HomeScreen(
+                "home" -> LockedMalakHome(
                     search = search, onSearch = { search = it },
                     selectedCategory = category, onCategory = { category = it },
                     favorite = favorite, onFavorite = { favorite = !favorite },
                     map3d = map3d, onToggleMap = { map3d = !map3d },
                     onOpen = { screen = "details" },
                     onNavigate = { screen = it }, notice = notice,
-                    onNotice = { notice = it }
+                    onNotice = { notice = it },
+                    immersive = immersiveMap,
+                    onImmersiveChange = { immersiveMap = it }
                 )
                 "details" -> DetailScreen(
                     favorite = favorite, onFavorite = { favorite = !favorite },
@@ -94,11 +128,13 @@ fun MalakApp() {
                     InfoRow("الخصوصية", "لا توجد وثائق شخصية في هذا النموذج")
                     MalakAction("إضافة عقار") { screen = "seller" }
                 }
-                else -> HomeScreen(
+                else -> LockedMalakHome(
                     search, { search = it }, category, { category = it }, favorite,
                     { favorite = !favorite }, map3d, { map3d = !map3d },
-                    { screen = "details" }, { screen = it }, notice, { notice = it }
+                    { screen = "details" }, { screen = it }, notice, { notice = it },
+                    immersiveMap, { immersiveMap = it }
                 )
+            }
             }
         }
     }
