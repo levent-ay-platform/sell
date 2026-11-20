@@ -9,6 +9,8 @@ import type {PrivateEvidenceReadiness} from './evidence-readiness-v2.ts';
 import {locateOwnerTableFromWords} from './owner-table-layout-v2.ts';
 import type {SpatialPage, SpatialWord, SpatialTableCandidate} from './owner-table-layout-v2.ts';
 import type {QualityWarning} from './capture.ts';
+import {extractParcelEdgeMeasurements} from './parcel-document-foundation.ts';
+import type {ParcelEdgeMeasurement} from './parcel-document-foundation.ts';
 
 /**
  * Isolated OCR/PDF worker boundary. Text/confidence are UNTRUSTED.
@@ -34,6 +36,8 @@ export interface ReadDocumentResult {
   documentFamilyCandidate:DocumentTrainingCandidate;
   /** Type-specific, sourced values requiring human confirmation; PRIVATE ONLY. */
   privateFamilyFields:PrivateLandFacts;
+  /** Annotated document lengths only; private and unreviewed. */
+  parcelEdgeMeasurements:readonly ParcelEdgeMeasurement[];
   /** Heuristic internal progress, not a public seller-trust or ownership badge. */
   privateEvidenceReadiness:PrivateEvidenceReadiness;
   /** Private, unreviewed candidates; never expose through a public listing. */
@@ -166,6 +170,7 @@ export function readUntrustedOcrDocument(payload:unknown):ReadDocumentResult {
   const ownerTableLayout=spatialReady?
     locateOwnerTableFromWords(parsed.pages.map(pg=>pg.privateSpatialPage!)):null;
   return {extraction,documentFamilyCandidate,privateFamilyFields,privateEvidenceReadiness,ownerTableLayout,
+    parcelEdgeMeasurements:extractParcelEdgeMeasurements(lines),
     pagesReceived:parsed.pages.length,
     extractionMethods:parsed.pages.map(pg=>pg.method),
     qualityReviewPages:parsed.pages.filter(pg=>pg.qualityWarnings?.length).map(pg=>pg.page),

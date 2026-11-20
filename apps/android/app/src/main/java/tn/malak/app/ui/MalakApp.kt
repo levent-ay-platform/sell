@@ -1,5 +1,9 @@
 package tn.malak.app.ui
 
+import androidx.activity.compose.BackHandler
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
+import tn.malak.app.BuildConfig
+import tn.malak.app.ui.explore.ExploreScreen
 import android.content.Context
 import android.content.res.Configuration
 import androidx.compose.foundation.*
@@ -50,6 +54,9 @@ private val LocalMalakStringsContext = staticCompositionLocalOf<Context> {
 @Composable
 internal fun s(id: Int): String = LocalMalakStringsContext.current.getString(id)
 
+@Composable
+internal fun s(id: Int, vararg args: Any): String = LocalMalakStringsContext.current.getString(id, *args)
+
 /** Arabic RTL, French LTR; an explicit user language selection drives every Compose layout. */
 @Composable
 internal fun MalakApp(
@@ -78,7 +85,10 @@ internal fun MalakApp(
     var pilotOcrSession by remember { mutableStateOf<PilotOcrSession?>(null) }
     var resubmission by remember{mutableStateOf<org.json.JSONObject?>(null)}
     var focusedRequest by rememberSaveable{mutableStateOf<String?>(null)}
-    val tabs = setOf("home", "map", "favorites", "more")
+    val v2 = BuildConfig.MALAK_V2_DISCOVERY
+    val destinations = if (v2) DiscoveryTabs else NavTabs
+    val exploreState = rememberSaveableStateHolder()
+    val ownerRoute = screen == "seller" || screen == "requests"
 
     CompositionLocalProvider(LocalMalakStringsContext provides localizedContext,
         LocalLayoutDirection provides direction,
@@ -92,29 +102,32 @@ internal fun MalakApp(
             onSurface = Brand.Ink
         )) {
             Surface(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing), color = Brand.Pearl) {
-                if (PilotOtpGate.enabled && pilotPhone == null) {
+                if (PilotOtpGate.enabled && pilotPhone == null && (!v2 || ownerRoute)) {
+                    BackHandler(enabled = v2) { screen = "home" }
                     PilotOtpScreen(onEnterPilot = { phone, session ->
                         pilotOcrSession=session
                         pilotPhone=phone
-                        screen="home"
+                        if (!v2) screen="home"
                     })
                 } else Scaffold(
                     containerColor = Brand.Pearl,
                     contentWindowInsets = WindowInsets(0, 0, 0, 0),
                     topBar = {
-                        if (PilotOtpGate.enabled) PilotSessionBar(pilotPhone.orEmpty()) {
+                        if (PilotOtpGate.enabled && pilotPhone != null) PilotSessionBar(pilotPhone.orEmpty()) {
                             pilotOcrSession = null
                             pilotPhone = null
                             screen = "home"
                         }
                     },
                     bottomBar = {
-                        if (screen in tabs) MalakBottomBar(screen) { screen = it }
+                        if (destinations.any { it.route == screen }) MalakBottomBar(screen, destinations) { screen = it }
                     }
                 ) { insets ->
                     Box(Modifier.fillMaxSize().padding(insets)) {
                         when (screen) {
-                            "home" -> MalakHome(query, { query = it }, category, { category = it }, { resubmission=null; screen = "seller" }, { resubmission=it;screen="seller" },{focusedRequest=null;screen="requests"})
+                            "home" -> if (v2) exploreState.SaveableStateProvider("explore") {
+                                ExploreScreen(language) { resubmission = null; screen = "seller" }
+                            } else MalakHome(query, { query = it }, category, { category = it }, { resubmission=null; screen = "seller" }, { resubmission=it;screen="seller" },{focusedRequest=null;screen="requests"})
                             "requests" -> Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(18.dp)){
                                 TextButton(onClick={screen="home"}){Text(s(R.string.back))}
                                 PilotListings("","all",{resubmission=it;screen="seller"},onlyOwn=true,focusId=focusedRequest)
@@ -126,7 +139,7 @@ internal fun MalakApp(
                             "more" -> MalakMorePage(language, onLanguage = {
                                 language = it
                                 preferences.edit().putString("language", it).apply()
-                            }, onSeller = { screen = "seller" })
+                            }, onSeller = { resubmission = null; screen = "seller" })
                             "seller" -> key(if (PilotOtpGate.enabled) pilotPhone else "owner",resubmission?.optString("id")) {
                                 // Recreate all seller Compose state when the pilot account changes.
                                 // A document URI, consent checkbox or OCR result must not be
@@ -326,13 +339,19 @@ private val NavTabs = listOf(
     NavigationTab("more", R.string.more, Icons.Outlined.MoreHoriz)
 )
 
+private val DiscoveryTabs = listOf(
+    NavigationTab("home", R.string.map, Icons.Outlined.Map),
+    NavigationTab("requests", R.string.v2_my_properties, Icons.Outlined.Assignment),
+    NavigationTab("more", R.string.more, Icons.Outlined.MoreHoriz)
+)
+
 @Composable
-private fun MalakBottomBar(active: String, onNavigate: (String) -> Unit) {
+private fun MalakBottomBar(active: String, destinations: List<NavigationTab>, onNavigate: (String) -> Unit) {
     Surface(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
         color = Color.White, shape = RoundedCornerShape(26.dp), shadowElevation = 7.dp) {
         Row(Modifier.fillMaxWidth().heightIn(min = 64.dp).padding(horizontal = 6.dp),
             horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            NavTabs.forEach { tab ->
+            destinations.forEach { tab ->
                 val selected = active == tab.route
                 Column(Modifier.weight(1f).clip(RoundedCornerShape(15.dp)).clickable { onNavigate(tab.route) }
                     .heightIn(min = 58.dp).padding(horizontal = 2.dp, vertical = 7.dp),

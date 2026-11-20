@@ -2,7 +2,7 @@ name: Malak F1 individual verification core
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, codex/malak-pilot-complete]
     paths:
       - 'services/verification/**'
       - '.github/workflows/verification-core.yml'
