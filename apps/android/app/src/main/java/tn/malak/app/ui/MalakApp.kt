@@ -37,8 +37,8 @@ import androidx.compose.ui.unit.sp
 import tn.malak.app.R
 import java.util.Locale
 
-private val Sea = Color(0xFF087C9A)
-private val SeaLight = Color(0xFFE9F8F9)
+private val Sea = Brand.Crimson
+private val SeaLight = Brand.Rose
 private val Border = Color(0xFFE8E8EB)
 
 /**
@@ -194,7 +194,7 @@ private fun MalakHome(
     onReplaceDocuments:(org.json.JSONObject)->Unit,onRequests:()->Unit
 ) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 18.dp)) {
-        Box(Modifier.fillMaxWidth().background(Brush.verticalGradient(listOf(Sea, Color(0xFF35ABC1), SeaLight)))) {
+        Box(Modifier.fillMaxWidth().background(Brush.verticalGradient(listOf(Color(0xFF71152B), Brand.Crimson, Color(0xFF89142E))))) {
             Column(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 23.dp, bottom = 24.dp),
                 verticalArrangement = Arrangement.spacedBy(17.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically,
