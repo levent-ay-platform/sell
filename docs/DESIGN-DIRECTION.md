@@ -1,5 +1,6 @@
 # ملاك — Approved Light Tunisia Visual System (LOCKED)
 
+> **2026-11-20 owner override — brand renamed to Amlak:** User-facing app/launcher/search masthead is **Amlak**, superseding previous use of «ملاك» or «Malak» as the consumer brand. Crimson/pearl, premium Mediterranean palette and 2D map-first decisions remain. The internal Android application ID `tn.malak.app` is intentionally retained for installation continuity and data safety; do not treat this as the consumer-facing name.\n\n
 Date: 2026-11-09
 Status: **LOCKED by user: exact visual/layout baseline; approved product name ملاك** — the light coastal screenshot with Tunisian crimson, white pearl glass cards, bougainvillea at the upper-right, and an interactive 3D real-estate map is the binding art-direction reference for upcoming screen designs. This is a DESIGN decision, not authorization to deploy.
 
