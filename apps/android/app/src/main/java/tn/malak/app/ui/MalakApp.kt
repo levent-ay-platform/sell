@@ -139,7 +139,8 @@ internal fun MalakApp(
                                 ExploreScreen(language,
                                     onSeller = { sellerReturnRoute = screen; resubmission = null; screen = "seller" },
                                     preferredMapMode = screen == "home",
-                                    onViewModeChanged = { map -> screen = if (map) "home" else "explore" }
+                                    onViewModeChanged = { map -> screen = if (map) "home" else "explore" },
+                                    onAlerts = { screen = "alerts" }, onAccount = { screen = "account" }
                                 )
                             } else MalakHome(query, { query = it }, category, { category = it }, { resubmission=null; screen = "seller" }, { resubmission=it;screen="seller" },{focusedRequest=null;screen="requests"})
                             "requests" -> Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(18.dp)){
