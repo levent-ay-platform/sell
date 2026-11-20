@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.provider.OpenableColumns
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.*
@@ -195,6 +196,9 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmission:org.j
     // payload fingerprint + opaque key BEFORE the first network request, so an
     // unknown server response followed by app restart cannot create a new case.
     var showInvalid by rememberSaveable(draftFile) {mutableStateOf(false)}
+    BackHandler(enabled = !submitted) {
+        if (step > 0) { step--; showInvalid = false } else onBack()
+    }
     var saveMessage by remember(draftFile) {mutableIntStateOf(0)}
     var pickMessage by remember(draftFile) {mutableIntStateOf(0)}
     val files=remember(draftFile) {mutableStateListOf<ChosenDocument>()}
