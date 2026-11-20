@@ -77,6 +77,7 @@ internal fun MalakApp(
     }
     val direction = if (language == "ar") LayoutDirection.Rtl else LayoutDirection.Ltr
     var screen by rememberSaveable { mutableStateOf("home") }
+    var sellerReturnRoute by rememberSaveable { mutableStateOf("home") }
     var category by rememberSaveable { mutableStateOf("all") }
     var query by rememberSaveable { mutableStateOf("") }
     // A successful server login returns a real scoped QA bearer. Local UI
@@ -88,7 +89,7 @@ internal fun MalakApp(
     val v2 = BuildConfig.MALAK_V2_DISCOVERY
     val destinations = if (v2) DiscoveryTabs else NavTabs
     val exploreState = rememberSaveableStateHolder()
-    val ownerRoute = screen == "seller" || screen == "requests"
+    val ownerRoute = screen == "seller" || screen == "requests" || screen == "signin"
 
     CompositionLocalProvider(LocalMalakStringsContext provides localizedContext,
         LocalLayoutDirection provides direction,
@@ -101,41 +102,71 @@ internal fun MalakApp(
             surface = Brand.Pearl,
             onSurface = Brand.Ink
         )) {
+            BackHandler(enabled = v2 && screen in setOf("explore", "alerts", "account", "settings", "favorites", "requests")) {
+                screen = if (screen in setOf("settings", "favorites", "requests")) "account" else "home"
+            }
+            BackHandler(enabled = v2 && screen == "seller") { screen = sellerReturnRoute }
             Surface(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing), color = Brand.Pearl) {
                 if (PilotOtpGate.enabled && pilotPhone == null && (!v2 || ownerRoute)) {
-                    BackHandler(enabled = v2) { screen = "home" }
+                    BackHandler(enabled = v2) { screen = if (screen == "signin") "account" else sellerReturnRoute }
                     PilotOtpScreen(onEnterPilot = { phone, session ->
                         pilotOcrSession=session
                         pilotPhone=phone
-                        if (!v2) screen="home"
+                        if (!v2) screen="home" else if (screen == "signin") screen="account"
                     })
                 } else Scaffold(
                     containerColor = Brand.Pearl,
                     contentWindowInsets = WindowInsets(0, 0, 0, 0),
                     topBar = {
-                        if (PilotOtpGate.enabled && pilotPhone != null) PilotSessionBar(pilotPhone.orEmpty()) {
+                        if (!v2 && PilotOtpGate.enabled && pilotPhone != null) PilotSessionBar(pilotPhone.orEmpty()) {
                             pilotOcrSession = null
                             pilotPhone = null
                             screen = "home"
                         }
                     },
                     bottomBar = {
-                        if (destinations.any { it.route == screen }) MalakBottomBar(screen, destinations) { screen = it }
+                        if (v2) {
+                            if (screen in setOf("home", "explore", "alerts", "account")) PremiumBottomBar(screen) { route ->
+                                if (route == "seller") { sellerReturnRoute = screen; resubmission = null }
+                                screen = route
+                            }
+                        } else if (destinations.any { it.route == screen }) MalakBottomBar(screen, destinations) { screen = it }
                     }
                 ) { insets ->
                     Box(Modifier.fillMaxSize().padding(insets)) {
                         when (screen) {
-                            "home" -> if (v2) exploreState.SaveableStateProvider("explore") {
-                                ExploreScreen(language) { resubmission = null; screen = "seller" }
+                            "home", "explore" -> if (v2) exploreState.SaveableStateProvider("explore") {
+                                ExploreScreen(language,
+                                    onSeller = { sellerReturnRoute = screen; resubmission = null; screen = "seller" },
+                                    preferredMapMode = screen == "home",
+                                    onViewModeChanged = { map -> screen = if (map) "home" else "explore" }
+                                )
                             } else MalakHome(query, { query = it }, category, { category = it }, { resubmission=null; screen = "seller" }, { resubmission=it;screen="seller" },{focusedRequest=null;screen="requests"})
                             "requests" -> Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(18.dp)){
-                                TextButton(onClick={screen="home"}){Text(s(R.string.back))}
+                                TextButton(onClick={screen=if(v2) "account" else "home"}){Text(s(R.string.back))}
                                 PilotListings("","all",{resubmission=it;screen="seller"},onlyOwn=true,focusId=focusedRequest)
                             }
                             "map" -> MalakEmptyPage(R.string.map_title, R.string.map_unavailable,
                                 R.string.map_unavailable_hint, Icons.Outlined.Map, { screen = "home" })
-                            "favorites" -> MalakEmptyPage(R.string.favorites_title, R.string.favorites_empty,
+                            "favorites" -> if (v2) PremiumFavoritesScreen(onExplore = { screen = "explore" }, onBack = { screen = "account" })
+                                else MalakEmptyPage(R.string.favorites_title, R.string.favorites_empty,
                                 R.string.favorites_hint, Icons.Outlined.FavoriteBorder, { screen = "home" })
+                            "alerts" -> PremiumAlertsScreen(onExplore = { screen = "explore" })
+                            "account" -> PremiumAccountScreen(
+                                phone = pilotPhone,
+                                onSignIn = { screen = if (PilotOtpGate.enabled) "signin" else "seller" },
+                                onRequests = { focusedRequest = null; screen = "requests" },
+                                onFavorites = { screen = "favorites" },
+                                onSettings = { screen = "settings" },
+                                onSeller = { sellerReturnRoute = "account"; resubmission = null; screen = "seller" },
+                                onLogout = if (pilotPhone == null) null else ({
+                                    pilotOcrSession = null; pilotPhone = null; screen = "account"
+                                })
+                            )
+                            "settings" -> PremiumSettingsScreen(language, onLanguage = {
+                                language = it
+                                preferences.edit().putString("language", it).apply()
+                            }, onBack = { screen = "account" })
                             "more" -> MalakMorePage(language, onLanguage = {
                                 language = it
                                 preferences.edit().putString("language", it).apply()
@@ -145,7 +176,7 @@ internal fun MalakApp(
                                 // A document URI, consent checkbox or OCR result must not be
                                 // inherited by a different account on a shared device.
                                 SellerOcrJourney(
-                                    onBack = { screen = "home" },
+                                    onBack = { screen = if (v2) sellerReturnRoute else "home" },
                                     draftScope = if (PilotOtpGate.enabled) pilotPhone else null,
                                     resubmission=resubmission,
                                     onSubmitted={focusedRequest=it;screen="requests"}
