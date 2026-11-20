@@ -445,4 +445,19 @@
     <string name="v2_ready_map">خريطة عقارية تفاعلية</string>
     <string name="v2_map_skip">اعرض النتائج كقائمة</string>
     <string name="v2_overview">عرض العقار</string>
+
+    <string name="v2_ui_map">الخريطة</string>
+    <string name="v2_ui_explore">استكشف</string>
+    <string name="v2_ui_add">أضف عقار</string>
+    <string name="v2_ui_alerts">التنبيهات</string>
+    <string name="v2_ui_account">حسابي</string>
+    <string name="v2_ui_alerts_empty">ما عندك تنبيهات حالياً</string>
+    <string name="v2_ui_alerts_explain">ستظهر هنا التنبيهات المتعلقة ببحثك وطلبات عقاراتك عند تفعيل خدمة الإشعارات.</string>
+    <string name="v2_ui_alerts_permission">الإشعارات لم تُفعّل بعد، ولن نطلب إذن التنبيهات من دون موافقتك.</string>
+    <string name="v2_ui_guest">أهلاً بك في ملاك</string>
+    <string name="v2_ui_member">مساحتي</string>
+    <string name="v2_ui_guest_explain">تصفّح الخريطة والعقارات بحرية بدون حساب.</string>
+    <string name="v2_ui_sign_in">تسجيل الدخول</string>
+    <string name="v2_ui_sign_out">تسجيل الخروج</string>
+    <string name="v2_ui_my_space">مساحتي العقارية</string>
 </resources>
