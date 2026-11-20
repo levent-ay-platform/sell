@@ -15,9 +15,9 @@ _Last audited: 2026-11-20 (Europe/Istanbul). This is the navigation and checkpoi
 
 ## Verified 2026-11-20 checkpoint
 
-- GitHub PR #22 implementation **QA baseline commit**: `a869e8369c5254133ba5f3181b40f21b1bd7450f`. This is the build-tested commit, not a promise that this file's documentation commit is itself Android-tested.
+- **Amlak 2.1 tested implementation commit:** `a2bed087c095b32cb4ba21137963661238ef9284` (map load timeout/fallback, touch targets, branding documentation). [Hosted Android QA workflow 44814338491](https://github.com/levent-ay-platform/sell/actions/runs/44814338491) completed successfully; its map-first APK is 41,965,065 bytes with SHA-256 `70911d4de9d987c0719bf537d3c3542e013accd7eb204127c7b0fed3697917aa`. The preceding Amlak 2.0 QA baseline is `a869e8369c5254133ba5f3181b40f21b1bd7450f`.
 - [Hosted Android workflow run 44807351079](https://github.com/levent-ay-platform/sell/actions/runs/44807351079): completed successfully for that QA baseline. Build artifact `app-debug.apk` is 41,962,333 bytes with SHA-256 `2ecd7dc5849fc2740c44229c8bef7055c9558718dd716ceb16a186572b050b4a`.
-- **Visual/physical-device approval: NOT COMPLETE.** Original emulator had an incompatible APK signature; a separate `Amlak2QA_20261120` AVD was created, but Android boot had not finished and installation did not succeed at the last verification. No existing app data were deleted. Never describe this as an installed/visually validated release.
+- **Emulator installation now proven for Amlak 2.0 baseline:** `Amlak2QA_20261120` completed boot and accepted the SHA-verified APK, the main Activity launched, and the app process was observed. French map/list/alerts/account and Arabic settings/Back/RTL were exercised with locally captured UI XML and screenshots. The MapLibre map background was visually blank at first check, leading to the Amlak 2.1 fallback patch. **New 2.1 artifact installation verification and physical-device / full screen / 130% font-scale approval are separate gates; not claimed by build success.** The original emulator's app data was not deleted.
 - **Mac worktree reconciliation completed (2026-11-20):** isolated PR checkout `/Users/levent/.codex/worktrees/malak-v2-map-parcel-foundation/amlak pro` was clean and successfully fast-forwarded from `a182a80` to `a3ab6f2` (documentation HEAD at sync). Primary `/Users/levent/Projects/amlak pro` remains on `codex/malak-pilot-complete` / `60b4e37` with untracked `docs/data-platform/` and `tools/` deliberately untouched. Always re-check live HEAD/status before later work.
 - Archived source data remains under `/Users/levent/MALAK_TUNISIA_DATA/` (`raw/`, `normalized/`, `derived/`, `reports/`, `private-snapshots/`, SQLite). Files and schemas were not moved or published.
 - New local **non-destructive** inventory: `/Users/levent/MALAK_TUNISIA_DATA/reports/housekeeping/2026-11-20/source-inventory.json`.
@@ -27,7 +27,7 @@ _Last audited: 2026-11-20 (Europe/Istanbul). This is the navigation and checkpoi
 
 1. On Mac: inspect **both** `git status` and HEAD and compare to the current remote PR head before syncing. Fast-forward only on a clean working tree; do not touch the base worktree's untracked Atlas work.
 2. Keep immutable archives in `MALAK_TUNISIA_DATA`; write generated outputs to versioned `reports/` paths with provenance, hashes and real counts. Do not promote older reported counts into newly verified facts.
-3. Investigate separate Android QA emulator boot, install APK, capture live screen evidence, audit every AR/FR page and contrast. No claim of device acceptance until this passes.
+3. Install the Amlak 2.1 APK on the isolated, disposable QA emulator; verify the timeout/list fallback and visual screenshots, test every AR/FR page at regular and 130% font scale, and then physical-device QA. Passing build is not visual acceptance.
 4. For Atlas data findings and real cadastral-plan coverage, update **Issue #20**; for decisions update **Issue #21**; for implementation/build report to **PR #22**, linking this index.
 5. No merges, public publishing, production/database migrations, credential changes, or archive deletions without explicit acceptance.
 
