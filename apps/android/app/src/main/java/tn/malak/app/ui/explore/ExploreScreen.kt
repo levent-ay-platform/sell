@@ -40,7 +40,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import tn.malak.app.BuildConfig
 import tn.malak.app.R
-import tn.malak.app.ui.APP_BRAND_ARABIC
+import tn.malak.app.ui.APP_BRAND_NAME
 import tn.malak.app.ui.Brand
 import tn.malak.app.ui.s
 import kotlin.math.abs
@@ -367,7 +367,7 @@ private fun ExploreHeader(
         Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween) {
-                Text(APP_BRAND_ARABIC, color = Brand.Crimson, style = MaterialTheme.typography.headlineSmall,
+                Text(APP_BRAND_NAME, color = Brand.Crimson, style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.Bold)
                 Row(horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
                     IconButton(onClick = onAlerts, modifier = Modifier.size(44.dp)) {
