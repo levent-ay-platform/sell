@@ -75,6 +75,18 @@ internal fun ExploreScreen(
     LaunchedEffect(preferredMapMode) { mapMode = preferredMapMode && styleUrl.isNotEmpty() }
     var mapIssue by rememberSaveable { mutableStateOf(false) }
     var mapReady by remember { mutableStateOf(false) }
+    // A map with an unresponsive style endpoint must not strand the user on a blank surface.
+    // List discovery uses the same authorized source and remains available offline/when tiles fail.
+    LaunchedEffect(mapMode, mapReady, styleUrl) {
+        if (mapMode && !mapReady && styleUrl.isNotBlank()) {
+            delay(18_000L)
+            if (mapMode && !mapReady) {
+                mapIssue = true
+                mapMode = false
+                onViewModeChanged(false)
+            }
+        }
+    }
     var centerLatitude by rememberSaveable { mutableDoubleStateOf(InitialCenter.latitude) }
     var centerLongitude by rememberSaveable { mutableDoubleStateOf(InitialCenter.longitude) }
     var zoom by rememberSaveable { mutableDoubleStateOf(InitialZoom) }
@@ -189,10 +201,24 @@ internal fun ExploreScreen(
                 onReady = { mapReady = true }
             )
             if (!mapReady) {
-                OutlinedButton(
-                    onClick = { mapMode = false },
-                    modifier = Modifier.align(Alignment.Center)
-                ) { Text(s(R.string.v2_map_skip)) }
+                Column(
+                    modifier = Modifier.align(Alignment.Center),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(30.dp),
+                        color = Brand.Crimson,
+                        strokeWidth = 3.dp
+                    )
+                    OutlinedButton(
+                        onClick = {
+                            mapMode = false
+                            onViewModeChanged(false)
+                        },
+                        colors = ButtonDefaults.outlinedButtonColors(containerColor = Brand.Pearl)
+                    ) { Text(s(R.string.v2_map_skip)) }
+                }
             }
         }
 
@@ -282,7 +308,12 @@ internal fun ExploreScreen(
                 }
                 Spacer(Modifier.height(32.dp))
             } else {
-                if (mapIssue) ResultMessage(s(R.string.v2_tiles_error), retry = { mapIssue = false; mapMode = true })
+                if (mapIssue) ResultMessage(s(R.string.v2_tiles_error), retry = {
+                    mapIssue = false
+                    mapReady = false
+                    mapMode = true
+                    onViewModeChanged(true)
+                })
                 when {
                     source == null -> ResultMessage(s(R.string.v2_not_configured))
                     listLoading -> LinearProgressIndicator(Modifier.fillMaxWidth())
@@ -370,10 +401,10 @@ private fun ExploreHeader(
                 Text(APP_BRAND_NAME, color = Brand.Crimson, style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.Bold)
                 Row(horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = onAlerts, modifier = Modifier.size(44.dp)) {
+                    IconButton(onClick = onAlerts, modifier = Modifier.size(48.dp)) {
                         Icon(Icons.Outlined.NotificationsNone, s(R.string.v2_ui_alerts), tint = Brand.Ink)
                     }
-                    IconButton(onClick = onAccount, modifier = Modifier.size(44.dp)) {
+                    IconButton(onClick = onAccount, modifier = Modifier.size(48.dp)) {
                         Icon(Icons.Outlined.PersonOutline, s(R.string.v2_ui_account), tint = Brand.Ink)
                     }
                 }
@@ -445,7 +476,10 @@ private fun ExploreHeader(
                     }
                     if (styleConfigured) {
                         val label = s(if (mapMode) R.string.v2_list_mode else R.string.v2_map_mode)
-                        TextButton(onClick = onMode, contentPadding = PaddingValues(horizontal = 6.dp)) {
+                        TextButton(
+                            onClick = onMode, modifier = Modifier.heightIn(min = 48.dp),
+                            contentPadding = PaddingValues(horizontal = 6.dp)
+                        ) {
                             Icon(if (mapMode) Icons.Outlined.ViewList else Icons.Outlined.Map, null,
                                 modifier = Modifier.size(18.dp))
                             Spacer(Modifier.width(4.dp))
