@@ -1,5 +1,6 @@
 # MALAK 2.0 — Premium Mobile UI/UX System
 
+> **2026-11-20 owner override — brand renamed to Amlak:** User-facing app/launcher/search masthead is **Amlak**, superseding previous use of «ملاك» or «Malak» as the consumer brand. Crimson/pearl, premium Mediterranean palette and 2D map-first decisions remain. The internal Android application ID `tn.malak.app` is intentionally retained for installation continuity and data safety; do not treat this as the consumer-facing name.\n\n
 **Status:** implementation design contract for Draft PR #22, 2026-11-20. Not a claim of completed functionality, build, or visual acceptance.
 **Canonical decisions:** [Issue #21](https://github.com/levent-ay-platform/sell/issues/21), [Atlas #20](https://github.com/levent-ay-platform/sell/issues/20), `docs/DESIGN-DIRECTION.md`. 2D map-first, sales-only closed launch Nabeul/Kélibia, Arabic RTL + French LTR. This document extends the design to all screens; it does not supersede data/security constraints.
 **User direction:** Full identity redesign including system back navigation, notifications/alerts, account, full screens, icons, typography, elements, gestures and every UI state. No mandatory login for browsing.
