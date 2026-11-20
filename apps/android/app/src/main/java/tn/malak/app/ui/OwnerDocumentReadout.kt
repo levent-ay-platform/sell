@@ -37,7 +37,7 @@ internal fun OwnerDocumentReadout(report:CertificateIdentityReview,onDateRefresh
             }
             field.fact?.let{
                 Text(s(R.string.smart_read_page)+" "+it.page+" · "+s(if(it.status=="LOW_CONFIDENCE")R.string.smart_read_needs_review else R.string.smart_read_source_available),
-                    fontSize=11.sp,color=Brand.Muted)
+                    fontSize=13.sp,color=Brand.Muted)
             }
         }
     }
