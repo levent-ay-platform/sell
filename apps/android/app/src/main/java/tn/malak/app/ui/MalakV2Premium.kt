@@ -87,7 +87,7 @@ internal fun PremiumBottomBar(route: String, onRoute: (String) -> Unit) {
                     }
                     Text(
                         s(tab.label),
-                        fontSize = 12.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                        fontSize = 12.sp, lineHeight = 17.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
                         color = if (selected || primary) Brand.Crimson else PremiumColors.Muted,
                         maxLines = 2, overflow = TextOverflow.Ellipsis,
                         textAlign = androidx.compose.ui.text.style.TextAlign.Center
@@ -171,7 +171,7 @@ internal fun PremiumAlertsScreen(onExplore: () -> Unit) {
         Text(
             s(R.string.v2_ui_alerts_permission),
             modifier = Modifier.padding(horizontal = 24.dp, vertical = 10.dp),
-            color = PremiumColors.Muted, fontSize = 12.sp, lineHeight = 18.sp
+            color = PremiumColors.Muted, fontSize = 13.sp, lineHeight = 20.sp
         )
     }
 }
@@ -321,7 +321,7 @@ internal fun PremiumSettingsScreen(
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(s(R.string.privacy), fontWeight = FontWeight.SemiBold, color = PremiumColors.Ink)
                     Text(s(R.string.privacy_hint), fontSize = 13.sp, color = PremiumColors.Muted)
-                    Text(s(R.string.v2_ui_alerts_permission), fontSize = 12.sp, color = PremiumColors.Muted)
+                    Text(s(R.string.v2_ui_alerts_permission), fontSize = 13.sp, color = PremiumColors.Muted)
                 }
             }
         }
