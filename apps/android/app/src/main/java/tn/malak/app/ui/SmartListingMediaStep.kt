@@ -108,7 +108,7 @@ internal fun SmartListingMediaStep(
                     Column(Modifier.weight(1f)){
                         Text(photo.name,maxLines=1,color=Brand.Ink,
                             fontSize=12.sp,fontWeight=FontWeight.Medium)
-                        Text("${photo.length/1024} KB",fontSize=11.sp,
+                        Text("${photo.length/1024} KB",fontSize=12.sp,
                             color=Brand.Muted)
                     }
                     IconButton(onClick={photos.removeAt(index)}) {
