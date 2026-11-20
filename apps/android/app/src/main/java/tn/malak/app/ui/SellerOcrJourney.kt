@@ -52,7 +52,7 @@ private const val MAX_DOC_BYTES = 12L * 1024L * 1024L
 // Keep form acceptance identical to provisionIndividualOwnerCase's server contract.
 private val ValidLandArea=Regex("""^[1-9][0-9]{0,8}(?:\.[0-9]{1,3})?$""")
 private val ValidLandPrice=Regex("""^[1-9][0-9]{0,11}$""")
-private val CardBorder = Color(0xFFE7E8EC)
+private val CardBorder = Color(0xFFCEC7CA)
 private data class ChosenDocument(val uri:Uri, val displayName:String, val length:Long,
     val mime:String, val uploadKey:String=UUID.randomUUID().toString())
 
@@ -627,7 +627,7 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmission:org.j
                     verticalArrangement=Arrangement.spacedBy(7.dp)) {
                     Box(Modifier.fillMaxWidth().height(5.dp).background(
                         if(i<=step)Brand.Crimson else Color(0xFFE5E8EE),CircleShape))
-                    Text(s(label),fontSize=10.sp,fontWeight=if(i==step)FontWeight.Bold else FontWeight.Normal,
+                    Text(s(label),fontSize=12.sp,fontWeight=if(i==step)FontWeight.Bold else FontWeight.Normal,
                         color=if(i==step)Brand.Crimson else Brand.Muted, maxLines=1)
                 }
             }
@@ -673,7 +673,7 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmission:org.j
                                             color=Brand.Ink,fontWeight=FontWeight.SemiBold,fontSize=12.sp)
                                         Text("${file.displayName} · ${file.length/1024} KB",
                                             color=Brand.Muted,maxLines=1,
-                                            overflow=TextOverflow.Ellipsis,fontSize=11.sp)
+                                            overflow=TextOverflow.Ellipsis,fontSize=12.sp)
                                     }
                                     IconButton(onClick={
                                         if(index<files.size&&files[index].uri==file.uri){
@@ -937,7 +937,7 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmission:org.j
                                         Text(s(R.string.smart_read_page)+" "+fact.page+" · "+
                                             s(if(fact.source=="pdf-text")R.string.source_pdf_text else R.string.source_scan_text)+" · "+s(if(fact.status=="LOW_CONFIDENCE")
                                                 R.string.smart_read_needs_review else R.string.smart_read_source_available),
-                                            color=Brand.Muted,fontSize=11.sp)
+                                            color=Brand.Muted,fontSize=12.sp)
                                     }
                                     Text(s(R.string.unified_not_ownership),
                                         fontSize=12.sp,color=Brand.Muted,lineHeight=18.sp)
@@ -1181,14 +1181,14 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmission:org.j
                                                 Column(Modifier.fillMaxWidth().padding(10.dp),
                                                     verticalArrangement=Arrangement.spacedBy(3.dp)) {
                                                     Text(s(familyFactLabel(fact.id)),
-                                                        color=Brand.Muted,fontSize=11.sp)
+                                                        color=Brand.Muted,fontSize=12.sp)
                                                     Text(fact.value?:"",fontWeight=FontWeight.SemiBold,
                                                         fontSize=14.sp,color=Brand.Ink)
                                                     Text("${s(R.string.smart_read_page)} ${fact.page?:1} · "+
                                                         s(if(fact.status=="LOW_CONFIDENCE")
                                                             R.string.smart_read_needs_review
                                                           else R.string.smart_read_source_available),
-                                                        color=Brand.Muted,fontSize=11.sp)
+                                                        color=Brand.Muted,fontSize=12.sp)
                                                     // Only explicitly SOLD area can be offered as an
                                                     // ad-area suggestion, never a whole-title area.
                                                     if(read.familyKind=="SALE_DEED"&&
@@ -1445,7 +1445,7 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmission:org.j
                     null,Modifier.size(21.dp))
             }
             if(step<3) {
-                Text(s(R.string.smart_autosave_hint),fontSize=11.sp,
+                Text(s(R.string.smart_autosave_hint),fontSize=12.sp,
                     color=Brand.Muted,lineHeight=17.sp)
             }
             }
@@ -1521,7 +1521,7 @@ private fun VerificationStage(
 ){
     val accent=when(status){
         ReadingStatus.EXTRACTED->Color(0xFF267B63)
-        ReadingStatus.REVIEW->Color(0xFFAD753A)
+        ReadingStatus.REVIEW->Color(0xFF84571E)
         ReadingStatus.READING->Brand.Crimson
         ReadingStatus.PENDING->Brand.Muted
     }
