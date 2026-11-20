@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="pair_reason_document_type">Le type du document reste incertain. Ajoutez une copie plus nette et complète pour effectuer la comparaison.</string>
-    <string name="app_name">ملاك</string>
+    <string name="app_name">Amlak</string>
     <string name="brand_subtitle">L’immobilier en Tunisie, de propriétaire à acheteur</string>
     <string name="home">Accueil</string>
     <string name="map">Carte</string>
@@ -180,10 +180,10 @@
     <string name="pair_service_unavailable">La lecture sécurisée est temporairement indisponible. Vous pouvez enregistrer un brouillon local.</string>
     <string name="pair_request_failed">Comparaison impossible. Vérifiez la connexion et réessayez lorsque le service est activé.</string>
     <string name="pair_not_connected">La lecture sécurisée n’est pas encore activée pour votre compte. Vous pouvez enregistrer le brouillon.</string>
-    <string name="pair_upload_consent">J’accepte l’envoi de mon certificat et de ma carte d’identité au service privé de Malak pour la lecture et la comparaison liées à mon dossier.</string>
+    <string name="pair_upload_consent">J’accepte l’envoi de mon certificat et de ma carte d’identité au service privé de Amlak pour la lecture et la comparaison liées à mon dossier.</string>
     <string name="pair_start">Lire et comparer les documents</string>
     <string name="pilot_ocr_service_unavailable">Connexion indisponible. Réessayez.</string>
-    <string name="pilot_login_title">Bienvenue sur Malak</string>
+    <string name="pilot_login_title">Bienvenue sur Amlak</string>
     <string name="pilot_login_subtitle">Saisissez votre numéro tunisien puis votre code d’accès.</string>
     <string name="pilot_phone_label">Numéro tunisien</string>
     <string name="pilot_phone_hint">8 chiffres après +216</string>
@@ -192,7 +192,7 @@
     <string name="pilot_otp_label">Code d’accès</string>
     <string name="pilot_otp_hint">Entrez le code à 4 chiffres (1234).</string>
     <string name="pilot_otp_invalid">Code incorrect. Réessayez.</string>
-    <string name="pilot_enter">Accéder à Malak</string>
+    <string name="pilot_enter">Accéder à Amlak</string>
     <string name="pilot_change_phone">Modifier le numéro</string>
     <string name="pilot_no_real_identity">Ce code ne confirme ni la propriété du numéro ni celle du terrain.</string>
     <string name="pilot_session_badge">Mon compte</string>
@@ -454,7 +454,7 @@
     <string name="v2_ui_alerts_empty">Aucune alerte pour le moment</string>
     <string name="v2_ui_alerts_explain">Les nouvelles alertes apparaîtront ici lorsque les notifications de vos recherches et de vos dossiers seront disponibles.</string>
     <string name="v2_ui_alerts_permission">Les notifications ne sont pas encore activées. Aucune autorisation n’est demandée sans votre accord.</string>
-    <string name="v2_ui_guest">Bienvenue sur ملاك</string>
+    <string name="v2_ui_guest">Bienvenue sur Amlak</string>
     <string name="v2_ui_member">Mon espace</string>
     <string name="v2_ui_guest_explain">Parcourez la carte librement, sans créer de compte.</string>
     <string name="v2_ui_sign_in">Se connecter</string>
