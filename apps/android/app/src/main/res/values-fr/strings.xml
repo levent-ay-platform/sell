@@ -445,4 +445,19 @@
     <string name="v2_ready_map">Carte immobilière interactive</string>
     <string name="v2_map_skip">Afficher les résultats en liste</string>
     <string name="v2_overview">Voir le bien</string>
+
+    <string name="v2_ui_map">Carte</string>
+    <string name="v2_ui_explore">Explorer</string>
+    <string name="v2_ui_add">Publier</string>
+    <string name="v2_ui_alerts">Alertes</string>
+    <string name="v2_ui_account">Compte</string>
+    <string name="v2_ui_alerts_empty">Aucune alerte pour le moment</string>
+    <string name="v2_ui_alerts_explain">Les nouvelles alertes apparaîtront ici lorsque les notifications de vos recherches et de vos dossiers seront disponibles.</string>
+    <string name="v2_ui_alerts_permission">Les notifications ne sont pas encore activées. Aucune autorisation n'est demandée sans votre accord.</string>
+    <string name="v2_ui_guest">Bienvenue sur ملاك</string>
+    <string name="v2_ui_member">Mon espace</string>
+    <string name="v2_ui_guest_explain">Parcourez la carte librement, sans créer de compte.</string>
+    <string name="v2_ui_sign_in">Se connecter</string>
+    <string name="v2_ui_sign_out">Se déconnecter</string>
+    <string name="v2_ui_my_space">Mon espace immobilier</string>
 </resources>
