@@ -15,6 +15,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Layers
+import androidx.compose.material.icons.outlined.NotificationsNone
+import androidx.compose.material.icons.outlined.PersonOutline
 import androidx.compose.material.icons.outlined.Map
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Tune
@@ -55,7 +57,8 @@ private val FilterSaver = listSaver<DiscoveryFilters, String>(
 @Composable
 internal fun ExploreScreen(
     language: String, onSeller: () -> Unit, preferredMapMode: Boolean = true,
-    onViewModeChanged: (Boolean) -> Unit = {}
+    onViewModeChanged: (Boolean) -> Unit = {},
+    onAlerts: () -> Unit = {}, onAccount: () -> Unit = {}
 ) {
     val context = LocalContext.current.applicationContext
     val endpoint = BuildConfig.MALAK_DISCOVERY_BASE_URL
@@ -200,6 +203,7 @@ internal fun ExploreScreen(
             ExploreHeader(
                 searchText = searchText, language = language, source = source, filters = filters,
                 mapMode = mapMode, styleConfigured = styleUrl.isNotEmpty(), demo = demo, onSeller = onSeller,
+                onAlerts = onAlerts, onAccount = onAccount,
                 onSearchChange = {
                     searchText = it
                     if (it.isBlank()) { placeId = null; selectedId = null }
@@ -339,6 +343,7 @@ internal fun ExploreScreen(
 private fun ExploreHeader(
     searchText: String, language: String, source: DiscoverySource?, filters: DiscoveryFilters,
     mapMode: Boolean, styleConfigured: Boolean, demo: Boolean, onSeller: () -> Unit,
+    onAlerts: () -> Unit, onAccount: () -> Unit,
     onSearchChange: (String) -> Unit, onPlace: (DiscoveryPlace) -> Unit, onKind: (String?) -> Unit,
     onFilters: () -> Unit, onMode: () -> Unit
 ) {
@@ -358,19 +363,19 @@ private fun ExploreHeader(
         }
     }
 
-    Surface(color = Brand.Pearl, shape = RoundedCornerShape(24.dp), shadowElevation = 6.dp) {
-        Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    Surface(color = Brand.Pearl, shape = RoundedCornerShape(22.dp), shadowElevation = 4.dp) {
+        Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween) {
                 Text(APP_BRAND_ARABIC, color = Brand.Crimson, style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.Bold)
-                FilledTonalButton(
-                    onClick = onSeller, contentPadding = PaddingValues(horizontal = 12.dp),
-                    colors = ButtonDefaults.filledTonalButtonColors(containerColor = Brand.Rose, contentColor = Brand.Crimson)
-                ) {
-                    Icon(Icons.Outlined.Add, null, Modifier.size(18.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text(s(R.string.v2_add_property))
+                Row(horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = onAlerts, modifier = Modifier.size(44.dp)) {
+                        Icon(Icons.Outlined.NotificationsNone, s(R.string.v2_ui_alerts), tint = Brand.Ink)
+                    }
+                    IconButton(onClick = onAccount, modifier = Modifier.size(44.dp)) {
+                        Icon(Icons.Outlined.PersonOutline, s(R.string.v2_ui_account), tint = Brand.Ink)
+                    }
                 }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
