@@ -22,4 +22,6 @@
     <string name="parcel_no_measured_sides">La source ne précise pas les longueurs des côtés.</string>
     <string name="parcel_pdf_page">Page PDF</string>
     <string name="parcel_pixel_measurements">Mesures du scan (pixels)</string>
+    <string name="parcel_zoom_in">Agrandir</string>
+    <string name="parcel_zoom_out">Réduire</string>
 </resources>

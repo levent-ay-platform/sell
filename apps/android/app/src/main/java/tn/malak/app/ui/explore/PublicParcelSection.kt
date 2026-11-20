@@ -11,12 +11,15 @@ import android.os.ParcelFileDescriptor
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.ZoomIn
+import androidx.compose.material.icons.outlined.ZoomOut
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -174,6 +177,7 @@ private fun LocalOutline(vertices: List<PlanPoint>) {
 private fun PropertyDocumentViewer(document: PublicPropertyDocument, onDismiss: () -> Unit) {
     val context = LocalContext.current
     val isPdf = document.mime == "application/pdf"
+    var zoom by rememberSaveable(document.id) { mutableFloatStateOf(1f) }
     var page by rememberSaveable(document.id) { mutableIntStateOf(document.startPage) }
     var preview by remember(document.location, page) { mutableStateOf<DocumentPage?>(null) }
     var failed by remember(document.location, page) { mutableStateOf(false) }
@@ -193,6 +197,12 @@ private fun PropertyDocumentViewer(document: PublicPropertyDocument, onDismiss: 
             Column(Modifier.fillMaxSize().safeDrawingPadding().padding(12.dp)) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Text(s(document.label()), Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
+                    IconButton(onClick = { zoom = (zoom - .5f).coerceAtLeast(1f) }, enabled = zoom > 1f) {
+                        Icon(Icons.Outlined.ZoomOut, s(R.string.parcel_zoom_out))
+                    }
+                    IconButton(onClick = { zoom = (zoom + .5f).coerceAtMost(4f) }, enabled = zoom < 4f) {
+                        Icon(Icons.Outlined.ZoomIn, s(R.string.parcel_zoom_in))
+                    }
                     IconButton(onClick = onDismiss) { Icon(Icons.Outlined.Close, s(R.string.back)) }
                 }
                 val shown = preview
@@ -200,10 +210,15 @@ private fun PropertyDocumentViewer(document: PublicPropertyDocument, onDismiss: 
                     failed -> ResultMessage(s(R.string.parcel_preview_error))
                     shown == null -> LinearProgressIndicator(Modifier.fillMaxWidth())
                     else -> {
-                        Box(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState())) {
-                            Image(shown.bitmap.asImageBitmap(), s(R.string.parcel_pdf_page),
-                                Modifier.fillMaxWidth().aspectRatio(shown.bitmap.width.toFloat() / shown.bitmap.height),
-                                contentScale = ContentScale.Fit)
+                        BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
+                            val documentWidth = maxWidth * zoom
+                            Box(Modifier.fillMaxSize().verticalScroll(rememberScrollState())
+                                .horizontalScroll(rememberScrollState())) {
+                                Image(shown.bitmap.asImageBitmap(), s(R.string.parcel_pdf_page),
+                                    Modifier.width(documentWidth).aspectRatio(
+                                        shown.bitmap.width.toFloat() / shown.bitmap.height
+                                    ), contentScale = ContentScale.Fit)
+                            }
                         }
                         if (isPdf && shown.count > 1) {
                             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,

@@ -22,4 +22,6 @@
     <string name="parcel_no_measured_sides">المصدر ما بيذكر أطوال الأضلاع.</string>
     <string name="parcel_pdf_page">صفحة PDF</string>
     <string name="parcel_pixel_measurements">قياسات المسح (بكسل)</string>
+    <string name="parcel_zoom_in">تكبير</string>
+    <string name="parcel_zoom_out">تصغير</string>
 </resources>
