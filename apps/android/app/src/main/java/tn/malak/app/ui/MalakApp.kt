@@ -96,12 +96,7 @@ internal fun MalakApp(
         LocalOwnerEvidenceSession provides (if (PilotOtpGate.enabled) null else ownerEvidenceSession),
         LocalAuthenticatedOwnerSession provides (if (PilotOtpGate.enabled) null else authenticatedOwnerSession),
         LocalPilotOcrSession provides (if (PilotOtpGate.enabled) pilotOcrSession else null)) {
-        MaterialTheme(colorScheme = lightColorScheme(
-            primary = Brand.Crimson,
-            background = Brand.Pearl,
-            surface = Brand.Pearl,
-            onSurface = Brand.Ink
-        )) {
+        MaterialTheme(colorScheme = AmlakColorScheme, typography = AmlakTypography) {
             BackHandler(enabled = v2 && screen in setOf("explore", "alerts", "account", "settings", "favorites", "requests")) {
                 screen = if (screen in setOf("settings", "favorites", "requests")) "account" else "home"
             }
@@ -208,7 +203,7 @@ private fun MalakHome(
                         Icon(Icons.Outlined.Home, null, Modifier.padding(10.dp).size(30.dp), tint = Brand.Crimson)
                     }
                     Column(Modifier.weight(1f)) {
-                        Text("MALAK / ملاك", color = Color.White, fontSize = 25.sp, fontWeight = FontWeight.Bold)
+                        Text("Amlak", color = Color.White, fontSize = 25.sp, fontWeight = FontWeight.Bold)
                         Text(s(R.string.brand_subtitle), color = Color.White.copy(alpha = .93f),
                             fontSize = 12.sp, maxLines = 2)
                     }
@@ -391,7 +386,7 @@ private fun MalakBottomBar(active: String, destinations: List<NavigationTab>, on
                     verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Icon(tab.icon, contentDescription = s(tab.title), modifier = Modifier.size(25.dp),
                         tint = if(selected) Brand.Crimson else Brand.Muted)
-                    Text(s(tab.title), fontSize = 11.sp, color = if(selected) Brand.Crimson else Brand.Muted,
+                    Text(s(tab.title), fontSize = 12.sp, color = if(selected) Brand.Crimson else Brand.Muted,
                         fontWeight = if(selected) FontWeight.Bold else FontWeight.Normal,
                         maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
