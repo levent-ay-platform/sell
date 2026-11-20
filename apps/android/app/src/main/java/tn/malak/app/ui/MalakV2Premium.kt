@@ -33,7 +33,7 @@ internal object PremiumColors {
     val Pearl = Color(0xFFFFFDFB)
     val Border = Color(0xFFE8E1DF)
     val Ink = Color(0xFF22242B)
-    val Muted = Color(0xFF5B606A)
+    val Muted = Brand.Muted
 }
 
 private data class PremiumTab(val route: String, val label: Int, val icon: ImageVector)
@@ -49,14 +49,14 @@ private val tabs = listOf(
 @Composable
 internal fun PremiumBottomBar(route: String, onRoute: (String) -> Unit) {
     Surface(
-        Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 12.dp, vertical = 6.dp),
+        Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp),
         shape = RoundedCornerShape(24.dp),
         color = PremiumColors.Pearl,
         shadowElevation = 7.dp,
         border = BorderStroke(1.dp, PremiumColors.Border)
     ) {
         Row(
-            Modifier.fillMaxWidth().heightIn(min = 66.dp).padding(horizontal = 4.dp, vertical = 4.dp),
+            Modifier.fillMaxWidth().heightIn(min = 70.dp).padding(horizontal = 4.dp, vertical = 4.dp),
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -64,7 +64,7 @@ internal fun PremiumBottomBar(route: String, onRoute: (String) -> Unit) {
                 val selected = route == tab.route
                 val primary = tab.route == "seller"
                 Column(
-                    Modifier.weight(1f).heightIn(min = 56.dp)
+                    Modifier.weight(1f).heightIn(min = 62.dp)
                         .clickable(onClickLabel = s(tab.label)) { onRoute(tab.route) }
                         .padding(horizontal = 2.dp, vertical = 4.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
@@ -87,9 +87,10 @@ internal fun PremiumBottomBar(route: String, onRoute: (String) -> Unit) {
                     }
                     Text(
                         s(tab.label),
-                        fontSize = 10.5.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                        fontSize = 12.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
                         color = if (selected || primary) Brand.Crimson else PremiumColors.Muted,
-                        maxLines = 1, overflow = TextOverflow.Ellipsis
+                        maxLines = 2, overflow = TextOverflow.Ellipsis,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
                     )
                 }
             }
