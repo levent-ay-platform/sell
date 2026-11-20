@@ -1,13 +1,13 @@
-# MALAK 2.0 — Premium Mobile UI/UX System
+# Amlak 2.1 — Premium Mobile UI/UX System
 
 > **2026-11-20 owner override — brand renamed to Amlak:** User-facing app/launcher/search masthead is **Amlak**, superseding previous use of «ملاك» or «Malak» as the consumer brand. Crimson/pearl, premium Mediterranean palette and 2D map-first decisions remain. The internal Android application ID `tn.malak.app` is intentionally retained for installation continuity and data safety; do not treat this as the consumer-facing name.\n\n
-**Status:** implementation design contract for Draft PR #22, 2026-11-20. Not a claim of completed functionality, build, or visual acceptance.
+**Status:** Amlak 2.1 incremental QA contract for Draft PR #22, 2026-11-20. The Amlak 2.0 QA APK was installed and launched on a dedicated Android emulator; preliminary French map/list/alerts/account navigation was captured. Blank map styling was observed, prompting a bounded map-loading fallback change. Physical-device QA, full Arabic RTL and 130% font acceptance remain outstanding.
 **Canonical decisions:** [Issue #21](https://github.com/levent-ay-platform/sell/issues/21), [Atlas #20](https://github.com/levent-ay-platform/sell/issues/20), `docs/DESIGN-DIRECTION.md`. 2D map-first, sales-only closed launch Nabeul/Kélibia, Arabic RTL + French LTR. This document extends the design to all screens; it does not supersede data/security constraints.
 **User direction:** Full identity redesign including system back navigation, notifications/alerts, account, full screens, icons, typography, elements, gestures and every UI state. No mandatory login for browsing.
 
 ## 1. Brand foundations
 
-- **Consumer masthead:** `ملاك`; no old SELL logo. Keep established crimson/pearl Mediterranean light design, no dark-first home. Formal brand red `#B30D2D`, active red `#D21C36`, rose `#FBE9EE`, pearl `#FFFDFB`, text `#22242B`, muted `#5B606A`, border `#E8E1DF`, verified green `#16834A` only when backed by a scoped decision. Semantics over decoration. Previous UI accents in teal must not leak into the new design.
+- **Consumer masthead:** `Amlak` (أملاك); no old SELL logo. Keep established crimson/pearl Mediterranean light design, no dark-first home. Formal brand red `#B30D2D`, active red `#D21C36`, rose `#FBE9EE`, pearl `#FFFDFB`, text `#22242B`, muted `#5B606A`, border `#E8E1DF`, verified green `#16834A` only when backed by a scoped decision. Semantics over decoration. Previous UI accents in teal must not leak into the new design.
 - **Typography:** evaluate IBM Plex Sans Arabic or Cairo for AR, Inter for FR/numerals; choose a bundled licensed, metrically tested font family after QA. Styles: Display 28/34 semibold; headline 22/28 semibold; title 18/24; body 14–16/21–24; label 12–13/18. Never rely on tiny 10sp labels for primary navigation. Tabular numerals for TND, m² and parcel IDs. Support large font scaling, Arabic shaping, diacritics and correct mixed-script Bidi.
 - **Spacing:** 4dp base grid, horizontal content 16dp, minimum 48dp tap targets, safe-area insets, 16–24dp radii depending on hierarchy, subtle 1dp dividers, restrained shadow (not simultaneous blur/glow). Keep foreground UI readable on bright maps.
 - **Icon language:** one consistent 24dp outlined family across tabs, app bars, actions, empty states, and alerts. Selected state can use filled counterpart; never mix unrelated visual families. Every icon action requires accessibility labels AR/FR and functional wiring. Do not use emoji as UI icons.
@@ -32,7 +32,7 @@
 
 | Screen | Essential elements | States and actions |
 |---|---|---|
-| Map home | refined `ملاك` masthead, location search, compact kind chips, filter, layers, recenter, map/list toggle, price pins, parcel overlays with legend | initial/loading/map tiles fail/list fallback, pan → Search this area, zoom, selection → compact property bottom sheet, permission only when tap Near me |
+| Map home | refined `Amlak` masthead, location search, compact kind chips, filter, layers, recenter, map/list toggle, price pins, parcel overlays with legend | initial/loading/map tiles fail/list fallback, pan → Search this area, zoom, selection → compact property bottom sheet, permission only when tap Near me |
 | List / explore | search and active filter chips, sort, vertically readable image cards, TND/m², location accuracy | loading/empty/error/retry/page cursor, tap detail, parity with map filters, preserve scroll |
 | Property quick sheet | thumbnail/gallery entry, price, surface, location label, save, detail | one-third-height peek, expandable, swipe dismiss, back restores map |
 | Property detail | image gallery, price, validated facts, description, boundary tab/legend, documents, contact, favorite, compare | secure/approved content only, no unfounded verified wording; errors and withdrawn status explicit |
@@ -63,7 +63,7 @@ Notification channels split at least: `listing_matches` (Radar opt-in), `seller_
 5. **Final QA gate:** visual snapshots at 360dp and 412dp Arabic RTL and French LTR; accessibility TalkBack/touch 48dp/large text; back from every modal/page/keyboard, offline and slow connection, low-RAM and reduced motion; map panning and polygon labels; deep links and auth expiry. Verify Android screenshot + UI test evidence on emulator *and* physical-device QA before production.
 6. **Governance:** draft PR only, no merge/deploy, no modification of Atlas archives, no CRM change. Rollback via feature flag. Report actual implemented/mocked/not implemented separately.
 
-## 6. Current PR #22 code inventory — observations, not future claims
+## 6. Original PR #22 inventory — historical baseline, not latest implementation proof
 
 - `apps/android/app/build.gradle.kts`: `malakV2Discovery` defaults `false`; QA must prove the *actual installed variant* has it on.
 - `MalakApp.kt`: legacy `MalakHome`, generic empty `map`/`favorites` paths, `MalakMorePage`, `PilotOtpGate`, and a V2 `ExploreScreen` behind the flag. Bottom nav presently does not provide a complete alerts/account design.
