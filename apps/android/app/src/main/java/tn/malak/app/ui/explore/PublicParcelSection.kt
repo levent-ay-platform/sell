@@ -304,7 +304,7 @@ private fun syntheticPlanPdf(): ByteArray {
             color = android.graphics.Color.rgb(30, 36, 47)
             textSize = 24f
         }
-        page.canvas.drawText("MALAK · PLAN DE TEST", 42f, 58f, ink)
+        page.canvas.drawText("AMLAK · PLAN DE TEST", 42f, 58f, ink)
         ink.textSize = 15f
         page.canvas.drawText("Document fictif · Lot QA-01", 42f, 95f, ink)
         val outline = Paint(Paint.ANTI_ALIAS_FLAG).apply {
