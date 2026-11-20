@@ -292,7 +292,7 @@ internal fun TunisianIdCamera(
                     .padding(20.dp),horizontalAlignment=Alignment.CenterHorizontally){
                     Text(s(hint),color=Color.White,fontSize=15.sp)
                     Text(s(R.string.camera_preview_quality_only),
-                        color=Color.White.copy(alpha=.72f),fontSize=11.sp)
+                        color=Color.White.copy(alpha=.94f),fontSize=13.sp)
                     Spacer(Modifier.height(17.dp))
                     if(capturing)CircularProgressIndicator(color=Color.White)
                     else Button(onClick={
