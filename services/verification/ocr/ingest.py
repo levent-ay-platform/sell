@@ -15,6 +15,7 @@ import sys
 import tempfile
 
 from quality import inspect_photo_quality
+from parcel_scan import has_parcel_plan_heading, scan_metadata_for_page
 
 MAX_BYTES = 12 * 1024 * 1024
 MAX_PAGES = 8
@@ -362,6 +363,21 @@ def _ocr_page(path: Path, page: int) -> list[dict]:
     return combined[:MAX_LINES_PER_PAGE], spatial_words, spatial_truncated
 
 
+def _parcel_metadata(path: Path, page: int, lines: list[dict]) -> dict:
+    if not has_parcel_plan_heading(lines):
+        return {}
+    from PIL import Image
+    with Image.open(path) as image:
+        return scan_metadata_for_page(image, page, lines)
+
+
+def _render_page(pdf: Path, page: int, destination: Path, *, contour_only: bool = False) -> Path:
+    resolution=['-scale-to','2400'] if contour_only else ['-r','160']
+    _cmd(['pdftoppm','-f',str(page),'-l',str(page),*resolution,
+          '-singlefile','-png',str(pdf),str(destination)],timeout=30)
+    return destination.with_suffix('.png')
+
+
 def extract_document(path: str, *, mode: str = 'auto') -> dict:
     """Produce untrusted text lines, omitting PII from metadata. Not a validator."""
     file=Path(path)
@@ -379,7 +395,7 @@ def extract_document(path: str, *, mode: str = 'auto') -> dict:
                                 'pageImageWidth':width,'pageImageHeight':height,
                                 'ocrWords':spatial_words,'spatialWordsTruncated':truncated,
                                 'qualityWarnings':inspect_photo_quality(file)['flags'],
-                                'lines':word_lines})
+                                'lines':word_lines,**_parcel_metadata(file,1,word_lines)})
     else:
         count=_pdf_page_count(file)
         text=b''
@@ -393,13 +409,17 @@ def extract_document(path: str, *, mode: str = 'auto') -> dict:
             for index in range(1,count+1):
                 page_text=pages[index-1] if len(pages)>=index else ''
                 if mode=='auto' and _has_text(page_text):
-                    result['pages'].append({'page':index,'method':'pdf-text',
-                                            'lines':_lines_from_native(page_text,index)})
+                    lines=_lines_from_native(page_text,index)
+                    metadata={}
+                    if has_parcel_plan_heading(lines):
+                        image=_render_page(file,index,work/f'page-{index}',contour_only=True)
+                        try:
+                            metadata=_parcel_metadata(image,index,lines)
+                        finally:
+                            image.unlink(missing_ok=True)
+                    result['pages'].append({'page':index,'method':'pdf-text','lines':lines,**metadata})
                     continue
-                image=work / f'page-{index}.png'
-                # DPI bounded; avoid rendering 8 pages at once and storing real docs.
-                _cmd(['pdftoppm','-f',str(index),'-l',str(index),'-r','160',
-                     '-singlefile','-png',str(file),str(work/f'page-{index}')],timeout=30)
+                image=_render_page(file,index,work/f'page-{index}')
                 word_lines, spatial_words, truncated=_ocr_page(image,index)
                 width,height=_png_size(image)
                 result['pages'].append({'page':index,'method':'ocr',
@@ -407,7 +427,8 @@ def extract_document(path: str, *, mode: str = 'auto') -> dict:
                                         'ocrWords':spatial_words,
                                         'spatialWordsTruncated':truncated,
                                         'qualityWarnings':inspect_photo_quality(image)['flags'],
-                                        'lines':word_lines})
+                                        'lines':word_lines,**_parcel_metadata(image,index,word_lines)})
+                image.unlink(missing_ok=True)
     if sum(len(ln['text']) for pg in result['pages'] for ln in pg['lines'])>MAX_TEXT_CHARS:
         raise InvalidDocument('EXTRACTED_TEXT_TOO_LARGE')
     # Preserve OCR availability for long documents: disable spatial layout

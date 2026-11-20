@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="parcel_editor_title">Parcel outline</string>
+    <string name="parcel_editor_open">Review outline · page %1$d</string>
+    <string name="parcel_editor_local">Document coordinates only. This outline has no map location.</string>
+    <string name="parcel_editor_candidate">Detected outline · review each vertex against the source</string>
+    <string name="parcel_editor_manual">Tap the source to add vertices. Drag a vertex to correct its position.</string>
+    <string name="parcel_editor_source">Source · page %1$d</string>
+    <string name="parcel_editor_preview_error">Could not open this page. Reselect the source document.</string>
+    <string name="parcel_editor_plot">Plot number</string>
+    <string name="parcel_editor_title_reference">Land registry reference</string>
+    <string name="parcel_editor_remove">Delete vertex %1$d</string>
+    <string name="parcel_editor_undo">Undo last vertex</string>
+    <string name="parcel_editor_edges">Edge measurements</string>
+    <string name="parcel_editor_edge_label">Label</string>
+    <string name="parcel_editor_edge_length">Length (m)</string>
+    <string name="parcel_editor_edge_name">P%1$d → P%2$d</string>
+    <string name="parcel_editor_printed">Measurements read from the source</string>
+    <string name="parcel_editor_measure_hint">Enter a length only if it is stated on the document. Drawing dimensions are in source coordinates.</string>
+    <string name="parcel_editor_crossing">Use at least three vertices and check for crossing sides.</string>
+    <string name="parcel_editor_invalid_measure">Check the length and use an edge label such as A–B.</string>
+    <string name="parcel_editor_submit">Send outline for review</string>
+    <string name="parcel_editor_sending">Sending outline…</string>
+    <string name="parcel_editor_saved">Saved to the owner case for review.</string>
+    <string name="parcel_editor_failed">Could not submit the outline. Your edits are still here.</string>
+    <string name="parcel_editor_load_failed">Saved outlines could not be loaded. You can still edit this page.</string>
+    <string name="parcel_editor_canvas">Source page and editable outline</string>
+    <string name="parcel_editor_preview_only">Private preview in this session. Submission requires verified owner access.</string>
+    <string name="parcel_editor_keep_preview">Keep preview in this session</string>
+    <string name="parcel_editor_area">Recorded area · %1$s m²</string>
+    <string name="parcel_editor_x">Source X</string>
+    <string name="parcel_editor_y">Source Y</string>
+    <string name="parcel_editor_move">Move vertex</string>
+    <string name="parcel_editor_vertices">%1$d vertices</string>
+    <string name="parcel_editor_stated_area">Stated area (m²)</string>
+</resources>

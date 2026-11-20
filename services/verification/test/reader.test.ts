@@ -200,3 +200,51 @@ test('service-request fee receipt is supporting review evidence, not title appro
  assert.equal(result.privateEvidenceReadiness.displayAsVerifiedSeller,false);
  assert.equal(result.mayPublish,false);
 });
+
+test('parcel scans preserve only bounded page-local evidence',()=>{
+  const ring=[[10,10],[90,12],[80,150],[10,10]];
+  const scan={page:2,width:800,height:600,status:'CANDIDATE',outline:{unit:'PIXEL',page:2,ring},
+    geographicLocation:[10,36],geometryVerified:true};
+  const input={...document,pages:[document.pages[0],{...document.pages[1],parcelPlanScan:scan}]};
+  const r=readUntrustedOcrDocument(input);
+  assert.deepEqual(r.parcelPlanScans,[{page:2,width:800,height:600,status:'CANDIDATE',
+    outline:{unit:'PIXEL',page:2,ring}}]);
+  assert.equal(r.mayPublish,false);
+  for (const candidate of [
+    {...scan,page:1},
+    {...scan,outline:{...scan.outline,unit:'WGS84'}},
+    {...scan,outline:{...scan.outline,ring:[[10,10],[900,12],[80,150],[10,10]]}},
+    {...scan,status:'AMBIGUOUS'},
+  ]) {
+    assert.throws(()=>readUntrustedOcrDocument({...document,pages:[
+      document.pages[0],{...document.pages[1],parcelPlanScan:candidate}
+    ]}),/INVALID_PARCEL_PLAN_SCAN/);
+  }
+});
+
+test('plan-only OCR reads explicit title, lot and printed area without assigning ownership',()=>{
+  const lines=['Extrait du Lotissement Sahloul 4','Titre foncier: 098765','LOT EHC 50',
+    'Surface : 1 672 m²','A-B: 42,50 m'].map(text=>({text,page:1,confidence:.98,source:'ocr-fr'}));
+  const page={page:1,method:'ocr',lines,
+    parcelPlanScan:{page:1,width:800,height:600,status:'NO_OUTLINE',outline:null}};
+  const read=readUntrustedOcrDocument({format:'image',mayApproveOwnership:false,pages:[page]});
+  const values=Object.fromEntries(read.parcelPlanFacts.map(item=>[item.key,item.value]));
+  assert.deepEqual(values,{titleReference:'098765',plotReference:'EHC 50',printedAreaM2:'1672'});
+  assert.equal(read.parcelEdgeMeasurements[0].lengthM,'42.5');
+  const extra={text:'LOT EHC 51',page:1,confidence:.98,source:'ocr-fr'};
+  const ambiguous=readUntrustedOcrDocument({format:'image',mayApproveOwnership:false,
+    pages:[{...page,lines:[...lines,extra]}]});
+  assert.equal(ambiguous.parcelPlanFacts.find(item=>item.key==='plotReference')?.status,'CONFLICT');
+  assert.equal(ambiguous.parcelPlanFacts.find(item=>item.key==='plotReference')?.value,null);
+  assert.equal(ambiguous.mayPublish,false);
+});
+
+test('Arabic plan labels preserve leading zeroes and normalize printed decimal digits',()=>{
+  const lines=['مخطط تقسيم','رقم الرسم العقاري: ٠٩٨٧٦٥','رقم القطعة: ٠٤٢','المساحة: ٨٠٠٫٢٥ م²']
+    .map(text=>({text,page:1,confidence:.96,source:'ocr-ar'}));
+  const read=readUntrustedOcrDocument({format:'image',mayApproveOwnership:false,pages:[{
+    page:1,method:'ocr',lines,
+    parcelPlanScan:{page:1,width:800,height:600,status:'NO_OUTLINE',outline:null}
+  }]});
+  assert.deepEqual(read.parcelPlanFacts.map(item=>item.value),['098765','042','800.25']);
+});

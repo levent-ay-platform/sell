@@ -5,6 +5,20 @@ import PDFKit
 import ImageIO
 
 // Private bounded worker: JSON only on stdout, no source text in stderr.
+// The companion process sometimes requests a page-rendered scan for local
+// contour detection. It owns this private temporary directory and deletes it.
+func writePlanRaster(_ cg: CGImage, _ page: Int) throws {
+    guard let directory=ProcessInfo.processInfo.environment["MALAK_VISION_PLAN_RASTERS"] else { return }
+    guard directory.hasPrefix("/") else { throw NSError(domain:"raster",code:1) }
+    let url=URL(fileURLWithPath:directory,isDirectory:true).appendingPathComponent("\(page).png")
+    guard let sink=CGImageDestinationCreateWithURL(url as CFURL,"public.png" as CFString,1,nil) else {
+        throw NSError(domain:"raster",code:1)
+    }
+    CGImageDestinationAddImage(sink,cg,nil)
+    guard CGImageDestinationFinalize(sink) else { throw NSError(domain:"raster",code:1) }
+    try FileManager.default.setAttributes([.posixPermissions:0o600],ofItemAtPath:url.path)
+}
+
 func scan(_ cg: CGImage, _ page: Int) throws -> [String: Any] {
     guard cg.width >= 175, cg.height >= 175, cg.width * cg.height <= 25_000_000 else { throw NSError(domain:"dimensions",code:1) }
     let request = VNRecognizeTextRequest()
@@ -38,6 +52,7 @@ func scan(_ cg: CGImage, _ page: Int) throws -> [String: Any] {
         result["pageImageWidth"]=cg.width; result["pageImageHeight"]=cg.height
         result["ocrWords"]=Array(words.prefix(1000)); result["spatialWordsTruncated"]=words.count>1000
     }
+    try writePlanRaster(cg,page)
     return result
 }
 do {

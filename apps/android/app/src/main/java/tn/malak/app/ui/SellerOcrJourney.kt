@@ -35,7 +35,12 @@ import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import tn.malak.app.BuildConfig
 import tn.malak.app.R
+import tn.malak.app.ui.parcel.OwnerParcelEditor
+import tn.malak.app.ui.parcel.OwnerParcelEditorSource
+import tn.malak.app.ui.parcel.OwnerPlanDraft
+import tn.malak.app.ui.parcel.selectedFact
 import java.util.Locale
 import java.util.UUID
 import kotlinx.coroutines.Job
@@ -210,8 +215,14 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmission:org.j
     var familyReadBusy by remember(draftFile) {mutableStateOf(false)}
     var familyReadError by remember(draftFile) {mutableIntStateOf(0)}
     var familyReadEpoch by remember(draftFile) {mutableIntStateOf(0)}
+    var parcelEditorSource by remember(draftFile) { mutableStateOf<OwnerParcelEditorSource?>(null) }
+    var parcelSaved by remember(draftFile) { mutableStateOf(false) }
+    val parcelPreviews = remember(draftFile) { mutableStateMapOf<Pair<Uri, Int>, OwnerPlanDraft>() }
     var familyReadJob by remember {mutableStateOf<Job?>(null)}
     LaunchedEffect(draftFile,files.toList(),ownerSession,authenticatedOwnerSession) {
+        parcelEditorSource = null
+        parcelSaved = false
+        parcelPreviews.clear()
         familyReadEpoch++
         familyReadJob?.cancel()
         familyReadings=emptyList()
@@ -568,6 +579,16 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmission:org.j
         }
         return
     }
+    parcelEditorSource?.let { source ->
+        val previewKey = source.uri to source.evidencePage
+        OwnerParcelEditor(source, ownerSession ?: provisionedCase, parcelPreviews[previewKey],
+            onPreview = { parcelPreviews[previewKey] = it },
+            onFinish = { submittedToCase ->
+                parcelEditorSource = null
+                if (submittedToCase) parcelSaved = true
+            })
+        return
+    }
     if(cameraVisible){
         TunisianIdCamera(onClose={cameraVisible=false},
             onPhoto={uri,length->
@@ -780,6 +801,29 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmission:org.j
                             showAnalysisDetails,{showAnalysisDetails=!showAnalysisDetails},
                             {if(files.isEmpty()){step=0;pickMessage=R.string.certificate_required}else startPairComparison()},{step=0},
                             onDateRefresh={refreshIdentityDate()},dateBusy=identityDateBusy,dateError=identityDateError)
+                        val result = pairReport
+                        if (BuildConfig.MALAK_V2_DISCOVERY && result != null && files.isNotEmpty()) {
+                            val pdf = files.singleOrNull()?.takeIf { it.mime == "application/pdf" }
+                            val pageCount = if (pdf != null) result.certificatePages else files.size
+                            for (page in 1..pageCount) {
+                                val file = pdf ?: files[page - 1]
+                                val scan = result.parcelScans.firstOrNull { it.page == page }
+                                OutlinedButton(onClick = {
+                                    parcelEditorSource = OwnerParcelEditorSource(
+                                        file.uri, file.mime, if (pdf != null) page else 1, page, null, scan,
+                                        result.parcelOcrLengths.filter { it.page == page },
+                                        result.parcelPlanFacts.selectedFact("titleReference", page)
+                                            ?: result.propertyFacts["registerReference"].orEmpty(),
+                                        result.parcelPlanFacts.selectedFact("plotReference", page)
+                                            ?: result.propertyFacts["soldPlotNumber"]
+                                            ?: result.propertyFacts["registeredPlotNumber"].orEmpty(),
+                                        result.parcelPlanFacts.selectedFact("printedAreaM2", page) ?: result.localFields?.areaM2
+                                    )
+                                }, modifier = Modifier.fillMaxWidth()) {
+                                    Text(s(R.string.parcel_editor_open, page))
+                                }
+                            }
+                        }
                     }
                     if(!hasPilotReviewSession||showAnalysisDetails){
                     Surface(shape=RoundedCornerShape(18.dp),color=Color.White,
@@ -1154,6 +1198,38 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmission:org.j
                                                         }){Text(s(R.string.smart_use_sold_area))}
                                                 }
                                             }
+                                        }
+                                        val file = files.getOrNull(docIndex)
+                                        if (BuildConfig.MALAK_V2_DISCOVERY && file != null) {
+                                            val pdf = file.mime == "application/pdf"
+                                            val pages = if (pdf) (1..read.pagesReceived.coerceIn(1, 8)).toList()
+                                                else listOf(docIndex + 1)
+                                            for (page in pages) {
+                                                val scan = if (pdf) read.parcelScans.firstOrNull { it.page == page }
+                                                    else read.parcelScans.singleOrNull()
+                                                OutlinedButton(onClick = {
+                                                    fun fact(vararg ids: String) = ids.firstNotNullOfOrNull { id ->
+                                                        read.familyFacts.firstOrNull {
+                                                            it.id == id && it.status == "CANDIDATE"
+                                                        }?.value
+                                                    }
+                                                    parcelEditorSource = OwnerParcelEditorSource(
+                                                        file.uri, file.mime, if (pdf) page else 1, page,
+                                                        read.evidenceId, scan,
+                                                        read.parcelOcrLengths.filter { !pdf || it.page == page },
+                                                        read.parcelPlanFacts.selectedFact("titleReference", page)
+                                                            ?: fact("registerReference").orEmpty(),
+                                                        read.parcelPlanFacts.selectedFact("plotReference", page)
+                                                            ?: fact("soldPlotNumber", "registeredPlotNumber", "possessedPlotNumber").orEmpty(),
+                                                        read.parcelPlanFacts.selectedFact("printedAreaM2", page)
+                                                            ?: fact("soldAreaM2", "registeredAreaM2", "possessedAreaM2", "transferredAreaM2")
+                                                    )
+                                                }, modifier = Modifier.fillMaxWidth()) {
+                                                    Text(s(R.string.parcel_editor_open, page))
+                                                }
+                                            }
+                                            if (parcelSaved) Text(s(R.string.parcel_editor_saved),
+                                                color = Brand.Ink, fontSize = 12.sp)
                                         }
                                     }else Text(s(R.string.smart_read_needs_review),
                                         color=Brand.Muted,fontSize=12.sp)

@@ -155,6 +155,11 @@ BEGIN
    IF SQLERRM <> 'ATLAS_CONTRIBUTION_NOT_ELIGIBLE' THEN RAISE; END IF;
  END;
 
+ IF (SELECT count(*) FROM sell.atlas_contribution_features c WHERE c.listing_id=test_listing)<>1
+ OR NOT EXISTS (SELECT 1 FROM sell.atlas_contribution_features
+  WHERE listing_id=test_listing AND boundary_id=geometry_id AND method='MALAK_DOC_GEOREFERENCED')
+ THEN RAISE EXCEPTION 'FAIL: dedicated Atlas layer does not contain exactly the approved contributed polygon'; END IF;
+
  INSERT INTO sell.parcel_document_consent_events(document_version_id,case_id,actor_user_id,decision)
  VALUES(test_document,case_id,owner_id,'REVOKED');
  IF EXISTS (SELECT 1 FROM sell.public_listing_parcel_documents d WHERE d.listing_id=test_listing)
@@ -162,6 +167,8 @@ BEGIN
  UPDATE sell.listings l SET status='PAUSED' WHERE l.id=test_listing;
  IF EXISTS (SELECT 1 FROM sell.public_listing_parcel_boundaries b WHERE b.listing_id=test_listing)
  THEN RAISE EXCEPTION 'FAIL: paused listing continues to expose geographic boundaries'; END IF;
+ IF EXISTS (SELECT 1 FROM sell.atlas_contribution_features c WHERE c.listing_id=test_listing)
+ THEN RAISE EXCEPTION 'FAIL: stale outbox still exported a paused listing'; END IF;
  PERFORM sell.enqueue_atlas_parcel_event(test_listing,geometry_id,'WITHDRAW');
 END
 $test$;

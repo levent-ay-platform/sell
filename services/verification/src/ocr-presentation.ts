@@ -8,7 +8,7 @@ import type {ReadDocumentResult} from './reader.ts';
 import type {FieldName, ExtractedField, SmartExtraction, OcrPixelBox} from './smart-fields.ts';
 import type {LandPaperKind,ClassificationStatus} from './document-training-v2.ts';
 import type {LandFactKey,LandFactStatus} from './document-family-fields-v2.ts';
-import type {ParcelEdgeMeasurement} from './parcel-document-foundation.ts';
+import type {ParcelEdgeMeasurement,ParcelPlanFact,ParcelPlanScan} from './parcel-document-foundation.ts';
 
 const LABELS: Record<FieldName,{ar:string;fr:string}>={
   registryReference:{ar:'مرجع الرسم العقاري',fr:'Référence du titre foncier'},
@@ -61,6 +61,8 @@ export interface PrivateOcrPresentation {
   readonly familyStatus:ClassificationStatus;
   readonly familyFacts:readonly PrivateDocumentFamilyFact[];
   readonly parcelEdgeMeasurements:readonly ParcelEdgeMeasurement[];
+  readonly parcelPlanScans:readonly ParcelPlanScan[];
+  readonly parcelPlanFacts:readonly ParcelPlanFact[];
   readonly documentSupportLevel:number;
   readonly provisionalReviewPoints:number;
   readonly declaredAreaComparison:'SAME_NUMBER_UNVERIFIED'|'DIFFERENT_NUMBER_REVIEW'|'NOT_COMPARABLE';
@@ -128,6 +130,7 @@ export function presentPrivateCpfReading(read:ReadDocumentResult,declaredArea:un
     facts,familyKind:read.documentFamilyCandidate.kind,
     familyStatus:read.documentFamilyCandidate.status,familyFacts,
     parcelEdgeMeasurements:read.parcelEdgeMeasurements,
+    parcelPlanScans:read.parcelPlanScans,parcelPlanFacts:read.parcelPlanFacts,
     documentSupportLevel:read.privateEvidenceReadiness.documentSupportLevel,
     provisionalReviewPoints:read.privateEvidenceReadiness.provisionalProgressPoints,
     declaredAreaComparison:comparison,

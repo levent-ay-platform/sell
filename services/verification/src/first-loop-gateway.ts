@@ -24,6 +24,9 @@ import type {PrivatePairDependencies} from './private-pair-service.ts';
 import {analyzeAuthorizedPrivateEvidencePair} from './private-pair-service.ts';
 import {provisionIndividualOwnerCase,revokeIndividualOwnerConsent} from './private-owner-case.ts';
 import {createListingDiscoveryHttpHandler,PostgresListingDiscoveryRepository} from './listing-discovery.ts';
+import type {ReviewedParcelRenditionReader} from './parcel-http.ts';
+import {createParcelHttpHandler} from './parcel-http.ts';
+import {createParcelRepository} from './parcel-repository.ts';
 
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const PHONE=/^\+216[2-9][0-9]{7}$/;
@@ -90,6 +93,8 @@ export interface UnboundFirstLoopGatewayDeps {
   readonly discoveryV2?:{
     readonly enabled:true;
     readonly mediaOrigin?:string;
+    /** Optional separate rendition storage. Never point this at the evidence vault. */
+    readonly readParcelRendition?:ReviewedParcelRenditionReader;
     readonly allowRequest:(remoteAddress:string)=>Promise<boolean>;
   };
   readonly rateLimitHmacSecret:Uint8Array;
@@ -158,7 +163,13 @@ export function composeUnboundMalakFirstLoop(deps:UnboundFirstLoopGatewayDeps) {
     repository:new PostgresListingDiscoveryRepository(deps.pool,deps.discoveryV2.mediaOrigin),
     allowRequest:deps.discoveryV2.allowRequest
   });
+  const parcels=createParcelHttpHandler({
+    repository:createParcelRepository(deps.pool),
+    readRendition:deps.discoveryV2.readParcelRendition,
+    authenticate:token=>verifiedAuth.authenticate(token),
+    allowRequest:deps.discoveryV2.allowRequest
+  });
   return async (req:Parameters<typeof privateHandler>[0],res:Parameters<typeof privateHandler>[1])=>{
-    if(!await discovery(req,res))await privateHandler(req,res);
+    if(!await parcels(req,res)&&!await discovery(req,res))await privateHandler(req,res);
   };
 }

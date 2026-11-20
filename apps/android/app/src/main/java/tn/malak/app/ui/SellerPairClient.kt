@@ -7,6 +7,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
+import tn.malak.app.ui.parcel.ParcelOcrLength
+import tn.malak.app.ui.parcel.ParcelPlanFact
+import tn.malak.app.ui.parcel.parseParcelPlanFacts
+import tn.malak.app.ui.parcel.ParcelScan
+import tn.malak.app.ui.parcel.parseParcelOcrLengths
+import tn.malak.app.ui.parcel.parseParcelScans
 import java.io.ByteArrayOutputStream
 import java.net.URI
 import java.net.URL
@@ -50,11 +56,14 @@ internal data class CertificateIdentityReview(
     val reviewId:String?=null, val propertyFacts:Map<String,String> = emptyMap(),
     val propertyFactStatuses:Map<String,String> = emptyMap(),
     val sourceFacts:List<PilotPropertyFact> = emptyList(),
-    val identityScan:LocalDocumentOcr.FrontScan?=null)
+    val identityScan:LocalDocumentOcr.FrontScan?=null,
+    val parcelScans:List<ParcelScan> = emptyList(),
+    val parcelOcrLengths:List<ParcelOcrLength> = emptyList(),
+    val parcelPlanFacts:List<ParcelPlanFact> = emptyList())
 internal class OwnerPairException(val statusCode:Int):Exception("PRIVATE_PAIR_UNAVAILABLE")
 
 private const val DOC_LIMIT=12L*1024L*1024L
-private const val RESPONSE_LIMIT=64*1024
+private const val RESPONSE_LIMIT=128*1024
 private val ID=Regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$")
 private val KEY=Regex("^[A-Za-z0-9_-]{16,100}$")
 private val TOKEN=Regex("^[A-Za-z0-9._~+/-]{20,4096}$")
@@ -473,6 +482,8 @@ internal fun parsePilotComparison(envelope:JSONObject):CertificateIdentityReview
             detectedKind=kind,unifiedAssessment=status,unifiedRoles=roles,
             matchedRightsHolder=holder,reviewId=reviewId,
             propertyFacts=values.toMap(),propertyFactStatuses=factStatuses.toMap(),sourceFacts=sourceFacts.toList(),
-            identityScan=data.optJSONObject("identityFields")?.let{LocalDocumentOcr.fromPilotReport(it)}
+            identityScan=data.optJSONObject("identityFields")?.let{LocalDocumentOcr.fromPilotReport(it)},
+            parcelScans=parseParcelScans(data),parcelOcrLengths=parseParcelOcrLengths(data),
+            parcelPlanFacts=parseParcelPlanFacts(data)
         )
 }

@@ -1,0 +1,25 @@
+<resources>
+    <string name="parcel_boundaries">Limites de la parcelle</string>
+    <string name="parcel_official">Limite cadastrale vérifiée à la source</string>
+    <string name="parcel_georeferenced">Géoréférencée à partir du document</string>
+    <string name="parcel_estimate">Limite indicative proposée par le propriétaire</string>
+    <string name="parcel_local_only">Contour du plan sans calage géographique</string>
+    <string name="parcel_references">Titre %1$s · Lot %2$s</string>
+    <string name="parcel_plot">Lot %1$s</string>
+    <string name="parcel_title">Titre %1$s</string>
+    <string name="parcel_edge">%1$s · %2$s m</string>
+    <string name="parcel_documents">Documents du bien</string>
+    <string name="parcel_doc_plan">Plan parcellaire</string>
+    <string name="parcel_doc_title">Document foncier</string>
+    <string name="parcel_doc_other">Document du bien</string>
+    <string name="parcel_preview">Aperçu</string>
+    <string name="parcel_preview_error">Ce document est indisponible.</string>
+    <string name="parcel_fetch_error">Impossible de charger les données parcellaires.</string>
+    <string name="parcel_previous">Page précédente</string>
+    <string name="parcel_next">Page suivante</string>
+    <string name="parcel_page">Page %1$d sur %2$d</string>
+    <string name="parcel_private_proof">Revue archive locale · consultation</string>
+    <string name="parcel_no_measured_sides">La source ne précise pas les longueurs des côtés.</string>
+    <string name="parcel_pdf_page">Page PDF</string>
+    <string name="parcel_pixel_measurements">Mesures du scan (pixels)</string>
+</resources>

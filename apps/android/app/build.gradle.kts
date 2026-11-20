@@ -45,6 +45,12 @@ android {
         buildConfigField("String", "MALAK_MAP_STYLE_URL", "\"$malakMapStyleUrl\"")
     }
 
+    providers.gradleProperty("malakLocalParcelProofAssets").orNull?.let { directory ->
+        val proofAssets = file(directory)
+        require(proofAssets.isDirectory) { "Local parcel proof assets directory is missing" }
+        sourceSets.getByName("debug").assets.srcDir(proofAssets)
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false

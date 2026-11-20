@@ -30,6 +30,9 @@ import org.maplibre.android.style.expressions.Expression
 import org.maplibre.android.style.layers.Property
 import org.maplibre.android.style.layers.PropertyFactory
 import org.maplibre.android.style.layers.SymbolLayer
+import org.maplibre.android.style.layers.FillLayer
+import org.maplibre.android.style.layers.LineLayer
+import org.maplibre.android.style.layers.CircleLayer
 import org.maplibre.android.style.sources.GeoJsonSource
 import org.maplibre.geojson.Feature
 import org.maplibre.geojson.FeatureCollection
@@ -53,6 +56,7 @@ internal fun DiscoveryMap(
     selectedId: String?,
     priceLabel: (DiscoveryListing) -> String,
     modifier: Modifier = Modifier,
+    boundaries: List<PublicParcelBoundary> = emptyList(),
     onCameraIdle: (DiscoveryCamera, Boolean) -> Unit,
     onListing: (String) -> Unit,
     onCluster: (DiscoveryPoint) -> Unit,
@@ -129,6 +133,7 @@ internal fun DiscoveryMap(
             map = nativeMap
             nativeMap.setStyle(Style.Builder().fromUri(styleUrl)) { loaded ->
                 if (!active) return@setStyle
+                if (boundaries.isNotEmpty()) addBoundaryLayers(loaded, boundaries)
                 loaded.addImage("malak-pin-background", markerBackground())
                 loaded.addSource(GeoJsonSource(SOURCE, FeatureCollection.fromFeatures(emptyList())))
                 loaded.addLayer(SymbolLayer(MARKERS, SOURCE).withProperties(
@@ -194,4 +199,44 @@ private fun markerBackground(): Bitmap {
     val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFFB30D2D.toInt() }
     canvas.drawRoundRect(RectF(1f, 1f, 83f, 35f), 17f, 17f, paint)
     return bitmap
+}
+
+private fun addBoundaryLayers(style: Style, boundaries: List<PublicParcelBoundary>) {
+    for (kind in BoundaryKind.entries) {
+        val items = boundaries.filter { it.kind == kind }
+        if (items.isEmpty()) continue
+        val suffix = kind.name.lowercase()
+        val id = "malak-boundary-$suffix"
+        val source = GeoJsonSource(id, FeatureCollection.fromFeatures(items.map {
+            Feature.fromJson("""{"type":"Feature","geometry":${it.geometry},"properties":{}}""")
+        }))
+        val color = when (kind) {
+            BoundaryKind.Official -> 0xFFB30D2D.toInt()
+            BoundaryKind.Georeferenced -> 0xFF8B4C05.toInt()
+            BoundaryKind.Estimate -> 0xFF48566B.toInt()
+        }
+        style.addSource(source)
+        style.addLayer(FillLayer("$id-fill", id).withProperties(
+            PropertyFactory.fillColor(color), PropertyFactory.fillOpacity(.19f)
+        ))
+        val line = LineLayer("$id-line", id).withProperties(
+            PropertyFactory.lineColor(color), PropertyFactory.lineWidth(3f)
+        )
+        if (kind != BoundaryKind.Official) {
+            line.setProperties(PropertyFactory.lineDasharray(arrayOf(2.5f, 1.5f)))
+        }
+        style.addLayer(line)
+        val vertices = items.flatMap { it.labelRing.takeIf { ring -> ring.size <= 40 }.orEmpty().distinct() }
+        if (vertices.isNotEmpty()) {
+            val vertexId = "$id-vertices"
+            style.addSource(GeoJsonSource(vertexId, FeatureCollection.fromFeatures(vertices.map {
+                Feature.fromGeometry(Point.fromLngLat(it.longitude, it.latitude))
+            })))
+            style.addLayer(CircleLayer("$vertexId-layer", vertexId).withProperties(
+                PropertyFactory.circleRadius(3f), PropertyFactory.circleColor(color),
+                PropertyFactory.circleStrokeColor(android.graphics.Color.WHITE),
+                PropertyFactory.circleStrokeWidth(1f)
+            ))
+        }
+    }
 }

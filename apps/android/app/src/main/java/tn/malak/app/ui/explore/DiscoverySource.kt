@@ -15,6 +15,7 @@ internal interface DiscoverySource {
     suspend fun suggest(text: String, language: String): List<DiscoveryPlace>
     suspend fun list(query: DiscoveryQuery, cursor: String? = null): DiscoveryPage
     suspend fun markers(query: DiscoveryQuery, zoom: Int): DiscoveryMarkers
+    suspend fun parcel(id: String): PublicParcel = PublicParcel()
     suspend fun detail(id: String): DiscoveryListing?
 }
 
@@ -49,6 +50,12 @@ internal class HttpDiscoverySource(private val baseUrl: String, private val lang
     override suspend fun detail(id: String): DiscoveryListing? {
         if (!id.matches(Regex("[0-9a-fA-F-]{36}"))) return null
         return get("/api/v1/listings/$id", mapOf("lang" to language), acceptMissing = true)?.getJSONObject("listing")?.let(::listing)
+    }
+
+    override suspend fun parcel(id: String): PublicParcel {
+        if (!id.matches(Regex("[0-9a-fA-F-]{36}"))) return PublicParcel()
+        return get("/api/v1/listings/$id/parcel", acceptMissing = true)
+            ?.let { decodePublicParcel(it, baseUrl, id) } ?: PublicParcel()
     }
 
     private fun listing(row: JSONObject): DiscoveryListing {
@@ -112,7 +119,7 @@ private fun requireHttps(value: String): URI = URI(value).also {
     require(it.scheme == "https" && !it.host.isNullOrBlank() && it.userInfo == null && it.fragment == null)
 }
 
-private fun discoveryConnection(url: String, accept: String): HttpsURLConnection =
+internal fun discoveryConnection(url: String, accept: String): HttpsURLConnection =
     (requireHttps(url).toURL().openConnection() as HttpsURLConnection).apply {
         connectTimeout = 7000
         readTimeout = 8000

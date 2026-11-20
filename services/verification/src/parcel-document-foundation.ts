@@ -129,3 +129,86 @@ export function preparePrivatePlanPreview(input:{
     !isLocalRing(outline.ring)))throw new TypeError('INVALID_LOCAL_PLAN_OUTLINE');
   return {kind:'DOCUMENT_ONLY',outline,dimensions:input.dimensions};
 }
+
+/** Scanner evidence is bounded to an image in display orientation. */
+export interface ParcelPlanScan {
+  readonly page:number;
+  readonly width:number;
+  readonly height:number;
+  readonly status:'CANDIDATE'|'AMBIGUOUS'|'NO_OUTLINE';
+  readonly outline:(LocalPlanOutline & {readonly unit:'PIXEL'})|null;
+}
+
+function asRecord(value:unknown):Record<string,unknown>|null {
+  return value!==null&&typeof value==='object'&&!Array.isArray(value)
+    ?value as Record<string,unknown>:null;
+}
+
+export function parseParcelPlanScan(value:unknown,page:number):ParcelPlanScan {
+  const scan=asRecord(value);
+  const width=scan?.width,height=scan?.height,status=scan?.status;
+  const invalid=()=>new TypeError('INVALID_PARCEL_PLAN_SCAN');
+  if(!scan||scan.page!==page||typeof width!=='number'||typeof height!=='number'||
+    !Number.isInteger(width)||!Number.isInteger(height)||width<175||height<175||
+    width>10000||height>10000||width*height>25_000_000||
+    (status!=='CANDIDATE'&&status!=='AMBIGUOUS'&&status!=='NO_OUTLINE'))throw invalid();
+  if(status!=='CANDIDATE'){
+    if(scan.outline!==null)throw invalid();
+    return {page,width,height,status,outline:null};
+  }
+  const outline=asRecord(scan.outline);
+  if(outline?.unit!=='PIXEL'||outline.page!==page||
+    !Array.isArray(outline.ring)||outline.ring.length>65||
+    !isLocalRing(outline.ring)||outline.ring.some(([x,y])=>x<0||y<0||x>width||y>height))throw invalid();
+  const ring=outline.ring.map(([x,y]):PlanPoint=>[x,y]);
+  return {page,width,height,status,outline:{unit:'PIXEL',page,ring}};
+}
+
+export function moveParcelPlanScanToPage(scan:ParcelPlanScan,page:number):ParcelPlanScan {
+  return {...scan,page,outline:scan.outline?{...scan.outline,page}:null};
+}
+
+export interface ParcelPlanFact {
+  readonly key:'titleReference'|'plotReference'|'printedAreaM2';
+  readonly value:string|null;
+  readonly status:'CANDIDATE'|'LOW_CONFIDENCE'|'CONFLICT';
+  readonly evidence:readonly PrivateLandFactEvidence[];
+}
+
+const PLAN_FACT_RULES:readonly [ParcelPlanFact['key'],RegExp][]=[
+  ['titleReference',/^(?:titre\s+foncier\s*(?:n[°o.]|num[eé]ro)?|T\.?\s*F\.?|الرسم\s+العقاري\s*(?:عدد|رقم)?|رقم\s+الرسم\s+العقاري)\s*[:#-]?\s*(\d{3,12})$/iu],
+  ['plotReference',/^(?:num[eé]ro\s+de\s+parcelle|(?:parcelle|lot)\s*(?:n[°o.]|num[eé]ro)?|القطع[ةه]\s+(?:عدد|رقم)|رقم\s+القطع[ةه])\s*[:#-]?\s*([\p{L}\d]{0,9}[ -]?\d{1,8})$/iu],
+  ['printedAreaM2',/^(?:superficie|surface|المساح[ةه])\s*[:#-]\s*(\d{1,10}(?:\s\d{3}){0,3}(?:[.,]\d{1,3})?)\s*(?:m2|م2|متر\s+مربع)$/iu],
+];
+
+/** Facts printed on a recognized plan page are independent of geometry and title approval. */
+export function extractParcelPlanFacts(
+  lines:readonly RecognizedLine[], planPages:ReadonlySet<number>
+):readonly ParcelPlanFact[] {
+  const byPageAndKey=new Map<string,ParcelPlanFact>();
+  for(const [lineIndex,line] of lines.entries()){
+    if(!planPages.has(line.page)||line.text.length>120)continue;
+    const source=normalizeMeasurementLine(line.text);
+    for(const [key,rule] of PLAN_FACT_RULES){
+      const match=rule.exec(source);
+      if(!match)continue;
+      const printed=match[1].replace(/\s+/gu,' ');
+      const value=key==='printedAreaM2'?metres(printed.replace(/ /gu,''),'m'):printed;
+      if(value===null)continue;
+      const mapKey=line.page+':'+key;
+      const existing=byPageAndKey.get(mapKey);
+      const evidence:PrivateLandFactEvidence={
+        page:line.page,lineIndex,confidence:line.confidence,source:line.source,bbox:line.bbox??null
+      };
+      const uncertain=(line.confidence!==null&&line.confidence<.90)||
+        (key==='printedAreaM2'&&/,\d{3}$/u.test(printed));
+      const conflicted=existing!==undefined&&existing.value!==value;
+      byPageAndKey.set(mapKey,{
+        key,value:conflicted?null:value,
+        status:conflicted?'CONFLICT':!uncertain||existing?.status==='CANDIDATE'?'CANDIDATE':'LOW_CONFIDENCE',
+        evidence:[...(existing?.evidence??[]),evidence].slice(0,8)
+      });
+    }
+  }
+  return [...byPageAndKey.values()];
+}

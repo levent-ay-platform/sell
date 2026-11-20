@@ -1,5 +1,6 @@
 // Private stdin/stdout bridge; calls the existing document-family matcher.
 import {parseOcrWorkerOutput,readUntrustedOcrDocument,asTextOnlyOcrDocument} from '../src/reader.ts';
+import {moveParcelPlanScanToPage} from '../src/parcel-document-foundation.ts';
 import {compareUnifiedPrivateDocumentIdentity} from '../src/unified-identity-v2.ts';
 let input='';for await(const chunk of process.stdin){input+=chunk;if(input.length>8_000_000)process.exit(1);}
 try{
@@ -12,6 +13,7 @@ try{
  const pages=docs.flatMap(d=>d.pages.map(page=>{
   const n=++p;
   return {...page,page:n,lines:page.lines.map(l=>({...l,page:n})),
+   ...(page.parcelPlanScan?{parcelPlanScan:moveParcelPlanScanToPage(page.parcelPlanScan,n)}:{}),
    ...(page.privateSpatialPage?{privateSpatialPage:{...page.privateSpatialPage,page:n,
     words:page.privateSpatialPage.words.map(w=>({...w,page:n}))}}:{})};
  }));
@@ -42,6 +44,8 @@ try{
   documentCinStatus:role?.documentCinStatus??null,
   matchedRightsHolder:role?comparison.matchedRightsHolder:null,propertyFacts,
   reasons:[...new Set(reasons)],missingPages,
+  parcelPlanScans:reading.parcelPlanScans,parcelPlanFacts:reading.parcelPlanFacts,
+  parcelEdgeMeasurements:reading.parcelEdgeMeasurements,
   certificatePages:p,identityPages:1,ownershipVerified:false,identityVerified:false,
   mayPublish:false,requiresHumanReview:true}));
 }catch{process.stderr.write('PAIR_PROCESSING_FAILED\n');process.exitCode=1;}

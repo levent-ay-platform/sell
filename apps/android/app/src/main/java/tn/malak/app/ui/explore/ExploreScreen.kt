@@ -27,6 +27,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -53,11 +54,12 @@ private val FilterSaver = listSaver<DiscoveryFilters, String>(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun ExploreScreen(language: String, onSeller: () -> Unit) {
+    val context = LocalContext.current.applicationContext
     val endpoint = BuildConfig.MALAK_DISCOVERY_BASE_URL
     val demo = BuildConfig.DEBUG && endpoint.isEmpty()
     val source = remember(endpoint, demo, language) {
         when {
-            demo -> DiscoveryDemoSource(language)
+            demo -> DiscoveryDemoSource(language, context)
             endpoint.isNotBlank() -> HttpDiscoverySource(endpoint, language)
             else -> null
         }

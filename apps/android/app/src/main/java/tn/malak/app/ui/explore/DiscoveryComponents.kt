@@ -61,7 +61,7 @@ internal fun ListingCard(
         ) {
             ListingPhoto(listing, Modifier.size(76.dp).clip(RoundedCornerShape(14.dp)), false)
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                Text(
+                if (listing.priceTnd.isNotBlank()) Text(
                     s(R.string.v2_amount, discoveryNumber(listing.priceTnd, language)),
                     color = Brand.Crimson, style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
@@ -122,7 +122,7 @@ internal fun ListingDetail(
                 ) {
                     ListingPhoto(listing, Modifier.fillMaxWidth().height(220.dp).clip(RoundedCornerShape(20.dp)), true)
                     Text(listing.title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                    Text(
+                    if (listing.priceTnd.isNotBlank()) Text(
                         s(R.string.v2_amount, discoveryNumber(listing.priceTnd, language)),
                         color = Brand.Crimson, style = MaterialTheme.typography.headlineSmall,
                         fontWeight = FontWeight.Bold
@@ -139,6 +139,7 @@ internal fun ListingDetail(
                         else -> R.string.v2_location_unknown
                     }), color = Brand.Muted, style = MaterialTheme.typography.bodyMedium)
                     listing.description?.let { Text(it, style = MaterialTheme.typography.bodyLarge) }
+                    if (source != null) PublicParcelSection(source, id, language)
                 }
             }
         }

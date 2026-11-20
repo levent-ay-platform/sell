@@ -4,12 +4,31 @@ import os
 from pathlib import Path
 import struct
 import subprocess
+import sys
 import tempfile
 import threading
 import time
 
 ROOT=Path(__file__).resolve().parents[3]
 MAX_TOTAL=12*1024*1024
+sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'ocr'))
+
+
+def attach_vision_plan_scans(document,directory):
+    # The Vision binary places renderings here only when requested by this
+    # owner-scoped process. Older binaries simply leave the directory empty.
+    from PIL import Image
+    from parcel_scan import scan_metadata_for_page
+    for page in document.get('pages',[]):
+        number=page.get('page')
+        if type(number) is not int or not 1<=number<=8:
+            continue
+        raster=directory/f'{number}.png'
+        if not raster.is_file():
+            continue
+        with Image.open(raster) as image:
+            page.update(scan_metadata_for_page(image,number,page.get('lines',[])))
+
 
 def identity_document(fields):
     confidence=fields['confidencePercent']/100
@@ -62,10 +81,14 @@ class MacPairRuntime:
                 for index,(_,mime,content) in enumerate(files[:-1]):
                     path=Path(directory)/str(index)
                     path.write_bytes(content);os.chmod(path,0o600)
-                    result=subprocess.run([self.vision,str(path)],stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,timeout=remaining(),check=True)
+                    rasters=Path(directory)/f'rasters-{index}'
+                    rasters.mkdir(mode=0o700)
+                    result=subprocess.run([self.vision,str(path)],stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,timeout=remaining(),check=True,
+                        env={**os.environ,'MALAK_VISION_PLAN_RASTERS':str(rasters)})
                     if len(result.stdout)>4_000_000:raise ValueError('OCR size')
                     doc=json.loads(result.stdout)
                     if len(doc.get('pages',[]))+sum(len(x['pages']) for x in docs)>8:raise ValueError('too many pages')
+                    attach_vision_plan_scans(doc,rasters)
                     docs.append(doc)
                 fields=self.pilot.read(files[-1][2],files[-1][1],cache_scope=cache_scope)
                 front=identity_document(fields)

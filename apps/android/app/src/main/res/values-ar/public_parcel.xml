@@ -1,0 +1,25 @@
+<resources>
+    <string name="parcel_boundaries">حدود الأرض</string>
+    <string name="parcel_official">حد رسمي مثبت بالمصدر</string>
+    <string name="parcel_georeferenced">حد مسند جغرافياً من وثيقة</string>
+    <string name="parcel_estimate">حد تقريبي قدّمه المالك</string>
+    <string name="parcel_local_only">حدود المخطط دون محاذاة جغرافية</string>
+    <string name="parcel_references">الرسم %1$s · القطعة %2$s</string>
+    <string name="parcel_plot">القطعة %1$s</string>
+    <string name="parcel_title">الرسم %1$s</string>
+    <string name="parcel_edge">%1$s · %2$s م</string>
+    <string name="parcel_documents">وثائق العقار</string>
+    <string name="parcel_doc_plan">مخطط القطعة</string>
+    <string name="parcel_doc_title">وثيقة الرسم العقاري</string>
+    <string name="parcel_doc_other">وثيقة العقار</string>
+    <string name="parcel_preview">معاينة</string>
+    <string name="parcel_preview_error">هذه الوثيقة غير متاحة.</string>
+    <string name="parcel_fetch_error">تعذّر تحميل بيانات القطعة.</string>
+    <string name="parcel_previous">الصفحة السابقة</string>
+    <string name="parcel_next">الصفحة التالية</string>
+    <string name="parcel_page">صفحة %1$d من %2$d</string>
+    <string name="parcel_private_proof">معاينة محلية من الأرشيف</string>
+    <string name="parcel_no_measured_sides">المصدر ما بيذكر أطوال الأضلاع.</string>
+    <string name="parcel_pdf_page">صفحة PDF</string>
+    <string name="parcel_pixel_measurements">قياسات المسح (بكسل)</string>
+</resources>
