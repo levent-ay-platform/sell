@@ -53,7 +53,10 @@ private val FilterSaver = listSaver<DiscoveryFilters, String>(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun ExploreScreen(language: String, onSeller: () -> Unit) {
+internal fun ExploreScreen(
+    language: String, onSeller: () -> Unit, preferredMapMode: Boolean = true,
+    onViewModeChanged: (Boolean) -> Unit = {}
+) {
     val context = LocalContext.current.applicationContext
     val endpoint = BuildConfig.MALAK_DISCOVERY_BASE_URL
     val demo = BuildConfig.DEBUG && endpoint.isEmpty()
@@ -65,7 +68,8 @@ internal fun ExploreScreen(language: String, onSeller: () -> Unit) {
         }
     }
     val styleUrl = BuildConfig.MALAK_MAP_STYLE_URL.ifEmpty { if (demo) DemoStyle else "" }
-    var mapMode by rememberSaveable { mutableStateOf(styleUrl.isNotEmpty()) }
+    var mapMode by rememberSaveable { mutableStateOf(preferredMapMode && styleUrl.isNotEmpty()) }
+    LaunchedEffect(preferredMapMode) { mapMode = preferredMapMode && styleUrl.isNotEmpty() }
     var mapIssue by rememberSaveable { mutableStateOf(false) }
     var mapReady by remember { mutableStateOf(false) }
     var centerLatitude by rememberSaveable { mutableDoubleStateOf(InitialCenter.latitude) }
@@ -175,9 +179,10 @@ internal fun ExploreScreen(language: String, onSeller: () -> Unit) {
                         jump = CameraJump(point, maxOf(12.0, zoom + 2).coerceAtMost(18.0), ++jumpSerial)
                     } else {
                         mapMode = false
+                        onViewModeChanged(false)
                     }
                 },
-                onFailure = { mapIssue = true; mapMode = false; mapReady = false },
+                onFailure = { mapIssue = true; mapMode = false; mapReady = false; onViewModeChanged(false) },
                 onReady = { mapReady = true }
             )
             if (!mapReady) {
@@ -229,6 +234,7 @@ internal fun ExploreScreen(language: String, onSeller: () -> Unit) {
                     recenterSearch = false
                     mapMode = !mapMode
                     if (mapMode) mapIssue = false
+                    onViewModeChanged(mapMode)
                 }
             )
 
