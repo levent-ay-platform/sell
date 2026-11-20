@@ -7,6 +7,7 @@ on:
       - 'apps/android/**'
       - '.github/workflows/android.yml'
       - 'scripts/check_malak_brand.py'
+      - 'scripts/check_amlak_ui_contrast.py'
   push:
     branches: [main]
     paths:
@@ -33,7 +34,9 @@ jobs:
         with:
           persist-credentials: false
       - name: Check approved brand
-        run: python3 scripts/check_malak_brand.py
+        run: |
+          python3 scripts/check_malak_brand.py
+          python3 scripts/check_amlak_ui_contrast.py
       - name: Set up JDK 17
         uses: actions/setup-java@v5
         with:
