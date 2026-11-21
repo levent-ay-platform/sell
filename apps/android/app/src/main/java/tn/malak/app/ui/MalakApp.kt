@@ -1,5 +1,9 @@
 package tn.malak.app.ui
 
+import androidx.activity.compose.BackHandler
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
+import tn.malak.app.BuildConfig
+import tn.malak.app.ui.explore.ExploreScreen
 import android.content.Context
 import android.content.res.Configuration
 import androidx.compose.foundation.*
@@ -33,8 +37,8 @@ import androidx.compose.ui.unit.sp
 import tn.malak.app.R
 import java.util.Locale
 
-private val Sea = Color(0xFF087C9A)
-private val SeaLight = Color(0xFFE9F8F9)
+private val Sea = Brand.Crimson
+private val SeaLight = Brand.Rose
 private val Border = Color(0xFFE8E8EB)
 
 /**
@@ -49,6 +53,9 @@ private val LocalMalakStringsContext = staticCompositionLocalOf<Context> {
 /** All consumer text is sourced from localized Android resources. */
 @Composable
 internal fun s(id: Int): String = LocalMalakStringsContext.current.getString(id)
+
+@Composable
+internal fun s(id: Int, vararg args: Any): String = LocalMalakStringsContext.current.getString(id, *args)
 
 /** Arabic RTL, French LTR; an explicit user language selection drives every Compose layout. */
 @Composable
@@ -70,6 +77,7 @@ internal fun MalakApp(
     }
     val direction = if (language == "ar") LayoutDirection.Rtl else LayoutDirection.Ltr
     var screen by rememberSaveable { mutableStateOf("home") }
+    var sellerReturnRoute by rememberSaveable { mutableStateOf("home") }
     var category by rememberSaveable { mutableStateOf("all") }
     var query by rememberSaveable { mutableStateOf("") }
     // A successful server login returns a real scoped QA bearer. Local UI
@@ -78,61 +86,93 @@ internal fun MalakApp(
     var pilotOcrSession by remember { mutableStateOf<PilotOcrSession?>(null) }
     var resubmission by remember{mutableStateOf<org.json.JSONObject?>(null)}
     var focusedRequest by rememberSaveable{mutableStateOf<String?>(null)}
-    val tabs = setOf("home", "map", "favorites", "more")
+    val v2 = BuildConfig.MALAK_V2_DISCOVERY
+    val destinations = if (v2) DiscoveryTabs else NavTabs
+    val exploreState = rememberSaveableStateHolder()
+    val ownerRoute = screen == "seller" || screen == "requests" || screen == "signin"
 
     CompositionLocalProvider(LocalMalakStringsContext provides localizedContext,
         LocalLayoutDirection provides direction,
         LocalOwnerEvidenceSession provides (if (PilotOtpGate.enabled) null else ownerEvidenceSession),
         LocalAuthenticatedOwnerSession provides (if (PilotOtpGate.enabled) null else authenticatedOwnerSession),
         LocalPilotOcrSession provides (if (PilotOtpGate.enabled) pilotOcrSession else null)) {
-        MaterialTheme(colorScheme = lightColorScheme(
-            primary = Brand.Crimson,
-            background = Brand.Pearl,
-            surface = Brand.Pearl,
-            onSurface = Brand.Ink
-        )) {
+        MaterialTheme(colorScheme = AmlakColorScheme, typography = AmlakTypography) {
+            BackHandler(enabled = v2 && screen in setOf("explore", "alerts", "account", "settings", "favorites", "requests")) {
+                screen = if (screen in setOf("settings", "favorites", "requests")) "account" else "home"
+            }
+            BackHandler(enabled = v2 && screen == "seller") { screen = sellerReturnRoute }
             Surface(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing), color = Brand.Pearl) {
-                if (PilotOtpGate.enabled && pilotPhone == null) {
+                if (PilotOtpGate.enabled && pilotPhone == null && (!v2 || ownerRoute)) {
+                    BackHandler(enabled = v2) { screen = if (screen == "signin") "account" else sellerReturnRoute }
                     PilotOtpScreen(onEnterPilot = { phone, session ->
                         pilotOcrSession=session
                         pilotPhone=phone
-                        screen="home"
+                        if (!v2) screen="home" else if (screen == "signin") screen="account"
                     })
                 } else Scaffold(
                     containerColor = Brand.Pearl,
                     contentWindowInsets = WindowInsets(0, 0, 0, 0),
                     topBar = {
-                        if (PilotOtpGate.enabled) PilotSessionBar(pilotPhone.orEmpty()) {
+                        if (!v2 && PilotOtpGate.enabled && pilotPhone != null) PilotSessionBar(pilotPhone.orEmpty()) {
                             pilotOcrSession = null
                             pilotPhone = null
                             screen = "home"
                         }
                     },
                     bottomBar = {
-                        if (screen in tabs) MalakBottomBar(screen) { screen = it }
+                        if (v2) {
+                            if (screen in setOf("home", "explore", "alerts", "account")) PremiumBottomBar(screen) { route ->
+                                if (route == "seller") { sellerReturnRoute = screen; resubmission = null }
+                                screen = route
+                            }
+                        } else if (destinations.any { it.route == screen }) MalakBottomBar(screen, destinations) { screen = it }
                     }
                 ) { insets ->
                     Box(Modifier.fillMaxSize().padding(insets)) {
                         when (screen) {
-                            "home" -> MalakHome(query, { query = it }, category, { category = it }, { resubmission=null; screen = "seller" }, { resubmission=it;screen="seller" },{focusedRequest=null;screen="requests"})
+                            "home", "explore" -> if (v2) exploreState.SaveableStateProvider("explore") {
+                                ExploreScreen(language,
+                                    onSeller = { sellerReturnRoute = screen; resubmission = null; screen = "seller" },
+                                    preferredMapMode = screen == "home",
+                                    onViewModeChanged = { map -> screen = if (map) "home" else "explore" },
+                                    onAlerts = { screen = "alerts" }, onAccount = { screen = "account" }
+                                )
+                            } else MalakHome(query, { query = it }, category, { category = it }, { resubmission=null; screen = "seller" }, { resubmission=it;screen="seller" },{focusedRequest=null;screen="requests"})
                             "requests" -> Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(18.dp)){
-                                TextButton(onClick={screen="home"}){Text(s(R.string.back))}
+                                TextButton(onClick={screen=if(v2) "account" else "home"}){Text(s(R.string.back))}
                                 PilotListings("","all",{resubmission=it;screen="seller"},onlyOwn=true,focusId=focusedRequest)
                             }
                             "map" -> MalakEmptyPage(R.string.map_title, R.string.map_unavailable,
                                 R.string.map_unavailable_hint, Icons.Outlined.Map, { screen = "home" })
-                            "favorites" -> MalakEmptyPage(R.string.favorites_title, R.string.favorites_empty,
+                            "favorites" -> if (v2) PremiumFavoritesScreen(onExplore = { screen = "explore" }, onBack = { screen = "account" })
+                                else MalakEmptyPage(R.string.favorites_title, R.string.favorites_empty,
                                 R.string.favorites_hint, Icons.Outlined.FavoriteBorder, { screen = "home" })
+                            "alerts" -> PremiumAlertsScreen(onExplore = { screen = "explore" })
+                            "account" -> PremiumAccountScreen(
+                                phone = pilotPhone,
+                                onSignIn = { screen = if (PilotOtpGate.enabled) "signin" else "seller" },
+                                onRequests = { focusedRequest = null; screen = "requests" },
+                                onFavorites = { screen = "favorites" },
+                                onSettings = { screen = "settings" },
+                                onSeller = { sellerReturnRoute = "account"; resubmission = null; screen = "seller" },
+                                onLogout = if (pilotPhone == null) null else ({
+                                    pilotOcrSession = null; pilotPhone = null; screen = "account"
+                                })
+                            )
+                            "settings" -> PremiumSettingsScreen(language, onLanguage = {
+                                language = it
+                                preferences.edit().putString("language", it).apply()
+                            }, onBack = { screen = "account" })
                             "more" -> MalakMorePage(language, onLanguage = {
                                 language = it
                                 preferences.edit().putString("language", it).apply()
-                            }, onSeller = { screen = "seller" })
+                            }, onSeller = { resubmission = null; screen = "seller" })
                             "seller" -> key(if (PilotOtpGate.enabled) pilotPhone else "owner",resubmission?.optString("id")) {
                                 // Recreate all seller Compose state when the pilot account changes.
                                 // A document URI, consent checkbox or OCR result must not be
                                 // inherited by a different account on a shared device.
                                 SellerOcrJourney(
-                                    onBack = { screen = "home" },
+                                    onBack = { screen = if (v2) sellerReturnRoute else "home" },
                                     draftScope = if (PilotOtpGate.enabled) pilotPhone else null,
                                     resubmission=resubmission,
                                     onSubmitted={focusedRequest=it;screen="requests"}
@@ -154,7 +194,7 @@ private fun MalakHome(
     onReplaceDocuments:(org.json.JSONObject)->Unit,onRequests:()->Unit
 ) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 18.dp)) {
-        Box(Modifier.fillMaxWidth().background(Brush.verticalGradient(listOf(Sea, Color(0xFF35ABC1), SeaLight)))) {
+        Box(Modifier.fillMaxWidth().background(Brush.verticalGradient(listOf(Color(0xFF71152B), Brand.Crimson, Color(0xFF89142E))))) {
             Column(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 23.dp, bottom = 24.dp),
                 verticalArrangement = Arrangement.spacedBy(17.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically,
@@ -163,7 +203,7 @@ private fun MalakHome(
                         Icon(Icons.Outlined.Home, null, Modifier.padding(10.dp).size(30.dp), tint = Brand.Crimson)
                     }
                     Column(Modifier.weight(1f)) {
-                        Text("MALAK / ملاك", color = Color.White, fontSize = 25.sp, fontWeight = FontWeight.Bold)
+                        Text("Amlak", color = Color.White, fontSize = 25.sp, fontWeight = FontWeight.Bold)
                         Text(s(R.string.brand_subtitle), color = Color.White.copy(alpha = .93f),
                             fontSize = 12.sp, maxLines = 2)
                     }
@@ -326,13 +366,19 @@ private val NavTabs = listOf(
     NavigationTab("more", R.string.more, Icons.Outlined.MoreHoriz)
 )
 
+private val DiscoveryTabs = listOf(
+    NavigationTab("home", R.string.map, Icons.Outlined.Map),
+    NavigationTab("requests", R.string.v2_my_properties, Icons.Outlined.Assignment),
+    NavigationTab("more", R.string.more, Icons.Outlined.MoreHoriz)
+)
+
 @Composable
-private fun MalakBottomBar(active: String, onNavigate: (String) -> Unit) {
+private fun MalakBottomBar(active: String, destinations: List<NavigationTab>, onNavigate: (String) -> Unit) {
     Surface(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
         color = Color.White, shape = RoundedCornerShape(26.dp), shadowElevation = 7.dp) {
         Row(Modifier.fillMaxWidth().heightIn(min = 64.dp).padding(horizontal = 6.dp),
             horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            NavTabs.forEach { tab ->
+            destinations.forEach { tab ->
                 val selected = active == tab.route
                 Column(Modifier.weight(1f).clip(RoundedCornerShape(15.dp)).clickable { onNavigate(tab.route) }
                     .heightIn(min = 58.dp).padding(horizontal = 2.dp, vertical = 7.dp),
@@ -340,7 +386,7 @@ private fun MalakBottomBar(active: String, onNavigate: (String) -> Unit) {
                     verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Icon(tab.icon, contentDescription = s(tab.title), modifier = Modifier.size(25.dp),
                         tint = if(selected) Brand.Crimson else Brand.Muted)
-                    Text(s(tab.title), fontSize = 11.sp, color = if(selected) Brand.Crimson else Brand.Muted,
+                    Text(s(tab.title), fontSize = 12.sp, color = if(selected) Brand.Crimson else Brand.Muted,
                         fontWeight = if(selected) FontWeight.Bold else FontWeight.Normal,
                         maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }

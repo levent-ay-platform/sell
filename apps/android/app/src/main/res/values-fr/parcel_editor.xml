@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="parcel_editor_title">Contour de la parcelle</string>
+    <string name="parcel_editor_open">Vérifier le contour · page %1$d</string>
+    <string name="parcel_editor_local">Coordonnées du document uniquement. Ce contour est sans localisation cartographique.</string>
+    <string name="parcel_editor_candidate">Contour détecté · vérifiez chaque sommet sur la source</string>
+    <string name="parcel_editor_manual">Touchez la source pour ajouter un sommet. Faites glisser un sommet pour le déplacer.</string>
+    <string name="parcel_editor_source">Source · page %1$d</string>
+    <string name="parcel_editor_preview_error">Impossible d’ouvrir cette page. Sélectionnez à nouveau le document source.</string>
+    <string name="parcel_editor_plot">Numéro de parcelle</string>
+    <string name="parcel_editor_title_reference">Référence du titre foncier</string>
+    <string name="parcel_editor_remove">Supprimer le sommet %1$d</string>
+    <string name="parcel_editor_undo">Retirer le dernier sommet</string>
+    <string name="parcel_editor_edges">Mesures des côtés</string>
+    <string name="parcel_editor_edge_label">Libellé</string>
+    <string name="parcel_editor_edge_length">Longueur (m)</string>
+    <string name="parcel_editor_edge_name">P%1$d → P%2$d</string>
+    <string name="parcel_editor_printed">Mesures lues sur la source</string>
+    <string name="parcel_editor_measure_hint">Saisissez uniquement les longueurs indiquées dans le document. Le dessin reste dans les coordonnées de la source.</string>
+    <string name="parcel_editor_crossing">Utilisez au moins trois sommets et vérifiez que les côtés ne se croisent pas.</string>
+    <string name="parcel_editor_invalid_measure">Vérifiez la longueur et utilisez un libellé tel que A–B.</string>
+    <string name="parcel_editor_submit">Envoyer le contour pour examen</string>
+    <string name="parcel_editor_sending">Envoi du contour…</string>
+    <string name="parcel_editor_saved">Contour enregistré dans le dossier pour examen.</string>
+    <string name="parcel_editor_failed">Impossible d’envoyer le contour. Vos modifications sont toujours présentes.</string>
+    <string name="parcel_editor_load_failed">Impossible de charger les contours enregistrés. Vous pouvez modifier cette page.</string>
+    <string name="parcel_editor_canvas">Page source et contour modifiable</string>
+    <string name="parcel_editor_preview_only">Aperçu privé pour cette session. L’envoi nécessite un accès propriétaire vérifié.</string>
+    <string name="parcel_editor_keep_preview">Conserver l’aperçu pour cette session</string>
+    <string name="parcel_editor_area">Surface lue · %1$s m²</string>
+    <string name="parcel_editor_x">X source</string>
+    <string name="parcel_editor_y">Y source</string>
+    <string name="parcel_editor_move">Déplacer le sommet</string>
+    <string name="parcel_editor_vertices">%1$d sommets</string>
+    <string name="parcel_editor_stated_area">Surface déclarée (m²)</string>
+</resources>

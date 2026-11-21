@@ -1,12 +1,18 @@
-# ملاك | MALAK — Trusted Property Discovery in Tunisia
+# Amlak | أملاك — Tunisia map-first property platform
 
-> **VISUAL RELEASE BLOCKER (2026-11-09):** The first Android QA APK did **not** match the approved visual reference. It compiles, but is NOT visually approved and MUST NOT be described as finished. See issue #7 and `docs/design/VISUAL-RELEASE-BLOCKER.md`.
->
-> **Status:** platform foundation merged; Android prototype remains unapproved. No production listing or release is live.
->
-> **Public product name:** **ملاك**. The GitHub repository retains the technical slug `sell` to preserve links, database migrations, and GitHub Actions history.
+> **QA RELEASE BLOCKER (2026-11-20):** Amlak 2.0 [Draft PR #22](https://github.com/levent-ay-platform/sell/pull/22) has a successful Android CI build, but **installation and visual acceptance are NOT proven**, and nothing has been merged or released to production. The older visual-blocker history remains documented in [issue #7](https://github.com/levent-ay-platform/sell/issues/7).
 
-ملاك is an owner-to-buyer real-estate marketplace for Tunisia: properties and land plots are published only after a server-side verification decision; buyers browse a globe/map or a fast list and contact authorized sellers directly.
+> **Official consumer name:** **Amlak (أملاك)**, formerly Malak. Repository slug `sell`, Android application ID `tn.malak.app`, and historical code paths are retained for compatibility; do not rename them ad hoc.
+
+Amlak is a Tunisia-focused property discovery and listing platform with a **2D map-first experience**, optional, provenance-aware Atlas layers and server-guarded listings. The approved launch is sales-only and initially closed to Nabeul/Kélibia. Some QA fixtures are synthetic and must not be presented as public verified properties.
+
+## Start here — authoritative sources
+
+- [Current verified checkpoint and known blockers](docs/CURRENT.md)
+- [Mac and GitHub workspace/file layout](docs/WORKSPACE-LAYOUT.md)
+- [ATLAS MASTER Issue #20](https://github.com/levent-ay-platform/sell/issues/20) — **official cadastral-plan discovery is the primary Atlas document goal**; INS/PAU/GeoPAU are supporting geospatial resources
+- [Approved product architecture Issue #21](https://github.com/levent-ay-platform/sell/issues/21)
+- [Android/map implementation Draft PR #22](https://github.com/levent-ay-platform/sell/pull/22)
 
 ## Core principles
 
@@ -18,7 +24,7 @@
 - **GitHub-hosted CI only:** `ubuntu-latest` or the pinned `ubuntu-24.04` LTS fallback during runner image outages; no Mac/self-hosted runners. No deployment or signing secrets in PR workflows.
 - **No brokerage payments, deposits or ownership transfer in V1.**
 
-## Foundation decisions
+## Foundation decisions (historical baseline; see Issue #21 for the current approved map-first direction)
 
 | Concern | Initial direction |
 | --- | --- |
@@ -34,7 +40,7 @@
 
 These are engineering defaults, not proof of performance, privacy compliance, or completed integration.
 
-## Roadmap
+## Roadmap (historical foundation; see Issue #21 for the current implementation plan)
 
 1. Freeze product constraints, data model, security and verification invariants.
 2. Prove map/globe rendering on real Android devices, including a low-end device.

@@ -9,11 +9,11 @@ object Brand {
     val Pearl = Color(0xFFFFFDFB)
     val Glass = Color(0xF2FFFDFB)
     val Ink = Color(0xFF22242B)
-    val Muted = Color(0xFF5B606A)
+    val Muted = Color(0xFF50545C)
     val TrustGreen = Color(0xFF16834A)
-    val Azure = Color(0xFF159DC5)
+    val Azure = Color(0xFF0C7189)
     val Sand = Color(0xFFDFD5BA)
 }
 
-const val APP_BRAND_ARABIC = "ملاك"
+const val APP_BRAND_NAME = "Amlak"
 const val DEMO_NOTE = "معاينة تجريبية — دون عقارات حقيقية"

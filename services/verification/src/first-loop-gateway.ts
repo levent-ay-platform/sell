@@ -1,7 +1,7 @@
 /**
  * Composition root for Malak's first verification loop.
  *
- * NO HTTP/HTTPS listener, environment variable, public route, fixed test PIN,
+ * NO HTTP/HTTPS listener, environment variable, fixed test PIN,
  * credential, document, or deployment side effect is created here.
  * A deployment MUST inject a separately reviewed +216 phone-verified provider,
  * a real PostgreSQL pool, malware scanner, private encrypted object store,
@@ -23,6 +23,10 @@ import {SameServicePilotAuth} from './pilot-auth.ts';
 import type {PrivatePairDependencies} from './private-pair-service.ts';
 import {analyzeAuthorizedPrivateEvidencePair} from './private-pair-service.ts';
 import {provisionIndividualOwnerCase,revokeIndividualOwnerConsent} from './private-owner-case.ts';
+import {createListingDiscoveryHttpHandler,PostgresListingDiscoveryRepository} from './listing-discovery.ts';
+import type {ReviewedParcelRenditionReader} from './parcel-http.ts';
+import {createParcelHttpHandler} from './parcel-http.ts';
+import {createParcelRepository} from './parcel-repository.ts';
 
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const PHONE=/^\+216[2-9][0-9]{7}$/;
@@ -85,6 +89,14 @@ export interface UnboundFirstLoopGatewayDeps {
    * Explicit private deployment opt-in; off for production by default.
    */
   readonly pilotQa?:{enabled:true;deviceHmacSecret:Uint8Array};
+  /** Set only when MALAK_V2_DISCOVERY is explicitly enabled in the server configuration. */
+  readonly discoveryV2?:{
+    readonly enabled:true;
+    readonly mediaOrigin?:string;
+    /** Optional separate rendition storage. Never point this at the evidence vault. */
+    readonly readParcelRendition?:ReviewedParcelRenditionReader;
+    readonly allowRequest:(remoteAddress:string)=>Promise<boolean>;
+  };
   readonly rateLimitHmacSecret:Uint8Array;
   readonly policyVersion:string;
   /** Optional deterministic clock for isolated synthetic-only tests. */
@@ -113,7 +125,7 @@ export function composeUnboundMalakFirstLoop(deps:UnboundFirstLoopGatewayDeps) {
   const limits=new PostgresPrivateEvidenceRateLimiter(deps.pool,deps.rateLimitHmacSecret);
   const audit=new PostgresPrivateEvidenceDenialAudit(deps.pool);
   const caseDeps={auth,pool:deps.pool,policyVersion:deps.policyVersion};
-  return createPrivateEvidenceHttpHandler({
+  const privateHandler=createPrivateEvidenceHttpHandler({
     auth,limits,audit,
     upload:request=>uploadIndividualEvidence(request,{
       auth,cases,objects:deps.objects,scanner:deps.scanner,
@@ -145,4 +157,19 @@ export function composeUnboundMalakFirstLoop(deps:UnboundFirstLoopGatewayDeps) {
     withdrawOwnerConsent:(bearer,caseId)=>
       revokeIndividualOwnerConsent(bearer,caseId,caseDeps)
   });
+  if(deps.discoveryV2?.enabled!==true)return privateHandler;
+  const discovery=createListingDiscoveryHttpHandler({
+    enabled:true,
+    repository:new PostgresListingDiscoveryRepository(deps.pool,deps.discoveryV2.mediaOrigin),
+    allowRequest:deps.discoveryV2.allowRequest
+  });
+  const parcels=createParcelHttpHandler({
+    repository:createParcelRepository(deps.pool),
+    readRendition:deps.discoveryV2.readParcelRendition,
+    authenticate:token=>verifiedAuth.authenticate(token),
+    allowRequest:deps.discoveryV2.allowRequest
+  });
+  return async (req:Parameters<typeof privateHandler>[0],res:Parameters<typeof privateHandler>[1])=>{
+    if(!await parcels(req,res)&&!await discovery(req,res))await privateHandler(req,res);
+  };
 }

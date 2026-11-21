@@ -9,6 +9,8 @@ import type {PrivateEvidenceReadiness} from './evidence-readiness-v2.ts';
 import {locateOwnerTableFromWords} from './owner-table-layout-v2.ts';
 import type {SpatialPage, SpatialWord, SpatialTableCandidate} from './owner-table-layout-v2.ts';
 import type {QualityWarning} from './capture.ts';
+import {extractParcelEdgeMeasurements,extractParcelPlanFacts,parseParcelPlanScan} from './parcel-document-foundation.ts';
+import type {ParcelEdgeMeasurement,ParcelPlanFact,ParcelPlanScan} from './parcel-document-foundation.ts';
 
 /**
  * Isolated OCR/PDF worker boundary. Text/confidence are UNTRUSTED.
@@ -22,6 +24,7 @@ export interface IngestedPage {
   /** Only generated on securely rasterized/decoded OCR pages. */
   privateSpatialPage?:SpatialPage;
   spatialWordsTruncated?:boolean;
+  parcelPlanScan?:ParcelPlanScan;
 }
 export interface IngestedDocument {
   format:'pdf'|'image';
@@ -34,6 +37,10 @@ export interface ReadDocumentResult {
   documentFamilyCandidate:DocumentTrainingCandidate;
   /** Type-specific, sourced values requiring human confirmation; PRIVATE ONLY. */
   privateFamilyFields:PrivateLandFacts;
+  /** Annotated document lengths only; private and unreviewed. */
+  parcelEdgeMeasurements:readonly ParcelEdgeMeasurement[];
+  parcelPlanScans:readonly ParcelPlanScan[];
+  parcelPlanFacts:readonly ParcelPlanFact[];
   /** Heuristic internal progress, not a public seller-trust or ownership badge. */
   privateEvidenceReadiness:PrivateEvidenceReadiness;
   /** Private, unreviewed candidates; never expose through a public listing. */
@@ -59,12 +66,13 @@ const validRasterBox=(x:unknown):x is {left:number;top:number;right:number;botto
  * A parsed private OCR page stores spatial boxes in a DIFFERENT schema from
  * raw Tesseract output. Legacy text-only consumers must not reparse that
  * in-memory layout as if it were untrusted incoming worker metadata.
- * Preserve source lines, page methods and capture-quality warnings only.
+ * Preserve source lines, capture warnings, and the independent page-local parcel scan.
  */
 export function asTextOnlyOcrDocument(input:IngestedDocument):IngestedDocument {
   return {format:input.format,mayApproveOwnership:false,
     pages:input.pages.map(p=>({
       page:p.page,method:p.method,lines:p.lines,
+      ...(p.parcelPlanScan!==undefined?{parcelPlanScan:p.parcelPlanScan}:{}),
       ...(p.qualityWarnings!==undefined?{qualityWarnings:p.qualityWarnings}:{})
     }))};
 }
@@ -139,6 +147,7 @@ export function parseOcrWorkerOutput(input:unknown):IngestedDocument {
                     bottom:(line.bbox as {bottom:number}).bottom}}:{})});
     }
     pages.push({page,method:item.method as IngestedPage['method'],lines,
+      ...(item.parcelPlanScan!==undefined?{parcelPlanScan:parseParcelPlanScan(item.parcelPlanScan,page)}:{}),
       ...(hasSpatial?{
         privateSpatialPage:{page,width:Number(item.pageImageWidth),
           height:Number(item.pageImageHeight),words:spatialWords},
@@ -165,7 +174,10 @@ export function readUntrustedOcrDocument(payload:unknown):ReadDocumentResult {
     !pg.spatialWordsTruncated&&pg.privateSpatialPage.words.length>0);
   const ownerTableLayout=spatialReady?
     locateOwnerTableFromWords(parsed.pages.map(pg=>pg.privateSpatialPage!)):null;
+  const parcelPlanScans=parsed.pages.flatMap(page=>page.parcelPlanScan?[page.parcelPlanScan]:[]);
   return {extraction,documentFamilyCandidate,privateFamilyFields,privateEvidenceReadiness,ownerTableLayout,
+    parcelEdgeMeasurements:extractParcelEdgeMeasurements(lines),
+    parcelPlanScans,parcelPlanFacts:extractParcelPlanFacts(lines,new Set(parcelPlanScans.map(scan=>scan.page))),
     pagesReceived:parsed.pages.length,
     extractionMethods:parsed.pages.map(pg=>pg.method),
     qualityReviewPages:parsed.pages.filter(pg=>pg.qualityWarnings?.length).map(pg=>pg.page),

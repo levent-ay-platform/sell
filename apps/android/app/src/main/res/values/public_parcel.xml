@@ -1,0 +1,27 @@
+<resources>
+    <string name="parcel_boundaries">Parcel boundaries</string>
+    <string name="parcel_official">Source-verified cadastral boundary</string>
+    <string name="parcel_georeferenced">Georeferenced from a document</string>
+    <string name="parcel_estimate">Owner-submitted estimate</string>
+    <string name="parcel_local_only">Plan outline without geographic alignment</string>
+    <string name="parcel_references">Title %1$s · Plot %2$s</string>
+    <string name="parcel_plot">Plot %1$s</string>
+    <string name="parcel_title">Title %1$s</string>
+    <string name="parcel_edge">%1$s · %2$s m</string>
+    <string name="parcel_documents">Property documents</string>
+    <string name="parcel_doc_plan">Parcel plan</string>
+    <string name="parcel_doc_title">Title document</string>
+    <string name="parcel_doc_other">Property document</string>
+    <string name="parcel_preview">Preview</string>
+    <string name="parcel_preview_error">This document is unavailable.</string>
+    <string name="parcel_fetch_error">Parcel information could not load.</string>
+    <string name="parcel_previous">Previous page</string>
+    <string name="parcel_next">Next page</string>
+    <string name="parcel_page">Page %1$d of %2$d</string>
+    <string name="parcel_private_proof">Local archive review · display only</string>
+    <string name="parcel_no_measured_sides">The source does not specify side lengths.</string>
+    <string name="parcel_pdf_page">PDF page</string>
+    <string name="parcel_pixel_measurements">Scan measurements (pixels)</string>
+    <string name="parcel_zoom_in">Zoom in</string>
+    <string name="parcel_zoom_out">Zoom out</string>
+</resources>

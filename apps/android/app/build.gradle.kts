@@ -15,6 +15,19 @@ require(malakPrivateBaseUrl.isEmpty() ||
     "Only an approved HTTPS host:port can configure the Malak private pilot gateway"
 }
 
+val malakV2Discovery = providers.gradleProperty("malakV2Discovery")
+    .map { it.toBooleanStrict() }.orElse(false).get()
+val malakDiscoveryBaseUrl = providers.gradleProperty("malakDiscoveryBaseUrl").orElse("").get()
+require(malakDiscoveryBaseUrl.isEmpty() ||
+    malakDiscoveryBaseUrl.matches(Regex("^https://[A-Za-z0-9.-]+(?::[0-9]{2,5})?$"))) {
+    "malakDiscoveryBaseUrl must be a trusted HTTPS origin"
+}
+val malakMapStyleUrl = providers.gradleProperty("malakMapStyleUrl").orElse("").get()
+require(malakMapStyleUrl.isEmpty() ||
+    malakMapStyleUrl.matches(Regex("^https://[A-Za-z0-9.-]+(?::[0-9]{2,5})?/[A-Za-z0-9/_\\.-]+$"))) {
+    "malakMapStyleUrl must be a public HTTPS style URL"
+}
+
 android {
     namespace = "tn.malak.app"
     compileSdk = 36
@@ -27,6 +40,15 @@ android {
         versionCode = 11
         versionName = "0.5.1-date-readout-pilot"
         buildConfigField("String", "MALAK_PRIVATE_SERVICE_URL", "\"$malakPrivateBaseUrl\"")
+        buildConfigField("boolean", "MALAK_V2_DISCOVERY", malakV2Discovery.toString())
+        buildConfigField("String", "MALAK_DISCOVERY_BASE_URL", "\"$malakDiscoveryBaseUrl\"")
+        buildConfigField("String", "MALAK_MAP_STYLE_URL", "\"$malakMapStyleUrl\"")
+    }
+
+    providers.gradleProperty("malakLocalParcelProofAssets").orNull?.let { directory ->
+        val proofAssets = file(directory)
+        require(proofAssets.isDirectory) { "Local parcel proof assets directory is missing" }
+        sourceSets.getByName("debug").assets.srcDir(proofAssets)
     }
 
     buildTypes {
@@ -39,6 +61,8 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
+    // Compress MapLibre's four native ABIs to keep the universal QA APK under the existing size budget.
+    packaging { jniLibs.useLegacyPackaging = true }
     kotlin { jvmToolchain(17) }
     buildFeatures { compose = true; buildConfig = true }
 }
@@ -52,6 +76,7 @@ dependencies {
     implementation("androidx.compose.animation:animation")
     implementation("androidx.compose.material:material-icons-extended")
     implementation("androidx.activity:activity-compose:1.13.0")
+    implementation("org.maplibre.gl:android-sdk-opengl:13.7.1")
     implementation("androidx.compose.ui:ui-tooling-preview")
     debugImplementation("androidx.compose.ui:ui-tooling")
     // OCR and perspective rectification execute inside the authorized

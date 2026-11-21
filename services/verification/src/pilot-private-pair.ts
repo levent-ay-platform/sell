@@ -5,6 +5,8 @@
  */
 import type {Authenticator} from './evidence-upload.ts';
 import type {PrivateOcrWorker} from './seller-ocr-service.ts';
+import {moveParcelPlanScanToPage} from './parcel-document-foundation.ts';
+import type {ParcelEdgeMeasurement,ParcelPlanFact,ParcelPlanScan} from './parcel-document-foundation.ts';
 import {parseOcrWorkerOutput,readUntrustedOcrDocument} from './reader.ts';
 import type {IngestedDocument,IngestedPage} from './reader.ts';
 import {compareUnifiedPrivateDocumentIdentity} from './unified-identity-v2.ts';
@@ -31,6 +33,9 @@ export type PilotPairPreview = {
  readonly documentCinStatus:string|null;
  readonly matchedRightsHolder:UnifiedPrivateDocumentIdentityResult['matchedRightsHolder'];
  readonly propertyFacts:readonly {key:string;value:string;page:number}[];
+ readonly parcelPlanScans:readonly ParcelPlanScan[];
+ readonly parcelPlanFacts:readonly ParcelPlanFact[];
+ readonly parcelEdgeMeasurements:readonly ParcelEdgeMeasurement[];
  readonly certificatePages:number;
  readonly identityPages:1;
  readonly ownershipVerified:false;
@@ -65,6 +70,7 @@ function join(docs:readonly IngestedDocument[]):IngestedDocument {
   if(number>8)throw new PilotPairDenied();
   pages.push({...page,page:number,
    lines:page.lines.map(line=>({...line,page:number})),
+   ...(page.parcelPlanScan?{parcelPlanScan:moveParcelPlanScanToPage(page.parcelPlanScan,number)}:{}),
    ...(page.privateSpatialPage?{privateSpatialPage:{
     ...page.privateSpatialPage,page:number,
     words:page.privateSpatialPage.words.map(w=>({...w,page:number}))
@@ -143,6 +149,8 @@ export async function previewPilotPrivatePair(
    documentCinStatus:selected?.documentCinStatus??null,
    matchedRightsHolder:selected?comparison.matchedRightsHolder:null,
    propertyFacts,
+   parcelPlanScans:read.parcelPlanScans,parcelPlanFacts:read.parcelPlanFacts,
+   parcelEdgeMeasurements:read.parcelEdgeMeasurements,
    certificatePages:document.pages.length,
    identityPages:1,
    ownershipVerified:false,identityVerified:false,mayPublish:false,

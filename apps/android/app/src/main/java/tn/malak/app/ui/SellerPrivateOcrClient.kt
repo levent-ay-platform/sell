@@ -5,6 +5,12 @@ import android.net.Uri
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
+import tn.malak.app.ui.parcel.ParcelOcrLength
+import tn.malak.app.ui.parcel.ParcelPlanFact
+import tn.malak.app.ui.parcel.parseParcelPlanFacts
+import tn.malak.app.ui.parcel.ParcelScan
+import tn.malak.app.ui.parcel.parseParcelOcrLengths
+import tn.malak.app.ui.parcel.parseParcelScans
 import java.net.URI
 import java.net.URL
 import java.util.UUID
@@ -32,9 +38,12 @@ internal data class ReadOcrResult(
     val familyKind:String="UNKNOWN",
     val familyFacts:List<ReadFamilyFact> = emptyList(),
     val documentSupportLevel:Int=0,
+    val parcelScans:List<ParcelScan> = emptyList(),
+    val parcelOcrLengths:List<ParcelOcrLength> = emptyList(),
+    val parcelPlanFacts:List<ParcelPlanFact> = emptyList(),
 )
 private const val MAX_DOC = 12L * 1024L * 1024L
-private const val MAX_REPLY = 64 * 1024
+private const val MAX_REPLY = 128 * 1024
 private val ID = Regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$")
 
 internal class PrivateOcrClientException(val statusCode: Int) : Exception("PRIVATE_OCR_FAILED")
@@ -172,6 +181,7 @@ internal suspend fun readOcrForOwner(
         ReadOcrResult(evidenceId,"READY",facts,pages("missingPages"),
             pages("qualityReviewPages"),reading.optString("declaredAreaComparison"),
             reading.optInt("pagesReceived").coerceIn(0,8),kind,familyFacts,
-            reading.optInt("documentSupportLevel",0).coerceIn(0,5))
+            reading.optInt("documentSupportLevel",0).coerceIn(0,5),
+            parseParcelScans(reading),parseParcelOcrLengths(reading),parseParcelPlanFacts(reading))
     } finally { conn.disconnect() }
 }

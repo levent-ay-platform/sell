@@ -6,6 +6,7 @@
  * title ownership, document authenticity or completeness.
  */
 import {createDecipheriv,createHash} from 'node:crypto';
+import {moveParcelPlanScanToPage} from './parcel-document-foundation.ts';
 import {parseOcrWorkerOutput,asTextOnlyOcrDocument} from './reader.ts';
 import type {IngestedDocument,IngestedPage} from './reader.ts';
 import {comparePrivateCertificateIdentityOcr} from './private-document-comparison.ts';
@@ -138,6 +139,7 @@ function joinPages(docs:readonly IngestedDocument[]):IngestedDocument {
     // Keep page quality and per-line evidence, but strip layout-only fields.
     pages.push({page:number,method:page.method,
       lines:page.lines.map(line=>({...line,page:number})),
+      ...(page.parcelPlanScan?{parcelPlanScan:moveParcelPlanScanToPage(page.parcelPlanScan,number)}:{}),
       // Private geometry stays bound to the verified SAME physical page.
       // The legacy text-only parser safely ignores this extra observation,
       // while the unified co-owner row comparator uses it in-memory.

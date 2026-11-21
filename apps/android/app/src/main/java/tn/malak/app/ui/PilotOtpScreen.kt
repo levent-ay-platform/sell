@@ -57,7 +57,7 @@ internal fun PilotOtpScreen(onEnterPilot:(String,PilotOcrSession)->Unit) {
             fontSize=14.sp,textAlign=TextAlign.Center,lineHeight=22.sp)
         Surface(
             shape=RoundedCornerShape(16.dp),color=Color.White,
-            border=BorderStroke(1.dp,Color(0xFFE7E8EC))
+            border=BorderStroke(1.dp,Color(0xFFCEC7CA))
         ) {
             Column(
                 Modifier.fillMaxWidth().padding(18.dp),
@@ -136,7 +136,7 @@ internal fun PilotOtpScreen(onEnterPilot:(String,PilotOcrSession)->Unit) {
         }
         Text(s(R.string.pilot_no_real_identity),
             Modifier.padding(horizontal=8.dp),
-            color=Brand.Muted,fontSize=11.sp,
+            color=Brand.Muted,fontSize=13.sp,
             textAlign=TextAlign.Center,lineHeight=17.sp)
     }
 }
@@ -153,7 +153,7 @@ internal fun PilotSessionBar(phone:String,onSignOut:()->Unit){
             Text(s(R.string.pilot_session_badge),
                 color=Brand.Ink,fontSize=12.sp,modifier=Modifier.weight(1f))
             Text("+216 ••••••"+phone.takeLast(2),
-                color=Brand.Muted,fontSize=11.sp)
+                color=Brand.Muted,fontSize=13.sp)
             TextButton(onClick=onSignOut){Text(s(R.string.pilot_sign_out),fontSize=12.sp)}
         }
     }
