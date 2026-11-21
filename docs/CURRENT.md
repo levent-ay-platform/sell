@@ -31,6 +31,10 @@ _Last audited: 2026-11-20 (Europe/Istanbul). This is the navigation and checkpoi
 4. For Atlas data findings and real cadastral-plan coverage, update **Issue #20**; for decisions update **Issue #21**; for implementation/build report to **PR #22**, linking this index.
 5. No merges, public publishing, production/database migrations, credential changes, or archive deletions without explicit acceptance.
 
+## Codex handoff
+
+For anyone resuming the Android/QA work, read [CODEX-HANDOFF-2026-11-21.md](CODEX-HANDOFF-2026-11-21.md) **before making changes**. It explicitly lists patches, verified tests, remaining blockers, the current APK, paths and safe Git/Atlas rules. Codex does not automatically inherit this conversation; it must read the repository handoff.
+
 ## Workspace directions
 
 See [WORKSPACE-LAYOUT.md](WORKSPACE-LAYOUT.md) for the difference between original archives, repo code, local QA output and the separate control-plane bridge. AI Agent CTR lives in `levent-ay-platform/ai-agent-ctr` [Issue #69](https://github.com/levent-ay-platform/ai-agent-ctr/issues/69) with canonical device `LEVENT-MAC`; control status is not inferred from Desktop Commander inventory.
