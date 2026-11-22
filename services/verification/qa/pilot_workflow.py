@@ -15,6 +15,7 @@ from datetime import date
 from contextlib import contextmanager
 from pathlib import Path
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+from cryptography.hazmat.primitives.kdf.scrypt import Scrypt
 
 class WorkflowError(Exception):
     def __init__(self,status=422,code='INVALID_REQUEST'):
@@ -24,6 +25,14 @@ class WorkflowError(Exception):
 def ident():return str(uuid.uuid4())
 def digest(value):return hashlib.sha256(value.encode()).hexdigest()
 def now():return int(time.time())
+
+def admin_password_digest(password, salt):
+    """Stable RFC 7914 scrypt (64 bytes) even on Python builds without hashlib.scrypt."""
+    data = password.encode()
+    native = getattr(hashlib, 'scrypt', None)
+    if callable(native):
+        return native(data, salt=salt, n=16384, r=8, p=1, dklen=64).hex()
+    return Scrypt(salt=salt, length=64, n=16384, r=8, p=1).derive(data).hex()
 
 def listing_fields(data):
     result={}
@@ -476,7 +485,7 @@ CREATE TABLE IF NOT EXISTS pilot_parcel_links(
     def bootstrap_admin(self,email,password):
         if not isinstance(email,str) or '@' not in email or len(email)>200 or len(password)<14:raise WorkflowError()
         salt=secrets.token_hex(16)
-        hashed=hashlib.scrypt(password.encode(),salt=bytes.fromhex(salt),n=16384,r=8,p=1).hex()
+        hashed=admin_password_digest(password,bytes.fromhex(salt))
         with self.db() as db:db.execute('INSERT INTO admins VALUES(?,?,?,?)',(ident(),email.strip().lower(),salt,hashed))
     def admin_login(self,email,password):
         if not isinstance(email,str) or not isinstance(password,str) or len(password)>200:raise WorkflowError(401,'LOGIN_DENIED')
@@ -484,7 +493,7 @@ CREATE TABLE IF NOT EXISTS pilot_parcel_links(
             row=db.execute('SELECT * FROM admins WHERE email=?',(email.strip().lower(),)).fetchone()
             # Equal work for unknown accounts.
             salt=bytes.fromhex(row['salt']) if row else bytes(16)
-            hashed=hashlib.scrypt(password.encode(),salt=salt,n=16384,r=8,p=1).hex()
+            hashed=admin_password_digest(password,salt)
             if not row or not hmac.compare_digest(hashed,row['password_hash']):raise WorkflowError(401,'LOGIN_DENIED')
             token=secrets.token_urlsafe(32)
             db.execute('INSERT INTO admin_sessions VALUES(?,?,?)',(digest(token),row['id'],now()+28800))
