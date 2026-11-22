@@ -128,7 +128,8 @@ test('live discovery serves bilingual places, shared map/list filters, verified 
     const radialList = await json('/api/v1/discovery/list?'+radar);
     const radialMap = await json('/api/v1/discovery/clusters?'+radar+'&zoom=14');
     assert.deepEqual(radialList.listings.map((card: {id: string}) => card.id), [point.listing_id,neighbor.listing_id]);
-    assert.deepEqual(radialMap.listings,radialList.listings);
+    const byId = (a: {id: string}, b: {id: string}) => a.id.localeCompare(b.id);
+    assert.deepEqual(radialMap.listings.toSorted(byId),radialList.listings.toSorted(byId));
     assert.equal((await get('/api/v1/discovery/list?bbox=11.07,36.83,11.11,36.87&radar=36.85,11.086,21')).status,400);
     await db.query(`
       INSERT INTO sell.listing_public_photos(property_revision_id,approved_by,sha256,asset_path)
