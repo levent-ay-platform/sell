@@ -24,4 +24,5 @@
     <string name="parcel_pixel_measurements">قياسات المسح (بكسل)</string>
     <string name="parcel_zoom_in">تكبير</string>
     <string name="parcel_zoom_out">تصغير</string>
+    <string name="parcel_verified_badge">عقار موثوق</string>
 </resources>

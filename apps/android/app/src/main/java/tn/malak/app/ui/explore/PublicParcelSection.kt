@@ -4,10 +4,8 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.pdf.PdfRenderer
-import android.graphics.pdf.PdfDocument
-import android.graphics.Paint
-import java.io.ByteArrayOutputStream
 import android.os.ParcelFileDescriptor
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -17,6 +15,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.automirrored.outlined.ArrowForward
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.ZoomIn
 import androidx.compose.material.icons.outlined.ZoomOut
@@ -29,6 +29,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
@@ -39,10 +40,8 @@ import androidx.compose.ui.window.DialogProperties
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import tn.malak.app.BuildConfig
 import tn.malak.app.R
 import tn.malak.app.ui.Brand
-import tn.malak.app.ui.readPilotBytes
 import tn.malak.app.ui.s
 import java.io.File
 import java.io.IOException
@@ -68,8 +67,38 @@ internal fun PublicParcelSection(source: DiscoverySource, listingId: String, lan
         ResultMessage(s(R.string.parcel_fetch_error), retry = { refresh++ })
         return
     }
-    if (parcel.boundaries.isNotEmpty()) GeographicParcel(parcel.boundaries, language)
+    if (parcel.showVerifiedBadge) {
+        Surface(shape = RoundedCornerShape(12.dp), color = Brand.NeutralContainer, contentColor = Brand.TrustGreen) {
+            Text(s(R.string.parcel_verified_badge), Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                style = MaterialTheme.typography.labelLarge)
+        }
+    }
     val proof = parcel.proof
+    val documents = parcel.documents + listOfNotNull(proof?.document)
+    if (documents.isNotEmpty()) {
+        Surface(color = Color.White, contentColor = Brand.Ink, shape = RoundedCornerShape(20.dp),
+            border = BorderStroke(1.dp, Brand.Border)) {
+            Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(s(R.string.parcel_documents), Modifier.padding(horizontal = 4.dp, vertical = 4.dp),
+                    style = MaterialTheme.typography.titleMedium)
+                documents.forEach { document ->
+                    Surface(onClick = { openDocumentId = document.id }, modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp), color = Brand.NeutralContainer, contentColor = Brand.Ink) {
+                        Row(Modifier.heightIn(min = 52.dp).padding(horizontal = 10.dp, vertical = 10.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Outlined.Description, null, tint = Brand.Muted)
+                            Text(s(document.label()), modifier = Modifier.weight(1f),
+                                style = MaterialTheme.typography.bodyMedium)
+                            Text(s(R.string.parcel_preview), color = Brand.Crimson,
+                                style = MaterialTheme.typography.labelLarge)
+                        }
+                    }
+                }
+            }
+        }
+    }
+    if (parcel.boundaries.isNotEmpty()) GeographicParcel(parcel.boundaries, language)
     if (proof != null) {
         Text(s(R.string.parcel_private_proof), color = Brand.Crimson, style = MaterialTheme.typography.labelMedium)
         Text(s(R.string.parcel_local_only), style = MaterialTheme.typography.titleMedium)
@@ -85,39 +114,19 @@ internal fun PublicParcelSection(source: DiscoverySource, listingId: String, lan
         }, style = MaterialTheme.typography.bodySmall, color = Brand.Muted)
         Text(s(R.string.parcel_no_measured_sides), style = MaterialTheme.typography.bodySmall, color = Brand.Muted)
     }
-    val documents = parcel.documents + listOfNotNull(proof?.document)
-    if (documents.isNotEmpty()) {
-        Text(s(R.string.parcel_documents), style = MaterialTheme.typography.titleLarge)
-        documents.forEach { document ->
-            OutlinedButton(
-                modifier = Modifier.fillMaxWidth(),
-                onClick = { openDocumentId = document.id },
-                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 12.dp)
-            ) {
-                Icon(Icons.Outlined.Description, null)
-                Spacer(Modifier.width(8.dp))
-                Text(s(document.label()), modifier = Modifier.weight(1f))
-                Text(s(R.string.parcel_preview))
-            }
-        }
-    }
     documents.firstOrNull { it.id == openDocumentId }?.let { document ->
-        PropertyDocumentViewer(document, onDismiss = { openDocumentId = null })
+        PropertyDocumentViewer(document, s(document.label()), { openDocumentId = null }, source::documentBytes)
     }
 }
 
 @Composable
 private fun GeographicParcel(boundaries: List<PublicParcelBoundary>, language: String) {
     val camera = remember(boundaries) { parcelCamera(boundaries.flatMap { it.points }) } ?: return
-    val style = BuildConfig.MALAK_MAP_STYLE_URL.ifEmpty {
-        if (BuildConfig.DEBUG && BuildConfig.MALAK_DISCOVERY_BASE_URL.isEmpty())
-            "https://tiles.openfreemap.org/styles/positron" else ""
-    }
     var mapFailed by remember(boundaries) { mutableStateOf(false) }
     Text(s(R.string.parcel_boundaries), style = MaterialTheme.typography.titleLarge)
-    if (style.isNotBlank() && !mapFailed) {
+    if (!mapFailed) {
         DiscoveryMap(
-            styleUrl = style, initial = camera, jump = null, markers = DiscoveryMarkers(emptyList()),
+            styleUrl = DiscoveryStyleUrl, initial = camera, jump = null, markers = DiscoveryMarkers(emptyList()),
             selectedId = null, priceLabel = { "" },
             modifier = Modifier.fillMaxWidth().height(260.dp).clip(RoundedCornerShape(20.dp)),
             boundaries = boundaries,
@@ -125,7 +134,7 @@ private fun GeographicParcel(boundaries: List<PublicParcelBoundary>, language: S
             onFailure = { mapFailed = true }, onReady = {}
         )
     }
-    if (mapFailed || style.isBlank()) Text(s(R.string.v2_tiles_error), color = Brand.Muted)
+    if (mapFailed) Text(s(R.string.v2_tiles_error), color = Brand.Muted)
     boundaries.forEach { boundary ->
         val label = when (boundary.kind) {
             BoundaryKind.Official -> R.string.parcel_official
@@ -174,7 +183,12 @@ private fun LocalOutline(vertices: List<PlanPoint>) {
 }
 
 @Composable
-private fun PropertyDocumentViewer(document: PublicPropertyDocument, onDismiss: () -> Unit) {
+internal fun PropertyDocumentViewer(
+    document: PublicPropertyDocument,
+    title: String,
+    onDismiss: () -> Unit,
+    readBytes: (PublicPropertyDocument) -> ByteArray = ::downloadPublicDocument
+) {
     val context = LocalContext.current
     val isPdf = document.mime == "application/pdf"
     var zoom by rememberSaveable(document.id) { mutableFloatStateOf(1f) }
@@ -184,7 +198,9 @@ private fun PropertyDocumentViewer(document: PublicPropertyDocument, onDismiss: 
 
     LaunchedEffect(document, page) {
         try {
-            preview = withContext(Dispatchers.IO) { readDocumentPage(context, document, page) }
+            preview = withContext(Dispatchers.IO) {
+                readDocumentPage(context, document, readBytes(document), page)
+            }
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (_: Exception) {
@@ -196,7 +212,7 @@ private fun PropertyDocumentViewer(document: PublicPropertyDocument, onDismiss: 
         Surface(Modifier.fillMaxSize(), color = Brand.Pearl) {
             Column(Modifier.fillMaxSize().safeDrawingPadding().padding(12.dp)) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Text(s(document.label()), Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
+                    Text(title, Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, maxLines = 3)
                     IconButton(onClick = { zoom = (zoom - .5f).coerceAtLeast(1f) }, enabled = zoom > 1f) {
                         Icon(Icons.Outlined.ZoomOut, s(R.string.parcel_zoom_out))
                     }
@@ -223,10 +239,12 @@ private fun PropertyDocumentViewer(document: PublicPropertyDocument, onDismiss: 
                         if (isPdf && shown.count > 1) {
                             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.SpaceBetween) {
-                                TextButton(onClick = { page-- }, enabled = page > 0) { Text(s(R.string.parcel_previous)) }
+                                IconButton(onClick = { page-- }, enabled = page > 0) {
+                                    Icon(Icons.AutoMirrored.Outlined.ArrowBack, s(R.string.parcel_previous))
+                                }
                                 Text(s(R.string.parcel_page, page + 1, shown.count))
-                                TextButton(onClick = { page++ }, enabled = page + 1 < shown.count) {
-                                    Text(s(R.string.parcel_next))
+                                IconButton(onClick = { page++ }, enabled = page + 1 < shown.count) {
+                                    Icon(Icons.AutoMirrored.Outlined.ArrowForward, s(R.string.parcel_next))
                                 }
                             }
                         }
@@ -244,25 +262,10 @@ private fun PublicPropertyDocument.label(): Int = when (kind) {
 }
 
 private data class DocumentPage(val bitmap: Bitmap, val count: Int)
-private const val MaxDocumentBytes = 16 * 1024 * 1024
 
-private fun readDocumentPage(context: Context, document: PublicPropertyDocument, index: Int): DocumentPage {
-    val bytes = when {
-        BuildConfig.DEBUG && document.location == "asset:demo-generated-parcel" -> syntheticPlanPdf()
-        BuildConfig.DEBUG && document.location == "asset:qa-parcel/reference.pdf" ->
-            context.assets.open("qa-parcel/reference.pdf").use { readPilotBytes(it, MaxDocumentBytes) }
-        else -> {
-            val connection = discoveryConnection(document.location, document.mime)
-            try {
-                if (connection.responseCode != 200 || connection.contentType?.substringBefore(';') != document.mime) {
-                    throw IOException("Property document unavailable")
-                }
-                connection.inputStream.use { readPilotBytes(it, MaxDocumentBytes) }
-            } finally {
-                connection.disconnect()
-            }
-        }
-    }
+private fun readDocumentPage(
+    context: Context, document: PublicPropertyDocument, bytes: ByteArray, index: Int
+): DocumentPage {
     if (document.mime != "application/pdf") {
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
@@ -293,35 +296,5 @@ private fun readDocumentPage(context: Context, document: PublicPropertyDocument,
         }
     } finally {
         temp.delete()
-    }
-}
-
-private fun syntheticPlanPdf(): ByteArray {
-    val pdf = PdfDocument()
-    try {
-        val page = pdf.startPage(PdfDocument.PageInfo.Builder(560, 680, 1).create())
-        val ink = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = android.graphics.Color.rgb(30, 36, 47)
-            textSize = 24f
-        }
-        page.canvas.drawText("AMLAK · PLAN DE TEST", 42f, 58f, ink)
-        ink.textSize = 15f
-        page.canvas.drawText("Document fictif · Lot QA-01", 42f, 95f, ink)
-        val outline = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = android.graphics.Color.rgb(179, 13, 45)
-            style = Paint.Style.STROKE
-            strokeWidth = 3f
-            pathEffect = android.graphics.DashPathEffect(floatArrayOf(8f, 6f), 0f)
-        }
-        page.canvas.drawRect(180f, 195f, 376f, 407f, outline)
-        page.canvas.drawText("A · 19,6 m · B", 231f, 170f, ink)
-        page.canvas.drawText("D · 19,6 m · C", 231f, 438f, ink)
-        page.canvas.drawText("21,1 m", 95f, 307f, ink)
-        page.canvas.drawText("21,1 m", 420f, 307f, ink)
-        page.canvas.drawText("Limite indicative · Exemple pour contrôle QA", 42f, 530f, ink)
-        pdf.finishPage(page)
-        return ByteArrayOutputStream().use { bytes -> pdf.writeTo(bytes); bytes.toByteArray() }
-    } finally {
-        pdf.close()
     }
 }

@@ -21,7 +21,8 @@ import tn.malak.app.R
 
 @Composable
 internal fun PilotListings(query:String,category:String,onReplaceDocuments:(JSONObject)->Unit,
-    onlyOwn:Boolean=false,focusId:String?=null,onOpenRequests:()->Unit={}){
+    onlyOwn:Boolean=false,focusId:String?=null,onOpenRequests:()->Unit={},
+    onEditDirect:(JSONObject)->Unit={}){
     val session=LocalPilotOcrSession.current
     val scope=rememberCoroutineScope()
     var refresh by remember{mutableIntStateOf(0)}
@@ -69,7 +70,8 @@ internal fun PilotListings(query:String,category:String,onReplaceDocuments:(JSON
     }
     if(session!=null){
         Row(Modifier.fillMaxWidth().padding(top=14.dp),horizontalArrangement=Arrangement.SpaceBetween){
-            Text(s(R.string.my_submissions),fontSize=19.sp)
+            Text(s(if(tn.malak.app.BuildConfig.MALAK_DIRECT_PUBLISHING)R.string.direct_my_properties
+                else R.string.my_submissions),fontSize=19.sp)
             if(!onlyOwn)TextButton(onClick=onOpenRequests){Text(s(R.string.owner_all_requests))}
             else TextButton(onClick={refresh++},enabled=!loading){Text(s(R.string.listing_refresh))}
         }
@@ -78,9 +80,12 @@ internal fun PilotListings(query:String,category:String,onReplaceDocuments:(JSON
         own.sortedByDescending{it.optString("id")==focusId}.forEach{item->
             var editing by remember(item.optString("id"),item.optInt("version")){mutableStateOf(false)}
             var reading by remember(item.optString("id")){mutableStateOf(false)}
+            var changing by remember(item.optString("id")){mutableStateOf(false)}
+            var changeFailed by remember(item.optString("id")){mutableStateOf(false)}
+            val direct=item.optBoolean("direct") && tn.malak.app.BuildConfig.MALAK_DIRECT_PUBLISHING
             Surface(color=MaterialTheme.colorScheme.surface,shape=RoundedCornerShape(16.dp),border=BorderStroke(1.dp,Brand.Muted.copy(alpha=.2f))){
                 Column(Modifier.fillMaxWidth().padding(14.dp),verticalArrangement=Arrangement.spacedBy(8.dp)){
-                    if(item.optString("id")==focusId)Text(s(R.string.owner_latest_request),color=Brand.Crimson)
+                    if(!direct&&item.optString("id")==focusId)Text(s(R.string.owner_latest_request),color=Brand.Crimson)
                     Text(item.optString("title"))
                     Text(s(when(item.optString("status")){
                         "PUBLISHED"->R.string.status_published
@@ -90,6 +95,33 @@ internal fun PilotListings(query:String,category:String,onReplaceDocuments:(JSON
                         else->R.string.status_pending
                     }),color=Brand.Crimson)
                     if(item.optString("note").isNotBlank())Text(item.optString("note"),fontSize=13.sp)
+                    if(direct){
+                        val verification = when(item.optString("verificationStatus")){
+                            "UNDER_REVIEW" -> R.string.direct_verification_in_review
+                            "PLAN_REQUIRED" -> R.string.direct_plan_required
+                            else -> R.string.direct_verification_incomplete
+                        }
+                        Text(s(verification),color=Brand.Muted)
+                        if(verification!=R.string.direct_verification_in_review)
+                            Button(onClick={onReplaceDocuments(item)}){Text(s(R.string.direct_verify))}
+                        TextButton(onClick={onEditDirect(item)}){Text(s(R.string.edit_property))}
+                        val status=item.optString("status")
+                        if(status=="PUBLISHED"||(status=="PAUSED"&&item.optBoolean("ownerPaused"))){
+                            TextButton(enabled=!changing,onClick={
+                                changing=true;changeFailed=false
+                                val action=if(status=="PUBLISHED")"pause" else "publish"
+                                scope.launch{
+                                    try{
+                                        PilotListingClient.call(session,"/api/pilot/direct-listings/"+item.getString("id")+"/"+action,JSONObject())
+                                        refresh++
+                                    }catch(cancel:kotlinx.coroutines.CancellationException){throw cancel}
+                                    catch(_:Exception){changeFailed=true}
+                                    finally{changing=false}
+                                }
+                            }){Text(s(if(status=="PUBLISHED")R.string.direct_pause else R.string.direct_resume))}
+                        }
+                        if(changeFailed)Text(s(R.string.direct_publish_failed),color=MaterialTheme.colorScheme.error)
+                    } else {
                     TextButton(onClick={reading=!reading}){Text(s(R.string.owner_read_request_documents))}
                     if(reading)OwnerStoredDocumentReadout(session,item.optString("reviewId"),
                         item.optString("status") in setOf("PENDING_REVIEW","CHANGES_REQUESTED"))
@@ -97,6 +129,7 @@ internal fun PilotListings(query:String,category:String,onReplaceDocuments:(JSON
                         TextButton(onClick={editing=!editing}){Text(s(R.string.edit_property))}
                         TextButton(onClick={onReplaceDocuments(item)}){Text(s(R.string.submission_replace_documents))}
                         if(editing)ResubmitForm(item,session){refresh++}
+                    }
                     }
                 }
             }

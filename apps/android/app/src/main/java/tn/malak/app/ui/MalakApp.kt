@@ -4,6 +4,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import tn.malak.app.BuildConfig
 import tn.malak.app.ui.explore.ExploreScreen
+import tn.malak.app.ui.explore.DiscoverySource
 import android.content.Context
 import android.content.res.Configuration
 import androidx.compose.foundation.*
@@ -61,7 +62,9 @@ internal fun s(id: Int, vararg args: Any): String = LocalMalakStringsContext.cur
 @Composable
 internal fun MalakApp(
     ownerEvidenceSession: OwnerEvidenceSession? = null,
-    authenticatedOwnerSession: AuthenticatedOwnerSession? = null
+    authenticatedOwnerSession: AuthenticatedOwnerSession? = null,
+    launchShowing: Boolean = false,
+    discoverySource: DiscoverySource? = null
 ) {
     val baseContext = LocalContext.current
     val preferences = remember(baseContext) {
@@ -89,7 +92,21 @@ internal fun MalakApp(
     val v2 = BuildConfig.MALAK_V2_DISCOVERY
     val destinations = if (v2) DiscoveryTabs else NavTabs
     val exploreState = rememberSaveableStateHolder()
-    val ownerRoute = screen == "seller" || screen == "requests" || screen == "signin"
+    val ownerRoute = screen in setOf("seller", "requests", "signin", "editListing")
+    val directRequested = v2 && BuildConfig.MALAK_DIRECT_PUBLISHING
+    val directCapability by produceState<Boolean?>(null, pilotOcrSession, directRequested) {
+        value = null
+        if (directRequested && pilotOcrSession != null) {
+            value = try {
+                PilotListingClient.call(null, "/api/public/capabilities").optBoolean("directPublishing")
+            } catch (cancellation: kotlinx.coroutines.CancellationException) {
+                throw cancellation
+            } catch (_: Exception) {
+                false
+            }
+        }
+    }
+    val directPublishing = directRequested && directCapability == true
 
     CompositionLocalProvider(LocalMalakStringsContext provides localizedContext,
         LocalLayoutDirection provides direction,
@@ -132,7 +149,8 @@ internal fun MalakApp(
                         when (screen) {
                             "home", "explore" -> if (v2) exploreState.SaveableStateProvider("explore") {
                                 ExploreScreen(language,
-                                    onSeller = { sellerReturnRoute = screen; resubmission = null; screen = "seller" },
+                                    launchShowing = launchShowing,
+                                    sourceOverride = discoverySource,
                                     preferredMapMode = screen == "home",
                                     onViewModeChanged = { map -> screen = if (map) "home" else "explore" },
                                     onAlerts = { screen = "alerts" }, onAccount = { screen = "account" }
@@ -140,7 +158,9 @@ internal fun MalakApp(
                             } else MalakHome(query, { query = it }, category, { category = it }, { resubmission=null; screen = "seller" }, { resubmission=it;screen="seller" },{focusedRequest=null;screen="requests"})
                             "requests" -> Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(18.dp)){
                                 TextButton(onClick={screen=if(v2) "account" else "home"}){Text(s(R.string.back))}
-                                PilotListings("","all",{resubmission=it;screen="seller"},onlyOwn=true,focusId=focusedRequest)
+                                PilotListings("","all",{resubmission=it;sellerReturnRoute="requests";screen="seller"},
+                                    onlyOwn=true,focusId=focusedRequest,
+                                    onEditDirect={resubmission=it;screen="editListing"})
                             }
                             "map" -> MalakEmptyPage(R.string.map_title, R.string.map_unavailable,
                                 R.string.map_unavailable_hint, Icons.Outlined.Map, { screen = "home" })
@@ -167,11 +187,18 @@ internal fun MalakApp(
                                 language = it
                                 preferences.edit().putString("language", it).apply()
                             }, onSeller = { resubmission = null; screen = "seller" })
-                            "seller" -> key(if (PilotOtpGate.enabled) pilotPhone else "owner",resubmission?.optString("id")) {
+                            "editListing", "seller" -> key(screen, if (PilotOtpGate.enabled) pilotPhone else "owner",resubmission?.optString("id")) {
                                 // Recreate all seller Compose state when the pilot account changes.
                                 // A document URI, consent checkbox or OCR result must not be
                                 // inherited by a different account on a shared device.
-                                SellerOcrJourney(
+                                val session = pilotOcrSession
+                                if (directRequested && session != null && directCapability == null && resubmission == null) {
+                                    LinearProgressIndicator(Modifier.fillMaxWidth())
+                                } else if (directPublishing && session != null && (screen == "editListing" || resubmission == null)) {
+                                    DirectOwnerListing(session, pilotPhone.orEmpty(), resubmission,
+                                        onBack = { screen = if (screen == "editListing") "requests" else sellerReturnRoute },
+                                        onPublished = { focusedRequest = it; screen = "requests" })
+                                } else SellerOcrJourney(
                                     onBack = { screen = if (v2) sellerReturnRoute else "home" },
                                     draftScope = if (PilotOtpGate.enabled) pilotPhone else null,
                                     resubmission=resubmission,

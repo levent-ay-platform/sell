@@ -1,18 +1,26 @@
 """Single-service workflow routes; opaque bearer for APK, separate admin session."""
 import json
 import hashlib
+import hmac
 import os
 from pathlib import Path
 import re
 import secrets
 import time
 from pilot_workflow import WorkflowError
+from pilot_parcel_bridge import PilotParcelBridge, UUID
 
 ID=r'[0-9a-f-]{36}'
 ADMIN_ROOT=Path(__file__).resolve().parents[3]/'apps/admin'
 
 class WorkflowRoutes:
-    def __init__(self,store,pair):self.store=store;self.pair=pair;self.attempts={}
+    def __init__(self,store,pair):
+        self.store=store;self.pair=pair;self.attempts={}
+        self.direct_publishing=os.environ.get('MALAK_DIRECT_PUBLISHING')=='1'
+        if self.direct_publishing and store.enrolled_devices is None:
+            raise ValueError('Connected Pilot publishing requires device enrollment')
+        self.atlas_reader_token=os.environ.get('MALAK_ATLAS_READER_TOKEN','')
+        self.parcel_bridge=PilotParcelBridge.configured() if self.direct_publishing else None
     def binary(self,h,status,data,mime):
         h.send_response(status)
         h.send_header("X-Request-Id",secrets.token_hex(12))
@@ -41,6 +49,36 @@ class WorkflowRoutes:
         user=self.store.admin_authenticate(token) if admin else self.store.authenticate(token)
         if not user:raise WorkflowError(401,'SESSION_REQUIRED')
         return user if admin else user['id']
+    def linked_projection(self, listing_id):
+        link = self.store.public_parcel_link(listing_id)
+        if link is None:
+            raise WorkflowError(404,'NOT_FOUND')
+        if not link or not self.parcel_bridge:
+            return None,None
+        projection=self.parcel_bridge.projection(link['v2_listing_id'],link['match_request'])
+        if not projection or link!=self.store.public_parcel_link(listing_id):
+            return None,None
+        return link,projection
+
+    def public_parcel(self,h,listing_id,document_id=None):
+        link,projection=self.linked_projection(listing_id)
+        documents = [] if projection is None else [
+            {'id':doc['id'],'kind':doc['kind'],'mime':doc['mime'],
+             'url':f'/api/v1/listings/{listing_id}/documents/{doc["id"]}'}
+            for doc in projection.get('documents',[]) if UUID.fullmatch(doc.get('id',''))
+        ]
+        if document_id:
+            approved=next((doc for doc in documents if doc['id']==document_id),None)
+            if approved and link:
+                rendered=self.parcel_bridge.document(link['v2_listing_id'],document_id)
+                current_link,current=self.linked_projection(listing_id)
+                if (rendered and rendered[1]==approved['mime'] and current_link==link and current
+                    and any(doc['id']==document_id and doc['mime']==approved['mime'] for doc in current.get('documents',[]))):
+                    return self.binary(h,200,rendered[0],rendered[1])
+            raise WorkflowError(404,'NOT_FOUND')
+        h.result(200,{'ok':True,'verifiedParcel':projection is not None,
+                      'boundaries':projection['boundaries'] if projection else [],'documents':documents})
+
     def dispatch(self,h,method):
         path=h.path
         if not (path.startswith('/api/') or path.startswith('/admin') or path=='/internal/v1/pilot/compare-pair'):return False
@@ -52,6 +90,8 @@ class WorkflowRoutes:
                 mime={'index.html':'text/html; charset=utf-8','app.js':'text/javascript; charset=utf-8','style.css':'text/css; charset=utf-8'}[name]
                 self.binary(h,200,(ADMIN_ROOT/name).read_bytes(),mime);return True
             if method=='GET' and path=='/api/public/listings':h.result(200,{'ok':True,'listings':self.store.public_listings()});return True
+            if method=='GET' and path=='/api/public/capabilities':
+                h.result(200,{'ok':True,'directPublishing':self.direct_publishing});return True
             match=re.fullmatch('/api/public/photos/('+ID+')',path)
             if match and method=='GET':
                 self.binary(h,200,self.store.public_photo(match[1]),'image/jpeg');return True
@@ -107,8 +147,46 @@ class WorkflowRoutes:
                 user=self.actor(h)
                 if method=='GET':h.result(200,{'ok':True,'submissions':self.store.own_submissions(user)});return True
                 if method=='POST':h.result(200,{'ok':True,'submission':self.store.submit(user,self.body(h))});return True
+            if self.direct_publishing and method=='POST' and path=='/api/pilot/direct-listings':
+                listing=self.store.prepare_direct_listing(self.actor(h),self.body(h))
+                h.result(200,{'ok':True,'listing':listing});return True
+            direct=re.fullmatch('/api/pilot/direct-listings/('+ID+')/(publish|pause|edit|verification)',path)
+            if self.direct_publishing and method=='POST' and direct:
+                listing=self.store.change_direct_listing(self.actor(h),direct[1],direct[2],self.body(h))
+                h.result(200,{'ok':True,'listing':listing});return True
+            if self.direct_publishing and method=='GET' and path=='/api/admin/atlas-listings':
+                self.actor(h,True)
+                h.result(200,self.store.atlas_listings());return True
+            if self.direct_publishing and method=='GET' and path=='/api/atlas/listings':
+                if not re.fullmatch(r'[A-Za-z0-9_-]{43}',self.atlas_reader_token):
+                    raise WorkflowError(404,'NOT_FOUND')
+                if not hmac.compare_digest(self.token(h),self.atlas_reader_token):
+                    raise WorkflowError(401,'ATLAS_READER_REQUIRED')
+                h.result(200,self.store.atlas_listings());return True
+            parcel=re.fullmatch('/api/v1/listings/('+UUID.pattern+')/(parcel|documents/('+UUID.pattern+'))',path)
+            if self.direct_publishing and method=='GET' and parcel:
+                self.public_parcel(h,parcel[1],parcel[3]);return True
+            attachment=re.fullmatch('/api/admin/submissions/('+UUID.pattern+')/parcel-link',path)
+            if self.direct_publishing and self.parcel_bridge and method=='POST' and attachment:
+                admin=self.actor(h,True)
+                data=self.body(h)
+                if not isinstance(data,dict) or set(data)!={'version','v2ListingId'} or type(data['version']) is not int:
+                    raise WorkflowError(422,'INVALID_PARCEL_LINK')
+                v2_id,version=data['v2ListingId'],data['version']
+                candidate=None
+                if v2_id is not None:
+                    if not isinstance(v2_id,str) or not UUID.fullmatch(v2_id):
+                        raise WorkflowError(422,'INVALID_PARCEL_LINK')
+                    candidate=self.store.parcel_link_candidate(attachment[1],version)
+                    if not self.parcel_bridge.projection(v2_id,candidate):
+                        raise WorkflowError(422,'PARCEL_MATCH_UNAVAILABLE')
+                if self.actor(h,True)!=admin:
+                    raise WorkflowError(401,'SESSION_REQUIRED')
+                self.store.store_parcel_link(admin,attachment[1],version,v2_id,candidate)
+                h.result(200,{'ok':True});return True
             if path=='/api/admin/submissions' and method=='GET':
-                h.result(200,{'ok':True,'submissions':self.store.admin_submissions(self.actor(h,True))});return True
+                h.result(200,{'ok':True,'submissions':self.store.admin_submissions(self.actor(h,True)),
+                             'parcelBridgeAvailable':self.parcel_bridge is not None});return True
             match=re.fullmatch('/api/admin/evidence/('+ID+')',path)
             if match and method=='GET':
                 mime,data=self.store.evidence(self.actor(h,True),match[1]);self.binary(h,200,data,mime);return True

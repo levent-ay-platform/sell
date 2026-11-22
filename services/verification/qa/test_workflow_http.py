@@ -97,6 +97,146 @@ class HttpWorkflow(unittest.TestCase):
         self.assertEqual(self.request('/api/admin/login',data,headers={'Origin':'https://malak-api.ayasofia.shop'})[0],200)
         self.assertEqual(self.request('/api/admin/login',data,headers={'Origin':'https://evil.test'})[0],400)
         self.assertEqual(self.request('/admin')[0],200)
+    def test_direct_listing_publication_verification_and_atlas_use_one_record(self):
+        owner=self.store.login('+21623456789','1234','A'*43)['bearer']
+        stranger=self.store.login('+21698765432','1234','B'*43)['bearer']
+        data={'title':'Isolated QA parcel','region':'Nabeul','area':'120',
+              'price':'48000','kind':'LAND','latitude':'36.85','longitude':'11.09','requestKey':'a'*32}
+        base='/api/pilot/direct-listings'
+        self.assertEqual(self.request(base,data,owner)[0],404)
+        self.server.workflow.direct_publishing=True
+        self.assertEqual(self.request(base,data)[0],401)
+        status,result=self.request(base,data,owner)
+        self.assertEqual(status,200)
+        draft=result['listing']
+        sid=draft['id']
+        self.assertEqual(self.request(base,data,owner)[1]['listing']['id'],sid)
+        self.assertEqual(self.request(base,{**data,'price':'49000'},owner)[0],409)
+        self.assertEqual(self.request('/api/public/listings')[1]['listings'],[])
+        self.assertEqual(self.request(base+'/'+sid+'/publish',{},stranger)[0],404)
+        photo_path='/api/pilot/reviews/'+draft['reviewId']+'/photos'
+        import io
+        from PIL import Image
+        image=io.BytesIO()
+        Image.new('RGB',(100,100)).save(image,format='PNG')
+        media_headers={'Content-Type':'application/octet-stream'}
+        self.assertEqual(self.request(photo_path,image.getvalue(),stranger,media_headers.copy())[0],403)
+        photo=self.request(photo_path,image.getvalue(),owner,media_headers.copy())[1]['photoId']
+        self.assertEqual(self.request('/api/public/photos/'+photo)[0],404)
+        self.assertEqual(self.request(base+'/'+sid+'/publish',{'photoIds':[photo]},owner)[1]['listing']['status'],'PUBLISHED')
+        self.assertEqual(self.request('/api/public/photos/'+photo)[0],200)
+        user=self.store.authenticate(owner)['id']
+        incomplete=self.store.record_review(user,[('IDENTITY','image/jpeg',b'private')],{})
+        self.assertEqual(self.request(base+'/'+sid+'/verification',{'reviewId':incomplete},owner)[0],422)
+        review=self.store.record_review(user,[('IDENTITY','image/jpeg',b'private'),
+                    ('DOCUMENT','application/pdf',b'private')],{'assessment':'ROLE_TEXT_MATCH_ONLY'})
+        first=self.request(base+'/'+sid+'/verification',{'reviewId':review},owner)
+        self.assertEqual(first[1]['listing']['verificationStatus'],'PLAN_REQUIRED')
+        review=self.store.record_review(user,[('IDENTITY','image/jpeg',b'private'),
+                    ('DOCUMENT','application/pdf',b'private')],{'parcelPlanScans':[{'page':2}]})
+        private=self.request(base+'/'+sid+'/verification',{'reviewId':review},owner)
+        self.assertEqual(private[0],200)
+        self.assertEqual(private[1]['listing']['verificationStatus'],'UNDER_REVIEW')
+        public,=self.request('/api/public/listings')[1]['listings']
+        self.assertEqual(public['id'],sid)
+        self.assertFalse(public['ownershipVerified'])
+        self.assertNotIn('reviewId',public)
+        self.assertNotIn('customerName',public)
+        self.assertEqual(self.request('/api/admin/atlas-listings',token=owner)[0],401)
+        self.server.workflow.atlas_reader_token='R'*43
+        self.assertEqual(self.request('/api/atlas/listings',token=owner)[0],401)
+        self.store.bootstrap_admin('admin@example.test','a-long-test-password')
+        admin=self.store.admin_login('admin@example.test','a-long-test-password')['bearer']
+        feature,=self.request('/api/admin/atlas-listings',token=admin)[1]['features']
+        self.assertEqual(feature['id'],sid)
+        self.assertEqual(feature['geometry'],{'type':'Point','coordinates':[11.09,36.85]})
+        self.assertNotIn('reviewId',feature['properties'])
+        shared=self.request('/api/atlas/listings',token='R'*43)
+        self.assertEqual(shared[0],200)
+        self.assertEqual(shared[1]['features'],[feature])
+        self.assertEqual(self.request('/api/admin/submissions',token='R'*43)[0],401)
+        edit={**data,'price':'51000','version':private[1]['listing']['version']}
+        changed=self.request(base+'/'+sid+'/edit',edit,owner)
+        self.assertEqual(changed[1]['listing']['verificationStatus'],'UNDER_REVIEW')
+        self.assertEqual(self.request(base+'/'+sid+'/edit',edit,owner)[0],409)
+        moved=self.request(base+'/'+sid+'/edit',
+            {**edit,'version':changed[1]['listing']['version'],'longitude':'11.095'},owner)
+        self.assertEqual(moved[1]['listing']['verificationStatus'],'INCOMPLETE')
+        with self.store.db() as db:
+            historical=db.execute("SELECT COUNT(*) FROM direct_listing_review_history WHERE submission_id=?",(sid,)).fetchone()[0]
+        self.assertEqual(historical,2)
+        self.assertEqual(self.request(base+'/'+sid+'/pause',{},owner)[1]['listing']['status'],'PAUSED')
+        self.assertEqual(self.request('/api/public/listings')[1]['listings'],[])
+        self.assertEqual(self.request('/api/admin/atlas-listings',token=admin)[1]['features'],[])
+        self.assertEqual(self.request('/api/atlas/listings',token='R'*43)[1]['features'],[])
+        resumed=self.request(base+'/'+sid+'/publish',{},owner)[1]['listing']
+        self.assertEqual(resumed['status'],'PUBLISHED')
+        self.assertEqual(self.request('/api/admin/submissions/'+sid+'/decision',
+            {'status':'PAUSED','listing':edit,'note':'QA moderation','version':resumed['version']},admin)[0],200)
+        self.assertEqual(self.request(base+'/'+sid+'/publish',{},owner)[0],409)
+    def test_linked_parcel_follows_pilot_id_and_live_publication_consent(self):
+        import hashlib
+        from unittest.mock import Mock
+        self.server.workflow.direct_publishing=True
+        bridge=Mock()
+        self.server.workflow.parcel_bridge=bridge
+        owner=self.store.login('+21623456789','1234','A'*43)['bearer']
+        account=self.store.authenticate(owner)['id']
+        self.store.bootstrap_admin('reviewer@example.test','example-reviewer-password')
+        admin=self.store.admin_login('reviewer@example.test','example-reviewer-password')['bearer']
+        data={'title':'Local bridge QA','kind':'LAND','region':'Nabeul','area':'120','price':'50000',
+              'latitude':'36','longitude':'10','requestKey':'d'*32}
+        owner_route='/api/pilot/direct-listings'
+        sid=self.request(owner_route,data,owner)[1]['listing']['id']
+        self.assertEqual(self.request(owner_route+'/'+sid+'/publish',{},owner)[0],200)
+        review=self.store.record_review(account,[('IDENTITY','image/jpeg',b'closed identity'),
+                 ('DOCUMENT','application/pdf',b'closed title')],{'parcelPlanFacts':[
+                     {'key':'titleReference','value':'00991'}, {'key':'plotReference','value':'QA01'}]})
+        saved=self.request(owner_route+'/'+sid+'/verification',{'reviewId':review},owner)[1]['listing']
+        edit='/api/admin/submissions/'+sid+'/parcel-link'
+        parcel='/api/v1/listings/'+sid+'/parcel'
+        approved='11111111-5555-4111-8111-111111111111'
+        doc='22222222-5555-4222-8222-222222222222'
+        params={'v2ListingId':approved,'version':saved['version']}
+        self.assertEqual(self.request(edit,params,owner)[0],401)
+        self.assertFalse(self.request(parcel)[1]['verifiedParcel'])
+        bridge.projection.return_value=None
+        self.assertEqual(self.request(edit,params,admin)[0],422)
+        bridge.projection.assert_called_with(approved,{'latitude':36.0,'longitude':10.0,
+            'titleReference':'00991','plotReference':'QA01',
+            'identityHashes':[hashlib.sha256(b'closed identity').hexdigest()],
+            'documentHashes':[hashlib.sha256(b'closed title').hexdigest()]})
+        projection={'verifiedParcel':True,
+            'boundaries':[{'id':doc,'method':'ATLAS_OFFICIAL_BOUNDARY','geometry':{'type':'Polygon',
+                  'coordinates':[[[10,36],[10.001,36],[10,36.001],[10,36]]]}}],
+            'documents':[{'id':doc,'kind':'CADASTRAL_PLAN','mime':'application/pdf'}]}
+        bridge.projection.return_value=projection
+        self.assertEqual(self.request(edit,params,admin)[0],200)
+        status,public=self.request(parcel)
+        self.assertEqual(status,200)
+        self.assertTrue(public['verifiedParcel'])
+        self.assertEqual(public['boundaries'],projection['boundaries'])
+        self.assertNotIn(approved,json.dumps(public))
+        file_path=public['documents'][0]['url']
+        self.assertEqual(file_path,'/api/v1/listings/'+sid+'/documents/'+doc)
+        bridge.document.return_value=(b'%PDF-1.4 test approved rendition','application/pdf')
+        self.assertEqual(self.request(file_path)[0],200)
+        bridge.projection.return_value=None
+        self.assertFalse(self.request(parcel)[1]['verifiedParcel'])
+        self.assertEqual(self.request(file_path)[0],404)
+        bridge.projection.return_value=projection
+        self.assertEqual(self.request(owner_route+'/'+sid+'/pause',{},owner)[0],200)
+        self.assertEqual(self.request(parcel)[0],404)
+        self.assertEqual(self.request(owner_route+'/'+sid+'/publish',{},owner)[0],200)
+        self.assertTrue(self.request(parcel)[1]['verifiedParcel'])
+        current=self.request('/api/pilot/submissions',token=owner)[1]['submissions'][0]
+        changed=self.request(owner_route+'/'+sid+'/edit',{**data,'price':'51000','version':current['version']},owner)
+        self.assertEqual(changed[0],200)
+        self.assertTrue(self.request(parcel)[1]['verifiedParcel'])
+        self.assertEqual(self.request(owner_route+'/'+sid+'/edit',
+            {**data,'longitude':'10.01','version':changed[1]['listing']['version']},owner)[0],200)
+        self.assertFalse(self.request(parcel)[1]['verifiedParcel'])
+
     def test_identity_date_refresh_requires_owner_consent_and_accepts_no_manual_fields(self):
         from unittest.mock import patch
         token=self.store.login('+21623456789','1234','A'*43)['bearer']

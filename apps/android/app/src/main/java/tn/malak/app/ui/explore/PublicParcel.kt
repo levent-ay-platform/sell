@@ -38,8 +38,12 @@ internal data class PublicPropertyDocument(
 internal data class PublicParcel(
     val boundaries: List<PublicParcelBoundary> = emptyList(),
     val documents: List<PublicPropertyDocument> = emptyList(),
-    val proof: LocalParcelProof? = null
-)
+    val proof: LocalParcelProof? = null,
+    val verifiedParcel: Boolean = false
+) {
+    val showVerifiedBadge: Boolean
+        get() = verifiedParcel && boundaries.any { it.kind != BoundaryKind.Estimate }
+}
 
 internal fun documentUrl(origin: String, listingId: String, documentId: String, path: String): String? =
     path.takeIf { it == "/api/v1/listings/$listingId/documents/$documentId" }?.let { origin + it }
@@ -92,7 +96,7 @@ internal fun decodePublicParcel(body: JSONObject, base: String, listingId: Strin
         val location = documentUrl(base, listingId, id, row.getString("url")) ?: return@mapNotNull null
         PublicPropertyDocument(id, row.getString("kind"), mime, location)
     }
-    return PublicParcel(boundaries, documents)
+    return PublicParcel(boundaries, documents, verifiedParcel = body.opt("verifiedParcel") == true)
 }
 
 private fun JSONObject.value(key: String): String? =

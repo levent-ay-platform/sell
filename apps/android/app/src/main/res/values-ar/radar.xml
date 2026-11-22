@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="radar_panel_title">الرادار</string>
+    <string name="radar_title">رادار العقارات</string>
+    <string name="radar_radius">نصف قطر ‎%1$d كم</string>
+    <string name="radar_hint">حرّك الخريطة لاختيار المركز، ثم اضبط نصف القطر.</string>
+    <string name="radar_apply">ابحث داخل الدائرة</string>
+    <string name="radar_clear">امسح بحث الرادار</string>
+    <string name="afi_shortcut">المناطق الصناعية</string>
+    <string name="pilot_device_id">معرّف جهاز Pilot</string>
+    <string name="pilot_device_hint">شارك هذا المعرّف بشكل خاص مع مسؤول Pilot لتفعيل الجهاز.</string>
+</resources>

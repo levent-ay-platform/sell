@@ -26,6 +26,7 @@ import {provisionIndividualOwnerCase,revokeIndividualOwnerConsent} from './priva
 import {createListingDiscoveryHttpHandler,PostgresListingDiscoveryRepository} from './listing-discovery.ts';
 import type {ReviewedParcelRenditionReader} from './parcel-http.ts';
 import {createParcelHttpHandler} from './parcel-http.ts';
+import {readAtlasContributionLayer} from './atlas-parcel-exchange.ts';
 import {createParcelRepository} from './parcel-repository.ts';
 
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -95,6 +96,8 @@ export interface UnboundFirstLoopGatewayDeps {
     readonly mediaOrigin?:string;
     /** Optional separate rendition storage. Never point this at the evidence vault. */
     readonly readParcelRendition?:ReviewedParcelRenditionReader;
+    readonly atlasReaderToken?:string;
+    readonly pilotParcelToken?:string;
     readonly allowRequest:(remoteAddress:string)=>Promise<boolean>;
   };
   readonly rateLimitHmacSecret:Uint8Array;
@@ -166,6 +169,11 @@ export function composeUnboundMalakFirstLoop(deps:UnboundFirstLoopGatewayDeps) {
   const parcels=createParcelHttpHandler({
     repository:createParcelRepository(deps.pool),
     readRendition:deps.discoveryV2.readParcelRendition,
+    atlas:deps.discoveryV2.atlasReaderToken ? {
+      readerToken:deps.discoveryV2.atlasReaderToken,
+      read:()=>readAtlasContributionLayer(deps.pool)
+    } : undefined,
+    pilotParcelToken:deps.discoveryV2.pilotParcelToken,
     authenticate:token=>verifiedAuth.authenticate(token),
     allowRequest:deps.discoveryV2.allowRequest
   });

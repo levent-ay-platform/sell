@@ -73,7 +73,14 @@ class MemoryPilot:
         if len(self.tokens) >= 128:
             return None
         if self.store is not None:
-            return self.store.login(phone,code,device)
+            from pilot_workflow import WorkflowError
+            try:
+                return self.store.login(phone,code,device)
+            except WorkflowError as rejected:
+                if rejected.status != 401:
+                    raise
+                recent.append(now)
+                return None
         token = secrets.token_urlsafe(32)
         self.tokens[hashlib.sha256(token.encode()).digest()] = [now+SESSION_SECONDS, 0]
         return {

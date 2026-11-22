@@ -9,10 +9,11 @@ const decimal = /^(?:0|[1-9]\d{0,14})(?:\.\d{1,3})?$/;
 const timestamp = /^(?!0000)\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/;
 const discoveryParams = [
   'bbox', 'placeId', 'kind', 'minPrice', 'maxPrice', 'minArea',
-  'maxArea', 'minRooms', 'lang', 'sort',
+  'maxArea', 'minRooms', 'lang', 'sort', 'radar',
 ];
 
-type Kind = 'LAND' | 'APARTMENT' | 'HOUSE';
+const listingKinds = ['LAND','APARTMENT','HOUSE','VILLA','FACTORY'] as const;
+type Kind = typeof listingKinds[number];
 type Language = 'ar' | 'fr';
 type Bounds = readonly [number, number, number, number];
 type Cursor = {readonly publishedAt: string; readonly id: string};
@@ -26,6 +27,7 @@ interface SearchFilters {
   readonly minArea: string | null;
   readonly maxArea: string | null;
   readonly minRooms: number | null;
+  readonly radar: readonly [latitude: number, longitude: number, radiusKm: number] | null;
 }
 
 interface ListingRow {
@@ -80,17 +82,22 @@ const FILTERED = `
       ST_Intersects(d.public_point, ST_MakeEnvelope($1,$2,$3,$4,4326))
       OR (d.public_point IS NULL
         AND ST_Intersects(d.place_center, ST_MakeEnvelope($1,$2,$3,$4,4326)))
-    )`;
+    )
+    AND ($14::int IS NULL OR (
+      d.public_point IS NOT NULL AND
+      ST_DWithin(d.public_point::geography,
+        ST_SetSRID(ST_MakePoint($13::float8,$12::float8),4326)::geography,$14::int*1000,false)
+    ))`;
 
 const LIST = `SELECT ${LISTING_COLUMNS} ${FILTERED}
-  AND ($12::timestamptz IS NULL OR (d.published_at,d.id)<($12,$13::uuid))
-  ORDER BY d.published_at DESC,d.id DESC LIMIT $14::integer`;
+  AND ($15::timestamptz IS NULL OR (d.published_at,d.id)<($15,$16::uuid))
+  ORDER BY d.published_at DESC,d.id DESC LIMIT $17::integer`;
 
 const CLUSTERS = `
   WITH visible AS MATERIALIZED (
     SELECT d.* ${FILTERED} AND d.public_point IS NOT NULL
   ), mode AS (
-    SELECT $12::integer<12 OR count(*)>200 AS group_points FROM visible
+    SELECT $15::integer<12 OR count(*)>200 AS group_points FROM visible
   ), cells AS (
     SELECT v.id,v.public_point,
       CASE WHEN mode.group_points
@@ -131,7 +138,7 @@ const PLACES = `
 function filterValues(filters: SearchFilters) {
   return [
     ...filters.bbox, filters.placeId, filters.kind, filters.minPrice, filters.maxPrice,
-    filters.minArea, filters.maxArea, filters.minRooms,
+    filters.minArea, filters.maxArea, filters.minRooms, ...(filters.radar ?? [null,null,null]),
   ];
 }
 
@@ -257,10 +264,11 @@ function readSmallInteger(raw: string, ceiling: number) {
 function readFilters(params: URLSearchParams): SearchFilters {
   const bbox = readBounds(params.get('bbox'));
   const placeId = params.get('placeId');
-  const kind = params.get('kind');
+  const kindParam = params.get('kind');
+  const kind = listingKinds.find(value=>value===kindParam) ?? null;
   const sort = params.get('sort');
   if (placeId !== null && !placeIdentifier.test(placeId)) throw new InvalidQuery();
-  if (kind !== null && kind !== 'LAND' && kind !== 'APARTMENT' && kind !== 'HOUSE') throw new InvalidQuery();
+  if (kindParam !== null && kind === null) throw new InvalidQuery();
   if (sort !== null && sort !== 'newest') throw new InvalidQuery();
 
   const minPrice = readAmount(params, 'minPrice');
@@ -272,7 +280,17 @@ function readFilters(params: URLSearchParams): SearchFilters {
 
   const rooms = params.get('minRooms');
   const minRooms = rooms === null ? null : readSmallInteger(rooms, 100);
-  return {bbox, placeId, kind, minPrice, maxPrice, minArea, maxArea, minRooms};
+  const rawRadar = params.get('radar');
+  let radar: SearchFilters['radar'] = null;
+  if (rawRadar !== null) {
+    if (!/^\d{2}(?:\.\d{1,16})?,\d{1,2}(?:\.\d{1,16})?,\d{1,2}$/.test(rawRadar)) throw new InvalidQuery();
+    const [latitude,longitude,radiusKm] = rawRadar.split(',').map(Number);
+    if (latitude < 29 || latitude > 39 || longitude < 7 || longitude > 13 ||
+        latitude < bbox[1] || latitude > bbox[3] || longitude < bbox[0] || longitude > bbox[2] ||
+        radiusKm < 1 || radiusKm > 20) throw new InvalidQuery();
+    radar = [latitude,longitude,radiusKm];
+  }
+  return {bbox, placeId, kind, minPrice, maxPrice, minArea, maxArea, minRooms, radar};
 }
 
 function encodeCursor(cursor: Cursor) {

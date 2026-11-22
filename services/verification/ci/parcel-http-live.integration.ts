@@ -26,6 +26,8 @@ test('assigned review and consent gate local scans, geometry, redacted files and
   const ownerToken='test-owner-session-aaaaaaaaaaaaaa';
   const reviewerToken='test-reviewer-session-aaaaaaaaaaa';
   const outsiderToken='test-outsider-session-aaaaaaaaaaa';
+  const atlasToken='R'.repeat(43);
+  const pilotToken='P'.repeat(43);
   const storageObjectId='6c75dffd-cc60-454b-8544-862c77c56c4b';
   let reads=0;
   const unavailable=async ():Promise<never>=>{throw Error('NO_PRIVATE_EVIDENCE_IO');};
@@ -59,7 +61,7 @@ test('assigned review and consent gate local scans, geometry, redacted files and
     objects:{putPrivate:unavailable,deletePrivate:unavailable,readPrivate:unavailable},
     scanner:{scan:unavailable},keys:{generateDataKey:unavailable,unwrapDataKey:unavailable},
     worker:{extract:unavailable},rateLimitHmacSecret:Buffer.alloc(40,3),policyVersion:'synthetic-parcel-v2',
-    discoveryV2:{enabled:true,allowRequest:async()=>true,readParcelRendition:async(id)=>{
+    discoveryV2:{enabled:true,atlasReaderToken:atlasToken,pilotParcelToken:pilotToken,allowRequest:async()=>true,readParcelRendition:async(id)=>{
       reads++;
       assert.equal(id,storageObjectId);
       return pdf;
@@ -80,7 +82,7 @@ test('assigned review and consent gate local scans, geometry, redacted files and
     identities.set(ownerToken,owner);
     identities.set(reviewerToken,reviewer);
     identities.set(outsiderToken,outsider);
-    const {rows:[fixture]}=await db.query<{case_id:string;listing_id:string;plan_id:string;cin_id:string}>(`
+    const {rows:[fixture]}=await db.query<{case_id:string;listing_id:string;plan_id:string;cin_id:string;title_id:string}>(`
       WITH seller AS (INSERT INTO sell.parties(kind) VALUES ('PERSON') RETURNING id),
       member AS (INSERT INTO sell.party_memberships SELECT id,$1::uuid,'OWNER' FROM seller RETURNING party_id),
       property AS (INSERT INTO sell.properties(kind) VALUES ('LAND') RETURNING id),
@@ -98,18 +100,22 @@ test('assigned review and consent gate local scans, geometry, redacted files and
        VALUES ('private/synthetic-v2-plan',repeat('a',64),'application/pdf') RETURNING id),
       cin AS (INSERT INTO sell.evidence_files(storage_key,sha256,media_kind)
        VALUES ('private/synthetic-v2-identity',repeat('b',64),'image/jpeg') RETURNING id),
+      title AS (INSERT INTO sell.evidence_files(storage_key,sha256,media_kind)
+       VALUES ('private/synthetic-v2-title',repeat('c',64),'application/pdf') RETURNING id),
       ev AS (INSERT INTO sell.case_evidence SELECT ver.id,plan.id FROM ver CROSS JOIN plan
-       UNION ALL SELECT ver.id,cin.id FROM ver CROSS JOIN cin)
-      SELECT ver.id case_id,item.listing_id,plan.id plan_id,cin.id cin_id
-       FROM ver CROSS JOIN item CROSS JOIN plan CROSS JOIN cin`,[owner,reviewer]);
+       UNION ALL SELECT ver.id,cin.id FROM ver CROSS JOIN cin
+       UNION ALL SELECT ver.id,title.id FROM ver CROSS JOIN title)
+      SELECT ver.id case_id,item.listing_id,plan.id plan_id,cin.id cin_id,title.id title_id
+       FROM ver CROSS JOIN item CROSS JOIN plan CROSS JOIN cin CROSS JOIN title`,[owner,reviewer]);
     await db.query(`INSERT INTO sell.evidence_consent_events(case_id,person_user_id,decision,policy_version)
       VALUES($1,$2,'GRANTED','synthetic-1')`,[fixture.case_id,owner]);
     await db.query(`
       INSERT INTO sell.evidence_upload_receipts(case_id,uploader_user_id,evidence_id,idempotency_key,sha256,wrapped_data_key,
        key_version,media_kind,file_size,evidence_kind,page_number)
       VALUES ($1,$2,$3,'synthetic_http_plan_test',repeat('a',64),repeat('a',40),'v1','application/pdf',100,'CADASTRAL_PLAN',NULL),
-       ($1,$2,$4,'synthetic_http_cin_test',repeat('b',64),repeat('b',40),'v1','image/jpeg',100,'IDENTITY',1)`,
-      [fixture.case_id,owner,fixture.plan_id,fixture.cin_id]);
+       ($1,$2,$4,'synthetic_http_cin_test',repeat('b',64),repeat('b',40),'v1','image/jpeg',100,'IDENTITY',1),
+       ($1,$2,$5,'synthetic_http_title_test',repeat('c',64),repeat('c',40),'v1','application/pdf',100,'TITLE_EXTRACT',NULL)`,
+      [fixture.case_id,owner,fixture.plan_id,fixture.cin_id,fixture.title_id]);
     const {rows:[doc]}=await db.query<{id:string}>(`
       INSERT INTO sell.parcel_document_versions(property_revision_id,case_id,source_evidence_id,original_sha256,rendition_sha256,
        rendition_mime,document_kind,storage_object_id)
@@ -143,7 +149,7 @@ test('assigned review and consent gate local scans, geometry, redacted files and
     assert.equal(ownerDetails.geometries[0].statedAreaM2,'1672.500000');
     assert.equal(ownerDetails.geometries[0].localPage,1);
     assert.deepEqual(ownerDetails.geometries[0].edges,[{ordinal:1,label:'A–B',lengthM:'32.500000'}]);
-    assert.deepEqual(ownerDetails.evidence,[{id:fixture.plan_id,kind:'CADASTRAL_PLAN'}]);
+    assert.deepEqual(ownerDetails.evidence.map((row:{kind:string})=>row.kind).sort(),['CADASTRAL_PLAN','TITLE_EXTRACT']);
     assert.equal((await call(reviewPath+'/parcel-geometries',ownerToken)).status,404);
     assert.equal((await call(reviewPath+'/parcel-geometries',reviewerToken)).status,200);
     assert.equal((await call(geometryPath,ownerToken,{method:'ATLAS_OFFICIAL_BOUNDARY',vertices:[]})).status,400);
@@ -173,6 +179,7 @@ test('assigned review and consent gate local scans, geometry, redacted files and
     assert.equal(listing.boundaries.length,1);
     assert.equal(listing.boundaries[0].id,geoId);
     assert.equal(listing.boundaries[0].method,'OWNER_TRACED_ESTIMATE');
+    assert.equal(listing.verifiedParcel,false);
     assert.equal(listing.boundaries[0].geometry.type,'MultiPolygon');
     assert.equal(listing.boundaries[0].edges.length,4);
     assert.ok(Number(listing.boundaries[0].edges[0].lengthM)>15);
@@ -202,6 +209,34 @@ test('assigned review and consent gate local scans, geometry, redacted files and
       SELECT * FROM sell.match_atlas_parcel_candidates($1,$2,$3,$4,ST_SetSRID(ST_MakePoint(10.0001,36.0001),4326))
     `,[atlasInput.registryScope,atlasInput.titleReference,atlasInput.plotReference,atlasInput.localityKey]);
     assert.deepEqual(match.rows,[{atlas_record_id:atlasId,spatial_status:'SPATIALLY_COMPATIBLE'}]);
+    const {rows:[official]}=await db.query<{id:string}>(`
+      INSERT INTO sell.parcel_geometry_versions
+       (parcel_id,property_id,property_revision_id,case_id,method,atlas_record_id,
+        registry_scope,title_reference,plot_reference,locality_key,match_anchor)
+      SELECT $1,i.property_id,i.property_revision_id,i.verification_case_id,'ATLAS_OFFICIAL_BOUNDARY',$2,
+       $3,$4,$5,$6,ST_SetSRID(ST_MakePoint(10.0001,36.0001),4326)
+      FROM sell.listing_items i WHERE i.listing_id=$7 RETURNING id`,
+      [ownerDetails.parcels[0].id,atlasId,atlasInput.registryScope,atlasInput.titleReference,
+        atlasInput.plotReference,atlasInput.localityKey,fixture.listing_id]);
+    assert.equal((await reviewGeo(official.id,reviewerToken)).status,201);
+    assert.equal((await (await call(publicPath+'/parcel')).json()).verifiedParcel,false);
+    assert.equal((await consentGeo(official.id)).status,201);
+    assert.equal((await (await call(publicPath+'/parcel')).json()).verifiedParcel,true);
+    const bindPath='/api/v1/atlas/pilot-parcel';
+    const matchPilot={listingId:fixture.listing_id, identityHashes:['b'.repeat(64)],
+      documentHashes:['c'.repeat(64)], latitude:36.0001, longitude:10.0001,
+      titleReference:'000991',plotReference:'QA01'};
+    assert.equal((await call(bindPath,atlasToken,matchPilot)).status,401);
+    assert.equal((await call(bindPath,pilotToken,{...matchPilot,identityHashes:['a'.repeat(64)]})).status,404);
+    assert.equal((await call(bindPath,pilotToken,{...matchPilot,longitude:9})).status,404);
+    assert.equal((await call(bindPath,pilotToken,{...matchPilot,plotReference:'QA02'})).status,404);
+    const linked=await call(bindPath,pilotToken,matchPilot);
+    assert.equal(linked.status,200);
+    assert.equal((await linked.json()).verifiedParcel,true);
+
+    assert.equal((await call(geometryPath+'/'+official.id+'/consent',ownerToken,{decision:'REVOKED'})).status,201);
+    assert.equal((await call(bindPath,pilotToken,matchPilot)).status,404);
+    assert.equal((await (await call(publicPath+'/parcel')).json()).verifiedParcel,false);
 
     await db.query("SELECT sell.enqueue_atlas_parcel_event($1,$2,'UPSERT')", [fixture.listing_id,geoId]);
     const contributions=await readAtlasContributionLayer(db);
@@ -209,9 +244,14 @@ test('assigned review and consent gate local scans, geometry, redacted files and
     assert.deepEqual(contributions.features.map(f=>f.properties),[
       {listingId:fixture.listing_id,boundaryId:geoId,method:'OWNER_TRACED_ESTIMATE'},
     ]);
+    const layerPath='/api/v1/atlas/contributions';
+    assert.equal((await call(layerPath,reviewerToken)).status,401);
+    assert.deepEqual(await (await call(layerPath,atlasToken)).json(),contributions);
+    assert.equal((await call(layerPath+'?anything=1',atlasToken)).status,400);
     await db.query("UPDATE sell.listings SET status='PAUSED' WHERE id=$1",[fixture.listing_id]);
     assert.equal((await call(publicPath+'/parcel')).status,404);
     assert.deepEqual((await readAtlasContributionLayer(db)).features,[]);
+    assert.deepEqual((await (await call(layerPath,atlasToken)).json()).features,[]);
   } finally {
     server.close();
     try {await db.query('ROLLBACK');} finally {db.release();await pool.end();}

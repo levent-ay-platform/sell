@@ -4,6 +4,16 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class PublicParcelTest {
+    @Test fun verifiedBadgeRequiresExplicitApprovalAndNonEstimatedGeometry() {
+        val estimate = PublicParcelBoundary("boundary", BoundaryKind.Estimate, "{}", emptyList(),
+            emptyList(), null, null, emptyList())
+        val official = estimate.copy(kind = BoundaryKind.Official)
+        assertFalse(PublicParcel(boundaries = listOf(official)).showVerifiedBadge)
+        assertFalse(PublicParcel(verifiedParcel = true).showVerifiedBadge)
+        assertFalse(PublicParcel(boundaries = listOf(estimate), verifiedParcel = true).showVerifiedBadge)
+        assertTrue(PublicParcel(boundaries = listOf(official), verifiedParcel = true).showVerifiedBadge)
+    }
+
     @Test fun estimateNeverUsesOfficialStyle() {
         assertEquals(BoundaryKind.Official, BoundaryKind.read("ATLAS_OFFICIAL_BOUNDARY"))
         assertEquals(BoundaryKind.Estimate, BoundaryKind.read("OWNER_TRACED_ESTIMATE"))

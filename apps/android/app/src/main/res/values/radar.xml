@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="radar_panel_title">Radar</string>
+    <string name="radar_title">Property radar</string>
+    <string name="radar_radius">%1$d km radius</string>
+    <string name="radar_hint">Move the map to choose the center, then adjust the radius.</string>
+    <string name="radar_apply">Search this circle</string>
+    <string name="radar_clear">Clear radar search</string>
+    <string name="afi_shortcut">Industrial zones</string>
+    <string name="pilot_device_id">Pilot device ID</string>
+    <string name="pilot_device_hint">Share this ID privately with your Pilot administrator to activate this device.</string>
+</resources>

@@ -50,6 +50,16 @@ def listing_fields(data):
 
 class PilotStore:
     def __init__(self,root):
+        enrollment = os.environ.get('MALAK_PILOT_DEVICE_ENROLLMENT')
+        self.enrolled_devices = None
+        if enrollment:
+            devices = json.loads(Path(enrollment).read_text())
+            if not isinstance(devices,dict) or not devices or any(
+                    not re.fullmatch(r'\+216[2-9][0-9]{7}',phone)
+                    or not isinstance(device,str) or not re.fullmatch(r'[0-9a-f]{64}',device)
+                    for phone,device in devices.items()):
+                raise ValueError('Invalid Pilot enrollment')
+            self.enrolled_devices = devices
         self.root=Path(root);self.root.mkdir(mode=0o700,parents=True,exist_ok=True)
         os.chmod(self.root,0o700)
         keyfile=self.root/'evidence.key'
@@ -71,7 +81,29 @@ CREATE TABLE IF NOT EXISTS admin_sessions(digest TEXT PRIMARY KEY,admin_id TEXT 
 CREATE TABLE IF NOT EXISTS audit(id TEXT PRIMARY KEY,actor TEXT NOT NULL,submission TEXT,action TEXT NOT NULL,created INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS analysis_cache(account_id TEXT NOT NULL,intent TEXT NOT NULL,fingerprint TEXT NOT NULL,revision TEXT NOT NULL,review_id TEXT NOT NULL,analyzed_at INTEGER NOT NULL,PRIMARY KEY(account_id,intent,revision));
 CREATE INDEX IF NOT EXISTS analysis_cache_inputs ON analysis_cache(account_id,fingerprint,revision);
+CREATE TABLE IF NOT EXISTS direct_listing_metadata(
+ submission_id TEXT PRIMARY KEY REFERENCES submissions(id),
+ verification_review_id TEXT UNIQUE REFERENCES reviews(id),
+ verification_status TEXT NOT NULL DEFAULT 'INCOMPLETE',
+ owner_paused INTEGER NOT NULL DEFAULT 0,
+ draft_fingerprint TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS direct_listing_review_history(
+ review_id TEXT PRIMARY KEY REFERENCES reviews(id),
+ submission_id TEXT NOT NULL REFERENCES direct_listing_metadata(submission_id),
+ attached INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS pilot_parcel_links(
+ submission_id TEXT PRIMARY KEY REFERENCES direct_listing_metadata(submission_id),
+ v2_listing_id TEXT NOT NULL UNIQUE,
+ review_id TEXT NOT NULL REFERENCES reviews(id),
+ scope_fingerprint TEXT NOT NULL,
+ match_request TEXT NOT NULL,
+ linked_at INTEGER NOT NULL
+);
 ''')
+            if not any(row['name']=='device_digest' for row in db.execute('PRAGMA table_info(sessions)')):
+                db.execute('ALTER TABLE sessions ADD COLUMN device_digest TEXT')
         os.chmod(self.path,0o600)
     @contextmanager
     def db(self):
@@ -82,18 +114,25 @@ CREATE INDEX IF NOT EXISTS analysis_cache_inputs ON analysis_cache(account_id,fi
         finally:db.close()
     def login(self,phone,code,device):
         if not isinstance(phone,str) or not re.fullmatch(r'\+216[2-9][0-9]{7}',phone) or not isinstance(code,str) or not hmac.compare_digest(code,'1234') or not isinstance(device,str) or not re.fullmatch(r'[A-Za-z0-9_-]{43}',device):raise WorkflowError(401,'LOGIN_DENIED')
+        device_digest=digest(device)
+        if not self._device_allowed(phone,device_digest):raise WorkflowError(401,'LOGIN_DENIED')
         token=secrets.token_urlsafe(32)
         with self.db() as db:
             db.execute('INSERT OR IGNORE INTO accounts VALUES(?,?)',(ident(),phone))
             user=db.execute('SELECT id FROM accounts WHERE phone=?',(phone,)).fetchone()['id']
             db.execute('DELETE FROM sessions WHERE expires<=?',(now(),))
-            db.execute('INSERT INTO sessions VALUES(?,?,?)',(digest(token),user,now()+43200))
+            db.execute('INSERT INTO sessions(digest,account_id,expires,device_digest) VALUES(?,?,?,?)',
+                       (digest(token),user,now()+43200,device_digest))
         return {'ok':True,'pilotConfirmed':True,'bearer':token,'expiresInSeconds':43200,'identityVerified':False,'ownershipVerified':False,'mayPublish':False}
+    def _device_allowed(self,phone,device_digest):
+        if self.enrolled_devices is None:return True
+        expected=self.enrolled_devices.get(phone)
+        return bool(expected and device_digest and hmac.compare_digest(expected,device_digest))
     def authenticate(self,token):
         if not isinstance(token,str) or not re.fullmatch(r'[A-Za-z0-9_-]{43}',token):return None
         with self.db() as db:
-            row=db.execute('SELECT a.* FROM accounts a JOIN sessions s ON s.account_id=a.id WHERE s.digest=? AND s.expires>?',(digest(token),now())).fetchone()
-            return dict(row) if row else None
+            row=db.execute('SELECT a.*,s.device_digest FROM accounts a JOIN sessions s ON s.account_id=a.id WHERE s.digest=? AND s.expires>?',(digest(token),now())).fetchone()
+            return {'id':row['id'],'phone':row['phone']} if row and self._device_allowed(row['phone'],row['device_digest']) else None
     def cached_analysis(self,user,intent,fingerprint,revision):
         with self.db() as db:
             row=db.execute('SELECT c.*,r.report,r.created FROM analysis_cache c JOIN reviews r ON r.id=c.review_id AND r.account_id=c.account_id WHERE c.account_id=? AND c.intent=? AND c.revision=?',(user,intent,revision)).fetchone()
@@ -175,6 +214,8 @@ CREATE INDEX IF NOT EXISTS analysis_cache_inputs ON analysis_cache(account_id,fi
                 if row['review_id']!=review or json.loads(row['listing'])!=fields or row['customer_name']!=name.strip():raise WorkflowError(409,'IDEMPOTENCY_CONFLICT')
                 return self._submission(db,row)
             if not db.execute('SELECT 1 FROM reviews WHERE id=? AND account_id=?',(review,user)).fetchone():raise WorkflowError(403,'REVIEW_DENIED')
+            if db.execute('SELECT 1 FROM direct_listing_review_history WHERE review_id=?',(review,)).fetchone():
+                raise WorkflowError(409,'REVIEW_ALREADY_LINKED')
             target=data.get('submissionId')
             if target is not None and (not isinstance(target,str) or not re.fullmatch(r'[0-9a-f-]{36}',target)):raise WorkflowError()
             prior=db.execute('SELECT * FROM submissions WHERE id=?',(target,)).fetchone() if target else db.execute('SELECT * FROM submissions WHERE review_id=?',(review,)).fetchone()
@@ -205,15 +246,233 @@ CREATE INDEX IF NOT EXISTS analysis_cache_inputs ON analysis_cache(account_id,fi
                 db.execute('INSERT INTO submissions(id,account_id,review_id,request_key,customer_name,listing,status,created,updated) VALUES(?,?,?,?,?,?,?,?,?)',(sid,user,review,key,name.strip(),json.dumps(fields),'PENDING_REVIEW',now(),now()))
             db.execute('INSERT INTO audit VALUES(?,?,?,?,?)',(ident(),user,sid,'SUBMITTED',now()))
             return self._submission(db,db.execute('SELECT * FROM submissions WHERE id=?',(sid,)).fetchone())
+    def prepare_direct_listing(self, user, data):
+        values = self._direct_fields(data)
+        key = data.get('requestKey')
+        if not isinstance(key,str) or not re.fullmatch(r'[A-Za-z0-9_-]{20,80}',key):
+            raise WorkflowError()
+        payload = json.dumps(values, sort_keys=True)
+        fingerprint = digest(payload)
+        with self.db() as db:
+            db.execute('BEGIN IMMEDIATE')
+            result = db.execute('''SELECT s.*,d.draft_fingerprint FROM submissions s
+                LEFT JOIN direct_listing_metadata d ON d.submission_id=s.id
+                WHERE account_id=? AND request_key=?''', (user,key)).fetchone()
+            if result:
+                if result['draft_fingerprint'] != fingerprint:
+                    raise WorkflowError(409,'IDEMPOTENCY_CONFLICT')
+                return self._submission(db,result)
+            sid, media = ident(), ident()
+            timestamp = now()
+            db.execute('INSERT INTO reviews VALUES(?,?,?,?)', (media,user,'{}',timestamp))
+            db.execute('''INSERT INTO submissions
+                (id,account_id,review_id,request_key,customer_name,listing,status,created,updated)
+                VALUES(?,?,?,?,?,?,'DRAFT',?,?)''', (sid,user,media,key,'',payload,timestamp,timestamp))
+            db.execute('INSERT INTO direct_listing_metadata(submission_id,draft_fingerprint) VALUES(?,?)',
+                       (sid,fingerprint))
+            return self._submission(db,db.execute('SELECT * FROM submissions WHERE id=?',(sid,)).fetchone())
+
+    @staticmethod
+    def _direct_fields(data):
+        if not isinstance(data,dict):
+            raise WorkflowError()
+        fields = listing_fields(data)
+        kind = data.get('kind')
+        if kind not in ('LAND','APARTMENT','HOUSE','VILLA','FACTORY') or not fields['latitude']:
+            raise WorkflowError()
+        for coordinate in ('latitude','longitude'):
+            fields[coordinate] = format(float(fields[coordinate]), '.3f')
+        fields['kind'] = kind
+        return fields
+
+    def change_direct_listing(self, user, sid, action, data):
+        if not isinstance(data,dict):
+            raise WorkflowError()
+        with self.db() as db:
+            db.execute('BEGIN IMMEDIATE')
+            row = db.execute('''SELECT s.*,d.verification_review_id,d.verification_status,d.owner_paused
+                FROM submissions s JOIN direct_listing_metadata d ON d.submission_id=s.id
+                WHERE s.id=? AND s.account_id=?''', (sid,user)).fetchone()
+            if not row:
+                raise WorkflowError(404,'NOT_FOUND')
+            status = row['status']
+            if action in ('publish','pause'):
+                desired = 'PUBLISHED' if action == 'publish' else 'PAUSED'
+                if status == desired:
+                    return self._submission(db,row)
+                allowed = ('DRAFT','PAUSED') if action == 'publish' else ('PUBLISHED',)
+                if status not in allowed:
+                    raise WorkflowError(409,'INVALID_TRANSITION')
+                if status == 'PAUSED' and action == 'publish' and not row['owner_paused']:
+                    raise WorkflowError(409,'MODERATION_PAUSE')
+                if status == 'DRAFT':
+                    photos = data.get('photoIds',[])
+                    if not isinstance(photos,list) or len(photos)>8 or any(not isinstance(p,str) for p in photos):
+                        raise WorkflowError()
+                    staged = db.execute("SELECT id FROM evidence WHERE review_id=? AND kind='PHOTO'",
+                                        (row['review_id'],)).fetchall()
+                    staged_ids = {photo['id'] for photo in staged}
+                    if not set(photos).issubset(staged_ids):
+                        raise WorkflowError(422,'PHOTO_NOT_OWNED')
+                    db.executemany('DELETE FROM evidence WHERE id=?',((photo,) for photo in staged_ids-set(photos)))
+                db.execute('UPDATE submissions SET status=? WHERE id=?',(desired,sid))
+                db.execute('UPDATE direct_listing_metadata SET owner_paused=? WHERE submission_id=?',
+                           (action == 'pause',sid))
+            elif action == 'edit':
+                fields = self._direct_fields(data)
+                if status not in ('PUBLISHED','PAUSED') or data.get('version') != row['version']:
+                    raise WorkflowError(409,'STALE_LISTING')
+                current = json.loads(row['listing'])
+                if any(fields[k] != current[k] for k in ('region','latitude','longitude','area','kind')):
+                    db.execute("UPDATE direct_listing_metadata SET verification_status='INCOMPLETE' WHERE submission_id=?",(sid,))
+                db.execute('UPDATE submissions SET listing=? WHERE id=?',(json.dumps(fields),sid))
+            elif action == 'verification':
+                review = data.get('reviewId')
+                if status not in ('PUBLISHED','PAUSED'):
+                    raise WorkflowError(409,'INVALID_TRANSITION')
+                if review == row['verification_review_id'] and row['verification_status'] != 'INCOMPLETE':
+                    return self._submission(db,row)
+                evidence = db.execute('''SELECT r.report FROM reviews r
+                    WHERE r.id=? AND r.account_id=?
+                    AND NOT EXISTS(SELECT 1 FROM submissions WHERE review_id=r.id)
+                    AND NOT EXISTS(SELECT 1 FROM direct_listing_review_history
+                            WHERE review_id=r.id AND submission_id<>?)''',(review,user,sid)).fetchone()
+                if not evidence:
+                    raise WorkflowError(404,'REVIEW_NOT_FOUND')
+                kinds = {row['kind'] for row in db.execute('SELECT kind FROM evidence WHERE review_id=?',(review,))}
+                if not {'IDENTITY','DOCUMENT'}.issubset(kinds):
+                    raise WorkflowError(422,'INCOMPLETE_DOCUMENTS')
+                report = json.loads(evidence['report'])
+                plans = report.get('parcelPlanScans') or []
+                is_land = json.loads(row['listing'])['kind'] == 'LAND'
+                verification = 'PLAN_REQUIRED' if is_land and not plans else 'UNDER_REVIEW'
+                db.execute('INSERT OR IGNORE INTO direct_listing_review_history VALUES(?,?,?)',(review,sid,now()))
+                db.execute('''UPDATE direct_listing_metadata
+                    SET verification_review_id=?,verification_status=? WHERE submission_id=?''',(review,verification,sid))
+            else:
+                raise WorkflowError()
+            db.execute('UPDATE submissions SET version=version+1,updated=? WHERE id=?',(now(),sid))
+            db.execute('INSERT INTO audit VALUES(?,?,?,?,?)',(ident(),user,sid,'DIRECT_'+action.upper(),now()))
+            return self._submission(db,db.execute('SELECT * FROM submissions WHERE id=?',(sid,)).fetchone())
+
+    @staticmethod
+    def _parcel_scope(listing):
+        fields = json.loads(listing)
+        return digest(json.dumps([fields.get(k) for k in ('kind','region','area','latitude','longitude')]))
+
+    def _parcel_listing(self, db, sid):
+        return db.execute("""SELECT s.*,d.verification_review_id,d.verification_status
+            FROM submissions s JOIN direct_listing_metadata d ON d.submission_id=s.id
+            WHERE s.id=?""",(sid,)).fetchone()
+
+    def parcel_link_candidate(self, sid, version):
+        with self.db() as db:
+            row = self._parcel_listing(db, sid)
+            if not row or row['status'] != 'PUBLISHED':
+                raise WorkflowError(404,'NOT_FOUND')
+            if row['version'] != version:
+                raise WorkflowError(409,'STALE_REVIEW')
+            if row['verification_status'] not in ('PLAN_REQUIRED','UNDER_REVIEW'):
+                raise WorkflowError(422,'REVIEW_REQUIRED')
+            fields = json.loads(row['listing'])
+            review = row['verification_review_id']
+            if fields.get('kind') != 'LAND' or not review:
+                raise WorkflowError(422,'LAND_REVIEW_REQUIRED')
+            report = json.loads(db.execute('SELECT report FROM reviews WHERE id=?',(review,)).fetchone()['report'])
+            facts = report.get('parcelPlanFacts',[]) + report.get('propertyFacts',[])
+            def unique_reference(keys):
+                if any(f.get('key') in keys and f.get('status')=='CONFLICT' for f in facts):
+                    raise WorkflowError(422,'PARCEL_REFERENCES_REQUIRED')
+                values = {f['value'].strip().upper() for f in facts if f.get('key') in keys
+                          and f.get('status')!='CONFLICT' and isinstance(f.get('value'),str) and f['value'].strip()}
+                if len(values) != 1:
+                    raise WorkflowError(422,'PARCEL_REFERENCES_REQUIRED')
+                return values.pop()
+            title_ref = unique_reference(('titleReference','registerReference'))
+            plot_ref = unique_reference(('plotReference','soldPlotNumber','registeredPlotNumber'))
+            hashes = {'IDENTITY':set(),'DOCUMENT':set()}
+            for item in db.execute("SELECT * FROM evidence WHERE review_id=? AND kind IN ('IDENTITY','DOCUMENT')",(review,)):
+                sealed = item['sealed']
+                raw = self.cipher.decrypt(sealed[:12],sealed[12:],(review+':'+item['id']).encode())
+                hashes[item['kind']].add(hashlib.sha256(raw).hexdigest())
+            if not hashes['IDENTITY'] or not hashes['DOCUMENT']:
+                raise WorkflowError(422,'REVIEW_REQUIRED')
+            return {'latitude':float(fields['latitude']),'longitude':float(fields['longitude']),
+                    'titleReference':title_ref,'plotReference':plot_ref,
+                    'identityHashes':sorted(hashes['IDENTITY']),'documentHashes':sorted(hashes['DOCUMENT'])}
+
+    def store_parcel_link(self, admin, sid, version, v2_id, candidate):
+        with self.db() as db:
+            db.execute('BEGIN IMMEDIATE')
+            row = self._parcel_listing(db,sid)
+            if not row or row['status'] in ('DRAFT','REJECTED'):
+                raise WorkflowError(404,'NOT_FOUND')
+            if row['version'] != version:
+                raise WorkflowError(409,'STALE_REVIEW')
+            if v2_id is None:
+                db.execute('DELETE FROM pilot_parcel_links WHERE submission_id=?',(sid,))
+            else:
+                if row['status']!='PUBLISHED' or not row['verification_review_id'] or candidate is None:
+                    raise WorkflowError(409,'STALE_REVIEW')
+                try:
+                    db.execute("""INSERT INTO pilot_parcel_links VALUES(?,?,?,?,?,?)
+                       ON CONFLICT(submission_id) DO UPDATE SET v2_listing_id=excluded.v2_listing_id,
+                        review_id=excluded.review_id,scope_fingerprint=excluded.scope_fingerprint,
+                        match_request=excluded.match_request,linked_at=excluded.linked_at""",
+                        (sid,v2_id,row['verification_review_id'],self._parcel_scope(row['listing']),json.dumps(candidate),now()))
+                except sqlite3.IntegrityError as error:
+                    raise WorkflowError(409,'PARCEL_ALREADY_LINKED') from error
+            db.execute('UPDATE submissions SET version=version+1 WHERE id=?',(sid,))
+            db.execute('INSERT INTO audit VALUES(?,?,?,?,?)',(ident(),admin,sid,
+                       'PILOT_PARCEL_LINKED' if v2_id else 'PILOT_PARCEL_UNLINKED',now()))
+
+    def public_parcel_link(self, sid):
+        with self.db() as db:
+            row = self._parcel_listing(db,sid)
+            if not row:
+                public = db.execute("SELECT 1 FROM submissions WHERE id=? AND status='PUBLISHED'",(sid,)).fetchone()
+                return {} if public else None
+            if row['status']!='PUBLISHED':
+                return None
+            link=db.execute('SELECT * FROM pilot_parcel_links WHERE submission_id=?',(sid,)).fetchone()
+            if (not link or link['review_id']!=row['verification_review_id']
+                    or row['verification_status']=='INCOMPLETE'
+                    or link['scope_fingerprint']!=self._parcel_scope(row['listing'])):
+                return {}
+            return {'v2_listing_id':link['v2_listing_id'],'match_request':json.loads(link['match_request'])}
+
+    def atlas_listings(self):
+        features = []
+        for row in self.public_listings():
+            if not (row.get('latitude') and row.get('longitude')):
+                continue
+            features.append({
+                'type':'Feature','id':row['id'],
+                'geometry':{'type':'Point','coordinates':[float(row['longitude']),float(row['latitude'])]},
+                'properties':{'listingId':row['id'],'title':row['title'],'kind':row.get('kind','LAND'),
+                              'locationAccuracy':'APPROXIMATE'},
+            })
+        return {'type':'FeatureCollection','features':features}
+
     def _submission(self,db,row,admin=False):
         out={'id':row['id'],'reviewId':row['review_id'],'customerName':row['customer_name'],'status':row['status'],'note':row['note'],'version':row['version'],'created':row['created'],'updated':row['updated'],**json.loads(row['listing'])}
+        direct=db.execute('SELECT * FROM direct_listing_metadata WHERE submission_id=?',(row['id'],)).fetchone()
+        review=row['review_id']
+        if direct:
+            out.update(direct=True,verificationStatus=direct['verification_status'],ownerPaused=bool(direct['owner_paused']))
+            if admin:
+                linked=db.execute('SELECT v2_listing_id FROM pilot_parcel_links WHERE submission_id=?',(row['id'],)).fetchone()
+                out['v2ListingId']=linked['v2_listing_id'] if linked else None
+            if direct['verification_review_id']:
+                review=direct['verification_review_id']
+                out['reviewId']=review
         if admin:
             out['phone']=db.execute('SELECT phone FROM accounts WHERE id=?',(row['account_id'],)).fetchone()['phone']
-            out['report']=json.loads(db.execute('SELECT report FROM reviews WHERE id=?',(row['review_id'],)).fetchone()['report'])
-            out['evidence']=[dict(x) for x in db.execute('SELECT id,kind,mime FROM evidence WHERE review_id=?',(row['review_id'],))]
+            out['report']=json.loads(db.execute('SELECT report FROM reviews WHERE id=?',(review,)).fetchone()['report'])
+            out['evidence']=[dict(x) for x in db.execute('SELECT id,kind,mime FROM evidence WHERE review_id IN (?,?)',(row['review_id'],review))]
         return out
     def own_submissions(self,user):
-        with self.db() as db:return [self._submission(db,r) for r in db.execute('SELECT * FROM submissions WHERE account_id=? ORDER BY created DESC',(user,)).fetchall()]
+        with self.db() as db:return [self._submission(db,r) for r in db.execute("SELECT * FROM submissions WHERE account_id=? AND status<>'DRAFT' ORDER BY created DESC",(user,)).fetchall()]
     def bootstrap_admin(self,email,password):
         if not isinstance(email,str) or '@' not in email or len(email)>200 or len(password)<14:raise WorkflowError()
         salt=secrets.token_hex(16)
@@ -237,13 +496,15 @@ CREATE INDEX IF NOT EXISTS analysis_cache_inputs ON analysis_cache(account_id,fi
     def admin_submissions(self,admin):
         with self.db() as db:
             if not db.execute('SELECT 1 FROM admins WHERE id=?',(admin,)).fetchone():raise WorkflowError(403,'ADMIN_REQUIRED')
-            return [self._submission(db,r,True) for r in db.execute('SELECT * FROM submissions ORDER BY created DESC').fetchall()]
+            return [self._submission(db,r,True) for r in db.execute("SELECT * FROM submissions WHERE status<>'DRAFT' ORDER BY created DESC").fetchall()]
     def evidence(self,admin,eid):
         with self.db() as db:
             if not db.execute('SELECT 1 FROM admins WHERE id=?',(admin,)).fetchone():raise WorkflowError(403,'ADMIN_REQUIRED')
             row=db.execute('SELECT * FROM evidence WHERE id=?',(eid,)).fetchone()
             if not row:raise WorkflowError(404,'NOT_FOUND')
-            sid=db.execute('SELECT id FROM submissions WHERE review_id=?',(row['review_id'],)).fetchone()
+            sid=db.execute('''SELECT id FROM submissions WHERE review_id=? AND status<>'DRAFT'
+                UNION SELECT submission_id FROM direct_listing_review_history WHERE review_id=?''',
+                (row['review_id'],row['review_id'])).fetchone()
             if not sid:raise WorkflowError(404,'NOT_FOUND')
             db.execute('INSERT INTO audit VALUES(?,?,?,?,?)',(ident(),admin,sid['id'],'EVIDENCE_READ',now()))
             sealed=row['sealed']
@@ -257,10 +518,14 @@ CREATE INDEX IF NOT EXISTS analysis_cache_inputs ON analysis_cache(account_id,fi
             row=db.execute('SELECT * FROM submissions WHERE id=?',(sid,)).fetchone()
             if not row:raise WorkflowError(404,'NOT_FOUND')
             if row['version']!=version:raise WorkflowError(409,'STALE_REVIEW')
+            current=json.loads(row['listing'])
+            if 'kind' in current:values['kind']=current['kind']
             if status=='PAUSED' and row['status']!='PUBLISHED':raise WorkflowError(409,'INVALID_TRANSITION')
             report=json.loads(db.execute('SELECT report FROM reviews WHERE id=?',(row['review_id'],)).fetchone()['report'])
             if status=='PUBLISHED' and report.get('assessment') not in ('ROLE_TEXT_MATCH_ONLY','NAME_ONLY_REVIEW') and len(note.strip())<3:raise WorkflowError(422,'REVIEW_NOTE_REQUIRED')
             db.execute('UPDATE submissions SET status=?,listing=?,note=?,version=version+1,updated=? WHERE id=?',(status,json.dumps(values),note.strip(),now(),sid))
+            if status=='PAUSED':
+                db.execute('UPDATE direct_listing_metadata SET owner_paused=0 WHERE submission_id=?',(sid,))
             db.execute('INSERT INTO audit VALUES(?,?,?,?,?)',(ident(),admin,sid,status,now()))
             return self._submission(db,db.execute('SELECT * FROM submissions WHERE id=?',(sid,)).fetchone(),True)
     def add_photo(self,user,review,data):
@@ -281,7 +546,7 @@ CREATE INDEX IF NOT EXISTS analysis_cache_inputs ON analysis_cache(account_id,fi
             for old in existing:
                 v=old['sealed']
                 if self.cipher.decrypt(v[:12],v[12:],(review+':'+old['id']).encode())==clean:return old['id']
-            if db.execute('SELECT 1 FROM submissions WHERE review_id=?',(review,)).fetchone():raise WorkflowError(409,'ALREADY_SUBMITTED')
+            if db.execute("SELECT 1 FROM submissions WHERE review_id=? AND status<>'DRAFT'",(review,)).fetchone():raise WorkflowError(409,'ALREADY_SUBMITTED')
             if len(existing)>=8:raise WorkflowError(413,'TOO_MANY_PHOTOS')
             eid=ident();nonce=os.urandom(12)
             sealed=nonce+self.cipher.encrypt(nonce,clean,(review+':'+eid).encode())

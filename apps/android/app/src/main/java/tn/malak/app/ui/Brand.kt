@@ -6,14 +6,15 @@ object Brand {
     val Crimson = Color(0xFFB30D2D)
     val TunisianRed = Color(0xFFD21C36)
     val Rose = Color(0xFFFBE9EE)
-    val Pearl = Color(0xFFFFFDFB)
+    val Pearl = Color(0xFFF9F7F4)
     val Glass = Color(0xF2FFFDFB)
-    val Ink = Color(0xFF22242B)
-    val Muted = Color(0xFF50545C)
-    val TrustGreen = Color(0xFF16834A)
+    val Ink = Color(0xFF202733)
+    val Muted = Color(0xFF4E5662)
+    val NeutralContainer = Color(0xFFEDF0F3)
+    val Border = Color(0xFFDDD8D3)
+    val TrustGreen = Color(0xFF147F47)
     val Azure = Color(0xFF0C7189)
     val Sand = Color(0xFFDFD5BA)
 }
 
 const val APP_BRAND_NAME = "Amlak"
-const val DEMO_NOTE = "معاينة تجريبية — دون عقارات حقيقية"

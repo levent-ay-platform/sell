@@ -1,9 +1,26 @@
 import tempfile
 import unittest
+import json
 from pathlib import Path
-from pilot_workflow import PilotStore, WorkflowError
+from unittest.mock import patch
+from pilot_workflow import PilotStore, WorkflowError, digest
 
 class Workflow(unittest.TestCase):
+    def test_enrolled_device_is_required_for_login_and_existing_bearers(self):
+        phone = '+21623456789'
+        legacy = self.store.login(phone, '1234', 'A' * 43)['bearer']
+        enrollment = self.root/'pilot-enrollment.json'
+        enrollment.write_text(json.dumps({phone:digest('B' * 43)}))
+        with patch.dict('os.environ', {'MALAK_PILOT_DEVICE_ENROLLMENT':str(enrollment)}):
+            enrolled = PilotStore(self.root)
+            self.assertIsNone(enrolled.authenticate(legacy))
+            with self.assertRaises(WorkflowError):
+                enrolled.login(phone, '1234', 'A' * 43)
+            with self.assertRaises(WorkflowError):
+                enrolled.login('+21623456782', '1234', 'B' * 43)
+            session = enrolled.login(phone, '1234', 'B' * 43)
+            self.assertEqual(enrolled.authenticate(session['bearer'])['phone'], phone)
+
     def test_owner_date_refinement_is_audited_and_cannot_change_identity_or_closed_review(self):
         user=self.store.authenticate(self.store.login('+21623456789','1234','A'*43)['bearer'])['id']
         fields={'surname':'TEST','givenName':'PERSON','cinFull':'00001122','birthDate':None,'confidencePercent':90}

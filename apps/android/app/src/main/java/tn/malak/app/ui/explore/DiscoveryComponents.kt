@@ -1,9 +1,13 @@
 package tn.malak.app.ui.explore
 
 import android.graphics.Bitmap
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -12,6 +16,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Home
+import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.ExpandLess
 import androidx.compose.material.icons.outlined.Landscape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -19,8 +25,10 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
@@ -36,7 +44,9 @@ internal val PropertyKinds = listOf(
     null to R.string.all,
     "LAND" to R.string.v2_land,
     "APARTMENT" to R.string.v2_apartment,
-    "HOUSE" to R.string.v2_house
+    "HOUSE" to R.string.v2_house,
+    "VILLA" to R.string.v2_villa,
+    "FACTORY" to R.string.v2_factory
 )
 
 internal fun discoveryNumber(amount: String, language: String): String =
@@ -52,7 +62,8 @@ internal fun ListingCard(
 ) {
     Surface(
         modifier.fillMaxWidth().clickable(onClickLabel = s(R.string.v2_overview), onClick = onClick),
-        color = Brand.Pearl, shape = RoundedCornerShape(20.dp), shadowElevation = 4.dp
+        color = Color.White, contentColor = Brand.Ink, shape = RoundedCornerShape(20.dp),
+        border = BorderStroke(1.dp, Brand.Border)
     ) {
         Row(
             Modifier.padding(12.dp),
@@ -61,14 +72,13 @@ internal fun ListingCard(
         ) {
             ListingPhoto(listing, Modifier.size(76.dp).clip(RoundedCornerShape(14.dp)), false)
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Text(
+                    listing.title, style = MaterialTheme.typography.titleMedium,
+                    maxLines = 2, overflow = TextOverflow.Ellipsis, color = Brand.Ink
+                )
                 if (listing.priceTnd.isNotBlank()) Text(
                     s(R.string.v2_amount, discoveryNumber(listing.priceTnd, language)),
-                    color = Brand.Crimson, style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    listing.title, style = MaterialTheme.typography.bodyLarge,
-                    maxLines = 1, overflow = TextOverflow.Ellipsis, color = Brand.Ink
+                    color = Brand.Ink, style = MaterialTheme.typography.titleSmall
                 )
                 val facts = listOfNotNull(listing.region.takeIf(String::isNotBlank), listing.areaM2?.let {
                     s(R.string.v2_area, discoveryNumber(it, language))
@@ -79,6 +89,55 @@ internal fun ListingCard(
     }
 }
 
+@Composable
+internal fun MapListingPreview(
+    listing: DiscoveryListing, language: String, onOpen: () -> Unit, onDismiss: () -> Unit
+) {
+    var drag by remember(listing.id) { mutableFloatStateOf(0f) }
+    val threshold = with(LocalDensity.current) { 36.dp.toPx() }
+    Surface(
+        modifier = Modifier.fillMaxWidth().draggable(
+            state = rememberDraggableState { delta -> drag += delta },
+            orientation = Orientation.Vertical,
+            onDragStarted = { drag = 0f },
+            onDragStopped = {
+                if (drag <= -threshold) onOpen()
+                if (drag >= threshold) onDismiss()
+                drag = 0f
+            }
+        ),
+        shape = RoundedCornerShape(20.dp), color = Color.White, contentColor = Brand.Ink,
+        shadowElevation = 4.dp, border = BorderStroke(1.dp, Brand.Border)
+    ) {
+        Column(Modifier.padding(start = 12.dp, end = 8.dp, bottom = 6.dp)) {
+            Box(Modifier.align(Alignment.CenterHorizontally).padding(top = 7.dp)
+                .size(width = 30.dp, height = 3.dp)
+                .background(Brand.Border, RoundedCornerShape(6.dp)))
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                ListingPhoto(listing, Modifier.size(58.dp).clip(RoundedCornerShape(12.dp)), false)
+                Column(Modifier.weight(1f).padding(vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    if (listing.priceTnd.isNotBlank()) {
+                        Text(s(R.string.v2_amount, discoveryNumber(listing.priceTnd, language)),
+                            color = Brand.Ink, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    }
+                    Text(listing.title, color = Brand.Ink, style = MaterialTheme.typography.bodyMedium,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    val area = listing.areaM2?.let { s(R.string.v2_area, discoveryNumber(it, language)) }
+                    Text(listOfNotNull(listing.region.takeIf(String::isNotBlank), area).joinToString(" · "),
+                        color = Brand.Muted, style = MaterialTheme.typography.bodySmall,
+                        maxLines = 2, overflow = TextOverflow.Ellipsis)
+                }
+                IconButton(onClick = onDismiss) { Icon(Icons.Outlined.Close, s(R.string.close)) }
+            }
+            TextButton(onClick = onOpen, modifier = Modifier.align(Alignment.End)) {
+                Text(s(R.string.v2_overview))
+                Icon(Icons.Outlined.ExpandLess, null, modifier = Modifier.size(18.dp))
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun ListingDetail(
     source: DiscoverySource?,
@@ -107,9 +166,12 @@ internal fun ListingDetail(
     Column(Modifier.fillMaxSize().background(Brand.Pearl)) {
         Row(Modifier.padding(start = 8.dp, top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) {
-                Icon(Icons.AutoMirrored.Outlined.ArrowBack, s(R.string.back))
+                Icon(Icons.AutoMirrored.Outlined.ArrowBack, s(R.string.back), tint = Brand.Ink)
             }
-            Text(item?.region.orEmpty(), style = MaterialTheme.typography.titleMedium)
+            item?.region?.takeIf(String::isNotBlank)?.let {
+                Text(it, color = Brand.Ink, style = MaterialTheme.typography.titleMedium, maxLines = 1,
+                    overflow = TextOverflow.Ellipsis)
+            }
         }
         when {
             loading -> LinearProgressIndicator(Modifier.fillMaxWidth())
@@ -120,26 +182,46 @@ internal fun ListingDetail(
                     Modifier.verticalScroll(rememberScrollState()).padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    ListingPhoto(listing, Modifier.fillMaxWidth().height(220.dp).clip(RoundedCornerShape(20.dp)), true)
-                    Text(listing.title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                    if (listing.priceTnd.isNotBlank()) Text(
-                        s(R.string.v2_amount, discoveryNumber(listing.priceTnd, language)),
-                        color = Brand.Crimson, style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.Bold
-                    )
-                    val kindLabel = PropertyKinds.firstOrNull { it.first == listing.kind }?.second
-                    val facts = listOfNotNull(kindLabel?.let { s(it) }, listing.areaM2?.let {
-                        s(R.string.v2_area, discoveryNumber(it, language))
-                    }, listing.rooms?.let { s(R.string.v2_rooms, it) })
-                    Text(facts.joinToString(" · "), style = MaterialTheme.typography.bodyLarge)
-                    Text(s(when (listing.locationAccuracy) {
-                        "EXACT_CONSENTED" -> R.string.v2_location_exact
-                        "APPROXIMATE" -> R.string.v2_approximate
-                        "AREA_ONLY" -> R.string.v2_area_only
-                        else -> R.string.v2_location_unknown
-                    }), color = Brand.Muted, style = MaterialTheme.typography.bodyMedium)
-                    listing.description?.let { Text(it, style = MaterialTheme.typography.bodyLarge) }
+                    if (listing.photoUrl != null) {
+                        ListingPhoto(listing,
+                            Modifier.fillMaxWidth().aspectRatio(1.72f).clip(RoundedCornerShape(20.dp)), true)
+                    }
+                    Surface(shape = RoundedCornerShape(20.dp), color = Color.White, contentColor = Brand.Ink,
+                        border = BorderStroke(1.dp, Brand.Border)) {
+                        Column(Modifier.fillMaxWidth().padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Text(listing.title, style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.SemiBold)
+                            if (listing.priceTnd.isNotBlank()) {
+                                Text(s(R.string.v2_amount, discoveryNumber(listing.priceTnd, language)),
+                                    style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+                            }
+                            val kindLabel = PropertyKinds.firstOrNull { it.first == listing.kind }?.second
+                            val facts = listOfNotNull(kindLabel?.let { s(it) }, listing.areaM2?.let {
+                                s(R.string.v2_area, discoveryNumber(it, language))
+                            }, listing.rooms?.let { s(R.string.v2_rooms, it) })
+                            FlowRow(
+                                horizontalArrangement = Arrangement.spacedBy(7.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                for (fact in facts) {
+                                    Surface(shape = RoundedCornerShape(8.dp), color = Brand.NeutralContainer,
+                                        contentColor = Brand.Ink) {
+                                        Text(fact, Modifier.padding(horizontal = 9.dp, vertical = 5.dp),
+                                            style = MaterialTheme.typography.labelLarge)
+                                    }
+                                }
+                            }
+                            Text(s(when (listing.locationAccuracy) {
+                                "EXACT_CONSENTED" -> R.string.v2_location_exact
+                                "APPROXIMATE" -> R.string.v2_approximate
+                                "AREA_ONLY" -> R.string.v2_area_only
+                                else -> R.string.v2_location_unknown
+                            }), color = Brand.Muted, style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
                     if (source != null) PublicParcelSection(source, id, language)
+                    listing.description?.let { Text(it, style = MaterialTheme.typography.bodyLarge) }
                 }
             }
         }
@@ -159,12 +241,12 @@ private fun ListingPhoto(listing: DiscoveryListing, modifier: Modifier, large: B
             photo = null
         }
     }
-    Box(modifier.background(Brand.Rose), contentAlignment = Alignment.Center) {
+    Box(modifier.background(Brand.NeutralContainer), contentAlignment = Alignment.Center) {
         val bitmap = photo
         if (bitmap == null) {
             Icon(
                 if (listing.kind == "LAND") Icons.Outlined.Landscape else Icons.Outlined.Home,
-                contentDescription = null, tint = Brand.Crimson, modifier = Modifier.size(if (large) 48.dp else 28.dp)
+                contentDescription = null, tint = Brand.Muted, modifier = Modifier.size(if (large) 48.dp else 28.dp)
             )
         } else {
             Image(bitmap.asImageBitmap(), s(R.string.v2_listing_photo),
@@ -185,24 +267,37 @@ internal fun ResultMessage(message: String, modifier: Modifier = Modifier, retry
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 internal fun DiscoveryFilterSheet(
     filters: DiscoveryFilters, onDismiss: () -> Unit, onApply: (DiscoveryFilters) -> Unit
 ) {
+    var kind by rememberSaveable { mutableStateOf(filters.kind) }
     var minPrice by rememberSaveable { mutableStateOf(filters.minPrice.orEmpty()) }
     var maxPrice by rememberSaveable { mutableStateOf(filters.maxPrice.orEmpty()) }
     var minArea by rememberSaveable { mutableStateOf(filters.minArea.orEmpty()) }
     var maxArea by rememberSaveable { mutableStateOf(filters.maxArea.orEmpty()) }
     var rooms by rememberSaveable { mutableStateOf(filters.minRooms?.toString().orEmpty()) }
     var invalid by rememberSaveable { mutableStateOf(false) }
-    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Brand.Pearl) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        containerColor = Brand.Pearl
+    ) {
         Column(
             Modifier.padding(horizontal = 20.dp).padding(bottom = 22.dp)
                 .verticalScroll(rememberScrollState()).imePadding(),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             Text(s(R.string.v2_filters), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                PropertyKinds.forEach { (option, label) ->
+                    FilterChip(selected = kind == option, onClick = {
+                        kind = option
+                        if (kind in setOf("LAND", "FACTORY")) rooms = ""
+                    }, label = { Text(s(label)) })
+                }
+            }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 FilterInput(R.string.v2_min_price, minPrice, { minPrice = it }, Modifier.weight(1f))
                 FilterInput(R.string.v2_max_price, maxPrice, { maxPrice = it }, Modifier.weight(1f))
@@ -211,15 +306,16 @@ internal fun DiscoveryFilterSheet(
                 FilterInput(R.string.v2_min_area, minArea, { minArea = it }, Modifier.weight(1f))
                 FilterInput(R.string.v2_max_area, maxArea, { maxArea = it }, Modifier.weight(1f))
             }
-            if (filters.kind != "LAND") FilterInput(R.string.v2_min_rooms, rooms, { rooms = it }, Modifier.fillMaxWidth(), false)
+            if (kind !in setOf("LAND", "FACTORY")) FilterInput(R.string.v2_min_rooms, rooms, { rooms = it }, Modifier.fillMaxWidth(), false)
             if (invalid) Text(s(R.string.v2_filter_error), color = MaterialTheme.colorScheme.error,
                 style = MaterialTheme.typography.bodySmall)
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(modifier = Modifier.weight(1f), onClick = {
+                    kind = null
                     minPrice = ""; maxPrice = ""; minArea = ""; maxArea = ""; rooms = ""; invalid = false
                 }) { Text(s(R.string.v2_reset)) }
                 Button(modifier = Modifier.weight(1f), onClick = {
-                    val result = DiscoveryFilters.parse(filters.kind, minPrice, maxPrice, minArea, maxArea, rooms)
+                    val result = DiscoveryFilters.parse(kind, minPrice, maxPrice, minArea, maxArea, rooms)
                     if (result == null) invalid = true else onApply(result)
                 }) { Text(s(R.string.v2_apply)) }
             }

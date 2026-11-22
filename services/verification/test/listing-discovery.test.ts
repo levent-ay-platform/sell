@@ -73,6 +73,11 @@ test('discovery validates filters, rejects invalid detail IDs and rate-limits be
     assert.deepEqual(await result.json(), {listings: [], nextCursor: null});
     assert.equal((await get(`/api/v1/listings/${listingId}`)).status, 404);
     assert.equal(queries.length, 2);
+    for (const kind of ['VILLA','FACTORY']) {
+      assert.equal((await get(`/api/v1/discovery/list?bbox=${bbox}&kind=${kind}`)).status,200);
+      assert.equal((await get(`/api/v1/discovery/clusters?bbox=${bbox}&zoom=12&kind=${kind}`)).status,200);
+    }
+
   } finally {
     server.close();
   }

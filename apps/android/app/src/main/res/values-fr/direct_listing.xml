@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="direct_publish">Publier le bien</string>
+    <string name="direct_preview">Aperçu de l’annonce</string>
+    <string name="direct_preview_note">Le bien apparaîtra à un emplacement approximatif. Vous pourrez le faire vérifier après publication.</string>
+    <string name="direct_missing_fields">Vérifiez le titre, la localité, la surface et le prix, puis placez le repère sur la carte.</string>
+    <string name="direct_publish_failed">Impossible d’enregistrer le bien. Vérifiez la connexion et réessayez.</string>
+    <string name="direct_choose_location">Choisir sur la carte</string>
+    <string name="direct_change_location">Modifier l’emplacement approximatif</string>
+    <string name="direct_pin_hint">Déplacez la carte pour placer le repère près du bien.</string>
+    <string name="direct_confirm_pin">Confirmer cet emplacement</string>
+    <string name="direct_save">Enregistrer les changements</string>
+    <string name="direct_my_properties">Mes biens</string>
+    <string name="direct_verify">Compléter la vérification</string>
+    <string name="direct_verification_incomplete">Vérification incomplète</string>
+    <string name="direct_verification_in_review">Vérification en cours</string>
+    <string name="direct_pause">Mettre en pause</string>
+    <string name="direct_resume">Republier</string>
+    <string name="direct_analysis">Lecture des documents</string>
+    <string name="direct_docs_private">Les documents d’identité et de propriété restent privés pour la vérification.</string>
+    <string name="direct_submit_docs">Envoyer les documents à vérifier</string>
+    <string name="direct_media_public">Les photos du bien deviennent publiques à la publication.</string>
+    <string name="direct_plan_required">Il manque le plan de la parcelle.</string>
+    <string name="direct_land_documents">Préparez votre carte d’identité, votre certificat de propriété et le plan. Vous pouvez réunir le certificat et le plan dans un seul PDF.</string>
+    <string name="direct_home_documents">Préparez votre carte d’identité et votre justificatif de propriété.</string>
+    <string name="direct_heading">Ajouter un bien</string>
+    <string name="direct_property_photos">Photos du bien</string>
+    <string name="direct_step_count">Étape %1$d sur %2$d</string>
+    <string name="direct_stage_kind">Type de bien</string>
+    <string name="direct_stage_location">Photos et emplacement</string>
+    <string name="direct_stage_details">Informations et prix</string>
+    <string name="direct_choose_kind">Choisissez un type de bien.</string>
+    <string name="direct_check_location">Indiquez la localité et placez le repère sur la carte.</string>
+    <string name="direct_next">Continuer</string>
+    <string name="direct_check_details">Indiquez un titre, une surface et un prix valides.</string>
+</resources>

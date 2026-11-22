@@ -1,7 +1,8 @@
-import {createHash} from 'node:crypto';
+import {createHash,timingSafeEqual} from 'node:crypto';
 import type {IncomingMessage,ServerResponse} from 'node:http';
 import type {Authenticator} from './evidence-upload.ts';
 import type {ParcelCandidate,ParcelDecision,ParcelRepository} from './parcel-repository.ts';
+import type {readAtlasContributionLayer} from './atlas-parcel-exchange.ts';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const maxBytes = 16 * 1024 * 1024;
@@ -14,6 +15,8 @@ export type ReviewedParcelRenditionReader =
 export interface ParcelHttpOptions {
   repository:ParcelRepository;
   readRendition?:ReviewedParcelRenditionReader;
+  atlas?:{readerToken:string; read:()=>ReturnType<typeof readAtlasContributionLayer>};
+  pilotParcelToken?:string;
   authenticate:Authenticator['authenticate'];
   allowRequest:(remoteAddress:string)=>Promise<boolean>;
 }
@@ -163,14 +166,90 @@ function validRendition(mime:string,buffer:Buffer):boolean {
   }
 }
 
+function serviceBearer(req:IncomingMessage,expected:string):boolean {
+  const bearer=/^Bearer ([A-Za-z0-9_-]{43})$/.exec(req.headers.authorization??'')?.[1];
+  return bearer!==undefined && timingSafeEqual(Buffer.from(bearer),Buffer.from(expected));
+}
+
+function documentHashes(value:unknown):string[] {
+  if (!Array.isArray(value) || value.length<1 || value.length>8 ||
+      !value.every(hash=>typeof hash==='string' && /^[a-f0-9]{64}$/.test(hash))) throw new BadRequest();
+  return value;
+}
+
+function projectListing(projection:NonNullable<Awaited<ReturnType<ParcelRepository['listing']>>>,
+  listingId:string,includeDocuments:boolean) {
+  return {
+    boundaries:projection.boundaries,
+    verifiedParcel:projection.verifiedParcel===true,
+    documents:includeDocuments ? projection.documents.map(({id,kind,mime})=>({
+      id,kind,mime,url:`/api/v1/listings/${listingId}/documents/${id}`,
+    })) : [],
+  };
+}
+
 const listingRoute=/^\/api\/v1\/listings\/([^/]+)\/(parcel|documents\/([^/]+))$/;
 const candidateRoute=/^\/api\/v1\/(owner|reviewer)\/cases\/([^/]+)\/parcel-geometries$/;
 const decisionRoute=/^\/api\/v1\/(owner|reviewer)\/cases\/([^/]+)\/(parcel-geometries|parcel-documents)\/([^/]+)\/(consent|review)$/;
 
 export function createParcelHttpHandler(options:ParcelHttpOptions) {
   const {repository}=options;
+  const atlas=options.atlas;
+  const pilotToken=options.pilotParcelToken;
+  const tokenPattern=/^[A-Za-z0-9_-]{43}$/;
+  if ((atlas && !tokenPattern.test(atlas.readerToken)) ||
+      (pilotToken!==undefined && (!tokenPattern.test(pilotToken) || pilotToken===atlas?.readerToken)))
+    throw new Error('INVALID_ATLAS_READER_CONFIGURATION');
   return async (req:IncomingMessage,res:ServerResponse):Promise<boolean> => {
     const path=req.url?.split('?',1)[0]??'';
+    if (path==='/api/v1/atlas/contributions' && atlas) {
+      try {
+        if (req.method!=='GET') {
+          res.setHeader('allow','GET');
+          json(res,405,{code:'METHOD_NOT_ALLOWED'});
+        } else if (req.url!==path) json(res,400,{code:'INVALID_ATLAS_QUERY'});
+        else if (await options.allowRequest(req.socket.remoteAddress??'UNKNOWN')!==true)
+          json(res,429,{code:'RATE_LIMITED'});
+        else {
+          if (!serviceBearer(req,atlas.readerToken))
+            json(res,401,{code:'ATLAS_READER_REQUIRED'});
+          else json(res,200,await atlas.read());
+        }
+      } catch {
+        json(res,503,{code:'ATLAS_LAYER_UNAVAILABLE'});
+      }
+      return true;
+    }
+    if (path==='/api/v1/atlas/pilot-parcel' && pilotToken!==undefined) {
+      try {
+        if (req.method!=='POST') {
+          res.setHeader('allow','POST');
+          json(res,405,{code:'METHOD_NOT_ALLOWED'});
+        } else if (req.url!==path) json(res,400,{code:'INVALID_ATLAS_QUERY'});
+        else if (await options.allowRequest(req.socket.remoteAddress??'UNKNOWN')!==true)
+          json(res,429,{code:'RATE_LIMITED'});
+        else if (!serviceBearer(req,pilotToken)) json(res,401,{code:'PILOT_PARCEL_READER_REQUIRED'});
+        else {
+          const data=await readBody(req);
+          exactKeys(data,['listingId','identityHashes','documentHashes','latitude','longitude','titleReference','plotReference']);
+          const listingId=optionalId(data.listingId),titleReference=reference(data.titleReference),plotReference=reference(data.plotReference);
+          if (!listingId || !titleReference || !plotReference ||
+            !validNumber(data.latitude,-85,85) || !validNumber(data.longitude,-180,180)) throw new BadRequest();
+          const projection=await repository.listing(listingId,{
+            identityHashes:documentHashes(data.identityHashes),documentHashes:documentHashes(data.documentHashes),
+            latitude:data.latitude,longitude:data.longitude,titleReference:titleReference.toUpperCase(),
+            plotReference:plotReference.toUpperCase(),
+          });
+          if (!projection?.verifiedParcel || !projection.boundaries.length) json(res,404,{code:'PARCEL_MATCH_UNAVAILABLE'});
+          else json(res,200,projectListing(projection,listingId,options.readRendition!==undefined));
+        }
+      } catch (error) {
+        if (error instanceof LargeRequest) json(res,413,{code:'REQUEST_TOO_LARGE'});
+        else if (error instanceof BadRequest) json(res,400,{code:'INVALID_PARCEL_MATCH'});
+        else json(res,503,{code:'PARCEL_MATCH_UNAVAILABLE'});
+      }
+      return true;
+    }
     const listing=listingRoute.exec(path);
     const candidateRouteMatch=candidateRoute.exec(path);
     const decision=decisionRoute.exec(path);
@@ -221,12 +300,7 @@ export function createParcelHttpHandler(options:ParcelHttpOptions) {
         } else {
           const projection=await repository.listing(listingId);
           if (!projection) json(res,404,miss);
-          else json(res,200,{
-            boundaries:projection.boundaries,
-            documents:options.readRendition ? projection.documents.map(({id,kind,mime})=>({
-              id,kind,mime,url:`/api/v1/listings/${listingId}/documents/${id}`,
-            })) : [],
-          });
+          else json(res,200,projectListing(projection,listingId,options.readRendition!==undefined));
         }
         return true;
       }

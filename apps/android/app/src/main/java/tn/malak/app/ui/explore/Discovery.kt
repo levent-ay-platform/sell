@@ -28,9 +28,9 @@ internal data class DiscoveryBounds(
     }
 }
 
-internal val InitialBounds = DiscoveryBounds(10.53, 36.36, 11.31, 37.15)
-internal val InitialCenter = DiscoveryPoint(36.735, 10.92)
-internal const val InitialZoom = 9.4
+internal val InitialBounds = DiscoveryBounds(7.4, 30.0, 12.0, 37.7)
+internal val InitialCenter = DiscoveryPoint(34.1, 9.7)
+internal const val InitialZoom = 5.25
 
 internal data class DiscoveryFilters(
     val kind: String? = null,
@@ -108,8 +108,12 @@ internal fun discoveryParameters(
 }
 
 internal data class DiscoveryQuery(
-    val bounds: DiscoveryBounds, val placeId: String?, val filters: DiscoveryFilters
-)
+    val bounds: DiscoveryBounds, val placeId: String?, val filters: DiscoveryFilters,
+    val radar: DiscoveryRadar? = null
+) {
+    fun parameters() = discoveryParameters(bounds, placeId, filters) +
+        (radar?.let { mapOf("radar" to it.encode()) } ?: emptyMap())
+}
 
 internal data class DiscoveryListing(
     val id: String,
@@ -125,7 +129,9 @@ internal data class DiscoveryListing(
     val description: String?
 )
 
-internal data class DiscoveryPlace(val id: String, val label: String, val point: DiscoveryPoint)
+internal data class DiscoveryPlace(
+    val id: String, val label: String, val point: DiscoveryPoint, val serverPlaceId: String? = id
+)
 internal data class DiscoveryCluster(val id: String, val point: DiscoveryPoint, val count: Int)
 internal data class DiscoveryPage(val listings: List<DiscoveryListing>, val nextCursor: String? = null)
 internal data class DiscoveryMarkers(

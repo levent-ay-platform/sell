@@ -410,9 +410,10 @@
     <string name="v2_search_area">Rechercher ici</string>
     <string name="v2_list_mode">Liste</string>
     <string name="v2_map_mode">Carte</string>
-    <string name="v2_demo">Démo · annonces fictives</string>
+    <string name="v2_collapse_search">Réduire la recherche</string>
     <string name="v2_empty">Aucun bien ne correspond à cette recherche.</string>
     <string name="v2_find_error">Le chargement des annonces a échoué.</string>
+    <string name="v2_map_loading">Chargement de la carte</string>
     <string name="v2_tiles_error">Carte indisponible. La liste reste accessible.</string>
     <string name="v2_not_configured">La recherche est indisponible dans cette version.</string>
     <string name="v2_places_empty">Aucun lieu correspondant</string>
@@ -430,7 +431,7 @@
     <string name="v2_land">Terrains</string>
     <string name="v2_apartment">Appartements</string>
     <string name="v2_house">Maisons</string>
-    <string name="v2_approximate">Emplacement approximatif</string>
+    <string name="v2_approximate">Repère approximatif sur la carte</string>
     <string name="v2_area_only">Secteur uniquement</string>
     <string name="v2_location_exact">Emplacement partagé</string>
     <string name="v2_location_unknown">Emplacement indisponible</string>

@@ -5,36 +5,35 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import tn.malak.app.R
-
-/**
- * Map-first V2 design primitives.
- * Keep the original crimson / pearl source of truth; do not mix the legacy teal hero here.
- * All buttons route to a real destination. Unimplemented backend features are labeled as such.
- */
-internal object PremiumColors {
-    val Rose = Color(0xFFFBE9EE)
-    val Pearl = Color(0xFFFFFDFB)
-    val Border = Color(0xFFE8E1DF)
-    val Ink = Color(0xFF22242B)
-    val Muted = Brand.Muted
-}
+import tn.malak.app.BuildConfig
 
 private data class PremiumTab(val route: String, val label: Int, val icon: ImageVector)
 
@@ -51,46 +50,56 @@ internal fun PremiumBottomBar(route: String, onRoute: (String) -> Unit) {
     Surface(
         Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp),
         shape = RoundedCornerShape(24.dp),
-        color = PremiumColors.Pearl,
-        shadowElevation = 7.dp,
-        border = BorderStroke(1.dp, PremiumColors.Border)
+        color = Color.White,
+        shadowElevation = 3.dp,
+        border = BorderStroke(1.dp, Brand.Border)
     ) {
         Row(
-            Modifier.fillMaxWidth().heightIn(min = 70.dp).padding(horizontal = 4.dp, vertical = 4.dp),
+            Modifier.fillMaxWidth().selectableGroup().heightIn(min = 70.dp).padding(horizontal = 4.dp, vertical = 4.dp),
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically
         ) {
             tabs.forEach { tab ->
                 val selected = route == tab.route
                 val primary = tab.route == "seller"
+                val action = if (primary) {
+                    Modifier.clickable(role = Role.Button) { onRoute(tab.route) }
+                } else {
+                    Modifier.selectable(selected = selected, role = Role.Tab, onClick = { onRoute(tab.route) })
+                }
                 Column(
                     Modifier.weight(1f).heightIn(min = 62.dp)
-                        .clickable(onClickLabel = s(tab.label)) { onRoute(tab.route) }
+                        .then(action)
                         .padding(horizontal = 2.dp, vertical = 4.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(3.dp)
                 ) {
-                    if (primary) {
-                        Surface(shape = CircleShape, color = Brand.Crimson) {
-                            Icon(
-                                tab.icon, contentDescription = s(tab.label),
-                                modifier = Modifier.padding(7.dp).size(24.dp),
-                                tint = Color.White
-                            )
-                        }
-                    } else {
+                    Box(
+                        Modifier.size(width = 44.dp, height = 32.dp).background(
+                            color = when {
+                                primary -> Brand.Crimson
+                                selected -> Brand.Rose
+                                else -> Color.Transparent
+                            },
+                            shape = CircleShape
+                        ),
+                        contentAlignment = Alignment.Center
+                    ) {
                         Icon(
-                            tab.icon, contentDescription = s(tab.label),
-                            modifier = Modifier.size(24.dp),
-                            tint = if (selected) Brand.Crimson else PremiumColors.Muted
+                            tab.icon, contentDescription = null, modifier = Modifier.size(22.dp),
+                            tint = when {
+                                primary -> Color.White
+                                selected -> Brand.Crimson
+                                else -> Brand.Muted
+                            }
                         )
                     }
                     Text(
                         s(tab.label),
                         fontSize = 12.sp, lineHeight = 17.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-                        color = if (selected || primary) Brand.Crimson else PremiumColors.Muted,
+                        color = if (selected || primary) Brand.Ink else Brand.Muted,
                         maxLines = 2, overflow = TextOverflow.Ellipsis,
-                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        textAlign = TextAlign.Center
                     )
                 }
             }
@@ -106,9 +115,10 @@ internal fun PremiumPageHeading(title: String, onBack: (() -> Unit)? = null) {
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         if (onBack != null) IconButton(onClick = onBack, modifier = Modifier.size(48.dp)) {
-            Icon(Icons.AutoMirrored.Outlined.ArrowBack, s(R.string.back), tint = PremiumColors.Ink)
+            Icon(Icons.AutoMirrored.Outlined.ArrowBack, s(R.string.back), tint = Brand.Ink)
         }
-        Text(title, fontSize = 24.sp, fontWeight = FontWeight.Bold, color = PremiumColors.Ink)
+        Text(title, modifier = Modifier.semantics { heading() },
+            style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, color = Brand.Ink)
     }
 }
 
@@ -124,26 +134,26 @@ private fun PremiumEmpty(
         Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
         shape = RoundedCornerShape(24.dp),
         color = Color.White,
-        border = BorderStroke(1.dp, PremiumColors.Border)
+        border = BorderStroke(1.dp, Brand.Border)
     ) {
         Column(
             Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 32.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            Surface(shape = CircleShape, color = PremiumColors.Rose) {
+            Surface(shape = CircleShape, color = Brand.NeutralContainer) {
                 Icon(
-                    icon, contentDescription = null, tint = Brand.Crimson,
+                    icon, contentDescription = null, tint = Brand.Ink,
                     modifier = Modifier.padding(18.dp).size(32.dp)
                 )
             }
             Text(
-                title, fontSize = 20.sp, fontWeight = FontWeight.SemiBold,
-                color = PremiumColors.Ink
+                title, style = MaterialTheme.typography.titleLarge,
+                color = Brand.Ink, textAlign = TextAlign.Center
             )
             Text(
-                description, fontSize = 14.sp, lineHeight = 21.sp,
-                color = PremiumColors.Muted
+                description, style = MaterialTheme.typography.bodyMedium,
+                color = Brand.Muted
             )
             if (button != null && onButton != null) Button(
                 onClick = onButton,
@@ -159,7 +169,7 @@ private fun PremiumEmpty(
 
 @Composable
 internal fun PremiumAlertsScreen(onExplore: () -> Unit) {
-    Column(Modifier.fillMaxSize().background(PremiumColors.Pearl)) {
+    Column(Modifier.fillMaxSize().background(Brand.Pearl).verticalScroll(rememberScrollState())) {
         PremiumPageHeading(s(R.string.v2_ui_alerts))
         PremiumEmpty(
             Icons.Outlined.NotificationsNone,
@@ -171,14 +181,14 @@ internal fun PremiumAlertsScreen(onExplore: () -> Unit) {
         Text(
             s(R.string.v2_ui_alerts_permission),
             modifier = Modifier.padding(horizontal = 24.dp, vertical = 10.dp),
-            color = PremiumColors.Muted, fontSize = 13.sp, lineHeight = 20.sp
+            color = Brand.Muted, fontSize = 13.sp, lineHeight = 20.sp
         )
     }
 }
 
 @Composable
 internal fun PremiumFavoritesScreen(onExplore: () -> Unit, onBack: () -> Unit) {
-    Column(Modifier.fillMaxSize().background(PremiumColors.Pearl)) {
+    Column(Modifier.fillMaxSize().background(Brand.Pearl).verticalScroll(rememberScrollState())) {
         PremiumPageHeading(s(R.string.favorites_title), onBack)
         PremiumEmpty(
             Icons.Outlined.FavoriteBorder, s(R.string.favorites_empty),
@@ -190,25 +200,26 @@ internal fun PremiumFavoritesScreen(onExplore: () -> Unit, onBack: () -> Unit) {
 @Composable
 private fun PremiumActionRow(icon: ImageVector, title: String, subtitle: String? = null, onClick: () -> Unit) {
     Surface(
-        Modifier.fillMaxWidth().clickable(onClickLabel = title, onClick = onClick),
+        modifier = Modifier.fillMaxWidth(),
+        onClick = onClick,
         color = Color.White, shape = RoundedCornerShape(18.dp),
-        border = BorderStroke(1.dp, PremiumColors.Border)
+        border = BorderStroke(1.dp, Brand.Border)
     ) {
         Row(
             Modifier.fillMaxWidth().heightIn(min = 65.dp).padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Surface(shape = RoundedCornerShape(12.dp), color = PremiumColors.Rose) {
-                Icon(icon, null, Modifier.padding(10.dp).size(22.dp), tint = Brand.Crimson)
+            Surface(shape = RoundedCornerShape(12.dp), color = Brand.NeutralContainer) {
+                Icon(icon, null, Modifier.padding(10.dp).size(22.dp), tint = Brand.Ink)
             }
             Column(Modifier.weight(1f)) {
-                Text(title, color = PremiumColors.Ink, fontWeight = FontWeight.Medium)
+                Text(title, color = Brand.Ink, style = MaterialTheme.typography.titleSmall)
                 if (subtitle != null) Text(
-                    subtitle, color = PremiumColors.Muted, fontSize = 12.sp, lineHeight = 18.sp
+                    subtitle, color = Brand.Muted, fontSize = 12.sp, lineHeight = 18.sp
                 )
             }
-            Icon(Icons.Outlined.ChevronRight, null, tint = PremiumColors.Muted)
+            Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, null, tint = Brand.Muted)
         }
     }
 }
@@ -219,31 +230,34 @@ internal fun PremiumAccountScreen(
     onSettings: () -> Unit, onSeller: () -> Unit, onLogout: (() -> Unit)?
 ) {
     Column(
-        Modifier.fillMaxSize().background(PremiumColors.Pearl)
+        Modifier.fillMaxSize().background(Brand.Pearl)
             .verticalScroll(rememberScrollState()).padding(bottom = 20.dp)
     ) {
         PremiumPageHeading(s(R.string.v2_ui_account))
         Surface(
             Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
             shape = RoundedCornerShape(24.dp), color = Color.White,
-            border = BorderStroke(1.dp, PremiumColors.Border)
+            border = BorderStroke(1.dp, Brand.Border)
         ) {
             Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                    Surface(shape = CircleShape, color = PremiumColors.Rose) {
+                    Surface(shape = CircleShape, color = Brand.NeutralContainer) {
                         Icon(
                             Icons.Outlined.PersonOutline, null, Modifier.padding(13.dp).size(32.dp),
-                            tint = Brand.Crimson
+                            tint = Brand.Ink
                         )
                     }
                     Column(Modifier.weight(1f)) {
                         Text(
                             if (phone.isNullOrBlank()) s(R.string.v2_ui_guest) else s(R.string.v2_ui_member),
-                            fontSize = 20.sp, fontWeight = FontWeight.SemiBold, color = PremiumColors.Ink
+                            fontSize = 20.sp, fontWeight = FontWeight.SemiBold, color = Brand.Ink
                         )
                         Text(
                             phone ?: s(R.string.v2_ui_guest_explain),
-                            color = PremiumColors.Muted, fontSize = 13.sp, lineHeight = 20.sp
+                            color = Brand.Muted,
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                textDirection = if (phone == null) TextDirection.Content else TextDirection.Ltr
+                            )
                         )
                     }
                 }
@@ -258,12 +272,14 @@ internal fun PremiumAccountScreen(
             Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Text(s(R.string.v2_ui_my_space), fontSize = 15.sp, fontWeight = FontWeight.Bold, color = PremiumColors.Ink)
-            PremiumActionRow(Icons.Outlined.HomeWork, s(R.string.v2_my_properties), onClick = onRequests)
+            Text(s(R.string.v2_ui_my_space), Modifier.semantics { heading() },
+                style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = Brand.Ink)
+            PremiumActionRow(Icons.Outlined.HomeWork,
+                s(if (tn.malak.app.BuildConfig.MALAK_DIRECT_PUBLISHING) R.string.direct_my_properties else R.string.v2_my_properties),
+                onClick = onRequests)
             PremiumActionRow(Icons.Outlined.FavoriteBorder, s(R.string.favorites), onClick = onFavorites)
             PremiumActionRow(Icons.Outlined.AddCircleOutline, s(R.string.v2_ui_add), onClick = onSeller)
             Spacer(Modifier.height(4.dp))
-            Text(s(R.string.settings), fontSize = 15.sp, fontWeight = FontWeight.Bold, color = PremiumColors.Ink)
             PremiumActionRow(Icons.Outlined.Settings, s(R.string.settings), onClick = onSettings)
             if (onLogout != null) PremiumActionRow(
                 Icons.Outlined.Logout, s(R.string.v2_ui_sign_out), onClick = onLogout
@@ -276,14 +292,15 @@ internal fun PremiumAccountScreen(
 internal fun PremiumSettingsScreen(
     language: String, onLanguage: (String) -> Unit, onBack: () -> Unit
 ) {
+    val context = LocalContext.current
     Column(
-        Modifier.fillMaxSize().background(PremiumColors.Pearl).verticalScroll(rememberScrollState())
+        Modifier.fillMaxSize().background(Brand.Pearl).verticalScroll(rememberScrollState())
     ) {
         PremiumPageHeading(s(R.string.settings), onBack)
         Surface(
             Modifier.fillMaxWidth().padding(horizontal = 16.dp),
             color = Color.White, shape = RoundedCornerShape(20.dp),
-            border = BorderStroke(1.dp, PremiumColors.Border)
+            border = BorderStroke(1.dp, Brand.Border)
         ) {
             Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -295,13 +312,13 @@ internal fun PremiumSettingsScreen(
                         val selected = language == code
                         Surface(
                             Modifier.weight(1f).clickable { onLanguage(code) }.heightIn(min = 48.dp),
-                            color = if (selected) PremiumColors.Rose else PremiumColors.Pearl,
-                            border = BorderStroke(1.dp, if (selected) Brand.Crimson else PremiumColors.Border),
+                            color = if (selected) Brand.Rose else Brand.Pearl,
+                            border = BorderStroke(1.dp, if (selected) Brand.Crimson else Brand.Border),
                             shape = RoundedCornerShape(14.dp)
                         ) {
                             Box(Modifier.padding(12.dp), contentAlignment = Alignment.Center) {
                                 Text(
-                                    s(label), color = if (selected) Brand.Crimson else PremiumColors.Ink,
+                                    s(label), color = if (selected) Brand.Crimson else Brand.Ink,
                                     fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal
                                 )
                             }
@@ -314,14 +331,31 @@ internal fun PremiumSettingsScreen(
         Surface(
             Modifier.fillMaxWidth().padding(horizontal = 16.dp),
             color = Color.White, shape = RoundedCornerShape(20.dp),
-            border = BorderStroke(1.dp, PremiumColors.Border)
+            border = BorderStroke(1.dp, Brand.Border)
         ) {
             Row(Modifier.padding(18.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Icon(Icons.Outlined.Shield, null, tint = Brand.Crimson)
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(s(R.string.privacy), fontWeight = FontWeight.SemiBold, color = PremiumColors.Ink)
-                    Text(s(R.string.privacy_hint), fontSize = 13.sp, color = PremiumColors.Muted)
-                    Text(s(R.string.v2_ui_alerts_permission), fontSize = 13.sp, color = PremiumColors.Muted)
+                    Text(s(R.string.privacy), fontWeight = FontWeight.SemiBold, color = Brand.Ink)
+                    Text(s(R.string.privacy_hint), fontSize = 13.sp, color = Brand.Muted)
+                    Text(s(R.string.v2_ui_alerts_permission), fontSize = 13.sp, color = Brand.Muted)
+                }
+            }
+        }
+        if (BuildConfig.MALAK_DIRECT_PUBLISHING) {
+            val fingerprint = remember(context) { PilotOcrLogin.deviceFingerprint(context) }
+            Surface(
+                Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+                shape = RoundedCornerShape(20.dp), color = Color.White,
+                border = BorderStroke(1.dp, Brand.Border)
+            ) {
+                Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(s(R.string.pilot_device_id), color = Brand.Ink, style = MaterialTheme.typography.titleMedium)
+                    Text(s(R.string.pilot_device_hint), color = Brand.Muted, style = MaterialTheme.typography.bodySmall)
+                    SelectionContainer {
+                        Text(fingerprint, color = Brand.Ink, style = MaterialTheme.typography.bodySmall.copy(
+                            textDirection = TextDirection.Ltr))
+                    }
                 }
             }
         }

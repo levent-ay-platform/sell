@@ -410,9 +410,10 @@
     <string name="v2_search_area">ابحث في هذه المنطقة</string>
     <string name="v2_list_mode">القائمة</string>
     <string name="v2_map_mode">الخريطة</string>
-    <string name="v2_demo">تجربة · إعلانات افتراضية</string>
+    <string name="v2_collapse_search">طيّ البحث</string>
     <string name="v2_empty">ما فيه عقارات تطابق هالبحث.</string>
     <string name="v2_find_error">تعذّر تحميل العقارات.</string>
+    <string name="v2_map_loading">جارٍ تجهيز الخريطة</string>
     <string name="v2_tiles_error">الخريطة غير متاحة. يمكنك تصفّح القائمة.</string>
     <string name="v2_not_configured">البحث غير متاح في هذه النسخة.</string>
     <string name="v2_places_empty">لم يتم العثور على مكان مطابق</string>
@@ -430,7 +431,7 @@
     <string name="v2_land">أراضٍ</string>
     <string name="v2_apartment">شقق</string>
     <string name="v2_house">منازل</string>
-    <string name="v2_approximate">موقع تقريبي</string>
+    <string name="v2_approximate">دبوس الموقع تقريبي</string>
     <string name="v2_area_only">المنطقة فقط</string>
     <string name="v2_location_exact">موقع مشارَك</string>
     <string name="v2_location_unknown">الموقع غير متاح</string>

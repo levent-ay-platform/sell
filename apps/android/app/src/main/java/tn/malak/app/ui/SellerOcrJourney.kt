@@ -28,6 +28,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -103,6 +108,7 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmission:org.j
     val ownerSession=LocalOwnerEvidenceSession.current
     val authenticatedOwnerSession=LocalAuthenticatedOwnerSession.current
     val pilotOcrSession=LocalPilotOcrSession.current
+    val directVerification=BuildConfig.MALAK_DIRECT_PUBLISHING && resubmission?.optBoolean("direct")==true
     // Pilot is a real server OCR session, but never a verified identity
     // or owner/case/publishing credential.
     val hasOwnerReviewSession=ownerSession!=null||authenticatedOwnerSession!=null
@@ -417,9 +423,11 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmission:org.j
         }catch (_:Exception){R.string.draft_error}
     }
     val stepLabels=listOf(R.string.smart_step_documents,R.string.step_identity,
-        R.string.step_property,R.string.step_summary)
+        if(directVerification)R.string.direct_analysis else R.string.step_property,R.string.step_summary)
     val stepScroll=rememberScrollState()
     val missingFieldsTarget=remember{BringIntoViewRequester()}
+    val certificateTarget = remember { BringIntoViewRequester() }
+    val needsCertificate = step == 0 && files.isEmpty() && !restoredReview
     LaunchedEffect(step) { if(step>3) step=3;stepScroll.scrollTo(0) }
 
     fun startPairComparison(){
@@ -617,18 +625,22 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmission:org.j
                 Icon(Icons.AutoMirrored.Filled.ArrowBack,s(R.string.back),tint=Brand.Crimson)
             }
             Column(Modifier.weight(1f)) {
-                Text(s(R.string.seller_title),fontSize=21.sp,fontWeight=FontWeight.Bold,color=Brand.Ink)
-                Text(s(R.string.draft_label),fontSize=12.sp,color=Brand.Muted)
+                Text(s(if(directVerification)R.string.direct_verify else R.string.seller_title), Modifier.semantics { heading() },
+                    style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = Brand.Ink)
+                Text(s(if(directVerification)R.string.direct_docs_private else R.string.draft_label),
+                    style = MaterialTheme.typography.bodySmall, color = Brand.Muted)
             }
         }
         Row(Modifier.fillMaxWidth().padding(horizontal=17.dp,vertical=8.dp),horizontalArrangement=Arrangement.spacedBy(5.dp)) {
             stepLabels.forEachIndexed { i,label ->
-                Column(Modifier.weight(1f),horizontalAlignment=Alignment.CenterHorizontally,
+                Column(Modifier.weight(1f).semantics(mergeDescendants = true) { selected = i == step },
+                    horizontalAlignment=Alignment.CenterHorizontally,
                     verticalArrangement=Arrangement.spacedBy(7.dp)) {
                     Box(Modifier.fillMaxWidth().height(5.dp).background(
-                        if(i<=step)Brand.Crimson else Color(0xFFE5E8EE),CircleShape))
-                    Text(s(label),fontSize=12.sp,fontWeight=if(i==step)FontWeight.Bold else FontWeight.Normal,
-                        color=if(i==step)Brand.Crimson else Brand.Muted, maxLines=1)
+                        if(i<=step)Brand.Crimson else Brand.Border,CircleShape))
+                    Text(s(label),style=MaterialTheme.typography.labelSmall,
+                        fontWeight=if(i==step)FontWeight.Bold else FontWeight.Medium,
+                        color=if(i==step)Brand.Ink else Brand.Muted, textAlign=TextAlign.Center)
                 }
             }
         }
@@ -637,28 +649,38 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmission:org.j
             when(step) {
                 0 -> {
                     SectionHeading(s(R.string.document_section),s(R.string.document_hint))
-                    Surface(color=Color.White,shape=RoundedCornerShape(21.dp),border=BorderStroke(1.dp,CardBorder)) {
+                    Surface(modifier = Modifier.bringIntoViewRequester(certificateTarget), color=Color.White,
+                        shape=RoundedCornerShape(21.dp),border=BorderStroke(1.dp,CardBorder)) {
                         Column(Modifier.fillMaxWidth().padding(20.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
-                            Icon(Icons.Outlined.Description,null,Modifier.size(34.dp),tint=Brand.Crimson)
-                            Text(s(R.string.file_rules),color=Brand.Muted,fontSize=12.sp)
-                            Text(s(R.string.certificate_page_order_hint),color=Brand.Muted,
-                                fontSize=12.sp,lineHeight=18.sp)
                             OutlinedButton(onClick={replacingPage=null;pickDocuments.launch(
                                 if(files.isEmpty())arrayOf("application/pdf","image/jpeg","image/png","image/tiff")
                                 else arrayOf("image/jpeg","image/png","image/tiff"))},
                                 enabled=pairProgress==null&&(files.isEmpty()||
                                     (files.size<8&&files.none{it.mime=="application/pdf"})),
+                                border = if (needsCertificate) null else ButtonDefaults.outlinedButtonBorder(),
+                                colors = ButtonDefaults.outlinedButtonColors(
+                                    containerColor = if (needsCertificate) Brand.Crimson else Color.Transparent,
+                                    contentColor = if (needsCertificate) Color.White else Brand.Ink
+                                ),
                                 modifier=Modifier.fillMaxWidth().heightIn(min=52.dp),shape=RoundedCornerShape(16.dp)) {
                                 Icon(Icons.Outlined.FolderOpen,null,Modifier.size(21.dp))
                                 Spacer(Modifier.width(8.dp))
                                 Text(s(if(files.isEmpty())R.string.pick_document
                                     else R.string.certificate_add_next_page))
                             }
+                            Text(s(R.string.file_rules),color=Brand.Ink,style=MaterialTheme.typography.labelMedium)
+                            Text(s(R.string.certificate_page_order_hint),color=Brand.Muted,
+                                style=MaterialTheme.typography.bodySmall)
+                            if (pickMessage != 0) {
+                                Text(s(pickMessage), Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = if (pickMessage == R.string.certificate_required)
+                                        MaterialTheme.colorScheme.error else Brand.Muted)
+                            }
                         }
                     }
-                    if(pickMessage!=0) Text(s(pickMessage),color=Brand.Muted,fontSize=12.sp)
                     if(files.isEmpty()) {
-                        PlainNotice(Icons.Outlined.Description,s(if(restoredReview)R.string.owner_saved_analysis else R.string.file_none))
+                        if (restoredReview) PlainNotice(Icons.Outlined.Description, s(R.string.owner_saved_analysis))
                     } else {
                         Text(s(R.string.documents_selected),color=Brand.Ink,fontSize=16.sp,fontWeight=FontWeight.SemiBold)
                         files.toList().forEachIndexed { index,file ->
@@ -698,6 +720,8 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmission:org.j
                             }
                         }
                     }
+                    if(directVerification) PlainNotice(Icons.Outlined.Description,
+                        s(if(resubmission?.optString("kind")=="LAND")R.string.direct_land_documents else R.string.direct_home_documents))
                     PlainNotice(Icons.Outlined.Lock,s(R.string.file_privacy))
                     PlainNotice(Icons.Outlined.Info,s(R.string.smart_document_first_hint))
                 }
@@ -829,6 +853,7 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmission:org.j
                             }
                         }
                     }
+                    if(!directVerification){
                     if(!hasPilotReviewSession||showAnalysisDetails){
                     Surface(shape=RoundedCornerShape(18.dp),color=Color.White,
                         border=BorderStroke(1.dp,CardBorder)){
@@ -1283,10 +1308,15 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmission:org.j
                             description=listingDescription,onDescription={listingDescription=it},
                             region=region,area=area,price=price)
                     }
+                    }
                 }
                 else -> {
                     SectionHeading(s(R.string.summary_title),s(R.string.summary_hint))
-                    if(pilotOcrSession!=null){
+                    if(directVerification){
+                        Text(listingTitle,style=MaterialTheme.typography.titleMedium,color=Brand.Ink)
+                        Text(s(R.string.direct_docs_private),color=Brand.Muted)
+                        if(submissionMessage!=0)PlainNotice(Icons.Outlined.Info,s(submissionMessage))
+                    }else if(pilotOcrSession!=null){
                         OwnerListingPreview(listingTitle,region,area,price,listingDescription,listingPhotos.toList())
                         Text(s(R.string.submission_customer_name)+": "+customerName,color=Brand.Muted)
                         Text(s(R.string.summary_docs)+": "+(pairReport?.certificatePages?:files.size),color=Brand.Muted)
@@ -1333,7 +1363,7 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmission:org.j
                         }
                     }
                     }
-                    OutlinedButton(onClick={step=2;showInvalid=false},
+                    if(!directVerification)OutlinedButton(onClick={step=2;showInvalid=false},
                         modifier=Modifier.fillMaxWidth().heightIn(min=51.dp)) {
                         Icon(Icons.Outlined.Edit,null,Modifier.size(20.dp))
                         Spacer(Modifier.width(8.dp))
@@ -1387,8 +1417,11 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmission:org.j
             }else{
             Button(onClick={
                 focusManager.clearFocus();keyboard?.hide()
-                if(step==0&&files.isEmpty()&&!restoredReview){pickMessage=R.string.certificate_required}
-                else if(step==2&&!validFirst){
+                if(needsCertificate){
+                    pickMessage=R.string.certificate_required
+                    scope.launch { withFrameNanos { }; certificateTarget.bringIntoView() }
+                }
+                else if(step==2&&!validFirst&&!directVerification){
                     showInvalid=true
                     scope.launch{withFrameNanos{};missingFieldsTarget.bringIntoView()}
                 }
@@ -1400,6 +1433,24 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmission:org.j
                     pairError=R.string.submission_scan_required
                 }
                 else if(step<3){step++;showInvalid=false;saveMessage=0}
+                else if(directVerification&&pilotOcrSession!=null&&!sending){
+                    val review=pairReport?.reviewId
+                    val listingId=resubmission?.optString("id").orEmpty()
+                    if(review==null||listingId.isBlank()){submissionMessage=R.string.submission_scan_required}
+                    else {
+                        sending=true
+                        requestJob=scope.launch{
+                            try{
+                                PilotListingClient.call(pilotOcrSession,"/api/pilot/direct-listings/$listingId/verification",
+                                    org.json.JSONObject().put("reviewId",review))
+                                prefs.edit().remove("review_id").remove("review_scope").remove("request_key").apply()
+                                onSubmitted(listingId)
+                            }catch(cancel:CancellationException){throw cancel}
+                            catch(_:Exception){submissionMessage=R.string.submission_failed}
+                            finally{sending=false}
+                        }
+                    }
+                }
                 else if(pilotOcrSession!=null&&!sending&&!submitted){
                     val review=pairReport?.reviewId
                     if(review==null){submissionMessage=R.string.submission_scan_required}
@@ -1435,9 +1486,13 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmission:org.j
                 }
                 else if(pilotOcrSession==null)saveLocalDraft()
             }, enabled=!sending&&!submitted&&!identityDateBusy&&!(step==2&&pilotOcrSession!=null&&pairReport==null), modifier=Modifier.fillMaxWidth().heightIn(min=54.dp),
-                shape=RoundedCornerShape(17.dp),colors=ButtonDefaults.buttonColors(containerColor=Brand.Crimson)) {
+                shape=RoundedCornerShape(17.dp),colors=ButtonDefaults.buttonColors(
+                    containerColor = if (needsCertificate) Brand.NeutralContainer else Brand.Crimson,
+                    contentColor = if (needsCertificate) Brand.Ink else Color.White
+                )) {
                 Text(s(if(step==3&&pilotOcrSession!=null)
-                    if(sending)R.string.submission_sending else if(submitted)R.string.submission_sent else R.string.submission_send
+                    if(sending)R.string.submission_sending else if(submitted)R.string.submission_sent
+                    else if(directVerification)R.string.direct_submit_docs else R.string.submission_send
                     else if(step==3)R.string.save_draft else if(step==1&&hasPilotReviewSession)R.string.owner_confirm_analyze
                     else R.string.continue_label),fontWeight=FontWeight.SemiBold,fontSize=15.sp)
                 Spacer(Modifier.width(9.dp))
@@ -1445,8 +1500,7 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmission:org.j
                     null,Modifier.size(21.dp))
             }
             if(step<3) {
-                Text(s(R.string.smart_autosave_hint),fontSize=12.sp,
-                    color=Brand.Muted,lineHeight=17.sp)
+                Text(s(R.string.smart_autosave_hint), style=MaterialTheme.typography.bodySmall, color=Brand.Muted)
             }
             }
         }
@@ -1457,18 +1511,18 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmission:org.j
 @Composable
 private fun SectionHeading(title:String,description:String) {
     Column(Modifier.fillMaxWidth().padding(vertical=6.dp),verticalArrangement=Arrangement.spacedBy(7.dp)) {
-        Text(title,fontSize=21.sp,fontWeight=FontWeight.Bold,color=Brand.Ink)
-        Text(description,color=Brand.Muted,fontSize=13.sp,lineHeight=21.sp)
+        Text(title, Modifier.semantics { heading() }, style=MaterialTheme.typography.titleLarge,color=Brand.Ink)
+        Text(description,color=Brand.Muted,style=MaterialTheme.typography.bodyMedium)
     }
 }
 
 @Composable
 private fun PlainNotice(icon:androidx.compose.ui.graphics.vector.ImageVector,message:String) {
-    Surface(shape=RoundedCornerShape(16.dp),color=Color(0xFFF2F5F7)) {
+    Surface(shape=RoundedCornerShape(16.dp),color=Brand.NeutralContainer,contentColor=Brand.Ink) {
         Row(Modifier.fillMaxWidth().padding(13.dp),horizontalArrangement=Arrangement.spacedBy(10.dp),
             verticalAlignment=Alignment.CenterVertically) {
-            Icon(icon,null,Modifier.size(22.dp),tint=Color(0xFF26718B))
-            Text(message,Modifier.weight(1f),fontSize=12.sp,color=Brand.Ink,lineHeight=19.sp)
+            Icon(icon,null,Modifier.size(22.dp),tint=Brand.Muted)
+            Text(message,Modifier.weight(1f),style=MaterialTheme.typography.bodySmall)
         }
     }
 }

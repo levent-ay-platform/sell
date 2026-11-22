@@ -50,10 +50,77 @@ internal fun SmartListingMediaStep(
     latitude:String,onLatitude:(String)->Unit,
     longitude:String,onLongitude:(String)->Unit,
     description:String,onDescription:(String)->Unit,
-    region:String,area:String,price:String
+    region:String,area:String,price:String,
+    directPublishing:Boolean=false
 ) {
     val context=LocalContext.current
     var message by remember {mutableIntStateOf(0)}
+    val point=SmartListingAssist.coordinates(latitude,longitude)
+    val descriptionPrefix=s(R.string.smart_land_title_prefix)
+    val descriptionUnit=s(R.string.smart_area_unit)
+    val descriptionPrice=s(R.string.smart_description_price_prefix)
+    Surface(color=Color.White,shape=RoundedCornerShape(20.dp)) {
+        Column(Modifier.fillMaxWidth().padding(16.dp),
+            verticalArrangement=Arrangement.spacedBy(12.dp)){
+            ListingPhotoEditor(photos, directPublishing)
+            HorizontalDivider()
+            if(!directPublishing) {
+                Text(s(R.string.smart_location_heading),
+                    fontWeight=FontWeight.Bold,color=Brand.Ink)
+                Text(s(R.string.smart_location_hint),
+                    fontSize=12.sp,color=Brand.Muted)
+                Row(horizontalArrangement=Arrangement.spacedBy(10.dp)){
+                    OutlinedTextField(latitude,{onLatitude(it.take(14))},
+                        label={Text(s(R.string.smart_latitude))},
+                        modifier=Modifier.weight(1f),singleLine=true,
+                        keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Decimal))
+                    OutlinedTextField(longitude,{onLongitude(it.take(14))},
+                        label={Text(s(R.string.smart_longitude))},
+                        modifier=Modifier.weight(1f),singleLine=true,
+                        keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Decimal))
+                }
+                OutlinedButton(onClick={
+                    val geo=point ?: return@OutlinedButton
+                    try {
+                        val uri=Uri.parse("geo:${geo.first},${geo.second}?q=${geo.first},${geo.second}")
+                        val intent=Intent(Intent.ACTION_VIEW,uri)
+                        if(intent.resolveActivity(context.packageManager)==null)
+                            message=R.string.smart_location_unavailable
+                        else context.startActivity(intent)
+                    }catch(_:Exception){message=R.string.smart_location_unavailable}
+                },enabled=point!=null,modifier=Modifier.fillMaxWidth()) {
+                    Icon(Icons.Outlined.LocationOn,null)
+                    Spacer(Modifier.width(7.dp))
+                    Text(s(R.string.smart_location_preview))
+                }
+                if (message != 0) Text(s(message), style = MaterialTheme.typography.bodySmall, color = Brand.Muted)
+                HorizontalDivider()
+            }
+            Text(s(R.string.smart_description_heading),
+                fontWeight=FontWeight.Bold,color=Brand.Ink)
+            if(!directPublishing) OutlinedButton(onClick={
+                SmartListingAssist.descriptionSuggestion(region,area,price,
+                    descriptionPrefix,descriptionUnit,descriptionPrice)?.let(onDescription)
+            },modifier=Modifier.fillMaxWidth()){
+                Text(s(R.string.smart_description_generate))
+            }
+            OutlinedTextField(description,{onDescription(it.take(650))},
+                modifier=Modifier.fillMaxWidth(),minLines=3,maxLines=6,
+                label={Text(s(R.string.smart_description_heading))})
+            Text(s(if(!directPublishing)R.string.smart_media_private_notice else R.string.direct_media_public),fontSize=12.sp,
+                color=Brand.Muted,lineHeight=18.sp)
+        }
+    }
+}
+
+@Composable
+internal fun ListingPhotoEditor(
+    photos: SnapshotStateList<DraftListingPhoto>,
+    directPublishing: Boolean,
+    persistAccess: Boolean = false
+) {
+    val context = LocalContext.current
+    var message by remember { mutableIntStateOf(0) }
     val picker=rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) {chosen->
         var refused=false
         for(uri in chosen) {
@@ -76,90 +143,43 @@ internal fun SmartListingMediaStep(
                 }
                 val mime=context.contentResolver.getType(uri)
                 if(size !in 20..MAX_PHOTO_BYTES||mime !in PHOTO_MIMES)refused=true
-                else photos.add(DraftListingPhoto(uri,name.ifBlank{"Photo"},size))
+                else {
+                    if (persistAccess) context.contentResolver.takePersistableUriPermission(
+                        uri, Intent.FLAG_GRANT_READ_URI_PERMISSION
+                    )
+                    photos.add(DraftListingPhoto(uri,name.ifBlank{"Photo"},size))
+                }
             }catch(_:Exception){refused=true}
         }
         message=if(refused)R.string.smart_media_rejected else R.string.smart_media_selected
     }
-    val point=SmartListingAssist.coordinates(latitude,longitude)
-    val descriptionPrefix=s(R.string.smart_land_title_prefix)
-    val descriptionUnit=s(R.string.smart_area_unit)
-    val descriptionPrice=s(R.string.smart_description_price_prefix)
-    Surface(color=Color.White,shape=RoundedCornerShape(20.dp)) {
-        Column(Modifier.fillMaxWidth().padding(16.dp),
-            verticalArrangement=Arrangement.spacedBy(12.dp)){
-            Text(s(R.string.smart_media_heading),fontSize=17.sp,
-                fontWeight=FontWeight.Bold,color=Brand.Ink)
-            Text(s(R.string.smart_media_hint),fontSize=12.sp,
-                color=Brand.Muted)
-            OutlinedButton(onClick={picker.launch(arrayOf("image/jpeg","image/png","image/webp"))},
-                enabled=photos.size<MAX_PHOTOS,modifier=Modifier.fillMaxWidth()
-                    .heightIn(min=52.dp)) {
-                Icon(Icons.Outlined.AddPhotoAlternate,null)
-                Spacer(Modifier.width(8.dp))
-                Text(s(R.string.smart_media_pick)+" (${photos.size}/$MAX_PHOTOS)")
+    Text(s(if(directPublishing)R.string.direct_property_photos else R.string.smart_media_heading),fontSize=17.sp,
+        fontWeight=FontWeight.Bold,color=Brand.Ink)
+    Text(s(R.string.smart_media_hint),fontSize=12.sp,
+        color=Brand.Muted)
+    OutlinedButton(onClick={picker.launch(arrayOf("image/jpeg","image/png","image/webp"))},
+        enabled=photos.size<MAX_PHOTOS,modifier=Modifier.fillMaxWidth()
+            .heightIn(min=52.dp)) {
+        Icon(Icons.Outlined.AddPhotoAlternate,null)
+        Spacer(Modifier.width(8.dp))
+        Text(s(R.string.smart_media_pick)+" (${photos.size}/$MAX_PHOTOS)")
+    }
+    if(message!=0)Text(s(message),fontSize=12.sp,
+        color=Brand.Muted)
+    photos.toList().forEachIndexed{index,photo->
+        Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically,
+            horizontalArrangement=Arrangement.spacedBy(10.dp)){
+            DraftPhotoThumbnail(photo.uri)
+            Column(Modifier.weight(1f)){
+                Text(photo.name,maxLines=1,color=Brand.Ink,
+                    fontSize=12.sp,fontWeight=FontWeight.Medium)
+                Text("${photo.length/1024} KB",fontSize=12.sp,
+                    color=Brand.Muted)
             }
-            if(message!=0)Text(s(message),fontSize=12.sp,
-                color=Brand.Muted)
-            photos.toList().forEachIndexed{index,photo->
-                Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically,
-                    horizontalArrangement=Arrangement.spacedBy(10.dp)){
-                    DraftPhotoThumbnail(photo.uri)
-                    Column(Modifier.weight(1f)){
-                        Text(photo.name,maxLines=1,color=Brand.Ink,
-                            fontSize=12.sp,fontWeight=FontWeight.Medium)
-                        Text("${photo.length/1024} KB",fontSize=12.sp,
-                            color=Brand.Muted)
-                    }
-                    IconButton(onClick={photos.removeAt(index)}) {
-                        Icon(Icons.Outlined.Close,s(R.string.smart_media_remove),
-                            tint=Brand.Crimson)
-                    }
-                }
+            IconButton(onClick={photos.removeAt(index)}) {
+                Icon(Icons.Outlined.Close,s(R.string.smart_media_remove),
+                    tint=Brand.Crimson)
             }
-            HorizontalDivider()
-            Text(s(R.string.smart_location_heading),
-                fontWeight=FontWeight.Bold,color=Brand.Ink)
-            Text(s(R.string.smart_location_hint),
-                fontSize=12.sp,color=Brand.Muted)
-            Row(horizontalArrangement=Arrangement.spacedBy(10.dp)){
-                OutlinedTextField(latitude,{onLatitude(it.take(14))},
-                    label={Text(s(R.string.smart_latitude))},
-                    modifier=Modifier.weight(1f),singleLine=true,
-                    keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Decimal))
-                OutlinedTextField(longitude,{onLongitude(it.take(14))},
-                    label={Text(s(R.string.smart_longitude))},
-                    modifier=Modifier.weight(1f),singleLine=true,
-                    keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Decimal))
-            }
-            OutlinedButton(onClick={
-                val geo=point ?: return@OutlinedButton
-                try {
-                    val uri=Uri.parse("geo:${geo.first},${geo.second}?q=${geo.first},${geo.second}")
-                    val intent=Intent(Intent.ACTION_VIEW,uri)
-                    if(intent.resolveActivity(context.packageManager)==null)
-                        message=R.string.smart_location_unavailable
-                    else context.startActivity(intent)
-                }catch(_:Exception){message=R.string.smart_location_unavailable}
-            },enabled=point!=null,modifier=Modifier.fillMaxWidth()) {
-                Icon(Icons.Outlined.LocationOn,null)
-                Spacer(Modifier.width(7.dp))
-                Text(s(R.string.smart_location_preview))
-            }
-            HorizontalDivider()
-            Text(s(R.string.smart_description_heading),
-                fontWeight=FontWeight.Bold,color=Brand.Ink)
-            OutlinedButton(onClick={
-                SmartListingAssist.descriptionSuggestion(region,area,price,
-                    descriptionPrefix,descriptionUnit,descriptionPrice)?.let(onDescription)
-            },modifier=Modifier.fillMaxWidth()){
-                Text(s(R.string.smart_description_generate))
-            }
-            OutlinedTextField(description,{onDescription(it.take(650))},
-                modifier=Modifier.fillMaxWidth(),minLines=3,maxLines=6,
-                label={Text(s(R.string.smart_description_heading))})
-            Text(s(R.string.smart_media_private_notice),fontSize=12.sp,
-                color=Brand.Muted,lineHeight=18.sp)
         }
     }
 }

@@ -410,9 +410,10 @@
     <string name="v2_search_area">Search this area</string>
     <string name="v2_list_mode">List</string>
     <string name="v2_map_mode">Map</string>
-    <string name="v2_demo">Demo · sample listings</string>
+    <string name="v2_collapse_search">Collapse search</string>
     <string name="v2_empty">No listings match this search.</string>
     <string name="v2_find_error">Listings could not load.</string>
+    <string name="v2_map_loading">Loading the map</string>
     <string name="v2_tiles_error">Map unavailable. You can still browse the list.</string>
     <string name="v2_not_configured">Discovery is unavailable in this build.</string>
     <string name="v2_places_empty">No matching places</string>
@@ -430,7 +431,7 @@
     <string name="v2_land">Land</string>
     <string name="v2_apartment">Apartments</string>
     <string name="v2_house">Houses</string>
-    <string name="v2_approximate">Approximate location</string>
+    <string name="v2_approximate">Approximate map pin</string>
     <string name="v2_area_only">Area only</string>
     <string name="v2_location_exact">Location shared</string>
     <string name="v2_location_unknown">Location unavailable</string>

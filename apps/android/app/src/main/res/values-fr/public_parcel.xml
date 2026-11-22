@@ -24,4 +24,5 @@
     <string name="parcel_pixel_measurements">Mesures du scan (pixels)</string>
     <string name="parcel_zoom_in">Agrandir</string>
     <string name="parcel_zoom_out">Réduire</string>
+    <string name="parcel_verified_badge">Bien vérifié</string>
 </resources>

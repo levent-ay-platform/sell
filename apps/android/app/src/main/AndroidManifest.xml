@@ -4,9 +4,10 @@
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
     <application android:allowBackup="false" android:label="@string/app_name" android:icon="@drawable/amlak_launcher_icon" android:roundIcon="@drawable/amlak_launcher_icon"
-        android:usesCleartextTraffic="false" android:theme="@android:style/Theme.Material.Light.NoActionBar"
+        android:usesCleartextTraffic="false" android:theme="@style/Theme.Amlak"
         android:supportsRtl="true">
-        <activity android:name=".MainActivity" android:screenOrientation="unspecified" android:exported="true">
+        <activity android:name=".MainActivity" android:theme="@style/Theme.Amlak.Starting"
+            android:screenOrientation="unspecified" android:exported="true">
             <intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter>
         </activity>
         <provider android:name="tn.malak.app.ui.PrivateCaptureProvider"

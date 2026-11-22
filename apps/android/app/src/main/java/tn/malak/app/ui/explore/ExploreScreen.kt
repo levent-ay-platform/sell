@@ -1,19 +1,24 @@
 package tn.malak.app.ui.explore
 
+import android.animation.ValueAnimator
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.CenterFocusStrong
+import androidx.compose.material.icons.outlined.Factory
+import androidx.compose.material.icons.outlined.Radar
 import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.ExpandLess
+import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.Layers
 import androidx.compose.material.icons.outlined.NotificationsNone
 import androidx.compose.material.icons.outlined.PersonOutline
@@ -27,25 +32,41 @@ import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.hideFromAccessibility
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import tn.malak.app.BuildConfig
 import tn.malak.app.R
 import tn.malak.app.ui.APP_BRAND_NAME
 import tn.malak.app.ui.Brand
 import tn.malak.app.ui.s
 import kotlin.math.abs
+import kotlin.math.log2
 
-private const val DemoStyle = "https://tiles.openfreemap.org/styles/positron"
+internal val DiscoveryStyleUrl = BuildConfig.MALAK_MAP_STYLE_URL
+    .ifEmpty { "https://tiles.openfreemap.org/styles/liberty" }
+
+private val discoveryGlobeStyle = BuildConfig.MALAK_MAP_STYLE_URL.ifEmpty { "asset://maps/liberty-globe.json" }
 
 private val FilterSaver = listSaver<DiscoveryFilters, String>(
     save = { listOf(it.kind, it.minPrice, it.maxPrice, it.minArea, it.maxArea, it.minRooms?.toString())
@@ -56,29 +77,52 @@ private val FilterSaver = listSaver<DiscoveryFilters, String>(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun ExploreScreen(
-    language: String, onSeller: () -> Unit, preferredMapMode: Boolean = true,
+    language: String, preferredMapMode: Boolean = true,
+    launchShowing: Boolean = false,
     onViewModeChanged: (Boolean) -> Unit = {},
-    onAlerts: () -> Unit = {}, onAccount: () -> Unit = {}
+    onAlerts: () -> Unit = {}, onAccount: () -> Unit = {},
+    sourceOverride: DiscoverySource? = null
 ) {
-    val context = LocalContext.current.applicationContext
     val endpoint = BuildConfig.MALAK_DISCOVERY_BASE_URL
-    val demo = BuildConfig.DEBUG && endpoint.isEmpty()
-    val source = remember(endpoint, demo, language) {
+    val source = sourceOverride ?: remember(endpoint, language) {
         when {
-            demo -> DiscoveryDemoSource(language, context)
+            BuildConfig.MALAK_DIRECT_PUBLISHING && BuildConfig.MALAK_PRIVATE_SERVICE_URL.isNotBlank() ->
+                PilotPublicDiscoverySource(BuildConfig.MALAK_PRIVATE_SERVICE_URL)
             endpoint.isNotBlank() -> HttpDiscoverySource(endpoint, language)
             else -> null
         }
     }
-    val styleUrl = BuildConfig.MALAK_MAP_STYLE_URL.ifEmpty { if (demo) DemoStyle else "" }
-    var mapMode by rememberSaveable { mutableStateOf(preferredMapMode && styleUrl.isNotEmpty()) }
-    LaunchedEffect(preferredMapMode) { mapMode = preferredMapMode && styleUrl.isNotEmpty() }
-    var mapIssue by rememberSaveable { mutableStateOf(false) }
+    var mapMode by rememberSaveable { mutableStateOf(preferredMapMode) }
+    LaunchedEffect(preferredMapMode) { mapMode = preferredMapMode }
+    val globeEnabled = discoveryGlobeStyle.startsWith("asset://")
+    var openingGlobe by rememberSaveable {
+        mutableStateOf(preferredMapMode && globeEnabled && ValueAnimator.areAnimatorsEnabled())
+    }
+    var flyToTunisia by remember { mutableStateOf(false) }
+    var globeVisible by remember { mutableStateOf(false) }
+    var mapRendered by remember { mutableStateOf(false) }
     var mapReady by remember { mutableStateOf(false) }
+    LaunchedEffect(mapMode) {
+        if (!mapMode) {
+            openingGlobe = false
+            flyToTunisia = false
+            mapRendered = false
+            mapReady = false
+        }
+    }
+    var mapIssue by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(launchShowing, mapReady, openingGlobe) {
+        if (!launchShowing && mapReady && openingGlobe) {
+            withTimeoutOrNull(2_200L) { snapshotFlow { mapRendered }.first { it } }
+            delay(650)
+            openingGlobe = false
+            flyToTunisia = true
+        }
+    }
     // A map with an unresponsive style endpoint must not strand the user on a blank surface.
     // List discovery uses the same authorized source and remains available offline/when tiles fail.
-    LaunchedEffect(mapMode, mapReady, styleUrl) {
-        if (mapMode && !mapReady && styleUrl.isNotBlank()) {
+    LaunchedEffect(mapMode, mapReady) {
+        if (mapMode && !mapReady) {
             delay(18_000L)
             if (mapMode && !mapReady) {
                 mapIssue = true
@@ -92,6 +136,7 @@ internal fun ExploreScreen(
     var zoom by rememberSaveable { mutableDoubleStateOf(InitialZoom) }
     var committedZoom by rememberSaveable { mutableIntStateOf(InitialZoom.toInt()) }
     var visible by rememberSaveable { mutableStateOf(InitialBounds.encode()) }
+    var viewportSearchable by remember { mutableStateOf(true) }
     var committed by rememberSaveable { mutableStateOf(InitialBounds.encode()) }
     var areaMoved by rememberSaveable { mutableStateOf(false) }
     var searchText by rememberSaveable { mutableStateOf("") }
@@ -104,19 +149,96 @@ internal fun ExploreScreen(
     var recenterSearch by remember { mutableStateOf(false) }
     var showFilters by rememberSaveable { mutableStateOf(false) }
     var showLayers by rememberSaveable { mutableStateOf(false) }
+    var radarEditing by rememberSaveable { mutableStateOf(false) }
+    var radarRadius by rememberSaveable { mutableIntStateOf(5) }
+    var radarSelection by rememberSaveable { mutableStateOf("") }
+    val activeRadar = DiscoveryRadar.decode(radarSelection)
+    val radarPreview = if (radarEditing) DiscoveryRadar.decode("$centerLatitude,$centerLongitude,$radarRadius") else null
+    var showSalesLayer by rememberSaveable { mutableStateOf(true) }
+    var showAtlasLayer by rememberSaveable { mutableStateOf(true) }
+    var showAdministrativeLayer by rememberSaveable { mutableStateOf(false) }
+    var showIndustrialLayer by rememberSaveable { mutableStateOf(false) }
+    var industrialSheet by rememberSaveable { mutableStateOf<String?>(null) }
+    var industrialZoneId by rememberSaveable { mutableStateOf<String?>(null) }
+    var industrialLotId by rememberSaveable { mutableStateOf<String?>(null) }
+    var fitIndustrialZone by remember { mutableStateOf<String?>(null) }
+    var industrialLoadFailed by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    val industrialCatalog by produceState<IndustrialCatalog?>(null, context, showIndustrialLayer) {
+        if (showIndustrialLayer && value == null) {
+            industrialLoadFailed = false
+            value = withContext(Dispatchers.IO) {
+                runCatching { loadIndustrialCatalog(context) }.getOrNull()
+            }
+            industrialLoadFailed = value == null
+        }
+    }
+    val industrialZone = industrialCatalog?.zones?.firstOrNull { it.id == industrialZoneId }
+    var industrialPlan by remember(industrialZone) { mutableStateOf<IndustrialPlan?>(null) }
+    var industrialPlanFailed by remember(industrialZone) { mutableStateOf(false) }
+    LaunchedEffect(industrialZone, showIndustrialLayer) {
+        if (industrialZone != null && showIndustrialLayer) {
+            industrialPlan = withContext(Dispatchers.IO) {
+                runCatching { loadIndustrialPlan(context, industrialZone) }.getOrNull()
+            }
+            industrialPlanFailed = industrialPlan == null
+        }
+    }
+    LaunchedEffect(industrialPlan, fitIndustrialZone) {
+        val plan = industrialPlan ?: return@LaunchedEffect
+        if (plan.zone.id == fitIndustrialZone) {
+            val (point, scale) = plan.camera(InitialCenter)
+            jump = CameraJump(point, scale, ++jumpSerial)
+            fitIndustrialZone = null
+        }
+    }
+    val industrialZoneFeatures = remember(industrialCatalog, language) { industrialCatalog?.mapFeatures(language) }
+    val industrialLot = industrialPlan?.lots?.firstOrNull { it.id == industrialLotId }
+    val chooseIndustrialZone: (String) -> Unit = { zoneId ->
+        selectedId = null
+        radarEditing = false
+        openingGlobe = false
+        flyToTunisia = false
+        recenterSearch = false
+        industrialZoneId = zoneId
+        industrialLotId = null
+        fitIndustrialZone = zoneId
+        industrialSheet = null
+    }
+    val noMarkers = remember { DiscoveryMarkers(emptyList()) }
+    var selectedAtlasBoundaries by remember(source, selectedId, showAtlasLayer, mapMode) {
+        mutableStateOf(emptyList<PublicParcelBoundary>())
+    }
+    LaunchedEffect(source, selectedId, showAtlasLayer, mapMode) {
+        val listingId = selectedId
+        if (source != null && listingId != null && showAtlasLayer && mapMode) {
+            try {
+                selectedAtlasBoundaries = source.parcel(listingId).boundaries.filter { it.kind != BoundaryKind.Estimate }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                selectedAtlasBoundaries = emptyList()
+            }
+        }
+    }
     var refresh by remember { mutableIntStateOf(0) }
-    val query = DiscoveryQuery(DiscoveryBounds.decode(committed) ?: InitialBounds, placeId, filters)
+    val query = DiscoveryQuery(activeRadar?.bounds ?: DiscoveryBounds.decode(committed) ?: InitialBounds,
+        placeId.takeUnless { activeRadar != null }, filters, activeRadar)
     var page by remember(query, source, refresh) { mutableStateOf(DiscoveryPage(emptyList())) }
     var listFailed by remember(query, source, refresh) { mutableStateOf(false) }
     var listLoading by remember(query, source, refresh) { mutableStateOf(source != null) }
     var loadingMore by remember(query, source, refresh) { mutableStateOf(false) }
     var pageFailed by remember(query, source, refresh) { mutableStateOf(false) }
-    val markerScope = remember(query, source, refresh, committedZoom, mapMode) {
+    val markerScope = remember(query, source, refresh, committedZoom, mapMode, showSalesLayer) {
         mutableStateOf(DiscoveryMarkers(emptyList()))
     }
-    var markerFailed by remember(query, source, refresh, committedZoom, mapMode) { mutableStateOf(false) }
+    var markerFailed by remember(query, source, refresh, committedZoom, mapMode, showSalesLayer) {
+        mutableStateOf(false)
+    }
     val focusManager = LocalFocusManager.current
     val scope = rememberCoroutineScope()
+    val resultScroll = rememberLazyListState()
+    LaunchedEffect(query) { resultScroll.requestScrollToItem(0) }
 
     LaunchedEffect(query, source, refresh) {
         if (source == null) return@LaunchedEffect
@@ -130,8 +252,8 @@ internal fun ExploreScreen(
             listLoading = false
         }
     }
-    LaunchedEffect(query, source, refresh, committedZoom, mapMode) {
-        if (source == null || !mapMode) return@LaunchedEffect
+    LaunchedEffect(query, source, refresh, committedZoom, mapMode, showSalesLayer) {
+        if (source == null || !mapMode || !showSalesLayer) return@LaunchedEffect
         try {
             markerScope.value = source.markers(query, committedZoom)
         } catch (cancelled: CancellationException) {
@@ -142,43 +264,64 @@ internal fun ExploreScreen(
     }
 
     val opened = detailId
-    BackHandler(enabled = opened != null || selectedId != null) {
-        if (detailId != null) detailId = null else selectedId = null
-    }
-    if (opened != null) {
-        ListingDetail(source, opened, language) { detailId = null }
-        return
-    }
 
     val selected = selectedId?.let { id ->
         markerScope.value.listings.firstOrNull { it.id == id }
             ?: page.listings.firstOrNull { it.id == id }
     }
 
+    val covered = if (opened == null) Modifier else Modifier.clearAndSetSemantics { hideFromAccessibility() }
     Box(Modifier.fillMaxSize().background(Brand.Pearl)) {
-        if (mapMode && styleUrl.isNotBlank()) {
-            val mapDescription = s(R.string.v2_ready_map)
+        if (mapMode) {
+            val mapDescription = s(if (globeVisible) R.string.v2_globe_view else R.string.v2_ready_map)
             DiscoveryMap(
-                styleUrl = styleUrl,
+                styleUrl = discoveryGlobeStyle,
                 initial = DiscoveryCamera(
                     DiscoveryPoint(centerLatitude, centerLongitude), zoom,
                     DiscoveryBounds.decode(visible) ?: InitialBounds
                 ),
                 jump = jump,
-                markers = markerScope.value,
+                markers = if (showSalesLayer) markerScope.value else noMarkers,
+                boundaries = selectedAtlasBoundaries,
+                administrativeBoundariesVisible = showAdministrativeLayer,
+                industrialZones = industrialZoneFeatures.takeIf { showIndustrialLayer },
+                industrialLots = industrialPlan?.shapes.takeIf { showIndustrialLayer },
+                industrialLotId = industrialLotId,
+                radar = if (radarEditing) radarPreview else activeRadar,
+                onIndustrialZone = chooseIndustrialZone,
+                onIndustrialLot = { lotId ->
+                    selectedId = null
+                    industrialLotId = lotId
+                },
+                minimumZoom = if (globeEnabled) WorldZoom else 2.5,
+                globeEnabled = globeEnabled,
+                openFromGlobe = openingGlobe,
+                flyToTunisia = flyToTunisia && jump == null,
+                onArrivalFinished = { flyToTunisia = false },
+                onMapRendered = { mapRendered = true },
+                onGlobeVisible = { globeVisible = it },
+                onGestureStarted = {
+                    openingGlobe = false
+                    flyToTunisia = false
+                    recenterSearch = false
+                    jump = null
+                },
                 selectedId = selectedId,
                 priceLabel = { discoveryNumber(it.priceTnd, language) },
-                modifier = Modifier.fillMaxSize().semantics {
+                modifier = Modifier.fillMaxSize().then(covered).semantics {
                     if (mapReady) contentDescription = mapDescription
                 },
                 onCameraIdle = { current, gesture ->
                     centerLatitude = current.center.latitude
                     centerLongitude = current.center.longitude
                     zoom = current.zoom
-                    visible = current.bounds.encode()
+                    viewportSearchable = current.searchableBounds
+                    if (viewportSearchable) visible = current.bounds.encode()
                     if (recenterSearch) {
-                        committed = visible
-                        committedZoom = zoom.toInt()
+                        if (viewportSearchable) {
+                            committed = visible
+                            committedZoom = zoom.toInt()
+                        }
                         recenterSearch = false
                         areaMoved = false
                         jump = null
@@ -187,7 +330,7 @@ internal fun ExploreScreen(
                         selectedId = null
                     }
                 },
-                onListing = { selectedId = it },
+                onListing = { selectedId = it; industrialZoneId = null; industrialLotId = null },
                 onCluster = { point ->
                     if (zoom < 18.0) {
                         recenterSearch = true
@@ -201,42 +344,46 @@ internal fun ExploreScreen(
                 onReady = { mapReady = true }
             )
             if (!mapReady) {
-                Column(
-                    modifier = Modifier.align(Alignment.Center),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(30.dp),
-                        color = Brand.Crimson,
-                        strokeWidth = 3.dp
-                    )
-                    OutlinedButton(
-                        onClick = {
-                            mapMode = false
-                            onViewModeChanged(false)
-                        },
-                        colors = ButtonDefaults.outlinedButtonColors(containerColor = Brand.Pearl)
-                    ) { Text(s(R.string.v2_map_skip)) }
+                Box(Modifier.fillMaxSize().background(Brand.Pearl), contentAlignment = Alignment.Center) {
+                    Surface(
+                        modifier = Modifier.padding(24.dp).widthIn(max = 300.dp),
+                        color = Color.White, contentColor = Brand.Ink,
+                        shape = RoundedCornerShape(20.dp), border = BorderStroke(1.dp, Brand.Border)
+                    ) {
+                        Column(
+                            Modifier.padding(16.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Text(s(R.string.v2_map_loading), style = MaterialTheme.typography.titleSmall)
+                            LinearProgressIndicator(Modifier.width(92.dp), color = Brand.Crimson)
+                            TextButton(onClick = {
+                                mapMode = false
+                                onViewModeChanged(false)
+                            }) { Text(s(R.string.v2_map_skip)) }
+                        }
+                    }
                 }
             }
         }
 
         Column(
-            Modifier.fillMaxSize().padding(horizontal = 12.dp, vertical = 8.dp),
+            Modifier.fillMaxSize().then(covered).padding(horizontal = 12.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             ExploreHeader(
                 searchText = searchText, language = language, source = source, filters = filters,
-                mapMode = mapMode, styleConfigured = styleUrl.isNotEmpty(), demo = demo, onSeller = onSeller,
+                mapMode = mapMode,
                 onAlerts = onAlerts, onAccount = onAccount,
                 onSearchChange = {
                     searchText = it
                     if (it.isBlank()) { placeId = null; selectedId = null }
                 },
                 onPlace = { place ->
+                    radarSelection = ""
+                    radarEditing = false
                     searchText = place.label
-                    placeId = place.id
+                    placeId = place.serverPlaceId
                     val point = place.point
                     val area = DiscoveryBounds(point.longitude - .11, point.latitude - .09,
                         point.longitude + .11, point.latitude + .09)
@@ -253,7 +400,7 @@ internal fun ExploreScreen(
                     selectedId = null
                 },
                 onKind = { kind ->
-                    filters = filters.copy(kind = kind, minRooms = filters.minRooms.takeUnless { kind == "LAND" })
+                    filters = filters.copy(kind = kind, minRooms = filters.minRooms.takeUnless { kind in setOf("LAND", "FACTORY") })
                     selectedId = null
                 },
                 onFilters = { showFilters = true },
@@ -268,12 +415,15 @@ internal fun ExploreScreen(
                 }
             )
 
-            if (mapMode && styleUrl.isNotBlank()) {
-                if (areaMoved && mapReady) {
+            if (mapMode) {
+                if (areaMoved && mapReady && viewportSearchable && !globeVisible && source != null &&
+                    showSalesLayer && activeRadar == null && !radarEditing) {
                     FilledTonalButton(
                         onClick = {
                             committed = visible
                             committedZoom = zoom.toInt()
+                            placeId = null
+                            searchText = ""
                             selectedId = null
                             areaMoved = false
                         },
@@ -283,28 +433,123 @@ internal fun ExploreScreen(
                         )
                     ) { Text(s(R.string.v2_search_area)) }
                 }
-                if (markerFailed) Surface(shape = RoundedCornerShape(16.dp), color = Brand.Pearl) {
+                if (markerFailed && showSalesLayer) Surface(shape = RoundedCornerShape(16.dp), color = Brand.Pearl) {
                     ResultMessage(s(R.string.v2_find_error), retry = { refresh++ })
                 }
-                if (mapReady) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(7.dp, Alignment.End),
+                    verticalAlignment = Alignment.CenterVertically) {
+                    FilledTonalButton(
+                        onClick = { showIndustrialLayer = true; radarEditing = false; industrialSheet = "zones" },
+                        colors = ButtonDefaults.filledTonalButtonColors(containerColor = Brand.Pearl, contentColor = Brand.Ink)
+                    ) {
+                        Icon(Icons.Outlined.Factory, null, Modifier.size(17.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text(s(R.string.afi_shortcut), maxLines = 1)
+                    }
+                    if (mapReady) FilledIconButton(
+                        onClick = {
+                            selectedId = null
+                            industrialZoneId = null
+                            industrialLotId = null
+                            openingGlobe = false
+                            flyToTunisia = false
+                            recenterSearch = false
+                            radarEditing = true
+                            val center = activeRadar?.center ?: DiscoveryPoint(centerLatitude, centerLongitude)
+                            val target = center.takeIf { it in InitialBounds } ?: InitialCenter
+                            radarRadius = activeRadar?.radiusKm ?: radarRadius
+                            jump = CameraJump(target, 10.6 - log2(radarRadius / 5.0), ++jumpSerial)
+                        },
+                        colors = IconButtonDefaults.filledIconButtonColors(
+                            containerColor = Brand.Pearl, contentColor = Brand.Crimson
+                        )
+                    ) { Icon(Icons.Outlined.Radar, s(R.string.radar_title)) }
                     FilledIconButton(
-                        onClick = { showLayers = true }, modifier = Modifier.align(Alignment.End),
+                        onClick = { showLayers = true },
                         colors = IconButtonDefaults.filledIconButtonColors(
                             containerColor = Brand.Pearl, contentColor = Brand.Crimson
                         )
                     ) { Icon(Icons.Outlined.Layers, s(R.string.v2_layers)) }
                 }
+                if (mapReady && !openingGlobe && (globeVisible || zoom < 4.4 ||
+                        DiscoveryPoint(centerLatitude, centerLongitude) !in InitialBounds)) {
+                    FilledIconButton(
+                        onClick = {
+                            focusManager.clearFocus()
+                            jump = null
+                            recenterSearch = false
+                            areaMoved = false
+                            selectedId = null
+                            radarSelection = ""
+                            radarEditing = false
+                            placeId = null
+                            searchText = ""
+                            committed = InitialBounds.encode()
+                            committedZoom = InitialZoom.toInt()
+                            visible = committed
+                            centerLatitude = InitialCenter.latitude
+                            centerLongitude = InitialCenter.longitude
+                            zoom = InitialZoom
+                            flyToTunisia = true
+                        },
+                        modifier = Modifier.align(Alignment.End),
+                        colors = IconButtonDefaults.filledIconButtonColors(
+                            containerColor = Brand.Pearl, contentColor = Brand.Ink
+                        )
+                    ) { Icon(Icons.Outlined.CenterFocusStrong, s(R.string.v2_recenter_tunisia)) }
+                }
                 Spacer(Modifier.weight(1f))
-                if (selected != null) {
-                    ListingCard(selected, language, { detailId = selected.id })
-                } else if (!listLoading && !listFailed && page.listings.isEmpty() && !markerFailed) {
+                if (activeRadar != null && !radarEditing) {
+                    AssistChip(onClick = { radarSelection = ""; selectedId = null },
+                        label = { Text(s(R.string.radar_radius, activeRadar.radiusKm)) },
+                        trailingIcon = { Icon(Icons.Outlined.Close, s(R.string.radar_clear), Modifier.size(16.dp)) },
+                        colors = AssistChipDefaults.assistChipColors(containerColor = Brand.Pearl))
+                }
+                if (showAdministrativeLayer && mapReady) {
+                    val uriHandler = LocalUriHandler.current
+                    Surface(
+                        onClick = { uriHandler.openUri("https://www.openstreetmap.org/copyright") },
+                        modifier = Modifier.align(Alignment.End),
+                        shape = RoundedCornerShape(8.dp), color = Brand.Pearl, contentColor = Brand.Ink
+                    ) {
+                        Text(s(R.string.layer_atlas_credit), modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
+                            style = MaterialTheme.typography.labelSmall)
+                    }
+                }
+                if (radarEditing) {
+                    RadarControls(radarRadius, radarPreview != null && source != null, source != null,
+                        onRadius = { radarRadius = it },
+                        onSearch = {
+                            val radar = radarPreview ?: return@RadarControls
+                            radarSelection = radar.encode()
+                            placeId = null
+                            searchText = ""
+                            selectedId = null
+                            areaMoved = false
+                            showSalesLayer = true
+                            committedZoom = zoom.toInt()
+                            radarEditing = false
+                        },
+                        onClose = { radarEditing = false })
+                } else if (showSalesLayer && selected != null) {
+                    MapListingPreview(selected, language, { detailId = selected.id }, { selectedId = null })
+                } else if (showIndustrialLayer && industrialZone != null && !globeVisible) {
+                    IndustrialMapCard(industrialZone, industrialPlan, industrialLot, language,
+                        onOpen = { industrialSheet = "plan" },
+                        onDismiss = { industrialZoneId = null; industrialLotId = null })
+                } else if (showSalesLayer && mapReady && !globeVisible && source == null) {
+                    Surface(shape = RoundedCornerShape(16.dp), color = Brand.Pearl) {
+                        ResultMessage(s(R.string.v2_map_data_unavailable))
+                    }
+                } else if (showSalesLayer && source != null && !areaMoved && !globeVisible &&
+                    !listLoading && !listFailed && page.listings.isEmpty() && !markerFailed) {
                     Surface(shape = RoundedCornerShape(16.dp), color = Brand.Pearl) {
                         ResultMessage(s(R.string.v2_empty))
                     }
-                } else if (mapReady && markerScope.value.listings.isEmpty() &&
+                } else if (showSalesLayer && mapReady && markerScope.value.listings.isEmpty() &&
                     markerScope.value.clusters.isEmpty() && page.listings.isNotEmpty()
                 ) {
-                    OutlinedButton(onClick = { mapMode = false }) { Text(s(R.string.v2_map_skip)) }
+                    OutlinedButton(onClick = { mapMode = false; onViewModeChanged(false) }) { Text(s(R.string.v2_map_skip)) }
                 }
                 Spacer(Modifier.height(32.dp))
             } else {
@@ -321,6 +566,7 @@ internal fun ExploreScreen(
                     page.listings.isEmpty() -> ResultMessage(s(R.string.v2_empty))
                     else -> LazyColumn(
                         Modifier.weight(1f),
+                        state = resultScroll,
                         contentPadding = PaddingValues(bottom = 12.dp),
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
@@ -353,6 +599,20 @@ internal fun ExploreScreen(
                 }
             }
         }
+        if (opened != null) {
+            Surface(Modifier.fillMaxSize(), color = Brand.Pearl) {
+                ListingDetail(source, opened, language) { detailId = null }
+            }
+        }
+    }
+    BackHandler(enabled = opened != null || (mapMode && (radarEditing || selectedId != null || industrialZoneId != null))) {
+        when {
+            detailId != null -> detailId = null
+            radarEditing -> radarEditing = false
+            selectedId != null -> selectedId = null
+            industrialLotId != null -> industrialLotId = null
+            else -> industrialZoneId = null
+        }
     }
     if (showFilters) {
         DiscoveryFilterSheet(filters, onDismiss = { showFilters = false }) {
@@ -360,47 +620,144 @@ internal fun ExploreScreen(
         }
     }
     if (showLayers) {
-        ModalBottomSheet(onDismissRequest = { showLayers = false }, containerColor = Brand.Pearl) {
-            Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(s(R.string.v2_layers), style = MaterialTheme.typography.titleLarge)
-                Text(s(R.string.v2_layer_listings), color = Brand.Crimson, fontWeight = FontWeight.Bold)
-                Text(s(R.string.v2_layers_cadastre_empty), color = Brand.Muted)
-            }
-        }
+        MapLayersSheet(
+            salesVisible = showSalesLayer, atlasVisible = showAtlasLayer,
+            administrativeVisible = showAdministrativeLayer, listingsAvailable = source != null,
+            industrialVisible = showIndustrialLayer,
+            onSalesVisible = { showSalesLayer = it },
+            onAtlasVisible = { showAtlasLayer = it },
+            onAdministrativeVisible = { showAdministrativeLayer = it },
+            onIndustrialVisible = {
+                showIndustrialLayer = it
+                if (!it) {
+                    industrialZoneId = null
+                    industrialLotId = null
+                    fitIndustrialZone = null
+                }
+            },
+            onBrowseIndustrial = {
+                showIndustrialLayer = true
+                showLayers = false
+                industrialSheet = "zones"
+            },
+            onDismiss = { showLayers = false }
+        )
+    }
+    val activeIndustrialSheet = industrialSheet
+    if (activeIndustrialSheet != null) {
+        IndustrialMapSheet(
+            industrialCatalog, industrialPlan, activeIndustrialSheet == "plan", language,
+            failed = industrialLoadFailed || activeIndustrialSheet == "plan" && industrialPlanFailed,
+            onZone = { chooseIndustrialZone(it.id) },
+            onLot = { lot ->
+                industrialLotId = lot.id
+                selectedId = null
+                lot.anchor?.let { point -> jump = CameraJump(point, 16.2, ++jumpSerial) }
+                industrialSheet = null
+            },
+            onBrowse = { industrialSheet = "zones" },
+            onDismiss = { industrialSheet = null }
+        )
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ExploreHeader(
     searchText: String, language: String, source: DiscoverySource?, filters: DiscoveryFilters,
-    mapMode: Boolean, styleConfigured: Boolean, demo: Boolean, onSeller: () -> Unit,
+    mapMode: Boolean,
     onAlerts: () -> Unit, onAccount: () -> Unit,
     onSearchChange: (String) -> Unit, onPlace: (DiscoveryPlace) -> Unit, onKind: (String?) -> Unit,
     onFilters: () -> Unit, onMode: () -> Unit
 ) {
     val focus = LocalFocusManager.current
+    val keyboard = LocalSoftwareKeyboardController.current
+    val context = LocalContext.current
+    val searchField = remember { FocusRequester() }
+    var expanded by rememberSaveable(mapMode) { mutableStateOf(false) }
     var searching by remember { mutableStateOf(false) }
-    var suggestions by remember(source, searchText) { mutableStateOf<List<DiscoveryPlace>?>(null) }
-    var placeError by remember(source, searchText) { mutableStateOf(false) }
-    LaunchedEffect(searchText, searching, source) {
-        if (!searching || searchText.trim().length < 2 || source == null) return@LaunchedEffect
+    var suggestions by remember(source, language, searchText) { mutableStateOf<List<DiscoveryPlace>?>(null) }
+    var placeError by remember(source, language, searchText) { mutableStateOf(false) }
+    var atlasPlaces by remember(context) { mutableStateOf<List<AtlasPlace>?>(null) }
+    val activeFilters = listOf(
+        filters.kind != null,
+        filters.minPrice != null || filters.maxPrice != null,
+        filters.minArea != null || filters.maxArea != null,
+        filters.minRooms != null
+    ).count { it }
+    val dismissSearch = {
+        keyboard?.hide()
+        focus.clearFocus()
+        if (mapMode) expanded = false
+    }
+    BackHandler(enabled = mapMode && expanded, onBack = dismissSearch)
+    LaunchedEffect(mapMode, expanded) {
+        if (mapMode && expanded) searchField.requestFocus()
+    }
+    LaunchedEffect(searchText, searching, language, source) {
+        val term = searchText.trim()
+        if (!searching || term.length < 2) return@LaunchedEffect
         delay(260)
+        val places = atlasPlaces ?: withContext(Dispatchers.IO) {
+            runCatching { readAtlasPlaces(context) }.getOrDefault(emptyList())
+        }.also { atlasPlaces = it }
+        val fallback = places.searchAtlasPlaces(term, language)
+        suggestions = fallback
+        if (source == null) return@LaunchedEffect
         try {
-            suggestions = source.suggest(searchText.trim(), language)
+            suggestions = source.suggest(term, language).ifEmpty { fallback }
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (_: Exception) {
-            placeError = true
+            placeError = fallback.isEmpty()
         }
     }
 
-    Surface(color = Brand.Pearl, shape = RoundedCornerShape(22.dp), shadowElevation = 4.dp) {
+    Surface(color = Color.White, contentColor = Brand.Ink, shape = RoundedCornerShape(22.dp),
+        shadowElevation = 2.dp, border = BorderStroke(1.dp, Brand.Border)) {
+        if (mapMode && !expanded) {
+            Row(Modifier.fillMaxWidth().padding(horizontal = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                TextButton(
+                    onClick = { expanded = true },
+                    modifier = Modifier.weight(1f).heightIn(min = 52.dp),
+                    contentPadding = PaddingValues(horizontal = 6.dp),
+                    colors = ButtonDefaults.textButtonColors(contentColor = Brand.Ink)
+                ) {
+                    Icon(Icons.Outlined.Search, null, Modifier.size(20.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text(searchText.ifBlank { s(R.string.v2_place_search) }, Modifier.weight(1f),
+                        maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Icon(Icons.Outlined.ExpandMore, null, Modifier.size(18.dp), tint = Brand.Muted)
+                }
+                IconButton(onClick = onFilters) {
+                    FilterIndicator(activeFilters)
+                }
+            }
+            return@Surface
+        }
         Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween) {
-                Text(APP_BRAND_NAME, color = Brand.Crimson, style = MaterialTheme.typography.headlineSmall,
+                Text(APP_BRAND_NAME, modifier = Modifier.weight(1f),
+                    color = Brand.Ink, style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.Bold)
                 Row(horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
+                    if (mapMode) {
+                        IconButton(onClick = dismissSearch) {
+                            Icon(Icons.Outlined.ExpandLess, s(R.string.v2_collapse_search), tint = Brand.Ink)
+                        }
+                    } else {
+                        val label = s(if (mapMode) R.string.v2_list_mode else R.string.v2_map_mode)
+                        TextButton(
+                            onClick = onMode, modifier = Modifier.heightIn(min = 48.dp),
+                            contentPadding = PaddingValues(horizontal = 6.dp)
+                        ) {
+                            Icon(if (mapMode) Icons.Outlined.ViewList else Icons.Outlined.Map, null,
+                                modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text(label, maxLines = 1)
+                        }
+                    }
                     IconButton(onClick = onAlerts, modifier = Modifier.size(48.dp)) {
                         Icon(Icons.Outlined.NotificationsNone, s(R.string.v2_ui_alerts), tint = Brand.Ink)
                     }
@@ -412,10 +769,10 @@ private fun ExploreHeader(
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
                 OutlinedTextField(
                     value = searchText, onValueChange = { onSearchChange(it.take(100)) },
-                    modifier = Modifier.weight(1f).onFocusChanged { searching = it.isFocused },
+                    modifier = Modifier.weight(1f).focusRequester(searchField).onFocusChanged { searching = it.isFocused },
                     singleLine = true, shape = RoundedCornerShape(16.dp),
                     placeholder = { Text(s(R.string.v2_place_search), maxLines = 1) },
-                    leadingIcon = { Icon(Icons.Outlined.Search, null, tint = Brand.Crimson) },
+                    leadingIcon = { Icon(Icons.Outlined.Search, null, tint = Brand.Muted) },
                     trailingIcon = if (searchText.isEmpty()) null else ({
                         IconButton(onClick = { onSearchChange("") }) { Icon(Icons.Outlined.Close, s(R.string.clear)) }
                     }),
@@ -424,17 +781,16 @@ private fun ExploreHeader(
                         val first = suggestions?.firstOrNull()
                         if (first != null) {
                             onPlace(first)
-                            focus.clearFocus()
+                            dismissSearch()
                         }
                     })
                 )
-                val filterLabel = s(R.string.v2_filters)
                 FilledTonalIconButton(
                     onClick = onFilters,
                     colors = IconButtonDefaults.filledTonalIconButtonColors(
-                        containerColor = Brand.Rose, contentColor = Brand.Crimson
+                        containerColor = Brand.NeutralContainer, contentColor = Brand.Ink
                     )
-                ) { Icon(Icons.Outlined.Tune, filterLabel) }
+                ) { FilterIndicator(activeFilters) }
             }
             val results = suggestions
             if (searching && (results != null || placeError)) {
@@ -447,7 +803,7 @@ private fun ExploreHeader(
                                 Text(
                                     place.label, style = MaterialTheme.typography.bodyLarge,
                                     modifier = Modifier.fillMaxWidth().clickable {
-                                        onPlace(place); focus.clearFocus()
+                                        onPlace(place); dismissSearch()
                                     }.heightIn(min = 48.dp).padding(horizontal = 12.dp, vertical = 10.dp)
                                 )
                             }
@@ -455,43 +811,31 @@ private fun ExploreHeader(
                     }
                 }
             } else {
-                Row(
-                    Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    Row(
-                        Modifier.weight(1f).horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        PropertyKinds.forEach { (kind, label) ->
-                            FilterChip(
-                                selected = filters.kind == kind, onClick = { onKind(kind) },
-                                label = { Text(s(label), maxLines = 1) },
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = Brand.Rose, selectedLabelColor = Brand.Crimson
-                                )
+                    PropertyKinds.forEach { (kind, label) ->
+                        FilterChip(
+                            selected = filters.kind == kind, onClick = { onKind(kind) },
+                            label = { Text(s(label)) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                labelColor = Brand.Muted, selectedContainerColor = Brand.NeutralContainer,
+                                selectedLabelColor = Brand.Ink
                             )
-                        }
-                    }
-                    if (styleConfigured) {
-                        val label = s(if (mapMode) R.string.v2_list_mode else R.string.v2_map_mode)
-                        TextButton(
-                            onClick = onMode, modifier = Modifier.heightIn(min = 48.dp),
-                            contentPadding = PaddingValues(horizontal = 6.dp)
-                        ) {
-                            Icon(if (mapMode) Icons.Outlined.ViewList else Icons.Outlined.Map, null,
-                                modifier = Modifier.size(18.dp))
-                            Spacer(Modifier.width(4.dp))
-                            Text(label, maxLines = 1)
-                        }
+                        )
                     }
                 }
             }
-            if (demo) Text(
-                s(R.string.v2_demo), color = Brand.Crimson, fontWeight = FontWeight.Medium,
-                style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(bottom = 3.dp)
-            )
         }
+    }
+}
+
+@Composable
+private fun FilterIndicator(activeFilters: Int) {
+    BadgedBox(badge = {
+        if (activeFilters > 0) Badge(containerColor = Brand.Crimson) { Text(activeFilters.toString()) }
+    }) {
+        Icon(Icons.Outlined.Tune, s(R.string.v2_filters), tint = Brand.Ink)
     }
 }

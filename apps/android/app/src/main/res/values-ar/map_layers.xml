@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="v2_villa">فلل</string>
+    <string name="v2_factory">مصانع</string>
+    <string name="layer_sales">عقارات للبيع</string>
+    <string name="layer_sales_hint">اعرض إعلانات البيع وأسعارها على الخريطة.</string>
+    <string name="layer_types">نوع العقار</string>
+    <string name="layer_atlas">حدود العقارات في أطلس</string>
+    <string name="layer_atlas_hint">اعرض الحدود المعتمدة للعقار عند اختياره.</string>
+    <string name="layer_purchase">طلبات الشراء</string>
+    <string name="layer_purchase_pending">طلبات الشراء غير متاحة حالياً.</string>
+    <string name="layer_atlas_admin">الحدود الإدارية لأطلس تونس</string>
+    <string name="layer_atlas_admin_hint">24 ولاية و279 معتمدية. حدود مرجعية.</string>
+    <string name="layer_atlas_parcels_unavailable">بيانات حدود العقارات غير متاحة في هذه النسخة.</string>
+    <string name="v2_globe_view">عرض الكرة الأرضية</string>
+    <string name="v2_recenter_tunisia">العودة إلى تونس</string>
+    <string name="v2_map_data_unavailable">الإعلانات غير متاحة حالياً. يمكنك البحث عن منطقة على الخريطة.</string>
+</resources>

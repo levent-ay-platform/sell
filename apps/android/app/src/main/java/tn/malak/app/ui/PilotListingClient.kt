@@ -53,7 +53,8 @@ internal object PilotListingClient {
                     }finally{buffer.fill(0)}
                 }?:throw OwnerPairException(422)}
                 if(c.responseCode!=200)throw OwnerPairException(c.responseCode)
-                c.inputStream.close()
+                val response=c.inputStream.use{readPilotBytes(it,16384)}
+                JSONObject(String(response,Charsets.UTF_8)).getString("photoId")
             }finally{c.disconnect()}
         }
 }

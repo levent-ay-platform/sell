@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="direct_publish">انشر العقار</string>
+    <string name="direct_preview">عاين الإعلان</string>
+    <string name="direct_preview_note">سيظهر العقار بموقع تقريبي. يمكنك إكمال التوثيق بعد النشر.</string>
+    <string name="direct_missing_fields">راجع العنوان والمنطقة والمساحة والسعر وحدد موقع العقار على الخريطة.</string>
+    <string name="direct_publish_failed">تعذّر حفظ العقار. تحقق من الاتصال وحاول مرة أخرى.</string>
+    <string name="direct_choose_location">اختر الموقع على الخريطة</string>
+    <string name="direct_change_location">عدّل الموقع التقريبي</string>
+    <string name="direct_pin_hint">حرّك الخريطة حتى يصبح الدبوس قريباً من العقار.</string>
+    <string name="direct_confirm_pin">اعتمد هذا الموقع</string>
+    <string name="direct_save">احفظ التعديلات</string>
+    <string name="direct_my_properties">عقاراتي</string>
+    <string name="direct_verify">كمّل التوثيق</string>
+    <string name="direct_verification_incomplete">التوثيق غير مكتمل</string>
+    <string name="direct_verification_in_review">التوثيق قيد التحقق</string>
+    <string name="direct_pause">أوقف الإعلان مؤقتاً</string>
+    <string name="direct_resume">أعد نشر الإعلان</string>
+    <string name="direct_analysis">قراءة الوثائق</string>
+    <string name="direct_docs_private">تبقى وثائق الهوية والملكية خاصة بفريق التحقق.</string>
+    <string name="direct_submit_docs">أرسل الوثائق للتحقق</string>
+    <string name="direct_media_public">تظهر صور العقار للعموم بعد النشر.</string>
+    <string name="direct_plan_required">باقي مخطط القطعة.</string>
+    <string name="direct_land_documents">جهّز بطاقة الهوية وشهادة الملكية ومخطط القطعة. يمكنك رفع الشهادة والمخطط في ملف PDF واحد.</string>
+    <string name="direct_home_documents">جهّز بطاقة الهوية ووثيقة إثبات الملكية.</string>
+    <string name="direct_heading">أضف عقار</string>
+    <string name="direct_property_photos">صور العقار</string>
+    <string name="direct_step_count">الخطوة %1$d من %2$d</string>
+    <string name="direct_stage_kind">نوع العقار</string>
+    <string name="direct_stage_location">الصور والموقع</string>
+    <string name="direct_stage_details">التفاصيل والسعر</string>
+    <string name="direct_choose_kind">اختر نوع العقار.</string>
+    <string name="direct_check_location">أدخل المنطقة وحدّد الموقع التقريبي على الخريطة.</string>
+    <string name="direct_next">متابعة</string>
+    <string name="direct_check_details">أدخل عنواناً ومساحة وسعراً صالحين.</string>
+</resources>

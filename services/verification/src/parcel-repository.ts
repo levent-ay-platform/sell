@@ -10,6 +10,19 @@ interface Boundary {
   edges:Edge[];
 }
 interface DocumentCard {id:string; kind:string; mime:string}
+export interface PilotParcelMatch {
+  identityHashes:string[];
+  documentHashes:string[];
+  latitude:number;
+  longitude:number;
+  titleReference:string;
+  plotReference:string;
+}
+interface PublicParcelProjection {
+  boundaries:Boundary[];
+  documents:DocumentCard[];
+  verifiedParcel:boolean;
+}
 export interface ApprovedRendition {storageObjectId:string; mime:string; sha256:string}
 interface ParcelCard {id:string; titleReference:string|null; plotReference:string|null}
 
@@ -41,7 +54,29 @@ export type ParcelDecision =
   | {role:'owner'; subject:'geometry'|'document'; decision:'GRANTED'|'REVOKED'};
 
 const publicListing = `
-SELECT coalesce(boundaries.items,'[]'::jsonb) boundaries,coalesce(documents.items,'[]'::jsonb) documents
+SELECT coalesce(boundaries.items,'[]'::jsonb) boundaries,coalesce(documents.items,'[]'::jsonb) documents,
+ (l.item_count=1 AND EXISTS (
+   SELECT 1 FROM sell.listing_items i JOIN sell.properties p ON p.id=i.property_id AND p.kind='LAND'
+   WHERE i.listing_id=l.id
+     AND EXISTS (
+       SELECT 1 FROM sell.evidence_upload_receipts r
+       WHERE r.case_id=i.verification_case_id AND r.evidence_kind='IDENTITY'
+         AND (SELECT c.decision FROM sell.evidence_consent_events c
+           WHERE c.case_id=r.case_id AND c.person_user_id=r.uploader_user_id
+           ORDER BY c.id DESC LIMIT 1)='GRANTED'
+     )
+     AND EXISTS (
+       SELECT 1 FROM sell.evidence_upload_receipts r WHERE r.case_id=i.verification_case_id
+         AND r.evidence_kind IN ('OWNERSHIP_CERTIFICATE','SHARED_OWNERSHIP_CERTIFICATE','TITLE_EXTRACT')
+         AND (SELECT c.decision FROM sell.evidence_consent_events c
+           WHERE c.case_id=r.case_id AND c.person_user_id=r.uploader_user_id
+           ORDER BY c.id DESC LIMIT 1)='GRANTED'
+     )
+     AND EXISTS (
+       SELECT 1 FROM sell.public_listing_parcel_boundaries b WHERE b.listing_id=l.id
+         AND b.method IN ('ATLAS_OFFICIAL_BOUNDARY','MALAK_DOC_GEOREFERENCED')
+     )
+ )) AS "verifiedParcel"
 FROM sell.public_listing_cards l
 LEFT JOIN LATERAL (
  SELECT jsonb_agg(row_to_json(b)) items FROM (
@@ -51,7 +86,13 @@ LEFT JOIN LATERAL (
      coalesce(e.stated_length_m,e.computed_length_m)::text) ORDER BY e.ordinal)
     FROM sell.parcel_edge_measurements e WHERE e.geometry_version_id=p.boundary_id
    ),'[]'::jsonb) edges
-  FROM sell.public_listing_parcel_boundaries p WHERE p.listing_id=l.id ORDER BY p.boundary_id LIMIT 20
+  FROM sell.public_listing_parcel_boundaries p
+  WHERE p.listing_id=l.id AND ($2::text[] IS NULL OR EXISTS (
+    SELECT 1 FROM sell.parcel_geometry_versions g WHERE g.id=p.boundary_id
+      AND g.method IN ('ATLAS_OFFICIAL_BOUNDARY','MALAK_DOC_GEOREFERENCED')
+      AND upper(btrim(g.title_reference))=$6::text AND upper(btrim(g.plot_reference))=$7::text
+      AND ST_DWithin(g.geometry_4326::geography,ST_SetSRID(ST_MakePoint($5::float8,$4::float8),4326)::geography,1000)
+  )) ORDER BY p.boundary_id LIMIT 20
  ) b
 ) boundaries ON true
 LEFT JOIN LATERAL (
@@ -61,7 +102,26 @@ LEFT JOIN LATERAL (
   ORDER BY p.reviewed_at DESC,p.document_id LIMIT 50
  ) d
 ) documents ON true
-WHERE l.id=$1::uuid`;
+WHERE l.id=$1::uuid
+AND ($2::text[] IS NULL OR EXISTS (
+  SELECT 1 FROM sell.listing_items i
+  JOIN sell.public_listing_parcel_boundaries b ON b.listing_id=i.listing_id
+  JOIN sell.parcel_geometry_versions g ON g.id=b.boundary_id
+    AND (g.property_revision_id,g.case_id)=(i.property_revision_id,i.verification_case_id)
+  WHERE i.listing_id=l.id
+    AND b.method IN ('ATLAS_OFFICIAL_BOUNDARY','MALAK_DOC_GEOREFERENCED')
+    AND upper(btrim(g.title_reference))=$6::text AND upper(btrim(g.plot_reference))=$7::text
+    AND ST_DWithin(g.geometry_4326::geography,ST_SetSRID(ST_MakePoint($5::float8,$4::float8),4326)::geography,1000)
+    AND EXISTS (SELECT 1 FROM sell.evidence_upload_receipts r WHERE r.case_id=i.verification_case_id
+      AND r.evidence_kind='IDENTITY' AND r.sha256=ANY($2::text[])
+      AND (SELECT c.decision FROM sell.evidence_consent_events c
+        WHERE c.case_id=r.case_id AND c.person_user_id=r.uploader_user_id ORDER BY c.id DESC LIMIT 1)='GRANTED')
+    AND EXISTS (SELECT 1 FROM sell.evidence_upload_receipts r WHERE r.case_id=i.verification_case_id
+      AND r.evidence_kind IN ('OWNERSHIP_CERTIFICATE','SHARED_OWNERSHIP_CERTIFICATE','TITLE_EXTRACT')
+      AND r.sha256=ANY($3::text[])
+      AND (SELECT c.decision FROM sell.evidence_consent_events c
+        WHERE c.case_id=r.case_id AND c.person_user_id=r.uploader_user_id ORDER BY c.id DESC LIMIT 1)='GRANTED')
+))`;
 
 const approvedDocument = `
 SELECT d.storage_object_id::text "storageObjectId",p.rendition_mime mime,p.rendition_sha256 sha256
@@ -106,7 +166,7 @@ coalesce((SELECT jsonb_agg(row_to_json(g)) FROM (
 FROM (${scopeSql}) scope`;
 
 export interface ParcelRepository {
-  listing(listingId:string):Promise<{boundaries:Boundary[];documents:DocumentCard[]}|null>;
+  listing(listingId:string,match?:PilotParcelMatch):Promise<PublicParcelProjection|null>;
   approvedDocument(listingId:string,documentId:string):Promise<ApprovedRendition|null>;
   ownerCase(caseId:string,actor:string,role?:'owner'|'reviewer'):Promise<{parcels:ParcelCard[];evidence:{id:string;kind:string}[];geometries:OwnerGeometry[]}|null>;
   saveOwnerGeometry(caseId:string,actor:string,candidate:ParcelCandidate):Promise<string|null>;
@@ -115,8 +175,10 @@ export interface ParcelRepository {
 
 export function createParcelRepository(pool:SqlPool):ParcelRepository {
   return {
-    async listing(listingId) {
-      const {rows} = await pool.query<{boundaries:Boundary[];documents:DocumentCard[]}>(publicListing,[listingId]);
+    async listing(listingId,match) {
+      const {rows} = await pool.query<PublicParcelProjection>(publicListing,[listingId,
+        match?.identityHashes??null,match?.documentHashes??null,match?.latitude??null,match?.longitude??null,
+        match?.titleReference??null,match?.plotReference??null]);
       return rows[0] ?? null;
     },
     async approvedDocument(listingId,documentId) {

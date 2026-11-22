@@ -48,6 +48,9 @@ internal object PilotOcrLogin {
             throw PilotOcrLoginException(503)
         return fresh
     }
+    fun deviceFingerprint(context: Context): String =
+        java.security.MessageDigest.getInstance("SHA-256").digest(deviceKey(context).toByteArray())
+            .joinToString("") { "%02x".format(it.toInt() and 0xff) }
     suspend fun login(context:Context,localPhone:String,code:String):
         PilotOcrSession=withContext(Dispatchers.IO){
         val base=configuredBase()?:throw PilotOcrLoginException(503)

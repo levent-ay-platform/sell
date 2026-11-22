@@ -101,6 +101,8 @@ test('live discovery serves bilingual places, shared map/list filters, verified 
     await db.query(`
       INSERT INTO sell.discovery_places(id,source_version,name_ar,name_fr,center)
       VALUES ('qa-kelibia','synthetic-v1','قليبية','Kélibia',ST_SetSRID(ST_MakePoint(11.092,36.851),4326));
+    `);
+    await db.query(`
       INSERT INTO sell.discovery_place_aliases(place_id,alias) VALUES ('qa-kelibia','Kelibia Plage');
     `);
     const fixture = async (kind: string, title: string, lon: number | null, rooms: number | null,
@@ -114,6 +116,12 @@ test('live discovery serves bilingual places, shared map/list filters, verified 
     const areaOnly = await fixture('APARTMENT','Synthetic list-only apartment',null,3,'201000.001','2026-01-01T01:01:01.000001Z');
     const outOfBounds = await fixture('HOUSE','Synthetic outside map',12.99,4,'92000','2026-01-01T01:01:01.000010Z');
     const pending = await fixture('LAND','Synthetic pending land',11.089,null,'18000','2026-01-01T01:01:01Z',false);
+    const radar = 'bbox=11.07,36.83,11.11,36.87&radar=36.85,11.086,1';
+    const radialList = await json('/api/v1/discovery/list?'+radar);
+    const radialMap = await json('/api/v1/discovery/clusters?'+radar+'&zoom=14');
+    assert.deepEqual(radialList.listings.map((card: {id: string}) => card.id), [point.listing_id,neighbor.listing_id]);
+    assert.deepEqual(radialMap.listings,radialList.listings);
+    assert.equal((await get('/api/v1/discovery/list?bbox=11.07,36.83,11.11,36.87&radar=36.85,11.086,21')).status,400);
     await db.query(`
       INSERT INTO sell.listing_public_photos(property_revision_id,approved_by,sha256,asset_path)
       SELECT property_revision_id,assigned_reviewer_user_id, repeat('a',64), 'qa/listing-discovery.jpg'
@@ -185,6 +193,16 @@ test('live discovery serves bilingual places, shared map/list filters, verified 
     const second = await json('/api/v1/discovery/list?'+query+'&kind=LAND&cursor='+first.nextCursor);
     assert.deepEqual(second.listings.map((card: {title: string}) => card.title),['Synthetic page 2','Synthetic page 1']);
     assert.equal(second.nextCursor,null);
+
+    const villa = await fixture('VILLA','Synthetic villa',11.086,5,'400000','2026-01-02T00:00:00Z');
+    const factory = await fixture('FACTORY','Synthetic factory',11.089,null,'500000','2026-01-02T00:00:00Z');
+    for (const [kind, listingId] of [['VILLA',villa.listing_id],['FACTORY',factory.listing_id]]) {
+      const matchingList = await json('/api/v1/discovery/list?'+query+'&kind='+kind);
+      const matchingMap = await json('/api/v1/discovery/clusters?'+query+'&zoom=14&kind='+kind);
+      assert.deepEqual(matchingList.listings.map((card: {id: string; kind: string}) => [card.id,card.kind]),
+        [[listingId,kind]]);
+      assert.deepEqual(matchingMap.listings,matchingList.listings);
+    }
   } finally {
     server.close();
     try { await db.query('ROLLBACK'); } finally { db.release(); await database.end(); }

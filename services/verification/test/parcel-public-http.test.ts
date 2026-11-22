@@ -16,6 +16,7 @@ test('approved document serving keeps internal identifiers private and honors re
   let active = true;
   let revokeDuringRead = false;
   let reads = 0;
+  let approvedParcel = false;
   let content: Uint8Array = pdf;
   const handler = createParcelHttpHandler({
     allowRequest: async () => true,
@@ -23,6 +24,7 @@ test('approved document serving keeps internal identifiers private and honors re
     repository: {
       listing: async () => active ? {
         boundaries: [],
+        verifiedParcel: approvedParcel,
         documents: [{id: documentId, kind: 'CADASTRAL_PLAN', mime: 'application/pdf'}],
       } : null,
       approvedDocument: async () => active ? {storageObjectId, mime: 'application/pdf', sha256: sha} : null,
@@ -50,6 +52,11 @@ test('approved document serving keeps internal identifiers private and honors re
     const body = await details.text();
     assert.equal(details.status,200);
     assert.equal(details.headers.get('cache-control'),'no-store');
+    assert.equal(JSON.parse(body).verifiedParcel,false);
+    approvedParcel = true;
+    assert.equal((await (await get(base+'/parcel')).json()).verifiedParcel,true);
+    approvedParcel = false;
+    assert.equal((await (await get(base+'/parcel')).json()).verifiedParcel,false);
     assert.deepEqual(JSON.parse(body).documents, [{
       id: documentId, kind: 'CADASTRAL_PLAN', mime: 'application/pdf',
       url: base + '/documents/' + documentId,

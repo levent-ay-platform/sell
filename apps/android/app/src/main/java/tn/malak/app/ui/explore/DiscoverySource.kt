@@ -17,6 +17,19 @@ internal interface DiscoverySource {
     suspend fun markers(query: DiscoveryQuery, zoom: Int): DiscoveryMarkers
     suspend fun parcel(id: String): PublicParcel = PublicParcel()
     suspend fun detail(id: String): DiscoveryListing?
+    fun documentBytes(document: PublicPropertyDocument): ByteArray = downloadPublicDocument(document)
+}
+
+internal fun downloadPublicDocument(document: PublicPropertyDocument): ByteArray {
+    val connection = discoveryConnection(document.location, document.mime)
+    return try {
+        if (connection.responseCode != 200 || connection.contentType?.substringBefore(';') != document.mime) {
+            throw IOException("Property document unavailable")
+        }
+        connection.inputStream.use { readPilotBytes(it, 16 * 1024 * 1024) }
+    } finally {
+        connection.disconnect()
+    }
 }
 
 internal class HttpDiscoverySource(private val baseUrl: String, private val language: String) : DiscoverySource {
@@ -28,7 +41,7 @@ internal class HttpDiscoverySource(private val baseUrl: String, private val lang
             }
 
     override suspend fun list(query: DiscoveryQuery, cursor: String?): DiscoveryPage {
-        val parameters = discoveryParameters(query.bounds, query.placeId, query.filters).toMutableMap()
+        val parameters = query.parameters().toMutableMap()
         parameters["lang"] = language
         cursor?.let { parameters["cursor"] = it }
         val payload = requireNotNull(get("/api/v1/discovery/list", parameters))
@@ -36,7 +49,7 @@ internal class HttpDiscoverySource(private val baseUrl: String, private val lang
     }
 
     override suspend fun markers(query: DiscoveryQuery, zoom: Int): DiscoveryMarkers {
-        val parameters = discoveryParameters(query.bounds, query.placeId, query.filters) +
+        val parameters = query.parameters() +
             mapOf("zoom" to zoom.toString(), "lang" to language)
         val payload = requireNotNull(get("/api/v1/discovery/clusters", parameters))
         val clusters = payload.objects("clusters").mapNotNull { cluster ->

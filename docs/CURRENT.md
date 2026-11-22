@@ -1,5 +1,5 @@
 # CURRENT — Amlak / Atlas Tunisia
-_Last audited: 2026-11-20 (Europe/Istanbul). This is the navigation and checkpoint index, not a replacement for the authoritative issue records._
+_Last audited: 2026-11-22 (Europe/Istanbul). This is the navigation and checkpoint index, not a replacement for the authoritative issue records._
 
 ## Source-of-truth ownership (do not create competing master plans)
 
@@ -12,6 +12,13 @@ _Last audited: 2026-11-20 (Europe/Istanbul). This is the navigation and checkpoi
 | Older seller OCR flow | [Draft PR #14](https://github.com/levent-ay-platform/sell/pull/14) | Do not assume merged or deployed. |
 
 **Approved public app name: Amlak.** Earlier code/paths use MALAK/Malak for historical compatibility. The existing Android package identifier `tn.malak.app` was deliberately not renamed to avoid data loss; technical slugs are not consumer branding.
+
+## Verified 2026-11-22 Pilot checkpoint
+
+- The bilingual map radar filters public listings within 1–20 km and shares the selection with the list. The map includes a route to AFI industrial subdivisions, labeled as planning reference data.
+- Direct listing publication requires the gateway capability and private enrollment for closed Pilot accounts. The live gateway currently returns HTTP 404 for the capability endpoint. The app uses the existing review flow against that gateway.
+- Emulator QA passed 83 unit tests and five instrumentation checks. A separate isolated end-to-end run published a test listing and found it in buyer radar results. The gateway and OCR contract suites passed 23 tests. The parcel document endpoint passed privacy and revocation checks on disposable data.
+- Local Pilot APK SHA-256: `805d93be33ef707d2df597c912b448d159994ce66e561771138078dae344d310`. Physical Android QA and a real listing with a reviewed public document remain open. See [Draft PR #22](https://github.com/levent-ay-platform/sell/pull/22) for review and CI.
 
 ## Verified 2026-11-20 checkpoint
 

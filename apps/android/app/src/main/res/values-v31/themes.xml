@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.Amlak.Starting" parent="Theme.Amlak.Starting.Base">
+        <item name="android:windowSplashScreenBackground">@color/amlak_window_pearl</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/amlak_launcher_icon</item>
+    </style>
+</resources>

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="radar_panel_title">Radar</string>
+    <string name="radar_title">Radar immobilier</string>
+    <string name="radar_radius">Rayon de %1$d km</string>
+    <string name="radar_hint">Déplacez la carte pour choisir le centre, puis ajustez le rayon.</string>
+    <string name="radar_apply">Rechercher dans le cercle</string>
+    <string name="radar_clear">Effacer le radar</string>
+    <string name="afi_shortcut">Zones industrielles</string>
+    <string name="pilot_device_id">Identifiant de l’appareil Pilot</string>
+    <string name="pilot_device_hint">Transmettez cet identifiant en privé à votre administrateur Pilot pour activer cet appareil.</string>
+</resources>

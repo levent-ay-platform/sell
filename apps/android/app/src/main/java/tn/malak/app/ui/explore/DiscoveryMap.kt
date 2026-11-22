@@ -4,6 +4,11 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.RectF
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -13,7 +18,15 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -22,6 +35,7 @@ import org.maplibre.android.MapLibre
 import org.maplibre.android.camera.CameraPosition
 import org.maplibre.android.camera.CameraUpdateFactory
 import org.maplibre.android.geometry.LatLng
+import org.maplibre.android.geometry.LatLngBounds
 import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.maps.MapLibreMapOptions
 import org.maplibre.android.maps.MapView
@@ -37,15 +51,25 @@ import org.maplibre.android.style.sources.GeoJsonSource
 import org.maplibre.geojson.Feature
 import org.maplibre.geojson.FeatureCollection
 import org.maplibre.geojson.Point
+import tn.malak.app.ui.Brand
+import java.net.URI
+import kotlin.math.roundToInt
+import kotlin.random.Random
 
 internal data class DiscoveryCamera(
-    val center: DiscoveryPoint, val zoom: Double, val bounds: DiscoveryBounds
+    val center: DiscoveryPoint, val zoom: Double, val bounds: DiscoveryBounds,
+    val searchableBounds: Boolean = true
 )
 
 internal data class CameraJump(val point: DiscoveryPoint, val zoom: Double, val serial: Int)
 
 private const val SOURCE = "malak-discovery-source"
 private const val MARKERS = "malak-discovery-markers"
+private const val AfiZones = "afi-zones"
+private const val AfiLots = "afi-lots"
+private const val AfiLotFill = "afi-lot-fill"
+private const val AfiSelected = "afi-lot-selected"
+internal const val WorldZoom = .52
 
 @Composable
 internal fun DiscoveryMap(
@@ -57,6 +81,21 @@ internal fun DiscoveryMap(
     priceLabel: (DiscoveryListing) -> String,
     modifier: Modifier = Modifier,
     boundaries: List<PublicParcelBoundary> = emptyList(),
+    administrativeBoundariesVisible: Boolean = false,
+    industrialZones: FeatureCollection? = null,
+    industrialLots: FeatureCollection? = null,
+    industrialLotId: String? = null,
+    radar: DiscoveryRadar? = null,
+    onIndustrialZone: (String) -> Unit = {},
+    onIndustrialLot: (String) -> Unit = {},
+    minimumZoom: Double = 7.0,
+    globeEnabled: Boolean = false,
+    openFromGlobe: Boolean = false,
+    flyToTunisia: Boolean = false,
+    onArrivalFinished: () -> Unit = {},
+    onMapRendered: () -> Unit = {},
+    onGlobeVisible: (Boolean) -> Unit = {},
+    onGestureStarted: () -> Unit = {},
     onCameraIdle: (DiscoveryCamera, Boolean) -> Unit,
     onListing: (String) -> Unit,
     onCluster: (DiscoveryPoint) -> Unit,
@@ -68,14 +107,25 @@ internal fun DiscoveryMap(
     val cameraCallback by rememberUpdatedState(onCameraIdle)
     val listingCallback by rememberUpdatedState(onListing)
     val clusterCallback by rememberUpdatedState(onCluster)
+    val zoneCallback by rememberUpdatedState(onIndustrialZone)
+    val lotCallback by rememberUpdatedState(onIndustrialLot)
+    val afiVisible by rememberUpdatedState(industrialZones != null)
     val failureCallback by rememberUpdatedState(onFailure)
     val readyCallback by rememberUpdatedState(onReady)
+    val arrivalCallback by rememberUpdatedState(onArrivalFinished)
+    val renderedCallback by rememberUpdatedState(onMapRendered)
+    val globeCallback by rememberUpdatedState(onGlobeVisible)
+    val gestureCallback by rememberUpdatedState(onGestureStarted)
+    val radarVisible by rememberUpdatedState(radar != null)
     val mapView = remember(context) {
         MapLibre.getInstance(context)
-        MapView(context, MapLibreMapOptions.createFromAttributes(context).textureMode(true))
+        MapView(context, MapLibreMapOptions.createFromAttributes(context).textureMode(true)
+            .translucentTextureSurface(globeEnabled))
     }
     var map by remember(mapView) { mutableStateOf<MapLibreMap?>(null) }
     var style by remember(mapView) { mutableStateOf<Style?>(null) }
+    var worldCamera by remember(mapView) { mutableStateOf<Pair<DiscoveryPoint, Double>?>(null) }
+    var radarCamera by remember(mapView) { mutableStateOf<CameraPosition?>(null) }
     var gesture = false
 
     DisposableEffect(mapView, lifecycle) {
@@ -92,27 +142,46 @@ internal fun DiscoveryMap(
         }
         lifecycle.addObserver(lifecycleObserver)
         val failed = MapView.OnDidFailLoadingMapListener { if (active) failureCallback() }
+        val rendered = MapView.OnDidFinishRenderingMapListener { fully ->
+            if (active && fully) renderedCallback()
+        }
         mapView.addOnDidFailLoadingMapListener(failed)
+        mapView.addOnDidFinishRenderingMapListener(rendered)
         mapView.getMapAsync { nativeMap ->
             if (!active) return@getMapAsync
-            nativeMap.setMinZoomPreference(7.0)
+            nativeMap.setMinZoomPreference(minimumZoom)
             nativeMap.setMaxZoomPreference(18.0)
             nativeMap.uiSettings.isRotateGesturesEnabled = false
             nativeMap.uiSettings.isTiltGesturesEnabled = false
+            nativeMap.uiSettings.isLogoEnabled = false
             nativeMap.cameraPosition = CameraPosition.Builder()
-                .target(initial.center.latLng()).zoom(initial.zoom).build()
+                .target(initial.center.latLng()).zoom(if (openFromGlobe) WorldZoom else initial.zoom).build()
             nativeMap.addOnCameraMoveStartedListener { reason ->
                 gesture = reason == MapLibreMap.OnCameraMoveStartedListener.REASON_API_GESTURE
+                if (gesture) gestureCallback()
+            }
+            nativeMap.addOnCameraMoveListener {
+                val camera = nativeMap.cameraPosition
+                if (radarVisible) radarCamera = camera
+                if (globeEnabled) {
+                    val point = camera.target ?: return@addOnCameraMoveListener
+                    globeCallback(camera.zoom <= 1.5)
+                    worldCamera = if (camera.zoom < WorldGlobeBlendEnd) {
+                        DiscoveryPoint(point.latitude, point.longitude) to camera.zoom
+                    } else null
+                }
             }
             nativeMap.addOnCameraIdleListener {
                 val position = nativeMap.cameraPosition
+                if (radarVisible) radarCamera = position
                 val center = position.target ?: return@addOnCameraIdleListener
                 val region = nativeMap.projection.visibleRegion.latLngBounds
                 val bounds = DiscoveryBounds.decode(
                     "${region.longitudeWest},${region.latitudeSouth},${region.longitudeEast},${region.latitudeNorth}"
-                ) ?: return@addOnCameraIdleListener
+                )
                 cameraCallback(
-                    DiscoveryCamera(DiscoveryPoint(center.latitude, center.longitude), position.zoom, bounds),
+                    DiscoveryCamera(DiscoveryPoint(center.latitude, center.longitude), position.zoom,
+                        bounds ?: initial.bounds, searchableBounds = bounds != null),
                     gesture
                 )
                 gesture = false
@@ -121,7 +190,18 @@ internal fun DiscoveryMap(
                 val tap = nativeMap.projection.toScreenLocation(location)
                 val hit = RectF(tap.x - 20, tap.y - 20, tap.x + 20, tap.y + 20)
                 val feature = nativeMap.queryRenderedFeatures(hit, MARKERS).firstOrNull()
-                    ?: return@addOnMapClickListener false
+                if (feature == null) {
+                    if (!afiVisible) return@addOnMapClickListener false
+                    val lot = nativeMap.queryRenderedFeatures(tap, AfiLotFill).firstOrNull()
+                    if (lot != null) {
+                        lotCallback(lot.getStringProperty("id"))
+                        return@addOnMapClickListener true
+                    }
+                    val zone = nativeMap.queryRenderedFeatures(hit, AfiZones).firstOrNull()
+                        ?: return@addOnMapClickListener false
+                    zoneCallback(zone.getStringProperty("id"))
+                    return@addOnMapClickListener true
+                }
                 val id = if (feature.hasProperty("listingId")) feature.getStringProperty("listingId") else null
                 val point = feature.geometry() as? Point
                 when {
@@ -133,7 +213,6 @@ internal fun DiscoveryMap(
             map = nativeMap
             nativeMap.setStyle(Style.Builder().fromUri(styleUrl)) { loaded ->
                 if (!active) return@setStyle
-                if (boundaries.isNotEmpty()) addBoundaryLayers(loaded, boundaries)
                 loaded.addImage("malak-pin-background", markerBackground())
                 loaded.addSource(GeoJsonSource(SOURCE, FeatureCollection.fromFeatures(emptyList())))
                 loaded.addLayer(SymbolLayer(MARKERS, SOURCE).withProperties(
@@ -149,12 +228,22 @@ internal fun DiscoveryMap(
                     PropertyFactory.symbolSortKey(Expression.get("drawOrder"))
                 ))
                 style = loaded
+                if (globeEnabled) {
+                    val camera = nativeMap.cameraPosition
+                    globeCallback(camera.zoom <= 1.5)
+                    camera.target?.let { point ->
+                        if (camera.zoom < WorldGlobeBlendEnd) {
+                            worldCamera = DiscoveryPoint(point.latitude, point.longitude) to camera.zoom
+                        }
+                    }
+                }
                 readyCallback()
             }
         }
         onDispose {
             active = false
             mapView.removeOnDidFailLoadingMapListener(failed)
+            mapView.removeOnDidFinishRenderingMapListener(rendered)
             lifecycle.removeObserver(lifecycleObserver)
             if (lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) mapView.onPause()
             if (lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) mapView.onStop()
@@ -165,6 +254,39 @@ internal fun DiscoveryMap(
     LaunchedEffect(map, jump) {
         val target = jump ?: return@LaunchedEffect
         map?.animateCamera(CameraUpdateFactory.newLatLngZoom(target.point.latLng(), target.zoom), 280)
+    }
+
+    LaunchedEffect(map, style, flyToTunisia) {
+        val nativeMap = map ?: return@LaunchedEffect
+        if (style == null || !flyToTunisia) return@LaunchedEffect
+        val density = context.resources.displayMetrics.density
+        val bounds = LatLngBounds.from(InitialBounds.north, InitialBounds.east, InitialBounds.south, InitialBounds.west)
+        val sides = (24 * density).roundToInt()
+        val target = CameraUpdateFactory.newLatLngBounds(
+            bounds, sides, (74 * density).roundToInt(), sides, (36 * density).roundToInt()
+        )
+        nativeMap.animateCamera(target, 840, object : MapLibreMap.CancelableCallback {
+            override fun onFinish() = arrivalCallback()
+            override fun onCancel() = arrivalCallback()
+        })
+    }
+
+    LaunchedEffect(style, administrativeBoundariesVisible) {
+        style?.let { updateAdministrativeLayers(it, administrativeBoundariesVisible) }
+    }
+
+    LaunchedEffect(style, industrialZones, industrialLots) {
+        style?.let { updateIndustrialLayers(it, industrialZones, industrialLots) }
+    }
+
+    LaunchedEffect(style, industrialZones, industrialLotId) {
+        style?.getLayerAs<LineLayer>(AfiSelected)?.setFilter(
+            Expression.eq(Expression.get("id"), Expression.literal(industrialLotId.orEmpty()))
+        )
+    }
+
+    LaunchedEffect(style, boundaries) {
+        style?.let { updateBoundaryLayers(it, boundaries) }
     }
 
     LaunchedEffect(style, markers, selectedId) {
@@ -188,10 +310,119 @@ internal fun DiscoveryMap(
         style?.getSourceAs<GeoJsonSource>(SOURCE)?.setGeoJson(FeatureCollection.fromFeatures(features))
     }
 
-    AndroidView(factory = { mapView }, modifier = modifier)
+    val radarRing = remember(radar) { radar?.ring().orEmpty() }
+    val radarPath = remember(map, radarRing, radarCamera) {
+        val projection = map?.projection
+        if (projection == null || radarRing.isEmpty()) null else Path().apply {
+            radarRing.forEachIndexed { index, point ->
+                val pixel = projection.toScreenLocation(point.latLng())
+                if (index == 0) moveTo(pixel.x, pixel.y) else lineTo(pixel.x, pixel.y)
+            }
+            close()
+        }
+    }
+    Box(modifier.background(Brand.Pearl)) {
+        if (globeEnabled && (radar == null || worldCamera != null)) GlobeSky(Modifier.matchParentSize())
+        AndroidView(factory = { mapView }, modifier = Modifier.fillMaxSize())
+        worldCamera?.let { (center, zoom) -> WorldGlobe(center, zoom, Modifier.matchParentSize()) }
+        if (radarPath != null && worldCamera == null) {
+            Canvas(Modifier.matchParentSize().clipToBounds()) {
+                drawPath(radarPath, Brand.Crimson.copy(alpha = .10f))
+                drawPath(radarPath, Brand.Crimson, style = Stroke(
+                    width = 2.5.dp.toPx(),
+                    pathEffect = PathEffect.dashPathEffect(floatArrayOf(9.dp.toPx(), 5.dp.toPx()))
+                ))
+            }
+        }
+    }
+}
+
+@Composable
+internal fun GlobeSky(modifier: Modifier, content: @Composable BoxScope.() -> Unit = {}) {
+    Box(modifier) {
+        val stars = remember {
+            val random = Random(721)
+            List(148) { Triple(random.nextFloat(), random.nextFloat(), random.nextFloat()) }
+        }
+        Canvas(Modifier.matchParentSize()) {
+            drawRect(Brush.verticalGradient(listOf(Color(0xFF080E20), Color(0xFF172C46), Color(0xFF080F20))))
+            for ((x, y, light) in stars) {
+                val center = Offset(x * size.width, y * size.height)
+                if (light > .96f) drawCircle(Color(0x306C9BD5), 2.8.dp.toPx(), center)
+                drawCircle(Color(0xFFDCEAFF), radius = (.38f + light * 1.02f).dp.toPx(),
+                    center = center, alpha = .26f + light * .64f)
+            }
+        }
+        content()
+    }
 }
 
 private fun DiscoveryPoint.latLng() = LatLng(latitude, longitude)
+
+private fun updateIndustrialLayers(style: Style, zones: FeatureCollection?, lots: FeatureCollection?) {
+    val empty = FeatureCollection.fromFeatures(emptyList())
+    val zoneSource = style.getSourceAs<GeoJsonSource>(AfiZones)
+    if (zoneSource != null) {
+        zoneSource.setGeoJson(zones ?: empty)
+        style.getSourceAs<GeoJsonSource>(AfiLots)?.setGeoJson(lots ?: empty)
+        return
+    }
+    if (zones == null) return
+    val teal = 0xFF14666F.toInt()
+    style.addSource(GeoJsonSource(AfiZones, zones))
+    style.addSource(GeoJsonSource(AfiLots, lots ?: empty))
+    style.addLayerBelow(FillLayer(AfiLotFill, AfiLots).withProperties(
+        PropertyFactory.fillColor(teal), PropertyFactory.fillOpacity(.26f)
+    ), MARKERS)
+    style.addLayerBelow(LineLayer("afi-lot-outline", AfiLots).withProperties(
+        PropertyFactory.lineColor(teal), PropertyFactory.lineWidth(1.6f)
+    ), MARKERS)
+    val selected = LineLayer(AfiSelected, AfiLots).withProperties(
+        PropertyFactory.lineColor(0xFFAD6111.toInt()), PropertyFactory.lineWidth(3.6f)
+    )
+    selected.setFilter(Expression.eq(Expression.get("id"), Expression.literal("")))
+    style.addLayerBelow(selected, MARKERS)
+    val lotNumbers = SymbolLayer("afi-lot-numbers", AfiLots).withProperties(
+        PropertyFactory.textField(Expression.get("number")), PropertyFactory.textFont(arrayOf("Noto Sans Bold")),
+        PropertyFactory.textColor(teal), PropertyFactory.textHaloColor(android.graphics.Color.WHITE),
+        PropertyFactory.textHaloWidth(1.3f), PropertyFactory.textSize(12f)
+    )
+    lotNumbers.minZoom = 15f
+    style.addLayerBelow(lotNumbers, MARKERS)
+    val markers = CircleLayer(AfiZones, AfiZones).withProperties(
+        PropertyFactory.circleColor(teal), PropertyFactory.circleRadius(6f),
+        PropertyFactory.circleStrokeColor(android.graphics.Color.WHITE), PropertyFactory.circleStrokeWidth(1.6f)
+    )
+    markers.minZoom = 4f
+    markers.maxZoom = 14f
+    style.addLayerBelow(markers, MARKERS)
+}
+
+private fun updateAdministrativeLayers(style: Style, visible: Boolean) {
+    val layers = listOf("governorates", "delegations")
+    for (partition in layers) {
+        val source = "atlas-reference-$partition"
+        val id = "$source-line"
+        val visibility = PropertyFactory.visibility(if (visible) Property.VISIBLE else Property.NONE)
+        val existing = style.getLayerAs<LineLayer>(id)
+        if (existing != null) {
+            existing.setProperties(visibility)
+        } else if (visible) {
+            style.addSource(GeoJsonSource(source, URI.create("asset://atlas-admin/$partition.geojson")))
+            val governorates = partition == "governorates"
+            val line = LineLayer(id, source).withProperties(
+                PropertyFactory.lineColor(if (governorates) 0xFF225866.toInt() else 0xFF497783.toInt()),
+                PropertyFactory.lineWidth(if (governorates) 2.2f else 1.35f),
+                PropertyFactory.lineOpacity(.9f)
+            )
+            if (!governorates) {
+                line.minZoom = 8f
+                line.setProperties(PropertyFactory.lineDasharray(arrayOf(3f, 2f)))
+            }
+            style.addLayerBelow(line, MARKERS)
+        }
+    }
+}
 
 private fun markerBackground(): Bitmap {
     val bitmap = Bitmap.createBitmap(84, 36, Bitmap.Config.ARGB_8888)
@@ -201,42 +432,45 @@ private fun markerBackground(): Bitmap {
     return bitmap
 }
 
-private fun addBoundaryLayers(style: Style, boundaries: List<PublicParcelBoundary>) {
+private fun updateBoundaryLayers(style: Style, boundaries: List<PublicParcelBoundary>) {
     for (kind in BoundaryKind.entries) {
         val items = boundaries.filter { it.kind == kind }
-        if (items.isEmpty()) continue
-        val suffix = kind.name.lowercase()
-        val id = "malak-boundary-$suffix"
-        val source = GeoJsonSource(id, FeatureCollection.fromFeatures(items.map {
+        val id = "malak-boundary-${kind.name.lowercase()}"
+        val vertexId = "$id-vertices"
+        val existing = style.getSourceAs<GeoJsonSource>(id)
+        if (existing == null && items.isEmpty()) continue
+        val polygons = FeatureCollection.fromFeatures(items.map {
             Feature.fromJson("""{"type":"Feature","geometry":${it.geometry},"properties":{}}""")
-        }))
+        })
+        val vertices = FeatureCollection.fromFeatures(items.flatMap { boundary ->
+            boundary.labelRing.takeIf { ring -> ring.size <= 40 }.orEmpty().distinct().map {
+                Feature.fromGeometry(Point.fromLngLat(it.longitude, it.latitude))
+            }
+        })
+        if (existing != null) {
+            existing.setGeoJson(polygons)
+            style.getSourceAs<GeoJsonSource>(vertexId)?.setGeoJson(vertices)
+            continue
+        }
         val color = when (kind) {
             BoundaryKind.Official -> 0xFFB30D2D.toInt()
             BoundaryKind.Georeferenced -> 0xFF8B4C05.toInt()
             BoundaryKind.Estimate -> 0xFF48566B.toInt()
         }
-        style.addSource(source)
-        style.addLayer(FillLayer("$id-fill", id).withProperties(
+        style.addSource(GeoJsonSource(id, polygons))
+        style.addSource(GeoJsonSource(vertexId, vertices))
+        style.addLayerBelow(FillLayer("$id-fill", id).withProperties(
             PropertyFactory.fillColor(color), PropertyFactory.fillOpacity(.19f)
-        ))
+        ), MARKERS)
         val line = LineLayer("$id-line", id).withProperties(
             PropertyFactory.lineColor(color), PropertyFactory.lineWidth(3f)
         )
-        if (kind != BoundaryKind.Official) {
-            line.setProperties(PropertyFactory.lineDasharray(arrayOf(2.5f, 1.5f)))
-        }
-        style.addLayer(line)
-        val vertices = items.flatMap { it.labelRing.takeIf { ring -> ring.size <= 40 }.orEmpty().distinct() }
-        if (vertices.isNotEmpty()) {
-            val vertexId = "$id-vertices"
-            style.addSource(GeoJsonSource(vertexId, FeatureCollection.fromFeatures(vertices.map {
-                Feature.fromGeometry(Point.fromLngLat(it.longitude, it.latitude))
-            })))
-            style.addLayer(CircleLayer("$vertexId-layer", vertexId).withProperties(
-                PropertyFactory.circleRadius(3f), PropertyFactory.circleColor(color),
-                PropertyFactory.circleStrokeColor(android.graphics.Color.WHITE),
-                PropertyFactory.circleStrokeWidth(1f)
-            ))
-        }
+        if (kind != BoundaryKind.Official) line.setProperties(PropertyFactory.lineDasharray(arrayOf(2.5f, 1.5f)))
+        style.addLayerBelow(line, MARKERS)
+        style.addLayerBelow(CircleLayer("$vertexId-layer", vertexId).withProperties(
+            PropertyFactory.circleRadius(3f), PropertyFactory.circleColor(color),
+            PropertyFactory.circleStrokeColor(android.graphics.Color.WHITE),
+            PropertyFactory.circleStrokeWidth(1f)
+        ), MARKERS)
     }
 }

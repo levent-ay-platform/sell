@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="direct_publish">Publish property</string>
+    <string name="direct_preview">Preview listing</string>
+    <string name="direct_preview_note">This listing will be shown with an approximate location. You can verify it after publishing.</string>
+    <string name="direct_missing_fields">Check the title, area, price and locality, and set a point on the map.</string>
+    <string name="direct_publish_failed">Could not save the property. Check your connection and try again.</string>
+    <string name="direct_choose_location">Set location on the map</string>
+    <string name="direct_change_location">Change approximate location</string>
+    <string name="direct_pin_hint">Move the map to put the pin near the property.</string>
+    <string name="direct_confirm_pin">Use this location</string>
+    <string name="direct_save">Save changes</string>
+    <string name="direct_my_properties">My properties</string>
+    <string name="direct_verify">Complete verification</string>
+    <string name="direct_verification_incomplete">Verification incomplete</string>
+    <string name="direct_verification_in_review">Verification under review</string>
+    <string name="direct_pause">Pause listing</string>
+    <string name="direct_resume">Resume listing</string>
+    <string name="direct_analysis">Document readout</string>
+    <string name="direct_docs_private">Identity and ownership documents remain private for review.</string>
+    <string name="direct_submit_docs">Send documents for verification</string>
+    <string name="direct_media_public">Property photos appear publicly when you publish.</string>
+    <string name="direct_plan_required">A parcel plan is still needed.</string>
+    <string name="direct_land_documents">Have your identity card, title certificate and parcel plan ready. You can include the certificate and plan in a single PDF.</string>
+    <string name="direct_home_documents">Have your identity card and proof of ownership ready.</string>
+    <string name="direct_heading">Add property</string>
+    <string name="direct_property_photos">Property photos</string>
+    <string name="direct_step_count">Step %1$d of %2$d</string>
+    <string name="direct_stage_kind">Property type</string>
+    <string name="direct_stage_location">Photos and location</string>
+    <string name="direct_stage_details">Details and price</string>
+    <string name="direct_choose_kind">Choose a property type.</string>
+    <string name="direct_check_location">Enter the area and choose the approximate location on the map.</string>
+    <string name="direct_next">Continue</string>
+    <string name="direct_check_details">Enter a title, a valid surface area and an asking price.</string>
+</resources>
