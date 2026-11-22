@@ -3,6 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createRequire} from 'node:module';
 import {createServer} from 'node:http';
+import {readFile} from 'node:fs/promises';
 import {once} from 'node:events';
 import {join} from 'node:path';
 import {composeUnboundMalakFirstLoop} from '../src/first-loop-gateway.ts';
@@ -97,6 +98,13 @@ test('live discovery serves bilingual places, shared map/list filters, verified 
       return JSON.parse(body);
     };
     await db.query('BEGIN');
+    // Exercise the additive migration inside this test's rollback transaction.
+    const migration = await readFile(
+      new URL('../../../db/migrations/0018_discovery_property_kinds.sql', import.meta.url), 'utf8',
+    );
+    const statements = /^--[^\n]*\nBEGIN;\n([\s\S]*)\nCOMMIT;\s*$/.exec(migration)?.[1];
+    assert.ok(statements, 'expected one transaction in migration 0018');
+    await db.query(statements);
     await db.query(fixtureFunction);
     await db.query(`
       INSERT INTO sell.discovery_places(id,source_version,name_ar,name_fr,center)
