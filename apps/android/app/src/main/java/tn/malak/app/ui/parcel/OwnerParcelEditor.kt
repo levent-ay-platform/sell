@@ -78,6 +78,7 @@ internal fun OwnerParcelEditor(
     var vertices by remember(source) { mutableStateOf(emptyList<ParcelPoint>()) }
     var edges by remember(source) { mutableStateOf(emptyMap<Int, EditableParcelEdge>()) }
     var selected by remember(source) { mutableStateOf<Int?>(null) }
+    var referenceEdge by remember(source) { mutableStateOf<Int?>(null) }
     var parcelId by remember(source) { mutableStateOf<String?>(null) }
     var title by remember(source) { mutableStateOf(source.titleReference) }
     var plot by remember(source) { mutableStateOf(source.plotReference) }
@@ -119,6 +120,11 @@ internal fun OwnerParcelEditor(
 
     val page = preview
     val ring = remember(page, vertices) { page?.frame?.validatedRing(vertices) }
+    val calibration = remember(page, vertices, edges, referenceEdge) {
+        val edge = referenceEdge
+        if (edge == null) null else page?.frame?.calibrateParcel(vertices, edge, edges[edge]?.length.orEmpty())
+    }
+    val estimatedLengths = calibration?.lengthsM?.map { s(R.string.parcel_editor_calculated_length, it) }.orEmpty()
     val invalidArea = area.isNotBlank() && parseParcelLength(area) == null
     val invalidMeasurement = edges.values.any {
         (it.length.isNotBlank() && parseParcelLength(it.length) == null) ||
@@ -137,6 +143,7 @@ internal fun OwnerParcelEditor(
         edges = edges.filterKeys { it != index && it != previous }
             .mapKeys { (ordinal, _) -> if (ordinal > index) ordinal - 1 else ordinal }
         selected = null
+        referenceEdge = null
         saveError = false
     }
 
@@ -176,7 +183,7 @@ internal fun OwnerParcelEditor(
                     Surface(color = Color.White, shape = MaterialTheme.shapes.medium) {
                         val description = s(R.string.parcel_editor_canvas)
                         ParcelPageCanvas(
-                            page, vertices, edges, selected, active,
+                            page, vertices, edges, estimatedLengths, selected, active,
                             Modifier.fillMaxWidth().height(330.dp)
                                 .semantics { contentDescription = description },
                             onAdd = { point ->
@@ -185,6 +192,7 @@ internal fun OwnerParcelEditor(
                                     edges = edges - vertices.lastIndex
                                     vertices = vertices + point
                                     selected = vertices.lastIndex
+                                    referenceEdge = null
                                     saveError = false
                                 }
                             },
@@ -194,6 +202,23 @@ internal fun OwnerParcelEditor(
                                 saveError = false
                             }
                         )
+                    }
+                }
+                if (ring != null) item {
+                    Surface(color = Color.White, contentColor = Brand.Ink, shape = MaterialTheme.shapes.medium) {
+                        Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(s(R.string.parcel_editor_scale_title), fontWeight = FontWeight.SemiBold)
+                            if (calibration == null) {
+                                Text(s(R.string.parcel_editor_scale_hint), color = Brand.Muted,
+                                    style = MaterialTheme.typography.bodySmall)
+                            } else {
+                                Text(s(R.string.parcel_editor_calculated_area, calibration.areaM2),
+                                    style = MaterialTheme.typography.titleLarge)
+                                Text(s(R.string.parcel_editor_calculated_perimeter, calibration.perimeterM))
+                                Text(s(R.string.parcel_editor_scale_caution), color = Brand.Muted,
+                                    style = MaterialTheme.typography.bodySmall)
+                            }
+                        }
                     }
                 }
                 item {
@@ -247,10 +272,15 @@ internal fun OwnerParcelEditor(
                 if (vertices.size >= 3) items(vertices.indices.toList()) { index ->
                     val end = (index + 1) % vertices.size
                     val edge = edges[index] ?: EditableParcelEdge()
-                    EdgeFields(index, end, edge, active) { next ->
-                        edges = edges + (index to next)
-                        saveError = false
-                    }
+                    EdgeFields(
+                        index, end, edge, active, source.measurements, estimatedLengths.getOrNull(index),
+                        isReference = referenceEdge == index,
+                        onReference = { referenceEdge = if (referenceEdge == index) null else index },
+                        onChange = { next ->
+                            edges = edges + (index to next)
+                            saveError = false
+                        }
+                    )
                 }
                 if (saveError) item {
                     Text(s(R.string.parcel_editor_failed), color = Brand.Crimson)
@@ -326,8 +356,11 @@ private fun parseCoordinate(input: String): Double? = buildString {
 
 @Composable
 private fun EdgeFields(
-    index: Int, end: Int, edge: EditableParcelEdge, active: Boolean, onChange: (EditableParcelEdge) -> Unit
+    index: Int, end: Int, edge: EditableParcelEdge, active: Boolean,
+    readings: List<ParcelOcrLength>, estimate: String?, isReference: Boolean,
+    onReference: () -> Unit, onChange: (EditableParcelEdge) -> Unit
 ) {
+    var showReadings by remember(index) { mutableStateOf(false) }
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(s(R.string.parcel_editor_edge_name, index + 1, end + 1), color = Brand.Ink)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -338,6 +371,32 @@ private fun EdgeFields(
                 Modifier.weight(1f), enabled = active, singleLine = true,
                 label = { Text(s(R.string.parcel_editor_edge_length)) },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
+        }
+        if (estimate != null && edge.length.isBlank()) {
+            Text(estimate, color = Brand.Muted, style = MaterialTheme.typography.bodySmall)
+        }
+        if (isReference || parseParcelLength(edge.length) != null) {
+            FilterChip(selected = isReference, onClick = onReference, enabled = active, label = {
+                Text(s(if (isReference) R.string.parcel_editor_reference_selected else R.string.parcel_editor_use_reference))
+            })
+        }
+        if (readings.isNotEmpty()) Box {
+            TextButton(enabled = active, onClick = { showReadings = true }) {
+                Text(s(R.string.parcel_editor_pick_reading))
+            }
+            DropdownMenu(expanded = showReadings, onDismissRequest = { showReadings = false },
+                modifier = Modifier.heightIn(max = 240.dp)) {
+                for (reading in readings) {
+                    val length = parseParcelLength(reading.metres) ?: continue
+                    val caption = "${reading.from}–${reading.to}: $length m"
+                    val note = if (reading.reviewNeeded) s(R.string.smart_read_needs_review) else null
+                    DropdownMenuItem(text = { Text(listOfNotNull(caption, note).joinToString(" · ")) },
+                        onClick = {
+                            onChange(edge.copy(length = length))
+                            showReadings = false
+                        })
+                }
+            }
         }
     }
 }
@@ -356,6 +415,7 @@ private fun ParcelPageCanvas(
     page: ParcelPagePreview,
     vertices: List<ParcelPoint>,
     edges: Map<Int, EditableParcelEdge>,
+    estimatedLengths: List<String>,
     selected: Int?,
     active: Boolean,
     modifier: Modifier,
@@ -432,10 +492,11 @@ private fun ParcelPageCanvas(
             drawCircle(Brand.Crimson, radius, centre)
             label("P${index + 1}", centre.x + radius + 3.dp.toPx(), centre.y - radius)
             if (centres.size >= 3) {
-                val edge = edges[index] ?: return@forEachIndexed
-                val length = parseParcelLength(edge.length) ?: return@forEachIndexed
+                val edge = edges[index]
+                val length = edge?.let { parseParcelLength(it.length) }
+                val caption = if (length == null) estimatedLengths.getOrNull(index) ?: return@forEachIndexed
+                    else listOfNotNull(edge?.label?.takeIf(String::isNotBlank), "$length m").joinToString(" · ")
                 val next = centres[(index + 1) % centres.size]
-                val caption = if (edge.label.isBlank()) "${length} m" else "${edge.label} · ${length} m"
                 label(caption, (centre.x + next.x) / 2f, (centre.y + next.y) / 2f)
             }
         }

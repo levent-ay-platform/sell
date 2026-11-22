@@ -33,4 +33,13 @@
     <string name="parcel_editor_move">Move vertex</string>
     <string name="parcel_editor_vertices">%1$d vertices</string>
     <string name="parcel_editor_stated_area">Stated area (m²)</string>
+    <string name="parcel_editor_scale_title">Plan measurements</string>
+    <string name="parcel_editor_scale_hint">Enter a known side length below and use it to set the scale.</string>
+    <string name="parcel_editor_calculated_area">Estimated area · %1$.1f m²</string>
+    <string name="parcel_editor_calculated_perimeter">Estimated perimeter · %1$.1f m</string>
+    <string name="parcel_editor_scale_caution">Estimates based on the selected side. Check them against the plan.</string>
+    <string name="parcel_editor_calculated_length">≈ %1$.1f m</string>
+    <string name="parcel_editor_use_reference">Use as scale reference</string>
+    <string name="parcel_editor_reference_selected">Scale reference selected</string>
+    <string name="parcel_editor_pick_reading">Choose a reading from the plan</string>
 </resources>

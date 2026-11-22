@@ -34,4 +34,17 @@ class ParcelGeometryTest {
         assertNull(parseParcelLength("-1"))
         assertNull(parseParcelLength("1.0000001"))
     }
+    @Test fun calibrationUsesOneExplicitSideAndScalesAreaQuadratically() {
+        val calibrated = checkNotNull(frame.calibrateParcel(square, 0, "٣٥"))
+        assertEquals(700.0, calibrated.areaM2, 0.0001)
+        assertEquals(110.0, calibrated.perimeterM, 0.0001)
+        assertEquals(listOf(35.0, 20.0, 35.0, 20.0), calibrated.lengthsM)
+        assertEquals(calibrated, frame.calibrateParcel(square + square.first(), 3, "20"))
+    }
+
+    @Test fun calibrationRejectsAnInvalidRingOrMissingReference() {
+        assertNull(frame.calibrateParcel(square, 0, ""))
+        assertNull(frame.calibrateParcel(square, 4, "35"))
+        assertNull(frame.calibrateParcel(listOf(square[0], square[2], square[1], square[3]), 0, "35"))
+    }
 }

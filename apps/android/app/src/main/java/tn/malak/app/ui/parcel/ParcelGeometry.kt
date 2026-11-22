@@ -1,5 +1,7 @@
 package tn.malak.app.ui.parcel
 
+import kotlin.math.abs
+import kotlin.math.hypot
 import kotlin.math.min
 
 internal data class ParcelPoint(val x: Double, val y: Double)
@@ -37,6 +39,25 @@ internal data class ParcelFrame(val width: Int, val height: Int) {
         }
         return ring.takeIf { twiceArea != 0.0 }
     }
+}
+
+internal data class ParcelCalibration(val lengthsM: List<Double>, val areaM2: Double) {
+    val perimeterM: Double get() = lengthsM.sum()
+}
+
+/** Estimates dimensions on a plan from a side measured in metres by its owner. */
+internal fun ParcelFrame.calibrateParcel(
+    vertices: List<ParcelPoint>, referenceEdge: Int, referenceLength: String
+): ParcelCalibration? {
+    val metres = parseParcelLength(referenceLength)?.toDouble() ?: return null
+    val ring = validatedRing(vertices) ?: return null
+    val sides = ring.zipWithNext()
+    val sourceLengths = sides.map { (a, b) -> hypot(b.x - a.x, b.y - a.y) }
+    val reference = sourceLengths.getOrNull(referenceEdge) ?: return null
+    val metresPerUnit = metres / reference
+    val twiceArea = sides.sumOf { (a, b) -> a.x * b.y - b.x * a.y }
+    return ParcelCalibration(sourceLengths.map { it * metresPerUnit },
+        abs(twiceArea) / 2 * metresPerUnit * metresPerUnit)
 }
 
 internal data class ParcelFit(
