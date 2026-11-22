@@ -3,7 +3,18 @@ import unittest
 import json
 from pathlib import Path
 from unittest.mock import patch
-from pilot_workflow import PilotStore, WorkflowError, digest
+from pilot_workflow import PilotStore, WorkflowError, admin_password_digest, digest
+
+class AdminPasswordCompatibility(unittest.TestCase):
+    def test_native_and_missing_hashlib_scrypt_produce_same_persisted_hash(self):
+        # Independently computed reference using native hashlib.scrypt with 64-byte output.
+        salt = bytes(range(16))
+        expected = ('810556edcc4d580e434443d8e0bae79908e1b0cdb0ae2107'
+                    'bcb44ad65d2f9f3aece026862fea417ee874c92376b8e6daa96a3e6'
+                    'e4706d365118e47f2866f9177')
+        self.assertEqual(admin_password_digest('a-long-test-password', salt), expected)
+        with patch('pilot_workflow.hashlib.scrypt', None, create=True):
+            self.assertEqual(admin_password_digest('a-long-test-password', salt), expected)
 
 class Workflow(unittest.TestCase):
     def test_enrolled_device_is_required_for_login_and_existing_bearers(self):
