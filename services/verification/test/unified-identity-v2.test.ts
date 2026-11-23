@@ -15,7 +15,7 @@ const identity=wrap(['Nom et prénom: Leila Ben Salem','CIN: 00001122'],true);
 test('blur warning keeps matched role clues but never promotes preliminary agreement',()=>{
  const doc=wrap(['شهادة ملكية','Propriétaire: Leila Ben Salem','CIN: 00001122']);
  const flagged:IngestedDocument={...doc,pages:doc.pages.map(p=>({
-   ...p,qualityWarnings:['POSSIBLE_BLUR']
+   ...p,qualityWarnings:['POSSIBLE_BLUR' as const]
  }))};
  const result=compareUnifiedPrivateDocumentIdentity(flagged,identity,
    ['OWNERSHIP_CERTIFICATE']);
@@ -33,7 +33,7 @@ test('blur warning keeps matched role clues but never promotes preliminary agree
 test('quality warning cannot conceal an explicit identity CIN disagreement',()=>{
  const doc=wrap(['شهادة ملكية','Propriétaire: Leila Ben Salem','CIN: 12345678']);
  const flagged:IngestedDocument={...doc,pages:doc.pages.map(p=>({
-   ...p,qualityWarnings:['LOW_CONTRAST']
+   ...p,qualityWarnings:['LOW_CONTRAST' as const]
  }))};
  const result=compareUnifiedPrivateDocumentIdentity(flagged,identity,
    ['OWNERSHIP_CERTIFICATE']);
