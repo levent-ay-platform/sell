@@ -673,7 +673,15 @@ internal fun ExploreScreen(
                 } else if (showSalesLayer && mapReady && !openingGlobe && !globeVisible && markerScope.value.listings.isEmpty() &&
                     markerScope.value.clusters.isEmpty() && page.listings.isNotEmpty()
                 ) {
-                    OutlinedButton(onClick = { mapMode = false; onViewModeChanged(false) }) { Text(s(R.string.v2_map_skip)) }
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        if (source is PilotPublicDiscoverySource) {
+                            Text(s(R.string.v2_public_location_unknown_note),
+                                style = MaterialTheme.typography.bodySmall, color = Brand.Muted)
+                        }
+                        OutlinedButton(onClick = { mapMode = false; onViewModeChanged(false) }) {
+                            Text(s(R.string.v2_map_skip))
+                        }
+                    }
                 }
                 Spacer(Modifier.height(32.dp))
             } else {
@@ -695,7 +703,13 @@ internal fun ExploreScreen(
                     source == null -> ResultMessage(s(R.string.v2_not_configured))
                     listLoading -> LinearProgressIndicator(Modifier.fillMaxWidth())
                     listFailed -> ResultMessage(s(R.string.v2_find_error), retry = { refresh++ })
-                    page.listings.isEmpty() -> ResultMessage(s(R.string.v2_empty))
+                    page.listings.isEmpty() -> {
+                        ResultMessage(s(R.string.v2_empty))
+                        if (source is PilotPublicDiscoverySource && filters.kind != null) {
+                            Text(s(R.string.v2_public_type_filter_note),
+                                style = MaterialTheme.typography.bodySmall, color = Brand.Muted)
+                        }
+                    }
                     else -> LazyColumn(
                         Modifier.weight(1f),
                         state = resultScroll,
