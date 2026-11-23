@@ -595,7 +595,7 @@ CREATE TABLE IF NOT EXISTS pilot_parcel_links(
             sealed=row['sealed']
             return self.cipher.decrypt(sealed[:12],sealed[12:],(row['review_id']+':'+eid).encode())
     @staticmethod
-    def _public_listing_fields(listing):
+    def _public_listing_fields(listing, allow_public_location=False):
         """Strict public allowlist, independent from mutable private review snapshots.
 
         A legacy reviewed submission has no property kind: UNKNOWN means unknown,
@@ -616,7 +616,9 @@ CREATE TABLE IF NOT EXISTS pilot_parcel_links(
                      and 29 <= latitude <= 39 and 7 <= longitude <= 13)
         except (ValueError, TypeError, OverflowError):
             valid = False
-        if valid:
+        if valid and allow_public_location:
+            # Only an owner-published direct listing can expose a coarse
+            # point. Legacy evidence-first reviews did not authorize a pin.
             # Public ~1 km precision, never return saved private coordinates.
             result['latitude'] = f'{latitude:.2f}'
             result['longitude'] = f'{longitude:.2f}'
@@ -630,12 +632,16 @@ CREATE TABLE IF NOT EXISTS pilot_parcel_links(
     def public_listings(self):
         with self.db() as db:
             return [
-                {'id': row['id'], **self._public_listing_fields(json.loads(row['listing'])),
+                {'id': row['id'], **self._public_listing_fields(
+                     json.loads(row['listing']), allow_public_location=bool(row['direct_owner_publish'])),
                  'publishedAt': row['updated'], 'ownershipVerified': False,
                  'photos': [photo['id'] for photo in db.execute(
                      "SELECT id FROM evidence WHERE review_id=? AND kind='PHOTO'",
                      (row['review_id'],))]}
                 for row in db.execute(
-                    "SELECT * FROM submissions WHERE status='PUBLISHED' ORDER BY updated DESC"
+                    """SELECT s.*, EXISTS (
+                        SELECT 1 FROM direct_listing_metadata d WHERE d.submission_id=s.id
+                    ) AS direct_owner_publish
+                    FROM submissions s WHERE s.status='PUBLISHED' ORDER BY s.updated DESC"""
                 ).fetchall()
             ]
