@@ -459,7 +459,7 @@ internal fun parsePilotComparison(envelope:JSONObject):CertificateIdentityReview
                 "serviceRequestNumber","serviceRequestDate","rightsDenominator")||
                 value.isBlank()||value.length>100||f.optInt("page") !in 1..pages||
                 values.containsKey(key))throw OwnerPairException(502)
-            val factStatus=f.optString("status","CANDIDATE")
+            val factStatus=f.optString("status","LOW_CONFIDENCE")
             if(factStatus !in setOf("CANDIDATE","LOW_CONFIDENCE"))throw OwnerPairException(502)
             val source=f.optString("source","ocr-ar")
             if(source !in setOf("ocr-ar","ocr-fr","pdf-text"))throw OwnerPairException(502)

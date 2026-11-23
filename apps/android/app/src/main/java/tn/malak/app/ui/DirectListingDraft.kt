@@ -46,7 +46,7 @@ private fun validAmount(input: String, maximum: BigDecimal): Boolean {
     return amount.signum() == 1 && amount <= maximum
 }
 
-private fun listingNumber(raw: String): String = buildString {
+internal fun listingNumber(raw: String): String = buildString {
     raw.trim().forEach { character ->
         append(when (character) {
             ',', '٫' -> '.'

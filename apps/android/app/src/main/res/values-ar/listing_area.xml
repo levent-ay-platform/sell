@@ -1,0 +1,13 @@
+<resources>
+    <string name="listing_read_documents">اقرأ وثائقي</string>
+    <string name="listing_attach_reading">استخدم هذه القراءة في إعلاني</string>
+    <string name="listing_review_attached">وثائق مرتبطة بهذه المسودة</string>
+    <string name="listing_area_none">تعذّر تحديد المساحة المعروضة من الوثيقة. أدخل المساحة التي تعرضها.</string>
+    <string name="listing_area_source">%1$s · الصفحة %2$d</string>
+    <string name="listing_document_area">مساحة الوثيقة · %1$s م²</string>
+    <string name="listing_entered_area">المساحة المدخلة في الإعلان · %1$s م²</string>
+    <string name="listing_use_area">اعتمد المساحة</string>
+    <string name="listing_use_part">أعرض جزءاً منها</string>
+    <string name="listing_review_unavailable">تعذّر ربط الوثائق حالياً. مسودتك محفوظة.</string>
+    <string name="listing_review_preview">ستُرسل الوثائق مع الإعلان للتحقق منها.</string>
+</resources>

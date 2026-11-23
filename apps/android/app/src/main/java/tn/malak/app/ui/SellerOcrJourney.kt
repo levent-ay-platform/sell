@@ -24,6 +24,8 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
@@ -102,7 +104,8 @@ private val Capacities = listOf(
  * raw OCR models remain on the isolated private Huawei service.
  */
 @Composable
-fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmission:org.json.JSONObject?=null,
+internal fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmission:org.json.JSONObject?=null,
+                     onDocumentRead: ((CertificateIdentityReview) -> Unit)? = null,
                      onSubmitted:(String)->Unit={onBack()}) {
     val context=LocalContext.current
     val ownerSession=LocalOwnerEvidenceSession.current
@@ -135,6 +138,11 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmission:org.j
     }
     val prefs=remember(context,draftFile){
         context.getSharedPreferences(draftFile,Context.MODE_PRIVATE)
+    }
+    val readingForListing = onDocumentRead != null
+    fun exitJourney() {
+        if (readingForListing) prefs.edit().clear().apply()
+        onBack()
     }
     var pairProgress by remember(draftFile) {mutableStateOf<PairProgress?>(null)}
     var pairReport by remember(draftFile) {mutableStateOf<CertificateIdentityReview?>(null)}
@@ -187,6 +195,7 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmission:org.j
     // Auto-save only the non-sensitive listing fields, never scans, tokens,
     // CIN, dates of birth, credentials or document URIs.
     LaunchedEffect(draftFile,name,region,area,price,capacity,capacityConfirmed,submitted) {
+        if(readingForListing)return@LaunchedEffect
         if(submitted){prefs.edit().clear().apply();return@LaunchedEffect}
         kotlinx.coroutines.delay(500)
         prefs.edit()
@@ -203,7 +212,7 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmission:org.j
     // unknown server response followed by app restart cannot create a new case.
     var showInvalid by rememberSaveable(draftFile) {mutableStateOf(false)}
     BackHandler(enabled = !submitted) {
-        if (step > 0) { step--; showInvalid = false } else onBack()
+        if (step > 0) { step--; showInvalid = false } else exitJourney()
     }
     var saveMessage by remember(draftFile) {mutableIntStateOf(0)}
     var pickMessage by remember(draftFile) {mutableIntStateOf(0)}
@@ -215,7 +224,7 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmission:org.j
     var listingLongitude by rememberSaveable(draftFile){mutableStateOf(resubmission?.optString("longitude")?:prefs.getString("longitude","").orEmpty())}
     var listingDescription by rememberSaveable(draftFile){mutableStateOf(resubmission?.optString("description")?:prefs.getString("description","").orEmpty())}
     LaunchedEffect(draftFile,listingLatitude,listingLongitude,listingDescription,submitted){
-        if(submitted)return@LaunchedEffect
+        if(submitted || readingForListing)return@LaunchedEffect
         kotlinx.coroutines.delay(500)
         prefs.edit().putString("latitude",listingLatitude).putString("longitude",listingLongitude)
             .putString("description",listingDescription).apply()
@@ -423,7 +432,8 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmission:org.j
         }catch (_:Exception){R.string.draft_error}
     }
     val stepLabels=listOf(R.string.smart_step_documents,R.string.step_identity,
-        if(directVerification)R.string.direct_analysis else R.string.step_property,R.string.step_summary)
+        if(directVerification || readingForListing)R.string.direct_analysis else R.string.step_property,R.string.step_summary
+    ).take(if (readingForListing) 3 else 4)
     val stepScroll=rememberScrollState()
     val missingFieldsTarget=remember{BringIntoViewRequester()}
     val certificateTarget = remember { BringIntoViewRequester() }
@@ -621,13 +631,13 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmission:org.j
     Column(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth().padding(horizontal=16.dp,vertical=12.dp),
             verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(10.dp)) {
-            IconButton(onClick={if(step>0){step--;showInvalid=false}else onBack()}, modifier=Modifier.size(48.dp)) {
+            IconButton(onClick={if(step>0){step--;showInvalid=false}else exitJourney()}, modifier=Modifier.size(48.dp)) {
                 Icon(Icons.AutoMirrored.Filled.ArrowBack,s(R.string.back),tint=Brand.Crimson)
             }
             Column(Modifier.weight(1f)) {
-                Text(s(if(directVerification)R.string.direct_verify else R.string.seller_title), Modifier.semantics { heading() },
+                Text(s(if(readingForListing)R.string.listing_read_documents else if(directVerification)R.string.direct_verify else R.string.seller_title), Modifier.semantics { heading() },
                     style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = Brand.Ink)
-                Text(s(if(directVerification)R.string.direct_docs_private else R.string.draft_label),
+                Text(s(if(directVerification || readingForListing)R.string.direct_docs_private else R.string.draft_label),
                     style = MaterialTheme.typography.bodySmall, color = Brand.Muted)
             }
         }
@@ -853,7 +863,7 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmission:org.j
                             }
                         }
                     }
-                    if(!directVerification){
+                    if(!directVerification && !readingForListing){
                     if(!hasPilotReviewSession||showAnalysisDetails){
                     Surface(shape=RoundedCornerShape(18.dp),color=Color.White,
                         border=BorderStroke(1.dp,CardBorder)){
@@ -1085,17 +1095,16 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmission:org.j
                         label={Text(s(R.string.property_region))},modifier=Modifier.fillMaxWidth(),singleLine=true,
                         isError=showInvalid&&region.trim().length<2,
                         supportingText=if(showInvalid&&region.trim().length<2){{Text(s(R.string.field_required))}}else null)
-                    if(area.isBlank())pilotConfirmableArea(pairReport?.detectedKind,pairReport?.sourceFacts.orEmpty())?.let{fact->
-                        Surface(color=Brand.Rose,shape=RoundedCornerShape(16.dp)){
-                            Column(Modifier.padding(14.dp)){
-                                Text(s(R.string.owner_area_question)+" "+fact.value+" m²")
-                                Text(s(R.string.owner_area_part_hint),fontSize=12.sp,color=Brand.Muted)
-                                TextButton(onClick={area=fact.value}){Text(s(R.string.owner_area_confirm))}
-                            }
+                    val areaFocus = remember { FocusRequester() }
+                    pairReport?.let { report ->
+                        listingAreaEvidence(report.detectedKind, report.sourceFacts)?.let { fact ->
+                            ListingAreaSuggestion(report.detectedKind.orEmpty(), fact, area,
+                                onAccept = { area = it; saveMessage = 0 },
+                                onEditPart = { area = it; areaFocus.requestFocus(); keyboard?.show() })
                         }
                     }
                     OutlinedTextField(area,{area=it.filter { char->char.isDigit()||char=='.'||char==',' }.take(16);saveMessage=0},
-                        label={Text(s(R.string.area_m2))},modifier=Modifier.fillMaxWidth(),singleLine=true,
+                        label={Text(s(R.string.area_m2))},modifier=Modifier.fillMaxWidth().focusRequester(areaFocus),singleLine=true,
                         textStyle=TextStyle(textDirection=TextDirection.Ltr,textAlign=TextAlign.Start,fontSize=16.sp),
                         keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Decimal),
                         isError=showInvalid&&!validArea,
@@ -1421,7 +1430,7 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmission:org.j
                     pickMessage=R.string.certificate_required
                     scope.launch { withFrameNanos { }; certificateTarget.bringIntoView() }
                 }
-                else if(step==2&&!validFirst&&!directVerification){
+                else if(step==2&&!validFirst&&!directVerification&&!readingForListing){
                     showInvalid=true
                     scope.launch{withFrameNanos{};missingFieldsTarget.bringIntoView()}
                 }
@@ -1431,6 +1440,12 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmission:org.j
                 else if(step==2&&pilotOcrSession!=null&&pairReport?.reviewId==null){
                     submissionMessage=R.string.submission_scan_required
                     pairError=R.string.submission_scan_required
+                }
+                else if(step==2 && onDocumentRead!=null){
+                    pairReport?.takeIf { it.reviewId != null }?.let { report ->
+                        onDocumentRead(report)
+                        prefs.edit().clear().apply()
+                    }
                 }
                 else if(step<3){step++;showInvalid=false;saveMessage=0}
                 else if(directVerification&&pilotOcrSession!=null&&!sending){
@@ -1490,7 +1505,8 @@ fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmission:org.j
                     containerColor = if (needsCertificate) Brand.NeutralContainer else Brand.Crimson,
                     contentColor = if (needsCertificate) Brand.Ink else Color.White
                 )) {
-                Text(s(if(step==3&&pilotOcrSession!=null)
+                Text(s(if(step==2 && readingForListing)R.string.listing_attach_reading
+                    else if(step==3&&pilotOcrSession!=null)
                     if(sending)R.string.submission_sending else if(submitted)R.string.submission_sent
                     else if(directVerification)R.string.direct_submit_docs else R.string.submission_send
                     else if(step==3)R.string.save_draft else if(step==1&&hasPilotReviewSession)R.string.owner_confirm_analyze

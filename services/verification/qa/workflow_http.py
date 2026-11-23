@@ -91,7 +91,8 @@ class WorkflowRoutes:
                 self.binary(h,200,(ADMIN_ROOT/name).read_bytes(),mime);return True
             if method=='GET' and path=='/api/public/listings':h.result(200,{'ok':True,'listings':self.store.public_listings()});return True
             if method=='GET' and path=='/api/public/capabilities':
-                h.result(200,{'ok':True,'directPublishing':self.direct_publishing});return True
+                h.result(200,{'ok':True,'directPublishing':self.direct_publishing,
+                              'draftDocumentReview':self.direct_publishing});return True
             match=re.fullmatch('/api/public/photos/('+ID+')',path)
             if match and method=='GET':
                 self.binary(h,200,self.store.public_photo(match[1]),'image/jpeg');return True

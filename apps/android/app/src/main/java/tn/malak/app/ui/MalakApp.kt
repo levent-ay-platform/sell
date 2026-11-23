@@ -47,7 +47,7 @@ private val Border = Color(0xFFE8E8EB)
  * The original Activity Context is needed by ActivityResultRegistryOwner when
  * SellerOcrJourney registers its Android document picker.
  */
-private val LocalMalakStringsContext = staticCompositionLocalOf<Context> {
+internal val LocalMalakStringsContext = staticCompositionLocalOf<Context> {
     error("Localized Malak resources are missing")
 }
 
@@ -94,19 +94,19 @@ internal fun MalakApp(
     val exploreState = rememberSaveableStateHolder()
     val ownerRoute = screen in setOf("seller", "requests", "signin", "editListing")
     val directRequested = v2 && BuildConfig.MALAK_DIRECT_PUBLISHING
-    val directCapability by produceState<Boolean?>(null, pilotOcrSession, directRequested) {
+    val directCapability by produceState<org.json.JSONObject?>(null, pilotOcrSession, directRequested) {
         value = null
         if (directRequested && pilotOcrSession != null) {
             value = try {
-                PilotListingClient.call(null, "/api/public/capabilities").optBoolean("directPublishing")
+                PilotListingClient.call(null, "/api/public/capabilities")
             } catch (cancellation: kotlinx.coroutines.CancellationException) {
                 throw cancellation
             } catch (_: Exception) {
-                false
+                org.json.JSONObject()
             }
         }
     }
-    val directPublishing = directRequested && directCapability == true
+    val directPublishing = directRequested && directCapability?.optBoolean("directPublishing") == true
 
     CompositionLocalProvider(LocalMalakStringsContext provides localizedContext,
         LocalLayoutDirection provides direction,
@@ -196,6 +196,7 @@ internal fun MalakApp(
                                     LinearProgressIndicator(Modifier.fillMaxWidth())
                                 } else if (directPublishing && session != null && (screen == "editListing" || resubmission == null)) {
                                     DirectOwnerListing(session, pilotPhone.orEmpty(), resubmission,
+                                        canAttachDocuments = directCapability?.optBoolean("draftDocumentReview") == true,
                                         onBack = { screen = if (screen == "editListing") "requests" else sellerReturnRoute },
                                         onPublished = { focusedRequest = it; screen = "requests" })
                                 } else SellerOcrJourney(

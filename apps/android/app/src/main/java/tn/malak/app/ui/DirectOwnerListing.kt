@@ -16,8 +16,11 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -36,14 +39,24 @@ import java.util.UUID
 
 private const val DirectPath = "/api/pilot/direct-listings"
 
+private data class ListingDocumentReading(val reviewId: String, val kind: String, val area: PilotPropertyFact?)
+private fun CertificateIdentityReview.forListing(id: String): ListingDocumentReading {
+    require(reviewId == id)
+    return ListingDocumentReading(id, detectedKind ?: "UNKNOWN", listingAreaEvidence(detectedKind, sourceFacts))
+}
+
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun DirectOwnerListing(
     session: PilotOcrSession,
     account: String,
     listing: JSONObject?,
+    canAttachDocuments: Boolean,
     onBack: () -> Unit,
-    onPublished: (String) -> Unit
+    onPublished: (String) -> Unit,
+    readReview: suspend (PilotOcrSession, String) -> CertificateIdentityReview = { owner, id ->
+        parsePilotComparison(PilotListingClient.call(owner, "/api/pilot/reviews/$id"))
+    }
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -81,6 +94,25 @@ internal fun DirectOwnerListing(
             }
         }
     }
+    var reviewId by remember(prefs, editing) {
+        mutableStateOf(if (editing) null else prefs.getString("documentReview", null))
+    }
+    var readingDocuments by rememberSaveable { mutableStateOf(false) }
+    var reading by remember(session) { mutableStateOf<ListingDocumentReading?>(null) }
+    var reviewLoadFailed by remember(reviewId) { mutableStateOf(false) }
+    var reload by remember { mutableIntStateOf(0) }
+    LaunchedEffect(session, reviewId, reload) {
+        val id = reviewId ?: return@LaunchedEffect
+        if (reading?.reviewId == id) return@LaunchedEffect
+        reviewLoadFailed = false
+        try {
+            reading = readReview(session, id).forListing(id)
+        } catch (cancel: CancellationException) {
+            throw cancel
+        } catch (_: Exception) {
+            reviewLoadFailed = true
+        }
+    }
     var choosingPoint by rememberSaveable { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableIntStateOf(0) }
@@ -116,6 +148,26 @@ internal fun DirectOwnerListing(
             error = 0
             if (stageIndex > 0) stageIndex-- else onBack()
         }
+    }
+    if (readingDocuments) {
+        val intake = remember(prefs) {
+            prefs.getString("documentIntake", null) ?: UUID.randomUUID().toString().also {
+                prefs.edit().putString("documentIntake", it).apply()
+            }
+        }
+        SellerOcrJourney(
+            draftScope = "$account/$intake",
+            onBack = { prefs.edit().remove("documentIntake").apply(); readingDocuments = false },
+            onDocumentRead = { report ->
+                report.reviewId?.let { id ->
+                    prefs.edit().putString("documentReview", id).remove("documentIntake").apply()
+                    reading = report.forListing(id)
+                    reviewId = id
+                    readingDocuments = false
+                }
+            }
+        )
+        return
     }
     BackHandler(enabled = !choosingPoint, onBack = previousStep)
     if (choosingPoint) {
@@ -181,8 +233,31 @@ internal fun DirectOwnerListing(
                 }
                 DirectListingStage.Details -> {
                     DirectField(title, { title = it.take(100) }, R.string.property_name)
+                    val areaFocus = remember { FocusRequester() }
+                    val keyboard = LocalSoftwareKeyboardController.current
+                    if (!editing && canAttachDocuments) {
+                        OutlinedButton(onClick = { focus.clearFocus(); readingDocuments = true }) {
+                            Text(s(R.string.listing_read_documents))
+                        }
+                    }
+                    if (reviewId != null) {
+                        Text(s(R.string.listing_review_attached), color = Brand.Ink)
+                        val current = reading?.takeIf { it.reviewId == reviewId }
+                        val fact = current?.area
+                        when {
+                            reviewLoadFailed -> {
+                                Text(s(R.string.owner_restore_failed), color = MaterialTheme.colorScheme.error)
+                                TextButton(onClick = { reload++ }) { Text(s(R.string.owner_retry)) }
+                            }
+                            current == null -> LinearProgressIndicator(Modifier.fillMaxWidth())
+                            fact != null -> ListingAreaSuggestion(current.kind, fact, area,
+                                onAccept = { area = it },
+                                onEditPart = { area = it; areaFocus.requestFocus(); keyboard?.show() })
+                            else -> Text(s(R.string.listing_area_none), color = Brand.Muted)
+                        }
+                    }
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        DirectField(area, { area = it.take(16) }, R.string.area_m2, Modifier.weight(1f), true)
+                        DirectField(area, { area = it.take(16) }, R.string.area_m2, Modifier.weight(1f).focusRequester(areaFocus), true)
                         DirectField(price, { price = it.take(16) }, R.string.price_tnd, Modifier.weight(1f), true)
                     }
                     OutlinedTextField(description, { description = it.take(650) },
@@ -191,7 +266,8 @@ internal fun DirectOwnerListing(
                 }
                 DirectListingStage.Preview -> {
                     OwnerListingPreview(title.trim(), region.trim(), area, price, description, photos)
-                    if (!editing) Text(s(R.string.direct_preview_note), color = Brand.Muted)
+                    if (!editing) Text(s(if (reviewId == null) R.string.direct_preview_note
+                        else R.string.listing_review_preview), color = Brand.Muted)
                 }
             }
             if (error != 0) Text(s(error), color = MaterialTheme.colorScheme.error)
@@ -204,6 +280,8 @@ internal fun DirectOwnerListing(
                     DirectListingStage.Details -> R.string.direct_check_details
                     DirectListingStage.Preview -> R.string.direct_missing_fields
                 }
+            } else if (preview && reviewId != null && !canAttachDocuments) {
+                error = R.string.listing_review_unavailable
             } else if (!preview) {
                 focus.clearFocus()
                 error = 0
@@ -233,7 +311,12 @@ internal fun DirectOwnerListing(
                                 photos.forEach {
                                     uploaded.put(PilotListingClient.photo(context, session, draft.getString("reviewId"), it.uri, it.length))
                                 }
-                                PilotListingClient.call(session, "$DirectPath/$id/publish", JSONObject().put("photoIds", uploaded))
+                                val publish = JSONObject().put("photoIds", uploaded).put("reviewId", reviewId)
+                                val published = PilotListingClient.call(session, "$DirectPath/$id/publish", publish)
+                                    .getJSONObject("listing")
+                                check(reviewId == null || published.optString("reviewId") == reviewId)
+                            } else {
+                                check(reviewId == null || draft.optString("reviewId") == reviewId)
                             }
                             prefs.edit().clear().apply()
                             id

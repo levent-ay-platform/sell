@@ -1,0 +1,13 @@
+<resources>
+    <string name="listing_read_documents">Lire mes documents</string>
+    <string name="listing_attach_reading">Utiliser cette lecture dans mon annonce</string>
+    <string name="listing_review_attached">Documents associés au brouillon</string>
+    <string name="listing_area_none">Aucune superficie exploitable. Saisissez la superficie proposée.</string>
+    <string name="listing_area_source">%1$s · page %2$d</string>
+    <string name="listing_document_area">Superficie du document · %1$s m²</string>
+    <string name="listing_entered_area">Superficie saisie dans l’annonce · %1$s m²</string>
+    <string name="listing_use_area">Utiliser cette superficie</string>
+    <string name="listing_use_part">Proposer une partie</string>
+    <string name="listing_review_unavailable">Le service ne peut pas associer ces documents pour le moment. Votre brouillon est conservé.</string>
+    <string name="listing_review_preview">Les documents seront transmis avec votre annonce pour vérification.</string>
+</resources>

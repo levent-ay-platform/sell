@@ -294,6 +294,29 @@ CREATE TABLE IF NOT EXISTS pilot_parcel_links(
         fields['kind'] = kind
         return fields
 
+    @staticmethod
+    def _attach_direct_review(db, user, row, review):
+        if not isinstance(review, str) or not review.strip():
+            raise WorkflowError()
+        sid = row['id']
+        evidence = db.execute('''SELECT r.report FROM reviews r
+            WHERE r.id=? AND r.account_id=?
+            AND NOT EXISTS(SELECT 1 FROM submissions WHERE review_id=r.id)
+            AND NOT EXISTS(SELECT 1 FROM direct_listing_review_history
+                    WHERE review_id=r.id AND submission_id<>?)''',(review,user,sid)).fetchone()
+        if not evidence:
+            raise WorkflowError(404,'REVIEW_NOT_FOUND')
+        kinds = {row['kind'] for row in db.execute('SELECT kind FROM evidence WHERE review_id=?',(review,))}
+        if not {'IDENTITY','DOCUMENT'}.issubset(kinds):
+            raise WorkflowError(422,'INCOMPLETE_DOCUMENTS')
+        report = json.loads(evidence['report'])
+        plans = report.get('parcelPlanScans') or []
+        is_land = json.loads(row['listing'])['kind'] == 'LAND'
+        verification = 'PLAN_REQUIRED' if is_land and not plans else 'UNDER_REVIEW'
+        db.execute('INSERT OR IGNORE INTO direct_listing_review_history VALUES(?,?,?)',(review,sid,now()))
+        db.execute('''UPDATE direct_listing_metadata
+            SET verification_review_id=?,verification_status=? WHERE submission_id=?''',(review,verification,sid))
+
     def change_direct_listing(self, user, sid, action, data):
         if not isinstance(data,dict):
             raise WorkflowError()
@@ -307,13 +330,20 @@ CREATE TABLE IF NOT EXISTS pilot_parcel_links(
             status = row['status']
             if action in ('publish','pause'):
                 desired = 'PUBLISHED' if action == 'publish' else 'PAUSED'
+                attach = action == 'publish' and 'reviewId' in data
                 if status == desired:
+                    if attach and data['reviewId'] != row['verification_review_id']:
+                        raise WorkflowError(409,'REVIEW_MISMATCH')
                     return self._submission(db,row)
                 allowed = ('DRAFT','PAUSED') if action == 'publish' else ('PUBLISHED',)
                 if status not in allowed:
                     raise WorkflowError(409,'INVALID_TRANSITION')
                 if status == 'PAUSED' and action == 'publish' and not row['owner_paused']:
                     raise WorkflowError(409,'MODERATION_PAUSE')
+                if attach:
+                    if status != 'DRAFT':
+                        raise WorkflowError(409,'INVALID_TRANSITION')
+                    self._attach_direct_review(db, user, row, data['reviewId'])
                 if status == 'DRAFT':
                     photos = data.get('photoIds',[])
                     if not isinstance(photos,list) or len(photos)>8 or any(not isinstance(p,str) for p in photos):
@@ -341,23 +371,7 @@ CREATE TABLE IF NOT EXISTS pilot_parcel_links(
                     raise WorkflowError(409,'INVALID_TRANSITION')
                 if review == row['verification_review_id'] and row['verification_status'] != 'INCOMPLETE':
                     return self._submission(db,row)
-                evidence = db.execute('''SELECT r.report FROM reviews r
-                    WHERE r.id=? AND r.account_id=?
-                    AND NOT EXISTS(SELECT 1 FROM submissions WHERE review_id=r.id)
-                    AND NOT EXISTS(SELECT 1 FROM direct_listing_review_history
-                            WHERE review_id=r.id AND submission_id<>?)''',(review,user,sid)).fetchone()
-                if not evidence:
-                    raise WorkflowError(404,'REVIEW_NOT_FOUND')
-                kinds = {row['kind'] for row in db.execute('SELECT kind FROM evidence WHERE review_id=?',(review,))}
-                if not {'IDENTITY','DOCUMENT'}.issubset(kinds):
-                    raise WorkflowError(422,'INCOMPLETE_DOCUMENTS')
-                report = json.loads(evidence['report'])
-                plans = report.get('parcelPlanScans') or []
-                is_land = json.loads(row['listing'])['kind'] == 'LAND'
-                verification = 'PLAN_REQUIRED' if is_land and not plans else 'UNDER_REVIEW'
-                db.execute('INSERT OR IGNORE INTO direct_listing_review_history VALUES(?,?,?)',(review,sid,now()))
-                db.execute('''UPDATE direct_listing_metadata
-                    SET verification_review_id=?,verification_status=? WHERE submission_id=?''',(review,verification,sid))
+                self._attach_direct_review(db, user, row, review)
             else:
                 raise WorkflowError()
             db.execute('UPDATE submissions SET version=version+1,updated=? WHERE id=?',(now(),sid))

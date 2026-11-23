@@ -97,6 +97,33 @@ class HttpWorkflow(unittest.TestCase):
         self.assertEqual(self.request('/api/admin/login',data,headers={'Origin':'https://malak-api.ayasofia.shop'})[0],200)
         self.assertEqual(self.request('/api/admin/login',data,headers={'Origin':'https://evil.test'})[0],400)
         self.assertEqual(self.request('/admin')[0],200)
+    def test_publish_with_document_area_binds_one_private_review_atomically(self):
+        self.server.workflow.direct_publishing = True
+        base = '/api/pilot/direct-listings'
+        owner = self.store.login('+21623456789','1234','A'*43)['bearer']
+        other = self.store.login('+21698765432','1234','B'*43)['bearer']
+        fields = dict(title='Test parcel', region='Tunis', area='275', price='54000',
+                      kind='LAND', latitude='36.85', longitude='10.10', requestKey='a'*32)
+        sid = self.request(base, fields, owner)[1]['listing']['id']
+        evidence = [('IDENTITY','image/jpeg',b'private id'), ('DOCUMENT','application/pdf',b'private deed')]
+        def review(token):
+            return self.store.record_review(self.store.authenticate(token)['id'], evidence, {
+                'propertyFacts':[{'key':'registeredAreaM2','value':'900','page':2,'status':'CANDIDATE'}]})
+        def publish(listing, rid):
+            return self.request(f'{base}/{listing}/publish', {'reviewId':rid}, owner)
+        self.assertEqual(publish(sid, review(other))[0], 404)
+        self.assertEqual(self.request('/api/public/listings')[1]['listings'], [])
+        rid = review(owner)
+        saved = publish(sid, rid)[1]['listing']
+        self.assertEqual((saved['area'], saved['reviewId'], saved['verificationStatus']), ('275', rid, 'PLAN_REQUIRED'))
+        self.assertEqual(publish(sid, rid)[1]['listing']['version'], saved['version'])
+        second = self.request(base, {**fields,'requestKey':'b'*32}, owner)[1]['listing']['id']
+        self.assertEqual(publish(second, rid)[0], 404)
+        public, = self.request('/api/public/listings')[1]['listings']
+        self.assertEqual((public['id'], public['area']), (sid, '275'))
+        self.assertNotIn('reviewId', public)
+        self.assertNotIn('propertyFacts', public)
+
     def test_direct_listing_publication_verification_and_atlas_use_one_record(self):
         owner=self.store.login('+21623456789','1234','A'*43)['bearer']
         stranger=self.store.login('+21698765432','1234','B'*43)['bearer']
