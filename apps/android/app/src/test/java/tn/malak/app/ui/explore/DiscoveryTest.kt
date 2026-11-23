@@ -68,6 +68,28 @@ class DiscoveryTest {
     }
 
     @Test
+    fun publicFeedMissingKindIsUnknownAndNotSilentlyClassifiedAsLand() {
+        assertEquals("UNKNOWN", publicListingKind(""))
+        assertEquals("UNKNOWN", publicListingKind("terrain"))
+        assertEquals("UNKNOWN", publicListingKind("something unexpected"))
+        assertEquals("LAND", publicListingKind("land"))
+        assertEquals("APARTMENT", publicListingKind(" APARTMENT "))
+
+        val incompletePublicRecord = DiscoveryListing(
+            id = "12345678-1234-4234-8234-123456789012",
+            title = "Example", region = "Nabeul", kind = publicListingKind(""),
+            priceTnd = "80000", areaM2 = "250", rooms = null,
+            point = DiscoveryPoint(36.8, 11.0), locationAccuracy = "APPROXIMATE",
+            photoUrl = null, description = null
+        )
+        val national = DiscoveryBounds(7.4, 30.0, 12.0, 37.7)
+        assertTrue(incompletePublicRecord.matchesPilotQuery(
+            DiscoveryQuery(national, null, DiscoveryFilters())))
+        assertFalse(incompletePublicRecord.matchesPilotQuery(
+            DiscoveryQuery(national, null, DiscoveryFilters(kind = "LAND"))))
+    }
+
+    @Test
     fun areaOnlyPublicListingStaysOnListButNeverGetsAFabricatedRadarPin() {
         val areaOnly = DiscoveryListing(
             id = "12345678-1234-4234-8234-123456789012",
