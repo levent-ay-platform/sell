@@ -84,11 +84,14 @@ internal fun ExploreScreen(
     sourceOverride: DiscoverySource? = null
 ) {
     val endpoint = BuildConfig.MALAK_DISCOVERY_BASE_URL
-    val source = sourceOverride ?: remember(endpoint, language) {
+    val readOnlyFeed = BuildConfig.MALAK_PUBLIC_LISTINGS_BASE_URL
+    val source = sourceOverride ?: remember(endpoint, readOnlyFeed, language) {
         when {
             BuildConfig.MALAK_DIRECT_PUBLISHING && BuildConfig.MALAK_PRIVATE_SERVICE_URL.isNotBlank() ->
                 PilotPublicDiscoverySource(BuildConfig.MALAK_PRIVATE_SERVICE_URL)
             endpoint.isNotBlank() -> HttpDiscoverySource(endpoint, language)
+            // Public-read QA must not switch on direct owner publishing or Pilot authentication.
+            readOnlyFeed.isNotBlank() -> PilotPublicDiscoverySource(readOnlyFeed)
             else -> null
         }
     }
