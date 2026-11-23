@@ -61,7 +61,8 @@ internal data class NozhaProjectCard(
     val counts: Map<NozhaLotStatus, Int>,
     val businessLandClassification: String?,
     val businessWater: String?,
-    val businessElectricity: String?
+    val businessElectricity: String?,
+    val projectPoint: DiscoveryPoint? = null
 )
 
 /**
@@ -127,8 +128,16 @@ internal fun decodeNozhaProject(body: JSONObject, nowMillis: Long): NozhaProject
         summary.optInt("blocked", -1) != counts[NozhaLotStatus.BLOCKED]) return null
     fun claim(key: String) = body.optJSONObject("land")?.optString(key)?.trim()
         ?.takeIf { it.length in 1..96 && it != "unknown" }
+    val anchor = body.optJSONObject("projectPoint")
+    val projectPoint = anchor?.takeIf {
+        it.optString("source") == "REVIEWED_PROJECT_POINT" && it.optString("accuracy") == "APPROXIMATE"
+    }?.let {
+        val latitude = it.optDouble("latitude")
+        val longitude = it.optDouble("longitude")
+        if (latitude in 29.0..39.0 && longitude in 7.0..13.0) DiscoveryPoint(latitude, longitude) else null
+    }
     return NozhaProjectCard(refreshedAt, current, lots, counts,
-        claim("classification"), claim("waterStatus"), claim("electricityStatus"))
+        claim("classification"), claim("waterStatus"), claim("electricityStatus"), projectPoint)
 }
 
 /** Full detail: public CRM facts alongside independent unverified Atlas state. */

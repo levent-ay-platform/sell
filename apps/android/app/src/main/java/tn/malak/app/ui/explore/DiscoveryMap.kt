@@ -83,6 +83,8 @@ internal fun DiscoveryMap(
     priceLabel: (DiscoveryListing) -> String,
     modifier: Modifier = Modifier,
     boundaries: List<PublicParcelBoundary> = emptyList(),
+    nozhaPoint: DiscoveryPoint? = null,
+    onNozha: () -> Unit = {},
     administrativeBoundariesVisible: Boolean = false,
     industrialZones: FeatureCollection? = null,
     industrialLots: FeatureCollection? = null,
@@ -113,6 +115,7 @@ internal fun DiscoveryMap(
     val context = LocalContext.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val cameraCallback by rememberUpdatedState(onCameraIdle)
+    val nozhaCallback by rememberUpdatedState(onNozha)
     val listingCallback by rememberUpdatedState(onListing)
     val clusterCallback by rememberUpdatedState(onCluster)
     val zoneCallback by rememberUpdatedState(onIndustrialZone)
@@ -213,6 +216,10 @@ internal fun DiscoveryMap(
                 val tap = nativeMap.projection.toScreenLocation(location)
                 val hit = RectF(tap.x - 20, tap.y - 20, tap.x + 20, tap.y + 20)
                 val feature = nativeMap.queryRenderedFeatures(hit, MARKERS).firstOrNull()
+                if (feature?.hasProperty("nozha") == true) {
+                    nozhaCallback()
+                    return@addOnMapClickListener true
+                }
                 if (feature == null) {
                     if (!afiVisible) return@addOnMapClickListener false
                     val lot = nativeMap.queryRenderedFeatures(tap, AfiLotFill).firstOrNull()
@@ -341,8 +348,13 @@ internal fun DiscoveryMap(
         style?.let { updateBoundaryLayers(it, boundaries) }
     }
 
-    LaunchedEffect(style, markers, selectedId) {
+    LaunchedEffect(style, markers, selectedId, nozhaPoint) {
         val features = buildList {
+            if (nozhaPoint != null) add(Feature.fromGeometry(Point.fromLngLat(nozhaPoint.longitude, nozhaPoint.latitude)).apply {
+                addBooleanProperty("nozha", true)
+                addStringProperty("label", "Nozha")
+                addNumberProperty("drawOrder", 1)
+            })
             for (listing in markers.listings) {
                 val point = listing.point ?: continue
                 add(Feature.fromGeometry(Point.fromLngLat(point.longitude, point.latitude)).apply {

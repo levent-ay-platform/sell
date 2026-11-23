@@ -28,7 +28,7 @@ internal fun RadarResultsSheet(
     industrialFailed: Boolean, listings: List<DiscoveryListing>,
     listingsLoading: Boolean, listingsFailed: Boolean, listingsAvailable: Boolean,
     language: String, onIndustrialZone: (String) -> Unit,
-    onListing: (String) -> Unit, onDismiss: () -> Unit
+    onListing: (String) -> Unit, onDismiss: () -> Unit, onNozha: (() -> Unit)? = null
 ) {
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -103,7 +103,12 @@ internal fun RadarResultsSheet(
                         }
                     }
                 }
-                if (industrialHits?.isEmpty() == true && listings.isEmpty() &&
+                if (onNozha != null) item {
+                    OutlinedButton(onClick = onNozha, modifier = Modifier.fillMaxWidth()) {
+                        Text(s(R.string.nozha_project_approximate))
+                    }
+                }
+                if (industrialHits?.isEmpty() == true && listings.isEmpty() && onNozha == null &&
                     !listingsLoading && !listingsFailed) {
                     item {
                         Text(s(R.string.radar_no_results), color = Brand.Muted,

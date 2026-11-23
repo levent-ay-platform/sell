@@ -295,8 +295,8 @@ internal fun ExploreScreen(
     var nozha by remember(projectSource) { mutableStateOf<NozhaProjectCard?>(null) }
     var showNozha by rememberSaveable { mutableStateOf(false) }
     val lifecycle = LocalLifecycleOwner.current.lifecycle
-    LaunchedEffect(projectSource, lifecycle, mapMode) {
-        if (projectSource == null || mapMode) return@LaunchedEffect
+    LaunchedEffect(projectSource, lifecycle) {
+        if (projectSource == null) return@LaunchedEffect
         lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
             nozha = nozha?.copy(current = false)
             while (currentCoroutineContext().isActive) {
@@ -317,6 +317,16 @@ internal fun ExploreScreen(
         }
     }
 
+    // A project pin enters radar only at the reviewed approximate point.
+    // Lot-price and size filters stay specific to actual lot coordinates/listings.
+    val matchesProjectFilters = filters == DiscoveryFilters() || filters == DiscoveryFilters(kind = "LAND")
+    val nozhaForRadar = nozha?.takeIf {
+        it.current && it.lots.any { lot -> lot.inquiryAllowed } && matchesProjectFilters
+    }?.projectPoint?.let { point -> activeRadar?.contains(point) == true } == true
+    val nozhaMapPoint = nozha?.projectPoint.takeIf {
+        showSalesLayer && (if (activeRadar != null) nozhaForRadar else matchesProjectFilters)
+    }
+
     val opened = detailId
 
     val selected = selectedId?.let { id ->
@@ -330,6 +340,8 @@ internal fun ExploreScreen(
             val sGlobe = s(R.string.v2_globe_view)
             val mapDescription = s(if (globeVisible) R.string.v2_globe_view else R.string.v2_ready_map)
             DiscoveryMap(
+                nozhaPoint = nozhaMapPoint,
+                onNozha = { showNozha = true },
                 styleUrl = discoveryGlobeStyle,
                 initial = DiscoveryCamera(
                     DiscoveryPoint(centerLatitude, centerLongitude), zoom,
@@ -790,14 +802,14 @@ internal fun ExploreScreen(
             }
         }
         val visibleProject = nozha
-        if (showNozha && !mapMode && visibleProject != null) {
+        if (showNozha && visibleProject != null) {
             Surface(Modifier.fillMaxSize(), color = Brand.Pearl) {
                 NozhaProjectDetail(visibleProject, language, onBack = { showNozha = false })
             }
         }
     }
     LaunchedEffect(nozha) { if (nozha == null) showNozha = false }
-    BackHandler(enabled = showNozha && !mapMode) { showNozha = false }
+    BackHandler(enabled = showNozha) { showNozha = false }
     BackHandler(enabled = opened != null || (mapMode && (radarEditing || selectedId != null || industrialZoneId != null))) {
         when {
             detailId != null -> detailId = null
@@ -813,6 +825,7 @@ internal fun ExploreScreen(
             industrialHits = radarIndustrialHits,
             industrialFailed = industrialLoadFailed,
             listings = page.listings,
+            onNozha = if (nozhaForRadar) ({ radarResultsOpen = false; showNozha = true }) else null,
             listingsLoading = listLoading,
             listingsFailed = listFailed,
             listingsAvailable = source != null,

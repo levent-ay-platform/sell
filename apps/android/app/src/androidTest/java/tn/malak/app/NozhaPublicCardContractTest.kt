@@ -129,6 +129,19 @@ class NozhaPublicCardContractTest {
         }
     }
 
+    @Test fun onlyAnApprovedApproximateProjectPointCanEnterRadar() {
+        val payload = fixture()
+        assertNull(decodeNozhaProject(payload, now)?.projectPoint)
+        val point = JSONObject("""{"latitude":36.85,"longitude":11.09,"accuracy":"APPROXIMATE","source":"REVIEWED_PROJECT_POINT"}""")
+        payload.put("projectPoint", point)
+        val accepted = requireNotNull(decodeNozhaProject(payload, now)?.projectPoint)
+        assertTrue(tn.malak.app.ui.explore.DiscoveryRadar(accepted, 1).contains(accepted))
+        point.put("source", "UNVERIFIED")
+        assertNull(decodeNozhaProject(payload, now)?.projectPoint)
+        point.put("source", "REVIEWED_PROJECT_POINT").put("latitude", 0)
+        assertNull(decodeNozhaProject(payload, now)?.projectPoint)
+    }
+
     @Test fun staleSnapshotNeverPromotesAvailableToForSale() {
         val stale = fixture()
         stale.put("inventoryCurrent", false)
