@@ -103,9 +103,10 @@ class WorkflowRoutes:
             if (card['schemaVersion'] != 1 or card['source'] != 'CASAIMED_CRM' or
                     card['project'] != {'id': '3', 'code': '561663', 'title': 'Nozha'}):
                 raise WorkflowError(503, 'INVENTORY_REFRESHING')
-            if include_plan:
-                return {'card': card, 'pilotPlan': envelope.get('pilotPlan', [])}
-            return card
+            response = {'card': card}
+            if include_plan or envelope.get('publicDerivedPlan') is True:
+                response['pilotPlan'] = envelope.get('pilotPlan', [])
+            return response
         except FileNotFoundError:
             raise WorkflowError(404, 'NOT_FOUND')
         except (OSError, ValueError, TypeError, KeyError, AttributeError):
@@ -128,7 +129,7 @@ class WorkflowRoutes:
                 h.result(200, {'ok': True, **self.nozha_card(include_plan=True)})
                 return True
             if method == 'GET' and path == '/api/public/projects/nozha':
-                h.result(200, {'ok': True, 'card': self.nozha_card()})
+                h.result(200, {'ok': True, **self.nozha_card()})
                 return True
             if method=='GET' and path=='/api/public/listings':h.result(200,{'ok':True,'listings':self.store.public_listings()});return True
             if method=='GET' and path=='/api/public/capabilities':

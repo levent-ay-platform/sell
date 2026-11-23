@@ -75,6 +75,10 @@ class HttpWorkflow(unittest.TestCase):
             self.assertEqual(self.request(private)[0], 401)
             self.assertEqual(self.request(private, token=bearer)[1]['pilotPlan'], plan)
             self.assertNotIn('pilotPlan', self.request('/api/public/projects/nozha')[1])
+            envelope = json.loads(path.read_text())
+            envelope['publicDerivedPlan'] = True
+            path.write_text(json.dumps(envelope))
+            self.assertEqual(self.request('/api/public/projects/nozha')[1]['pilotPlan'], plan)
             self.store.enrolled_devices = {}
             self.assertEqual(self.request(private, token=bearer)[0], 401)
 

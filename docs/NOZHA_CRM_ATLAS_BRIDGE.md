@@ -47,3 +47,9 @@ The CRM follow-up verified a project point and a populated legal-title reference
 The exporter can produce the approximate geographic subdivision for the enrolled Pilot using the CRM plan-space polygons, the bound Nozha blueprint and the persisted alignment. Enable it via `pilotDerivedPlanApproved` on the scoped release. `/api/pilot/projects/nozha` serves the overlay to enrolled account/device pairs. The public project response omits the overlay. Android draws status-colored clickable parcels and offers a zoom-to-plan action from the project card. Plot labels and status come from the same feed snapshot. Source scans and cadastral references remain private.
 
 Activation requires a separately enrolled Pilot runtime, an explicit account/device whitelist and the CRM snapshot feed. The existing login-only gateway returned HTTP 404 for the private project route. Existing login service and data were left intact.
+
+## Guest Pilot rollout
+
+The approved derived subdivision may be included in the public Nozha response when the project release explicitly sets `publicDerivedPlanApproved`. Guest Android parses these polygons from the public feed. The Pilot gateway routes the exact GET path to the dedicated read-only sidecar. The CRM exporter and HTTP reader run separately. The exporter reads committed state; the reader has a read-only snapshot mount and no CRM database credentials. Its response expires after 20 seconds without fresh data.
+
+The 23 November Pilot rollout uses a seven-day project grant. The live guest route returned 48 inventory records and 43 approximate lot polygons. Source PDF scans, the legal title reference and buyer details remain private. Renewal and withdrawal are controlled by the scoped grant. Gateway rollback restores the prior tested nginx configuration.

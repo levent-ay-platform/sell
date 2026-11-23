@@ -32,8 +32,9 @@ internal class PilotPublicDiscoverySource(private val origin: String) : Discover
 
     suspend fun nozha(): NozhaProjectCard? =
         publicGet("/api/public/projects/nozha", missingAllowed = true)?.let {
-            decodeNozhaProject(it.getJSONObject("card"), System.currentTimeMillis())
+            val card = decodeNozhaProject(it.getJSONObject("card"), System.currentTimeMillis())
                 ?: throw IOException("Invalid project inventory")
+            card.copy(pilotPlan = parseNozhaPlan(it.optJSONArray("pilotPlan"), card))
         }
 
     // Map, list and place suggestions may request the same public feed at once.
