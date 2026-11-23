@@ -1,3 +1,5 @@
 <resources>
     <string name="nozha_project_approximate">Nozha · Emplacement approximatif du projet</string>
+    <string name="nozha_open_plan">Voir le lotissement sur la carte</string>
+    <string name="nozha_plan_notice">Plan de lotissement approximatif</string>
 </resources>

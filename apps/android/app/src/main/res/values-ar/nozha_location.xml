@@ -1,3 +1,5 @@
 <resources>
     <string name="nozha_project_approximate">النزهة · موقع المشروع التقريبي</string>
+    <string name="nozha_open_plan">اعرض التقسيم على الخريطة</string>
+    <string name="nozha_plan_notice">مخطط تقسيم تقريبي</string>
 </resources>

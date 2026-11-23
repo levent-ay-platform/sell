@@ -85,6 +85,8 @@ internal fun DiscoveryMap(
     boundaries: List<PublicParcelBoundary> = emptyList(),
     nozhaPoint: DiscoveryPoint? = null,
     onNozha: () -> Unit = {},
+    nozhaPlan: List<Feature> = emptyList(),
+    onNozhaLot: (String) -> Unit = {},
     administrativeBoundariesVisible: Boolean = false,
     industrialZones: FeatureCollection? = null,
     industrialLots: FeatureCollection? = null,
@@ -115,6 +117,7 @@ internal fun DiscoveryMap(
     val context = LocalContext.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val cameraCallback by rememberUpdatedState(onCameraIdle)
+    val nozhaLotCallback by rememberUpdatedState(onNozhaLot)
     val nozhaCallback by rememberUpdatedState(onNozha)
     val listingCallback by rememberUpdatedState(onListing)
     val clusterCallback by rememberUpdatedState(onCluster)
@@ -218,6 +221,11 @@ internal fun DiscoveryMap(
                 val feature = nativeMap.queryRenderedFeatures(hit, MARKERS).firstOrNull()
                 if (feature?.hasProperty("nozha") == true) {
                     nozhaCallback()
+                    return@addOnMapClickListener true
+                }
+                val nozhaLot = nativeMap.queryRenderedFeatures(tap, "nozha-plan-fill").firstOrNull()
+                if (nozhaLot != null) {
+                    nozhaLotCallback(nozhaLot.getStringProperty("code"))
                     return@addOnMapClickListener true
                 }
                 if (feature == null) {
@@ -346,6 +354,32 @@ internal fun DiscoveryMap(
 
     LaunchedEffect(style, boundaries) {
         style?.let { updateBoundaryLayers(it, boundaries) }
+    }
+
+    LaunchedEffect(style, nozhaPlan) {
+        val mapStyle = style ?: return@LaunchedEffect
+        val collection = FeatureCollection.fromFeatures(nozhaPlan)
+        val existing = mapStyle.getSourceAs<GeoJsonSource>("nozha-plan")
+        if (existing != null) {
+            existing.setGeoJson(collection)
+        } else if (nozhaPlan.isNotEmpty()) {
+            mapStyle.addSource(GeoJsonSource("nozha-plan", collection))
+            val color = Expression.match(Expression.get("status"), Expression.color(0xFF64748B.toInt()),
+                Expression.stop("AVAILABLE", Expression.color(0xFF17764C.toInt())),
+                Expression.stop("RESERVED", Expression.color(0xFFAB710E.toInt())),
+                Expression.stop("SOLD", Expression.color(0xFFA81835.toInt())))
+            mapStyle.addLayerBelow(FillLayer("nozha-plan-fill", "nozha-plan").withProperties(
+                PropertyFactory.fillColor(color), PropertyFactory.fillOpacity(.47f)
+            ).apply { minZoom = 13f }, MARKERS)
+            mapStyle.addLayerBelow(LineLayer("nozha-plan-outline", "nozha-plan").withProperties(
+                PropertyFactory.lineColor(color), PropertyFactory.lineWidth(2f),
+                PropertyFactory.lineDasharray(arrayOf(3f, 2f))
+            ).apply { minZoom = 13f }, MARKERS)
+            mapStyle.addLayerBelow(SymbolLayer("nozha-plan-label", "nozha-plan").withProperties(
+                PropertyFactory.textField(Expression.get("code")), PropertyFactory.textSize(12f),
+                PropertyFactory.textFont(arrayOf("Noto Sans Bold"))
+            ).apply { minZoom = 15.5f }, MARKERS)
+        }
     }
 
     LaunchedEffect(style, markers, selectedId, nozhaPoint) {

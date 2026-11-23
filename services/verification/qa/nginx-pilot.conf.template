@@ -86,6 +86,11 @@ server {
   limit_req zone=malak_ocr_rate burst=12 nodelay;
   proxy_pass https://__MAC_TLS_HOST__:10000;
  }
+ location = /api/pilot/projects/nozha {
+  limit_except GET { deny all; }
+  limit_req zone=malak_ocr_rate burst=12 nodelay;
+  proxy_pass https://__MAC_TLS_HOST__:10000;
+ }
  location = /api/public/capabilities {
   limit_except GET { deny all; }
   limit_req zone=malak_ocr_rate burst=12 nodelay;

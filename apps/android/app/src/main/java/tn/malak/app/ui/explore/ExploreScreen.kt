@@ -291,17 +291,30 @@ internal fun ExploreScreen(
         }
     }
 
+    val pilotSession = tn.malak.app.ui.LocalPilotOcrSession.current
     val projectSource = source as? PilotPublicDiscoverySource
-    var nozha by remember(projectSource) { mutableStateOf<NozhaProjectCard?>(null) }
+    var nozha by remember(projectSource, pilotSession) { mutableStateOf<NozhaProjectCard?>(null) }
     var showNozha by rememberSaveable { mutableStateOf(false) }
+    var openedNozhaLot by remember { mutableStateOf<String?>(null) }
     val lifecycle = LocalLifecycleOwner.current.lifecycle
-    LaunchedEffect(projectSource, lifecycle) {
-        if (projectSource == null) return@LaunchedEffect
+    LaunchedEffect(projectSource, pilotSession, lifecycle) {
+        if (projectSource == null && pilotSession == null) return@LaunchedEffect
         lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
-            nozha = nozha?.copy(current = false)
+            nozha = nozha?.copy(current = false, pilotPlan = emptyList())
             while (currentCoroutineContext().isActive) {
                 try {
-                    val incoming = projectSource.nozha()
+                    val privateCard = if (pilotSession != null) {
+                        try {
+                            val data = tn.malak.app.ui.PilotListingClient.call(pilotSession, "/api/pilot/projects/nozha")
+                            decodeNozhaProject(data.getJSONObject("card"), System.currentTimeMillis())?.let {
+                                it.copy(pilotPlan = parseNozhaPlan(data.optJSONArray("pilotPlan"), it))
+                            }
+                        } catch (error: tn.malak.app.ui.OwnerPairException) {
+                            if (error.statusCode !in setOf(401, 404)) throw error
+                            null
+                        }
+                    } else null
+                    val incoming = privateCard ?: projectSource?.nozha()
                     val previous = nozha
                     if (incoming == null || previous == null ||
                         java.time.Instant.parse(incoming.updatedAt) >= java.time.Instant.parse(previous.updatedAt)) {
@@ -310,7 +323,7 @@ internal fun ExploreScreen(
                 } catch (cancelled: CancellationException) {
                     throw cancelled
                 } catch (_: Exception) {
-                    nozha = nozha?.copy(current = false)
+                    nozha = nozha?.copy(current = false, pilotPlan = emptyList())
                 }
                 delay(if (nozha == null) 15_000 else 4_000)
             }
@@ -323,7 +336,11 @@ internal fun ExploreScreen(
     val nozhaForRadar = nozha?.takeIf {
         it.current && it.lots.any { lot -> lot.inquiryAllowed } && matchesProjectFilters
     }?.projectPoint?.let { point -> activeRadar?.contains(point) == true } == true
-    val nozhaMapPoint = nozha?.projectPoint.takeIf {
+    val privatePlanPoint = nozha?.pilotPlan?.takeIf { it.isNotEmpty() }?.flatMap { it.ring }?.let { rings ->
+        DiscoveryPoint(rings.map { it.latitude() }.average(), rings.map { it.longitude() }.average())
+    }
+    val planFeatures = remember(nozha) { nozha?.planFeatures().orEmpty() }
+    val nozhaMapPoint = (nozha?.projectPoint ?: privatePlanPoint).takeIf {
         showSalesLayer && (if (activeRadar != null) nozhaForRadar else matchesProjectFilters)
     }
 
@@ -341,7 +358,9 @@ internal fun ExploreScreen(
             val mapDescription = s(if (globeVisible) R.string.v2_globe_view else R.string.v2_ready_map)
             DiscoveryMap(
                 nozhaPoint = nozhaMapPoint,
-                onNozha = { showNozha = true },
+                onNozha = { openedNozhaLot = null; showNozha = true },
+                nozhaPlan = if (nozhaMapPoint != null) planFeatures else emptyList(),
+                onNozhaLot = { openedNozhaLot = it; showNozha = true },
                 styleUrl = discoveryGlobeStyle,
                 initial = DiscoveryCamera(
                     DiscoveryPoint(centerLatitude, centerLongitude), zoom,
@@ -804,7 +823,17 @@ internal fun ExploreScreen(
         val visibleProject = nozha
         if (showNozha && visibleProject != null) {
             Surface(Modifier.fillMaxSize(), color = Brand.Pearl) {
-                NozhaProjectDetail(visibleProject, language, onBack = { showNozha = false })
+                NozhaProjectDetail(visibleProject, language, onBack = { showNozha = false }, initialLot = openedNozhaLot,
+                    onPlan = privatePlanPoint?.let { point ->
+                        {
+                            showNozha = false
+                            openingGlobe = false
+                            flyToTunisia = false
+                            mapMode = true
+                            onViewModeChanged(true)
+                            jump = CameraJump(point, 16.2, ++jumpSerial)
+                        }
+                    })
             }
         }
     }

@@ -81,7 +81,7 @@ class WorkflowRoutes:
                       'boundaries':projection['boundaries'] if projection else [],'documents':documents})
 
     @staticmethod
-    def nozha_card():
+    def nozha_card(include_plan=False):
         # The configured file is written atomically by the scoped CRM exporter.
         path = os.environ.get('MALAK_NOZHA_FEED_FILE', '')
         if not path or not Path(path).is_absolute():
@@ -103,6 +103,8 @@ class WorkflowRoutes:
             if (card['schemaVersion'] != 1 or card['source'] != 'CASAIMED_CRM' or
                     card['project'] != {'id': '3', 'code': '561663', 'title': 'Nozha'}):
                 raise WorkflowError(503, 'INVENTORY_REFRESHING')
+            if include_plan:
+                return {'card': card, 'pilotPlan': envelope.get('pilotPlan', [])}
             return card
         except FileNotFoundError:
             raise WorkflowError(404, 'NOT_FOUND')
@@ -119,6 +121,12 @@ class WorkflowRoutes:
                 name='index.html' if path in ('/admin','/admin/') else path.rsplit('/',1)[1]
                 mime={'index.html':'text/html; charset=utf-8','app.js':'text/javascript; charset=utf-8','style.css':'text/css; charset=utf-8'}[name]
                 self.binary(h,200,(ADMIN_ROOT/name).read_bytes(),mime);return True
+            if method == 'GET' and path == '/api/pilot/projects/nozha':
+                if self.store.enrolled_devices is None:
+                    raise WorkflowError(404, 'NOT_FOUND')
+                self.actor(h)
+                h.result(200, {'ok': True, **self.nozha_card(include_plan=True)})
+                return True
             if method == 'GET' and path == '/api/public/projects/nozha':
                 h.result(200, {'ok': True, 'card': self.nozha_card()})
                 return True

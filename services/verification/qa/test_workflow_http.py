@@ -53,6 +53,31 @@ class HttpWorkflow(unittest.TestCase):
             path.write_text(json.dumps(envelope))
             self.assertEqual(self.request(url)[0], 404)
 
+    def test_nozha_plan_is_only_available_to_enrolled_pilot_accounts(self):
+        from datetime import datetime, timedelta, timezone
+        from unittest.mock import patch
+        from pilot_workflow import digest
+        path = Path(self.tmp.name) / 'nozha-plan.json'
+        now = datetime.now(timezone.utc)
+        plan = [{'code': '7', 'ring': [[11,36],[11.001,36],[11,36.001],[11,36]]}]
+        path.write_text(json.dumps({
+            'approvedUntil': (now + timedelta(minutes=1)).isoformat(),
+            'card': {'schemaVersion': 1, 'source': 'CASAIMED_CRM',
+                     'project': {'id':'3','code':'561663','title':'Nozha'},
+                     'refreshedAt': now.isoformat(), 'inventoryCurrent': True},
+            'pilotPlan': plan
+        }))
+        private = '/api/pilot/projects/nozha'
+        with patch.dict('os.environ', {'MALAK_NOZHA_FEED_FILE': str(path)}):
+            self.assertEqual(self.request(private)[0], 404)
+            self.store.enrolled_devices = {'+21623456789': digest('A' * 43)}
+            bearer = self.store.login('+21623456789', '1234', 'A' * 43)['bearer']
+            self.assertEqual(self.request(private)[0], 401)
+            self.assertEqual(self.request(private, token=bearer)[1]['pilotPlan'], plan)
+            self.assertNotIn('pilotPlan', self.request('/api/public/projects/nozha')[1])
+            self.store.enrolled_devices = {}
+            self.assertEqual(self.request(private, token=bearer)[0], 401)
+
     def test_exact_input_replay_avoids_ocr_but_distinct_listing_gets_own_review(self):
         from unittest.mock import patch
         token=self.store.login('+21623456789','1234','A'*43)['bearer']

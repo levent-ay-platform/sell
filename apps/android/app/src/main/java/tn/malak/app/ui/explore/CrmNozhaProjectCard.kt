@@ -15,6 +15,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import org.json.JSONObject
+import org.json.JSONArray
+import org.maplibre.geojson.Feature
+import org.maplibre.geojson.Point
+import org.maplibre.geojson.Polygon
+import tn.malak.app.R
+import tn.malak.app.ui.s
 import tn.malak.app.ui.Brand
 import java.time.Instant
 import java.math.BigDecimal
@@ -62,8 +68,43 @@ internal data class NozhaProjectCard(
     val businessLandClassification: String?,
     val businessWater: String?,
     val businessElectricity: String?,
-    val projectPoint: DiscoveryPoint? = null
+    val projectPoint: DiscoveryPoint? = null,
+    val pilotPlan: List<NozhaPlanLot> = emptyList()
 )
+
+internal data class NozhaPlanLot(val code: String, val ring: List<Point>)
+
+internal fun parseNozhaPlan(rows: JSONArray?, card: NozhaProjectCard): List<NozhaPlanLot> {
+    if (rows == null || rows.length() > 250) return emptyList()
+    val codes = card.lots.map { it.code }.toSet()
+    return (0 until rows.length()).mapNotNull { index ->
+        val item = rows.optJSONObject(index) ?: return@mapNotNull null
+        val code = item.optString("code")
+        if (code !in codes) return@mapNotNull null
+        val ring = item.optJSONArray("ring") ?: return@mapNotNull null
+        if (ring.length() !in 4..61) return@mapNotNull null
+        val points = (0 until ring.length()).map { i ->
+            val point = ring.optJSONArray(i) ?: return@mapNotNull null
+            val lon = point.optDouble(0)
+            val lat = point.optDouble(1)
+            if (lat !in 29.0..39.0 || lon !in 7.0..13.0) return@mapNotNull null
+            Point.fromLngLat(lon, lat)
+        }
+        if (points.first() != points.last() || points.distinct().size < 3) return@mapNotNull null
+        NozhaPlanLot(code, points)
+    }.distinctBy { it.code }
+}
+
+internal fun NozhaProjectCard.planFeatures(): List<Feature> {
+    val byCode = lots.associateBy { it.code }
+    return pilotPlan.mapNotNull { shape ->
+        val lot = byCode[shape.code] ?: return@mapNotNull null
+        Feature.fromGeometry(Polygon.fromLngLats(listOf(shape.ring))).apply {
+            addStringProperty("code", lot.code)
+            addStringProperty("status", lot.state.name)
+        }
+    }
+}
 
 /**
  * Amlak must fetch this JSON from a separately authorized HTTPS gateway,
@@ -144,16 +185,21 @@ internal fun decodeNozhaProject(body: JSONObject, nowMillis: Long): NozhaProject
 @Composable
 internal fun NozhaProjectDetail(
     data: NozhaProjectCard, language: String,
-    onBack: () -> Unit, onLotInquiry: ((String) -> Unit)? = null
+    onBack: () -> Unit, onLotInquiry: ((String) -> Unit)? = null,
+    onPlan: (() -> Unit)? = null, initialLot: String? = null
 ) {
     val ar = language == "ar"
-    var selectedCode by remember { mutableStateOf<String?>(null) }
+    var selectedCode by remember(initialLot) { mutableStateOf(initialLot) }
     val selected = data.lots.firstOrNull { it.code == selectedCode }
     Column(Modifier.fillMaxSize().background(Brand.Pearl)
         .verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)) {
         TextButton(onClick = onBack) {
             Text(if (ar) "رجوع للخريطة" else "Retour à la carte")
+        }
+        if (onPlan != null) {
+            OutlinedButton(onClick = onPlan) { Text(s(R.string.nozha_open_plan)) }
+            Text(s(R.string.nozha_plan_notice), color = Brand.Muted)
         }
         Text("Nozha", style = MaterialTheme.typography.headlineLarge,
             fontWeight = FontWeight.Bold, color = Brand.Ink)

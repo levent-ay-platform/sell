@@ -3,6 +3,10 @@ package tn.malak.app
 import androidx.activity.compose.setContent
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
+import tn.malak.app.ui.explore.planFeatures
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -140,6 +144,48 @@ class NozhaPublicCardContractTest {
         assertNull(decodeNozhaProject(payload, now)?.projectPoint)
         point.put("source", "REVIEWED_PROJECT_POINT").put("latitude", 0)
         assertNull(decodeNozhaProject(payload, now)?.projectPoint)
+    }
+
+    @Test fun approximateLotRendersAndIsSelectableInMapLibre() {
+        val card = requireNotNull(decodeNozhaProject(fixture(), now))
+        val points = org.json.JSONArray("""[{"code":"7","ring":[[11.088,36.848],[11.092,36.848],[11.092,36.852],[11.088,36.852],[11.088,36.848]]}]""")
+        val lots = tn.malak.app.ui.explore.parseNozhaPlan(points, card)
+        assertEquals(1, lots.size)
+        val geometry = card.copy(pilotPlan = lots).planFeatures()
+        val selected = java.util.concurrent.atomic.AtomicReference("")
+        val ready = java.util.concurrent.atomic.AtomicBoolean(false)
+        val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
+        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            scenario.onActivity { activity ->
+                activity.setContent { androidx.compose.foundation.layout.Box {
+                    tn.malak.app.ui.explore.DiscoveryMap(
+                        styleUrl = "asset://maps/liberty-globe.json",
+                        initial = tn.malak.app.ui.explore.DiscoveryCamera(
+                            tn.malak.app.ui.explore.DiscoveryPoint(36.85, 11.09), 16.0,
+                            tn.malak.app.ui.explore.InitialBounds
+                        ),
+                        jump = null, markers = tn.malak.app.ui.explore.DiscoveryMarkers(emptyList()),
+                        selectedId = null, priceLabel = { "" },
+                        modifier = androidx.compose.ui.Modifier.fillMaxSize().semantics { contentDescription = "Test map" },
+                        nozhaPlan = geometry, onNozhaLot = { selected.set(it) },
+                        onCameraIdle = { _, _ -> }, onListing = {}, onCluster = {},
+                        onFailure = {}, onReady = { ready.set(true) }
+                    )
+                } }
+            }
+            val deadline = android.os.SystemClock.uptimeMillis() + 25_000
+            while (!ready.get() && android.os.SystemClock.uptimeMillis() < deadline) Thread.sleep(100)
+            assertTrue("Map style did not load", ready.get())
+            val bounds = device.findObject(By.desc("Test map")).visibleBounds
+            for (attempt in 1..12) {
+                device.click(bounds.centerX(), bounds.centerY())
+                Thread.sleep(500)
+                if (selected.get() == "7") break
+            }
+            val context = InstrumentationRegistry.getInstrumentation().targetContext
+            device.takeScreenshot(java.io.File(context.cacheDir, "nozha-plan-render.png"))
+            assertEquals("7", selected.get())
+        }
     }
 
     @Test fun staleSnapshotNeverPromotesAvailableToForSale() {

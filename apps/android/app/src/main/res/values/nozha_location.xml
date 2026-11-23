@@ -1,3 +1,5 @@
 <resources>
     <string name="nozha_project_approximate">Nozha · Approximate project location</string>
+    <string name="nozha_open_plan">Show subdivision on the map</string>
+    <string name="nozha_plan_notice">Approximate project plan</string>
 </resources>

@@ -351,7 +351,7 @@ internal fun PremiumSettingsScreen(
                 FeedbackSetting(s(R.string.action_haptics), haptic, onHaptic)
             }
         }
-        if (BuildConfig.MALAK_DIRECT_PUBLISHING) {
+        if (BuildConfig.MALAK_PRIVATE_SERVICE_URL.isNotBlank()) {
             val fingerprint = remember(context) { PilotOcrLogin.deviceFingerprint(context) }
             Surface(
                 Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
