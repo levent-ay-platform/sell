@@ -2,7 +2,7 @@
     <string name="parcel_boundaries">حدود الأرض</string>
     <string name="parcel_official">حد رسمي مثبت بالمصدر</string>
     <string name="parcel_georeferenced">حد مسند جغرافياً من وثيقة</string>
-    <string name="parcel_estimate">حد تقريبي قدّمه المالك</string>
+    <string name="parcel_estimate">حدود مقدمة من صاحب الإعلان</string>
     <string name="parcel_local_only">حدود المخطط دون محاذاة جغرافية</string>
     <string name="parcel_references">الرسم %1$s · القطعة %2$s</string>
     <string name="parcel_plot">القطعة %1$s</string>
