@@ -30,6 +30,12 @@ internal class PilotPublicDiscoverySource(private val origin: String) : Discover
             }
         }
 
+    suspend fun nozha(): NozhaProjectCard? =
+        publicGet("/api/public/projects/nozha", missingAllowed = true)?.let {
+            decodeNozhaProject(it.getJSONObject("card"), System.currentTimeMillis())
+                ?: throw IOException("Invalid project inventory")
+        }
+
     // Map, list and place suggestions may request the same public feed at once.
     // Share an *in-progress* network response, never a stale completed response.
     private val sharedRead = PublicFeedSingleFlight {

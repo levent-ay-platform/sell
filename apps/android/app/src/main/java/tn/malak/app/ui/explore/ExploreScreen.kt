@@ -52,6 +52,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -283,6 +288,32 @@ internal fun ExploreScreen(
             throw cancelled
         } catch (_: Exception) {
             markerFailed = true
+        }
+    }
+
+    val projectSource = source as? PilotPublicDiscoverySource
+    var nozha by remember(projectSource) { mutableStateOf<NozhaProjectCard?>(null) }
+    var showNozha by rememberSaveable { mutableStateOf(false) }
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    LaunchedEffect(projectSource, lifecycle, mapMode) {
+        if (projectSource == null || mapMode) return@LaunchedEffect
+        lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            nozha = nozha?.copy(current = false)
+            while (currentCoroutineContext().isActive) {
+                try {
+                    val incoming = projectSource.nozha()
+                    val previous = nozha
+                    if (incoming == null || previous == null ||
+                        java.time.Instant.parse(incoming.updatedAt) >= java.time.Instant.parse(previous.updatedAt)) {
+                        nozha = incoming
+                    }
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (_: Exception) {
+                    nozha = nozha?.copy(current = false)
+                }
+                delay(if (nozha == null) 15_000 else 4_000)
+            }
         }
     }
 
@@ -699,6 +730,14 @@ internal fun ExploreScreen(
                     mapMode = true
                     onViewModeChanged(true)
                 })
+                val project = nozha
+                if (project != null && activeRadar == null && filters.kind in setOf(null, "LAND") &&
+                    (searchText.isBlank() || foldPlaceName(searchText) in foldPlaceName("Nozha النزهة"))) {
+                    OutlinedButton(onClick = { showNozha = true }, modifier = Modifier.fillMaxWidth()) {
+                        Text(if (project.current) "Nozha" else if (language == "ar")
+                            "Nozha · التوفر قيد التحديث" else "Nozha · disponibilité en cours de mise à jour")
+                    }
+                }
                 when {
                     source == null -> ResultMessage(s(R.string.v2_not_configured))
                     listLoading -> LinearProgressIndicator(Modifier.fillMaxWidth())
@@ -750,7 +789,15 @@ internal fun ExploreScreen(
                 ListingDetail(source, opened, language) { detailId = null }
             }
         }
+        val visibleProject = nozha
+        if (showNozha && !mapMode && visibleProject != null) {
+            Surface(Modifier.fillMaxSize(), color = Brand.Pearl) {
+                NozhaProjectDetail(visibleProject, language, onBack = { showNozha = false })
+            }
+        }
     }
+    LaunchedEffect(nozha) { if (nozha == null) showNozha = false }
+    BackHandler(enabled = showNozha && !mapMode) { showNozha = false }
     BackHandler(enabled = opened != null || (mapMode && (radarEditing || selectedId != null || industrialZoneId != null))) {
         when {
             detailId != null -> detailId = null

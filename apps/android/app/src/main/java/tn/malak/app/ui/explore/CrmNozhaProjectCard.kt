@@ -135,10 +135,11 @@ internal fun decodeNozhaProject(body: JSONObject, nowMillis: Long): NozhaProject
 @Composable
 internal fun NozhaProjectDetail(
     data: NozhaProjectCard, language: String,
-    onBack: () -> Unit, onLotInquiry: (String) -> Unit
+    onBack: () -> Unit, onLotInquiry: ((String) -> Unit)? = null
 ) {
     val ar = language == "ar"
-    var selected by remember(data) { mutableStateOf<NozhaLot?>(null) }
+    var selectedCode by remember { mutableStateOf<String?>(null) }
+    val selected = data.lots.firstOrNull { it.code == selectedCode }
     Column(Modifier.fillMaxSize().background(Brand.Pearl)
         .verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -187,7 +188,7 @@ internal fun NozhaProjectDetail(
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     group.forEach { lot ->
                         Surface(
-                            Modifier.weight(1f).heightIn(min = 62.dp).clickable { selected = lot },
+                            Modifier.weight(1f).heightIn(min = 62.dp).clickable { selectedCode = lot.code },
                             color = lot.state.color.copy(alpha = 0.12f),
                             border = BorderStroke(1.dp, lot.state.color),
                             shape = RoundedCornerShape(10.dp)) {
@@ -226,7 +227,7 @@ internal fun NozhaProjectDetail(
         }
     }
     selected?.let { lot ->
-        AlertDialog(onDismissRequest = { selected = null },
+        AlertDialog(onDismissRequest = { selectedCode = null },
             title = { Text((if (ar) "اللوت " else "Lot ") + lot.code) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
@@ -241,11 +242,11 @@ internal fun NozhaProjectDetail(
                 }
             },
             confirmButton = {
-                if (lot.inquiryAllowed && data.current) Button(onClick = {
-                    selected = null
+                if (lot.inquiryAllowed && data.current && onLotInquiry != null) Button(onClick = {
+                    selectedCode = null
                     onLotInquiry(lot.code)
                 }) { Text(if (ar) "استفسر" else "Se renseigner") }
-                else TextButton(onClick = { selected = null }) {
+                else TextButton(onClick = { selectedCode = null }) {
                     Text(if (ar) "إغلاق" else "Fermer")
                 }
             }

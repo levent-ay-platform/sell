@@ -27,6 +27,32 @@ class HttpWorkflow(unittest.TestCase):
         self.server.workflow=WorkflowRoutes(self.store,self.pair)
         self.thread=threading.Thread(target=self.server.serve_forever,daemon=True);self.thread.start()
     def tearDown(self):self.server.shutdown();self.server.server_close();self.thread.join();self.tmp.cleanup()
+    def test_nozha_feed_tracks_committed_snapshot_and_refuses_stale_inventory(self):
+        from datetime import datetime, timedelta, timezone
+        from unittest.mock import patch
+        path = Path(self.tmp.name) / 'nozha.json'
+        url = '/api/public/projects/nozha'
+        now = datetime.now(timezone.utc)
+        with patch.dict('os.environ', {'MALAK_NOZHA_FEED_FILE': str(path)}):
+            self.assertEqual(self.request(url)[0], 404)
+            for offset, status in enumerate(('AVAILABLE', 'RESERVED', 'SOLD', 'AVAILABLE')):
+                card = {'schemaVersion': 1, 'source': 'CASAIMED_CRM',
+                        'project': {'id':'3','code':'561663','title':'Nozha'},
+                        'refreshedAt': now.isoformat(), 'inventoryCurrent': True,
+                        'lots': [{'id': '4', 'code': '7', 'status': status,
+                                  'availableForInquiry': status == 'AVAILABLE'}]}
+                stamp = now - timedelta(seconds=offset)
+                envelope = {'approvedUntil': (now + timedelta(minutes=1)).isoformat(), 'card': card}
+                path.write_text(json.dumps(envelope))
+                code, result = self.request(url)
+                self.assertEqual((code, result['card']['lots'][0]['status']), (200, status))
+            envelope['card']['refreshedAt'] = (stamp - timedelta(minutes=1)).isoformat()
+            path.write_text(json.dumps(envelope))
+            self.assertEqual(self.request(url)[0], 503)
+            envelope['approvedUntil'] = (now - timedelta(seconds=1)).isoformat()
+            path.write_text(json.dumps(envelope))
+            self.assertEqual(self.request(url)[0], 404)
+
     def test_exact_input_replay_avoids_ocr_but_distinct_listing_gets_own_review(self):
         from unittest.mock import patch
         token=self.store.login('+21623456789','1234','A'*43)['bearer']

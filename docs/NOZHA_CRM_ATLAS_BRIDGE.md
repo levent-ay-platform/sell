@@ -33,3 +33,9 @@
 - Need to match source plan/document permissions and independently find official cadastral references; current project code is NOT a legal TF.
 - Only after manager-approved publication decision: implement a separate read-only public API with strict TTL/authorization/revocation and consume it through Amlak map/list/Nozha card in QA. No false direct CRM DB access from an Android client.
 - Keep Draft PR #22 separate; do not merge/deploy live CRM or Amlak without approval and backout plan.
+
+## Near-real-time inventory QA
+
+The CRM read-only worker `scripts/sync-nozha-amlak-readonly.ts` reads the committed Nozha inventory every three seconds and writes an atomic, project-scoped snapshot. It uses `NOZHA_AMLAK_READONLY_DATABASE_URL`, `NOZHA_AMLAK_APPROVAL_FILE`, and `NOZHA_AMLAK_FEED_FILE`. Run a single instance. The approval file is a verified manager decision in the format of `NozhaAmlakRelease`. The publisher and API must share the snapshot through a private directory, with the API having read-only access. The API reads `MALAK_NOZHA_FEED_FILE` and returns 404 for unpublished or expired grants and 503 after 20 seconds without a fresh read.
+
+Android refreshes the open Explore view and Nozha details every four seconds once a card is available. A failed read hides the live price and inquiry action. The UI retains the open lot during inventory changes. There are no Nozha lot coordinates cleared for map or radar use. The initial entry point is the Explore list.

@@ -2,6 +2,7 @@ package tn.malak.app
 
 import androidx.activity.compose.setContent
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.mutableStateOf
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -93,6 +94,38 @@ class NozhaPublicCardContractTest {
             val lot = device.wait(Until.findObject(By.text("7")), 8_000)
             requireNotNull(lot).click()
             assertTrue(device.wait(Until.hasObject(By.text("Prix : 18900 TND / m²")), 5_000))
+        }
+    }
+
+    @Test fun openLotDialogRefreshesWhenCrmMovesThroughReservationSaleAndRelease() {
+        val state = mutableStateOf(requireNotNull(decodeNozhaProject(fixture(), now)))
+        val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
+        val price = By.text("Prix : 18900 TND")
+        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            scenario.onActivity { activity ->
+                activity.setContent {
+                    MaterialTheme(colorScheme = AmlakColorScheme, typography = AmlakTypography) {
+                        NozhaProjectDetail(state.value, "fr", onBack = {})
+                    }
+                }
+            }
+            requireNotNull(device.wait(Until.findObject(By.text("7")), 8_000)).click()
+            assertTrue(device.wait(Until.hasObject(price), 5_000))
+            for ((status, label) in listOf("RESERVED" to "Réservé", "SOLD" to "Vendu", "AVAILABLE" to "Disponible")) {
+                val payload = fixture()
+                val lot = payload.getJSONArray("lots").getJSONObject(0)
+                val summary = payload.getJSONObject("counts")
+                val available = status == "AVAILABLE"
+                lot.put("status", status).put("availableForInquiry", available)
+                summary.put("available", if (available) 1 else 0)
+                    .put("reserved", if (status == "RESERVED") 1 else 0)
+                    .put("sold", if (status == "SOLD") 2 else 1)
+                scenario.onActivity { state.value = requireNotNull(decodeNozhaProject(payload, now)) }
+                assertTrue(device.wait(Until.hasObject(By.text("Lot 7")), 5_000))
+                assertTrue(device.wait(Until.hasObject(By.text(label)), 5_000))
+                assertTrue(if (available) device.wait(Until.hasObject(price), 5_000)
+                    else device.wait(Until.gone(price), 5_000))
+            }
         }
     }
 

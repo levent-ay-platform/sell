@@ -7,6 +7,7 @@ from pathlib import Path
 import re
 import secrets
 import time
+from datetime import datetime, timezone
 from pilot_workflow import WorkflowError
 from pilot_parcel_bridge import PilotParcelBridge, UUID
 
@@ -79,6 +80,35 @@ class WorkflowRoutes:
         h.result(200,{'ok':True,'verifiedParcel':projection is not None,
                       'boundaries':projection['boundaries'] if projection else [],'documents':documents})
 
+    @staticmethod
+    def nozha_card():
+        # The configured file is written atomically by the scoped CRM exporter.
+        path = os.environ.get('MALAK_NOZHA_FEED_FILE', '')
+        if not path or not Path(path).is_absolute():
+            raise WorkflowError(404, 'NOT_FOUND')
+        try:
+            with open(path, 'rb') as stream:
+                raw = stream.read(128 * 1024 + 1)
+            if len(raw) > 128 * 1024:
+                raise WorkflowError(503, 'INVENTORY_REFRESHING')
+            envelope = json.loads(raw)
+            card = envelope['card']
+            now = datetime.now(timezone.utc)
+            expires = datetime.fromisoformat(envelope['approvedUntil'].replace('Z', '+00:00'))
+            if expires <= now:
+                raise WorkflowError(404, 'NOT_FOUND')
+            read_at = datetime.fromisoformat(card['refreshedAt'].replace('Z', '+00:00'))
+            if not (-5 <= (now - read_at).total_seconds() <= 20) or card['inventoryCurrent'] is not True:
+                raise WorkflowError(503, 'INVENTORY_REFRESHING')
+            if (card['schemaVersion'] != 1 or card['source'] != 'CASAIMED_CRM' or
+                    card['project'] != {'id': '3', 'code': '561663', 'title': 'Nozha'}):
+                raise WorkflowError(503, 'INVENTORY_REFRESHING')
+            return card
+        except FileNotFoundError:
+            raise WorkflowError(404, 'NOT_FOUND')
+        except (OSError, ValueError, TypeError, KeyError, AttributeError):
+            raise WorkflowError(503, 'INVENTORY_REFRESHING')
+
     def dispatch(self,h,method):
         path=h.path
         if not (path.startswith('/api/') or path.startswith('/admin') or path=='/internal/v1/pilot/compare-pair'):return False
@@ -89,6 +119,9 @@ class WorkflowRoutes:
                 name='index.html' if path in ('/admin','/admin/') else path.rsplit('/',1)[1]
                 mime={'index.html':'text/html; charset=utf-8','app.js':'text/javascript; charset=utf-8','style.css':'text/css; charset=utf-8'}[name]
                 self.binary(h,200,(ADMIN_ROOT/name).read_bytes(),mime);return True
+            if method == 'GET' and path == '/api/public/projects/nozha':
+                h.result(200, {'ok': True, 'card': self.nozha_card()})
+                return True
             if method=='GET' and path=='/api/public/listings':h.result(200,{'ok':True,'listings':self.store.public_listings()});return True
             if method=='GET' and path=='/api/public/capabilities':
                 h.result(200,{'ok':True,'directPublishing':self.direct_publishing,
