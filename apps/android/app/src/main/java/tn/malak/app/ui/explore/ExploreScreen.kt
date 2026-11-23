@@ -296,6 +296,7 @@ internal fun ExploreScreen(
     var nozha by remember(projectSource, pilotSession) { mutableStateOf<NozhaProjectCard?>(null) }
     var showNozha by rememberSaveable { mutableStateOf(false) }
     var openedNozhaLot by remember { mutableStateOf<String?>(null) }
+    var measuredNozhaLot by rememberSaveable { mutableStateOf<String?>(null) }
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     LaunchedEffect(projectSource, pilotSession, lifecycle) {
         if (projectSource == null && pilotSession == null) return@LaunchedEffect
@@ -340,6 +341,8 @@ internal fun ExploreScreen(
         DiscoveryPoint(rings.map { it.latitude() }.average(), rings.map { it.longitude() }.average())
     }
     val planFeatures = remember(nozha) { nozha?.planFeatures().orEmpty() }
+    val measuredShape = nozha?.pilotPlan?.firstOrNull { it.code == measuredNozhaLot }
+    val measurementFeatures = remember(measuredShape, language) { measuredShape?.measurementFeatures(language).orEmpty() }
     val nozhaMapPoint = (nozha?.projectPoint ?: privatePlanPoint).takeIf {
         showSalesLayer && (if (activeRadar != null) nozhaForRadar else matchesProjectFilters)
     }
@@ -360,6 +363,7 @@ internal fun ExploreScreen(
                 nozhaPoint = nozhaMapPoint,
                 onNozha = { openedNozhaLot = null; showNozha = true },
                 nozhaPlan = if (nozhaMapPoint != null) planFeatures else emptyList(),
+                nozhaMeasurements = if (nozhaMapPoint != null) measurementFeatures else emptyList(),
                 onNozhaLot = { openedNozhaLot = it; showNozha = true },
                 styleUrl = discoveryGlobeStyle,
                 initial = DiscoveryCamera(
@@ -660,6 +664,12 @@ internal fun ExploreScreen(
                     ) { Icon(Icons.Outlined.CenterFocusStrong, s(R.string.v2_recenter_tunisia)) }
                 }
                 Spacer(Modifier.weight(1f))
+                if (measuredShape != null && nozhaMapPoint != null) {
+                    AssistChip(onClick = { measuredNozhaLot = null },
+                        label = { Text(s(R.string.nozha_measured_lot, measuredShape.code)) },
+                        trailingIcon = { Icon(Icons.Outlined.Close, s(R.string.close), Modifier.size(16.dp)) },
+                        colors = AssistChipDefaults.assistChipColors(containerColor = Brand.Pearl))
+                }
                 if (activeRadar != null && !radarEditing) {
                     AssistChip(onClick = { radarSelection = ""; selectedId = null },
                         label = { Text(s(R.string.radar_radius, activeRadar.radiusKm)) },
@@ -824,9 +834,23 @@ internal fun ExploreScreen(
         if (showNozha && visibleProject != null) {
             Surface(Modifier.fillMaxSize(), color = Brand.Pearl) {
                 NozhaProjectDetail(visibleProject, language, onBack = { showNozha = false }, initialLot = openedNozhaLot,
+                    onMeasure = { code ->
+                        visibleProject.pilotPlan.firstOrNull { it.code == code }?.let { shape ->
+                            measuredNozhaLot = code
+                            showNozha = false
+                            openingGlobe = false
+                            flyToTunisia = false
+                            mapMode = true
+                            onViewModeChanged(true)
+                            val center = DiscoveryPoint(shape.ring.map { it.latitude() }.average(),
+                                shape.ring.map { it.longitude() }.average())
+                            jump = CameraJump(center, 18.0, ++jumpSerial)
+                        }
+                    },
                     onPlan = privatePlanPoint?.let { point ->
                         {
                             showNozha = false
+                            measuredNozhaLot = null
                             openingGlobe = false
                             flyToTunisia = false
                             mapMode = true

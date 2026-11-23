@@ -3,6 +3,8 @@ package tn.malak.app
 import androidx.activity.compose.setContent
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.CompositionLocalProvider
+import tn.malak.app.ui.LocalMalakStringsContext
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.contentDescription
@@ -91,7 +93,9 @@ class NozhaPublicCardContractTest {
             scenario.onActivity { activity ->
                 activity.setContent {
                     MaterialTheme(colorScheme = AmlakColorScheme, typography = AmlakTypography) {
-                        NozhaProjectDetail(card, "fr", onBack = {}, onLotInquiry = {})
+                        CompositionLocalProvider(LocalMalakStringsContext provides activity) {
+                            NozhaProjectDetail(card, "fr", onBack = {}, onLotInquiry = {})
+                        }
                     }
                 }
             }
@@ -109,7 +113,9 @@ class NozhaPublicCardContractTest {
             scenario.onActivity { activity ->
                 activity.setContent {
                     MaterialTheme(colorScheme = AmlakColorScheme, typography = AmlakTypography) {
-                        NozhaProjectDetail(state.value, "fr", onBack = {})
+                        CompositionLocalProvider(LocalMalakStringsContext provides activity) {
+                            NozhaProjectDetail(state.value, "fr", onBack = {})
+                        }
                     }
                 }
             }
@@ -144,6 +150,21 @@ class NozhaPublicCardContractTest {
         assertNull(decodeNozhaProject(payload, now)?.projectPoint)
         point.put("source", "REVIEWED_PROJECT_POINT").put("latitude", 0)
         assertNull(decodeNozhaProject(payload, now)?.projectPoint)
+    }
+
+    @Test fun crmTitleStatusAndPlanMeasurementsStayDistinctFromOfficialProof() {
+        val payload = fixture()
+        payload.getJSONObject("land").put("titleReferenceRecorded", true)
+        val card = requireNotNull(decodeNozhaProject(payload, now))
+        assertTrue(card.crmIndividualTitle)
+        assertTrue(card.crmTitleReferenceRecorded)
+        val validRing = "[[11.08,36.84],[11.09,36.84],[11.09,36.85],[11.08,36.85],[11.08,36.84]]"
+        val rows = org.json.JSONArray("""[{"code":"7","ring":$validRing,"edgeMeters":[12.5,16,12.5,16]}]""")
+        val shape = tn.malak.app.ui.explore.parseNozhaPlan(rows, card).single()
+        assertEquals(listOf("12,5 m", "16 m", "12,5 m", "16 m"),
+            shape.measurementFeatures("fr").map { it.getStringProperty("label") })
+        rows.getJSONObject(0).put("edgeMeters", org.json.JSONArray("[12.5,16]"))
+        assertTrue(tn.malak.app.ui.explore.parseNozhaPlan(rows, card).single().edgeMeters.isEmpty())
     }
 
     @Test fun approximateLotRendersAndIsSelectableInMapLibre() {

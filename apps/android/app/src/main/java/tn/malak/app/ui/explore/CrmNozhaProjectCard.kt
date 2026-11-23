@@ -69,10 +69,27 @@ internal data class NozhaProjectCard(
     val businessWater: String?,
     val businessElectricity: String?,
     val projectPoint: DiscoveryPoint? = null,
-    val pilotPlan: List<NozhaPlanLot> = emptyList()
+    val pilotPlan: List<NozhaPlanLot> = emptyList(),
+    val crmIndividualTitle: Boolean = false,
+    val crmTitleReferenceRecorded: Boolean = false
 )
 
-internal data class NozhaPlanLot(val code: String, val ring: List<Point>)
+internal data class NozhaPlanLot(val code: String, val ring: List<Point>, val edgeMeters: List<Double>) {
+    fun measurementFeatures(language: String): List<Feature> = edgeMeters.mapIndexedNotNull { index, meters ->
+        if (meters <= 0.0) return@mapIndexedNotNull null
+        val start = ring[index]
+        val end = ring[index + 1]
+        val labelPoint = Point.fromLngLat((start.longitude() + end.longitude()) / 2,
+            (start.latitude() + end.latitude()) / 2)
+        Feature.fromGeometry(labelPoint).apply { addStringProperty("label", planLength(meters, language)) }
+    }
+}
+
+private fun planLength(meters: Double, language: String): String {
+    val number = java.text.NumberFormat.getNumberInstance(java.util.Locale.forLanguageTag(language))
+    number.maximumFractionDigits = 1
+    return number.format(meters) + if (language == "ar") " م" else " m"
+}
 
 internal fun parseNozhaPlan(rows: JSONArray?, card: NozhaProjectCard): List<NozhaPlanLot> {
     if (rows == null || rows.length() > 250) return emptyList()
@@ -91,7 +108,10 @@ internal fun parseNozhaPlan(rows: JSONArray?, card: NozhaProjectCard): List<Nozh
             Point.fromLngLat(lon, lat)
         }
         if (points.first() != points.last() || points.distinct().size < 3) return@mapNotNull null
-        NozhaPlanLot(code, points)
+        val lengths = item.optJSONArray("edgeMeters")?.takeIf { it.length() == points.size - 1 }?.let { values ->
+            List(values.length()) { values.optDouble(it) }.takeIf { it.all { value -> value in 0.0..500.0 } }
+        }.orEmpty()
+        NozhaPlanLot(code, points, lengths)
     }.distinctBy { it.code }
 }
 
@@ -178,7 +198,9 @@ internal fun decodeNozhaProject(body: JSONObject, nowMillis: Long): NozhaProject
         if (latitude in 29.0..39.0 && longitude in 7.0..13.0) DiscoveryPoint(latitude, longitude) else null
     }
     return NozhaProjectCard(refreshedAt, current, lots, counts,
-        claim("classification"), claim("waterStatus"), claim("electricityStatus"), projectPoint)
+        claim("classification"), claim("waterStatus"), claim("electricityStatus"), projectPoint,
+        crmIndividualTitle = claim("ownershipModelClaim") == "individual_title",
+        crmTitleReferenceRecorded = body.optJSONObject("land")?.optBoolean("titleReferenceRecorded") == true)
 }
 
 /** Full detail: public CRM facts alongside independent unverified Atlas state. */
@@ -186,7 +208,7 @@ internal fun decodeNozhaProject(body: JSONObject, nowMillis: Long): NozhaProject
 internal fun NozhaProjectDetail(
     data: NozhaProjectCard, language: String,
     onBack: () -> Unit, onLotInquiry: ((String) -> Unit)? = null,
-    onPlan: (() -> Unit)? = null, initialLot: String? = null
+    onPlan: (() -> Unit)? = null, initialLot: String? = null, onMeasure: ((String) -> Unit)? = null
 ) {
     val ar = language == "ar"
     var selectedCode by remember(initialLot) { mutableStateOf(initialLot) }
@@ -262,6 +284,8 @@ internal fun NozhaProjectDetail(
             Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
                 Text(if (ar) "ملف العقار والتوثيق" else "Dossier foncier et vérification",
                     style = MaterialTheme.typography.titleLarge, color = Brand.Ink)
+                if (data.crmIndividualTitle) Text(s(R.string.nozha_crm_individual_title), color = Brand.Ink)
+                if (data.crmTitleReferenceRecorded) Text(s(R.string.nozha_crm_title_recorded), color = Brand.Ink)
                 Text(if (ar) "الملكية القانونية: غير موثقة" else
                     "Propriété légale : non vérifiée", color = Brand.Ink)
                 Text(if (ar) "رقم الرسم العقاري TF: بانتظار إثبات مستقل" else
@@ -289,6 +313,14 @@ internal fun NozhaProjectDetail(
                     Text(lot.state.label(ar))
                     Text((if (ar) "المساحة: " else "Surface : ") + (lot.area ?: "-") +
                         (if (ar) " م²" else " m²"))
+                    val shape = data.pilotPlan.firstOrNull { it.code == lot.code }
+                    if (shape != null && shape.edgeMeters.any { it > 0 }) {
+                        Text(s(R.string.nozha_side_lengths, shape.edgeMeters.filter { it > 0 }
+                            .joinToString(" · ") { planLength(it, language) }))
+                        if (onMeasure != null) OutlinedButton(onClick = { onMeasure(lot.code) }) {
+                            Text(s(R.string.nozha_show_measurements))
+                        }
+                    }
                     if (lot.inquiryAllowed && data.current) {
                         lot.askingLabel(ar)?.let { Text((if (ar) "السعر: " else "Prix : ") + it) }
                     }

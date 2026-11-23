@@ -53,3 +53,9 @@ Activation requires a separately enrolled Pilot runtime, an explicit account/dev
 The approved derived subdivision may be included in the public Nozha response when the project release explicitly sets `publicDerivedPlanApproved`. Guest Android parses these polygons from the public feed. The Pilot gateway routes the exact GET path to the dedicated read-only sidecar. The CRM exporter and HTTP reader run separately. The exporter reads committed state; the reader has a read-only snapshot mount and no CRM database credentials. Its response expires after 20 seconds without fresh data.
 
 The 23 November Pilot rollout uses a seven-day project grant. The live guest route returned 48 inventory records and 43 approximate lot polygons. Source PDF scans, the legal title reference and buyer details remain private. Renewal and withdrawal are controlled by the scoped grant. Gateway rollback restores the prior tested nginx configuration.
+
+## Buyer measurement and recorded title status
+
+The live feed reads the CRM title type and whether a reference is on file. The public card does not carry the raw title reference, owner names or private files. The CRM media metadata review found two private masterplans and no legal document approved for public viewing.
+
+Each drawable lot includes edge lengths calculated from its saved plan-space ring and the source plan scale. Amlak shows the CRM lot area separately, and overlays each plan-derived length when the buyer selects a lot and opens measurements. The displayed edge lengths are based on the plan scale before geographic alignment, so the map calibration does not change them. The live feed returned measurements for 43 polygons.

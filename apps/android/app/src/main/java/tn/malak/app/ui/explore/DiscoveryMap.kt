@@ -86,6 +86,7 @@ internal fun DiscoveryMap(
     nozhaPoint: DiscoveryPoint? = null,
     onNozha: () -> Unit = {},
     nozhaPlan: List<Feature> = emptyList(),
+    nozhaMeasurements: List<Feature> = emptyList(),
     onNozhaLot: (String) -> Unit = {},
     administrativeBoundariesVisible: Boolean = false,
     industrialZones: FeatureCollection? = null,
@@ -379,6 +380,23 @@ internal fun DiscoveryMap(
                 PropertyFactory.textField(Expression.get("code")), PropertyFactory.textSize(12f),
                 PropertyFactory.textFont(arrayOf("Noto Sans Bold"))
             ).apply { minZoom = 15.5f }, MARKERS)
+        }
+    }
+
+    LaunchedEffect(style, nozhaMeasurements) {
+        val mapStyle = style ?: return@LaunchedEffect
+        val collection = FeatureCollection.fromFeatures(nozhaMeasurements)
+        val source = mapStyle.getSourceAs<GeoJsonSource>("nozha-measurements")
+        if (source != null) {
+            source.setGeoJson(collection)
+        } else if (nozhaMeasurements.isNotEmpty()) {
+            mapStyle.addSource(GeoJsonSource("nozha-measurements", collection))
+            mapStyle.addLayerAbove(SymbolLayer("nozha-measurement-label", "nozha-measurements").withProperties(
+                PropertyFactory.textField(Expression.get("label")), PropertyFactory.textSize(14f),
+                PropertyFactory.textFont(arrayOf("Noto Sans Bold")), PropertyFactory.textAllowOverlap(true),
+                PropertyFactory.textColor(0xFF142E42.toInt()), PropertyFactory.textHaloColor(android.graphics.Color.WHITE),
+                PropertyFactory.textHaloWidth(2f)
+            ), MARKERS)
         }
     }
 
