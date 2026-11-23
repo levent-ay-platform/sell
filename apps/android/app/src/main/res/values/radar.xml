@@ -12,7 +12,7 @@
     <string name="radar_results_title">Radar search results</string>
     <string name="radar_afi_note">AFI mapped subdivision lots, not sale advertisements or confirmed availability.</string>
     <string name="radar_afi_inside">%1$d mapped lots in the radar circle</string>
-    <string name="radar_afi_approximate">Approximate location — lot coordinates not published</string>
+    <string name="radar_afi_approximate">Zone shown on map · Individual lot coordinates not published</string>
     <string name="radar_sale_results">Properties for sale</string>
     <string name="radar_no_results">No mapped AFI lots or property listings found inside this circle.</string>
 </resources>
