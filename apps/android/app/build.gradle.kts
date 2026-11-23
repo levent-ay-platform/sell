@@ -19,6 +19,12 @@ val malakV2Discovery = providers.gradleProperty("malakV2Discovery")
     .map { it.toBooleanStrict() }.orElse(false).get()
 val malakDirectPublishing = providers.gradleProperty("malakDirectPublishing")
     .map { it.toBooleanStrict() }.orElse(false).get()
+// An explicitly selected read-only public Pilot feed; does not enable publishing or owner login.
+val malakPublicListingsBaseUrl = providers.gradleProperty("malakPublicListingsBaseUrl").orElse("").get()
+require(malakPublicListingsBaseUrl.isEmpty() ||
+    malakPublicListingsBaseUrl.matches(Regex("^https://[A-Za-z0-9.-]+(?::[0-9]{2,5})?$"))) {
+    "malakPublicListingsBaseUrl must be an approved HTTPS origin"
+}
 val malakDiscoveryBaseUrl = providers.gradleProperty("malakDiscoveryBaseUrl").orElse("").get()
 require(malakDiscoveryBaseUrl.isEmpty() ||
     malakDiscoveryBaseUrl.matches(Regex("^https://[A-Za-z0-9.-]+(?::[0-9]{2,5})?$"))) {
@@ -45,6 +51,7 @@ android {
         buildConfigField("boolean", "MALAK_V2_DISCOVERY", malakV2Discovery.toString())
         buildConfigField("boolean", "MALAK_DIRECT_PUBLISHING", malakDirectPublishing.toString())
         buildConfigField("String", "MALAK_DISCOVERY_BASE_URL", "\"$malakDiscoveryBaseUrl\"")
+        buildConfigField("String", "MALAK_PUBLIC_LISTINGS_BASE_URL", "\"$malakPublicListingsBaseUrl\"")
         buildConfigField("String", "MALAK_MAP_STYLE_URL", "\"$malakMapStyleUrl\"")
     }
 
