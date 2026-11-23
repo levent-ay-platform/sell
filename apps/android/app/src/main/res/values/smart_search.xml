@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="smart_search_detected">Search criteria recognized</string>
+    <string name="smart_search_apply">Apply</string>
+    <string name="smart_search_grounded">Only recognized filters are applied. Unverified wishes are not treated as facts.</string>
+</resources>
