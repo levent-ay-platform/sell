@@ -1,0 +1,7 @@
+<resources>
+    <string name="action_sounds">Action sounds</string>
+    <string name="action_haptics">Touch feedback</string>
+    <string name="afi_lots_layer">Planned industrial lots</string>
+    <string name="afi_lots_hint">Draw AFI lot shapes as you zoom in.</string>
+    <string name="afi_count_legend">Mapped lots per governorate · AFI</string>
+</resources>

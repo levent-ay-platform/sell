@@ -36,7 +36,7 @@ class BuyerDiscoveryTest {
         val plan = By.text("Plan parcellaire")
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
             scenario.onActivity { it.setContent { MalakApp(discoverySource = BuyerFixture) } }
-            device.waitFor(map, timeout = 25_000)
+            device.waitFor(search, timeout = 25_000)
             device.waitFor(search).click()
             assertTrue(device.wait(Until.hasObject(By.clazz("android.widget.EditText")), 6_000))
             device.findObject(UiSelector().className("android.widget.EditText")).setText("قليبية")

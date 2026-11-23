@@ -13,6 +13,12 @@ _Last audited: 2026-11-23 (Europe/Istanbul). This is the navigation and checkpoi
 
 **Approved public app name: Amlak.** Earlier code/paths use MALAK/Malak for historical compatibility. The existing Android package identifier `tn.malak.app` was deliberately not renamed to avoid data loss; technical slugs are not consumer branding.
 
+## 2026-11-23 globe and buyer radar
+
+The Android map opens at world scale with a rotating globe and a beacon at Tunisia. Radar opens the Tunisia overview. The enabled AFI and Atlas layers show documented lot counts by governorate, industrial sites, and individual lot shapes at progressively closer zooms. The packaged AFI snapshot contains 47 zones and 2,838 mapped lots across 23 governorates. The overview also includes Gafsa with zero lots in this snapshot. The badges count planning geometry. Sale listings continue to come from the listing API.
+
+Account settings now include independent sound and haptic controls. The installed app uses short action, radar, adjustment and confirmation cues with Android system settings. Connected Pilot QA APK SHA-256 `9fc646878c50a8090651487e0d26d0735e0d027388fbfc376c5e3217185f4e0c`. Physical handset feedback remains to be evaluated.
+
 ## 2026-11-23 document area and handoff review
 
 - The owner can keep the entered area, use the document area, or offer part of it. Both seller forms show the eligible area, document family and page. A direct draft restores its private review by ID. A gateway advertising `draftDocumentReview` can attach that review in the publication transaction. The area in the buyer card follows the owner’s choice. The live capability endpoint returned HTTP 404 on the read-only check.

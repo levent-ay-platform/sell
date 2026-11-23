@@ -1,6 +1,8 @@
 package tn.malak.app.ui.explore
 
-import android.animation.ValueAnimator
+import org.maplibre.geojson.FeatureCollection
+import tn.malak.app.ui.AppCue
+import tn.malak.app.ui.LocalFeedback
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -51,10 +53,8 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeoutOrNull
 import tn.malak.app.BuildConfig
 import tn.malak.app.R
 import tn.malak.app.ui.APP_BRAND_NAME
@@ -94,31 +94,22 @@ internal fun ExploreScreen(
     }
     var mapMode by rememberSaveable { mutableStateOf(preferredMapMode) }
     LaunchedEffect(preferredMapMode) { mapMode = preferredMapMode }
-    val globeEnabled = discoveryGlobeStyle.startsWith("asset://")
+    val feedback = LocalFeedback.current
     var openingGlobe by rememberSaveable {
-        mutableStateOf(preferredMapMode && globeEnabled && ValueAnimator.areAnimatorsEnabled())
+        mutableStateOf(preferredMapMode)
     }
     var flyToTunisia by remember { mutableStateOf(false) }
     var globeVisible by remember { mutableStateOf(false) }
-    var mapRendered by remember { mutableStateOf(false) }
+    var cameraMoving by remember { mutableStateOf(false) }
     var mapReady by remember { mutableStateOf(false) }
     LaunchedEffect(mapMode) {
         if (!mapMode) {
             openingGlobe = false
             flyToTunisia = false
-            mapRendered = false
             mapReady = false
         }
     }
     var mapIssue by rememberSaveable { mutableStateOf(false) }
-    LaunchedEffect(launchShowing, mapReady, openingGlobe) {
-        if (!launchShowing && mapReady && openingGlobe) {
-            withTimeoutOrNull(2_200L) { snapshotFlow { mapRendered }.first { it } }
-            delay(650)
-            openingGlobe = false
-            flyToTunisia = true
-        }
-    }
     // A map with an unresponsive style endpoint must not strand the user on a blank surface.
     // List discovery uses the same authorized source and remains available offline/when tiles fail.
     LaunchedEffect(mapMode, mapReady) {
@@ -156,8 +147,9 @@ internal fun ExploreScreen(
     val radarPreview = if (radarEditing) DiscoveryRadar.decode("$centerLatitude,$centerLongitude,$radarRadius") else null
     var showSalesLayer by rememberSaveable { mutableStateOf(true) }
     var showAtlasLayer by rememberSaveable { mutableStateOf(true) }
-    var showAdministrativeLayer by rememberSaveable { mutableStateOf(false) }
-    var showIndustrialLayer by rememberSaveable { mutableStateOf(false) }
+    var showAdministrativeLayer by rememberSaveable { mutableStateOf(true) }
+    var showIndustrialLayer by rememberSaveable { mutableStateOf(true) }
+    var showLotLayer by rememberSaveable { mutableStateOf(true) }
     var industrialSheet by rememberSaveable { mutableStateOf<String?>(null) }
     var industrialZoneId by rememberSaveable { mutableStateOf<String?>(null) }
     var industrialLotId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -171,6 +163,19 @@ internal fun ExploreScreen(
                 runCatching { loadIndustrialCatalog(context) }.getOrNull()
             }
             industrialLoadFailed = value == null
+        }
+    }
+    var allLots by remember(industrialCatalog) { mutableStateOf<FeatureCollection?>(null) }
+    var lotLoadFailed by remember(industrialCatalog) { mutableStateOf(false) }
+    var lotRetry by remember { mutableIntStateOf(0) }
+    val needLotShapes = mapMode && showIndustrialLayer && showLotLayer && zoom >= 11
+    LaunchedEffect(industrialCatalog, needLotShapes, lotRetry) {
+        val catalog = industrialCatalog ?: return@LaunchedEffect
+        if (needLotShapes && allLots == null) {
+            lotLoadFailed = false
+            try { allLots = withContext(Dispatchers.IO) { loadIndustrialShapes(context, catalog) } }
+            catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: Exception) { lotLoadFailed = true }
         }
     }
     val industrialZone = industrialCatalog?.zones?.firstOrNull { it.id == industrialZoneId }
@@ -195,6 +200,7 @@ internal fun ExploreScreen(
     val industrialZoneFeatures = remember(industrialCatalog, language) { industrialCatalog?.mapFeatures(language) }
     val industrialLot = industrialPlan?.lots?.firstOrNull { it.id == industrialLotId }
     val chooseIndustrialZone: (String) -> Unit = { zoneId ->
+        feedback(AppCue.Action)
         selectedId = null
         radarEditing = false
         openingGlobe = false
@@ -273,6 +279,7 @@ internal fun ExploreScreen(
     val covered = if (opened == null) Modifier else Modifier.clearAndSetSemantics { hideFromAccessibility() }
     Box(Modifier.fillMaxSize().background(Brand.Pearl)) {
         if (mapMode) {
+            val sGlobe = s(R.string.v2_globe_view)
             val mapDescription = s(if (globeVisible) R.string.v2_globe_view else R.string.v2_ready_map)
             DiscoveryMap(
                 styleUrl = discoveryGlobeStyle,
@@ -285,21 +292,33 @@ internal fun ExploreScreen(
                 boundaries = selectedAtlasBoundaries,
                 administrativeBoundariesVisible = showAdministrativeLayer,
                 industrialZones = industrialZoneFeatures.takeIf { showIndustrialLayer },
-                industrialLots = industrialPlan?.shapes.takeIf { showIndustrialLayer },
+                industrialLots = allLots.takeIf { showIndustrialLayer && showLotLayer },
+                industrialCounts = industrialCatalog?.governorates.orEmpty().takeIf { showIndustrialLayer }.orEmpty(),
+                onGovernorate = { point ->
+                    feedback(AppCue.Action)
+                    jump = CameraJump(point, 9.3, ++jumpSerial)
+                    openingGlobe = false
+                    flyToTunisia = false
+                },
+                radarEditing = radarEditing, onRadarMove = { feedback(AppCue.Step) },
+                spinGlobe = openingGlobe && !launchShowing,
                 industrialLotId = industrialLotId,
                 radar = if (radarEditing) radarPreview else activeRadar,
                 onIndustrialZone = chooseIndustrialZone,
-                onIndustrialLot = { lotId ->
+                onIndustrialLot = { zoneId, lotId ->
+                    feedback(AppCue.Action)
+                    industrialZoneId = zoneId
+                    fitIndustrialZone = null
                     selectedId = null
                     industrialLotId = lotId
                 },
-                minimumZoom = if (globeEnabled) WorldZoom else 2.5,
-                globeEnabled = globeEnabled,
+                minimumZoom = WorldZoom,
+                globeEnabled = true,
                 openFromGlobe = openingGlobe,
                 flyToTunisia = flyToTunisia && jump == null,
                 onArrivalFinished = { flyToTunisia = false },
-                onMapRendered = { mapRendered = true },
                 onGlobeVisible = { globeVisible = it },
+                onCameraMoving = { cameraMoving = it },
                 onGestureStarted = {
                     openingGlobe = false
                     flyToTunisia = false
@@ -309,7 +328,7 @@ internal fun ExploreScreen(
                 selectedId = selectedId,
                 priceLabel = { discoveryNumber(it.priceTnd, language) },
                 modifier = Modifier.fillMaxSize().then(covered).semantics {
-                    if (mapReady) contentDescription = mapDescription
+                    if (openingGlobe) contentDescription = sGlobe else if (mapReady) contentDescription = mapDescription
                 },
                 onCameraIdle = { current, gesture ->
                     centerLatitude = current.center.latitude
@@ -330,7 +349,7 @@ internal fun ExploreScreen(
                         selectedId = null
                     }
                 },
-                onListing = { selectedId = it; industrialZoneId = null; industrialLotId = null },
+                onListing = { feedback(AppCue.Action); selectedId = it; industrialZoneId = null; industrialLotId = null },
                 onCluster = { point ->
                     if (zoom < 18.0) {
                         recenterSearch = true
@@ -343,7 +362,7 @@ internal fun ExploreScreen(
                 onFailure = { mapIssue = true; mapMode = false; mapReady = false; onViewModeChanged(false) },
                 onReady = { mapReady = true }
             )
-            if (!mapReady) {
+            if (!mapReady && !openingGlobe) {
                 Box(Modifier.fillMaxSize().background(Brand.Pearl), contentAlignment = Alignment.Center) {
                     Surface(
                         modifier = Modifier.padding(24.dp).widthIn(max = 300.dp),
@@ -380,6 +399,9 @@ internal fun ExploreScreen(
                     if (it.isBlank()) { placeId = null; selectedId = null }
                 },
                 onPlace = { place ->
+                    openingGlobe = false
+                    flyToTunisia = false
+                    feedback(AppCue.Action)
                     radarSelection = ""
                     radarEditing = false
                     searchText = place.label
@@ -439,15 +461,17 @@ internal fun ExploreScreen(
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(7.dp, Alignment.End),
                     verticalAlignment = Alignment.CenterVertically) {
                     FilledTonalButton(
-                        onClick = { showIndustrialLayer = true; radarEditing = false; industrialSheet = "zones" },
+                        onClick = { feedback(AppCue.Action); showIndustrialLayer = true; radarEditing = false; industrialSheet = "zones" },
                         colors = ButtonDefaults.filledTonalButtonColors(containerColor = Brand.Pearl, contentColor = Brand.Ink)
                     ) {
                         Icon(Icons.Outlined.Factory, null, Modifier.size(17.dp))
                         Spacer(Modifier.width(6.dp))
                         Text(s(R.string.afi_shortcut), maxLines = 1)
                     }
-                    if (mapReady) FilledIconButton(
+                    if (mapReady || openingGlobe) FilledIconButton(
                         onClick = {
+                            val fromWorld = openingGlobe || globeVisible || zoom < 3
+                            feedback(AppCue.Radar)
                             selectedId = null
                             industrialZoneId = null
                             industrialLotId = null
@@ -458,24 +482,30 @@ internal fun ExploreScreen(
                             val center = activeRadar?.center ?: DiscoveryPoint(centerLatitude, centerLongitude)
                             val target = center.takeIf { it in InitialBounds } ?: InitialCenter
                             radarRadius = activeRadar?.radiusKm ?: radarRadius
-                            jump = CameraJump(target, 10.6 - log2(radarRadius / 5.0), ++jumpSerial)
+                            if (fromWorld) {
+                                jump = null
+                                flyToTunisia = true
+                            } else {
+                                jump = CameraJump(target, 10.6 - log2(radarRadius / 5.0), ++jumpSerial)
+                            }
                         },
                         colors = IconButtonDefaults.filledIconButtonColors(
                             containerColor = Brand.Pearl, contentColor = Brand.Crimson
                         )
                     ) { Icon(Icons.Outlined.Radar, s(R.string.radar_title)) }
                     FilledIconButton(
-                        onClick = { showLayers = true },
+                        onClick = { feedback(AppCue.Action); showLayers = true },
                         colors = IconButtonDefaults.filledIconButtonColors(
                             containerColor = Brand.Pearl, contentColor = Brand.Crimson
                         )
                     ) { Icon(Icons.Outlined.Layers, s(R.string.v2_layers)) }
                 }
-                if (mapReady && !openingGlobe && (globeVisible || zoom < 4.4 ||
+                if (mapReady && (globeVisible || zoom < 4.4 ||
                         DiscoveryPoint(centerLatitude, centerLongitude) !in InitialBounds)) {
                     FilledIconButton(
                         onClick = {
                             focusManager.clearFocus()
+                            openingGlobe = false
                             jump = null
                             recenterSearch = false
                             areaMoved = false
@@ -505,7 +535,16 @@ internal fun ExploreScreen(
                         trailingIcon = { Icon(Icons.Outlined.Close, s(R.string.radar_clear), Modifier.size(16.dp)) },
                         colors = AssistChipDefaults.assistChipColors(containerColor = Brand.Pearl))
                 }
-                if (showAdministrativeLayer && mapReady) {
+                if (showIndustrialLayer && industrialCatalog != null && !globeVisible && zoom >= 2.5 && zoom < AfiZoneZoom) {
+                    Surface(Modifier.align(Alignment.End), shape = RoundedCornerShape(10.dp), color = Brand.Pearl) {
+                        Text(s(R.string.afi_count_legend), Modifier.padding(horizontal = 9.dp, vertical = 5.dp),
+                            color = Brand.Ink, style = MaterialTheme.typography.labelSmall)
+                    }
+                }
+                if (lotLoadFailed && needLotShapes) {
+                    ResultMessage(s(R.string.v2_find_error), retry = { lotRetry++ })
+                }
+                if (showAdministrativeLayer && mapReady && !globeVisible) {
                     val uriHandler = LocalUriHandler.current
                     Surface(
                         onClick = { uriHandler.openUri("https://www.openstreetmap.org/copyright") },
@@ -517,10 +556,21 @@ internal fun ExploreScreen(
                     }
                 }
                 if (radarEditing) {
-                    RadarControls(radarRadius, radarPreview != null && source != null, source != null,
-                        onRadius = { radarRadius = it },
+                    RadarControls(radarRadius, !flyToTunisia && !cameraMoving && radarPreview != null && source != null, source != null,
+                        onRadius = { radius ->
+                            if (radarRadius != radius) {
+                                radarRadius = radius
+                                feedback(AppCue.Step)
+                            }
+                        },
+                        onRadiusFinished = {
+                            if (!flyToTunisia && zoom < AfiZoneZoom && radarPreview != null) {
+                                jump = CameraJump(radarPreview.center, 10.6 - log2(radarRadius / 5.0), ++jumpSerial)
+                            }
+                        },
                         onSearch = {
                             val radar = radarPreview ?: return@RadarControls
+                            feedback(AppCue.Confirm)
                             radarSelection = radar.encode()
                             placeId = null
                             searchText = ""
@@ -541,12 +591,12 @@ internal fun ExploreScreen(
                     Surface(shape = RoundedCornerShape(16.dp), color = Brand.Pearl) {
                         ResultMessage(s(R.string.v2_map_data_unavailable))
                     }
-                } else if (showSalesLayer && source != null && !areaMoved && !globeVisible &&
+                } else if (showSalesLayer && source != null && !openingGlobe && !areaMoved && !globeVisible &&
                     !listLoading && !listFailed && page.listings.isEmpty() && !markerFailed) {
                     Surface(shape = RoundedCornerShape(16.dp), color = Brand.Pearl) {
                         ResultMessage(s(R.string.v2_empty))
                     }
-                } else if (showSalesLayer && mapReady && markerScope.value.listings.isEmpty() &&
+                } else if (showSalesLayer && mapReady && !openingGlobe && !globeVisible && markerScope.value.listings.isEmpty() &&
                     markerScope.value.clusters.isEmpty() && page.listings.isNotEmpty()
                 ) {
                     OutlinedButton(onClick = { mapMode = false; onViewModeChanged(false) }) { Text(s(R.string.v2_map_skip)) }
@@ -616,6 +666,7 @@ internal fun ExploreScreen(
     }
     if (showFilters) {
         DiscoveryFilterSheet(filters, onDismiss = { showFilters = false }) {
+            feedback(AppCue.Confirm)
             filters = it; showFilters = false; selectedId = null
         }
     }
@@ -624,10 +675,12 @@ internal fun ExploreScreen(
             salesVisible = showSalesLayer, atlasVisible = showAtlasLayer,
             administrativeVisible = showAdministrativeLayer, listingsAvailable = source != null,
             industrialVisible = showIndustrialLayer,
+            lotsVisible = showLotLayer, onLotsVisible = { showLotLayer = it; feedback(AppCue.Action) },
             onSalesVisible = { showSalesLayer = it },
             onAtlasVisible = { showAtlasLayer = it },
-            onAdministrativeVisible = { showAdministrativeLayer = it },
+            onAdministrativeVisible = { showAdministrativeLayer = it; feedback(AppCue.Action) },
             onIndustrialVisible = {
+                feedback(AppCue.Action)
                 showIndustrialLayer = it
                 if (!it) {
                     industrialZoneId = null

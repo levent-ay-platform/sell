@@ -60,6 +60,7 @@ internal fun DirectOwnerListing(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val feedback = LocalFeedback.current
     val prefs = remember(context, account) {
         val key = MessageDigest.getInstance("SHA-256").digest(account.toByteArray())
             .joinToString("") { "%02x".format(it) }
@@ -285,6 +286,7 @@ internal fun DirectOwnerListing(
             } else if (!preview) {
                 focus.clearFocus()
                 error = 0
+                feedback(AppCue.Action)
                 stageIndex++
             } else {
                 busy = true
@@ -329,7 +331,7 @@ internal fun DirectOwnerListing(
                     } finally {
                         busy = false
                     }
-                    if (id != null) onPublished(id)
+                    if (id != null) { feedback(AppCue.Confirm); onPublished(id) }
                 }
             }
         }, enabled = !busy, modifier = Modifier.fillMaxWidth().padding(16.dp).heightIn(min = 50.dp)) {

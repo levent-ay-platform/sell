@@ -63,3 +63,5 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+The globe overlays a rasterization of Natural Earth's public-domain 1:110m land boundaries. Source revision [117488d, Admin 0 boundary lines](https://github.com/nvkelso/natural-earth-vector/blob/117488dc884bad03366ff727eca013e434615127/geojson/ne_110m_admin_0_boundary_lines_land.geojson).

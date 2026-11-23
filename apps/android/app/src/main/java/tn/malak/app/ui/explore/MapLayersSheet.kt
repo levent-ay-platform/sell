@@ -1,5 +1,7 @@
 package tn.malak.app.ui.explore
 
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.ui.semantics.Role
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -33,6 +35,8 @@ internal fun MapLayersSheet(
     administrativeVisible: Boolean,
     listingsAvailable: Boolean,
     industrialVisible: Boolean,
+    lotsVisible: Boolean,
+    onLotsVisible: (Boolean) -> Unit,
     onSalesVisible: (Boolean) -> Unit,
     onAtlasVisible: (Boolean) -> Unit,
     onAdministrativeVisible: (Boolean) -> Unit,
@@ -61,6 +65,8 @@ internal fun MapLayersSheet(
                 salesVisible && listingsAvailable, onSalesVisible.takeIf { listingsAvailable })
             LayerSwitch(Icons.Outlined.Factory, s(R.string.afi_layer), s(R.string.afi_layer_hint),
                 industrialVisible, onIndustrialVisible)
+            LayerSwitch(Icons.Outlined.Map, s(R.string.afi_lots_layer), s(R.string.afi_lots_hint),
+                lotsVisible && industrialVisible, onLotsVisible.takeIf { industrialVisible })
             TextButton(onClick = onBrowseIndustrial) { Text(s(R.string.afi_browse)) }
             LayerSwitch(Icons.Outlined.Map, s(R.string.layer_atlas_admin), s(R.string.layer_atlas_admin_hint),
                 administrativeVisible, onAdministrativeVisible)
@@ -85,7 +91,10 @@ private fun LayerSwitch(
     Surface(color = Color.White, contentColor = Brand.Ink, shape = RoundedCornerShape(16.dp),
         border = BorderStroke(1.dp, Brand.Border)) {
         Row(
-            Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
+            Modifier.fillMaxWidth().then(if (onChecked == null) Modifier else
+                Modifier.toggleable(value = checked, role = Role.Switch, onValueChange = onChecked)
+                    .semantics { contentDescription = label }
+            ).padding(horizontal = 12.dp, vertical = 10.dp),
             horizontalArrangement = Arrangement.spacedBy(10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -95,8 +104,7 @@ private fun LayerSwitch(
                 Text(detail, color = Brand.Muted, style = MaterialTheme.typography.bodySmall)
             }
             if (onChecked != null) {
-                Switch(checked = checked, onCheckedChange = onChecked,
-                    modifier = Modifier.semantics { contentDescription = label })
+                Switch(checked = checked, onCheckedChange = null)
             }
         }
     }

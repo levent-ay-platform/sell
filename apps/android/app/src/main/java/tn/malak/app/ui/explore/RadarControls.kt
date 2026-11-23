@@ -20,7 +20,7 @@ import kotlin.math.roundToInt
 @Composable
 internal fun RadarControls(
     radius: Int, canSearch: Boolean, dataAvailable: Boolean,
-    onRadius: (Int) -> Unit, onSearch: () -> Unit, onClose: () -> Unit
+    onRadius: (Int) -> Unit, onRadiusFinished: () -> Unit, onSearch: () -> Unit, onClose: () -> Unit
 ) {
     Surface(Modifier.fillMaxWidth(), RoundedCornerShape(20.dp), Color.White, Brand.Ink,
         shadowElevation = 4.dp, border = BorderStroke(1.dp, Brand.Border)) {
@@ -32,7 +32,7 @@ internal fun RadarControls(
                 IconButton(onClick = onClose) { Icon(Icons.Outlined.Close, s(R.string.close)) }
             }
             Text(s(R.string.radar_hint), color = Brand.Muted, style = MaterialTheme.typography.bodySmall)
-            Slider(radius.toFloat(), { onRadius(it.roundToInt()) }, valueRange = 1f..20f, steps = 18,
+            Slider(radius.toFloat(), { onRadius(it.roundToInt()) }, valueRange = 1f..20f, steps = 18, onValueChangeFinished = onRadiusFinished,
                 colors = SliderDefaults.colors(thumbColor = Brand.Crimson, activeTrackColor = Brand.Crimson))
             if (!dataAvailable) {
                 Text(s(R.string.v2_map_data_unavailable), color = Brand.Muted, style = MaterialTheme.typography.bodySmall)

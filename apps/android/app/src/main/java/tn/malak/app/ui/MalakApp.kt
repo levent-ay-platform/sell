@@ -73,6 +73,8 @@ internal fun MalakApp(
     var language by rememberSaveable {
         mutableStateOf(preferences.getString("language", "fr")?.takeIf { it in setOf("ar", "fr") } ?: "fr")
     }
+    var sound by remember { mutableStateOf(preferences.getBoolean("action_sounds", true)) }
+    var haptic by remember { mutableStateOf(preferences.getBoolean("action_haptics", true)) }
     val localizedContext = remember(baseContext, language) {
         val configuration = Configuration(baseContext.resources.configuration)
         configuration.setLocale(Locale.forLanguageTag(if (language == "ar") "ar" else "fr"))
@@ -109,11 +111,18 @@ internal fun MalakApp(
     val directPublishing = directRequested && directCapability?.optBoolean("directPublishing") == true
 
     CompositionLocalProvider(LocalMalakStringsContext provides localizedContext,
+        LocalFeedback provides rememberAppFeedback(sound, haptic),
         LocalLayoutDirection provides direction,
         LocalOwnerEvidenceSession provides (if (PilotOtpGate.enabled) null else ownerEvidenceSession),
         LocalAuthenticatedOwnerSession provides (if (PilotOtpGate.enabled) null else authenticatedOwnerSession),
         LocalPilotOcrSession provides (if (PilotOtpGate.enabled) pilotOcrSession else null)) {
         MaterialTheme(colorScheme = AmlakColorScheme, typography = AmlakTypography) {
+            val feedback = LocalFeedback.current
+            var previousScreen by remember { mutableStateOf(screen) }
+            LaunchedEffect(screen) {
+                if (screen != previousScreen) feedback(AppCue.Action)
+                previousScreen = screen
+            }
             BackHandler(enabled = v2 && screen in setOf("explore", "alerts", "account", "settings", "favorites", "requests")) {
                 screen = if (screen in setOf("settings", "favorites", "requests")) "account" else "home"
             }
@@ -179,7 +188,10 @@ internal fun MalakApp(
                                     pilotOcrSession = null; pilotPhone = null; screen = "account"
                                 })
                             )
-                            "settings" -> PremiumSettingsScreen(language, onLanguage = {
+                            "settings" -> PremiumSettingsScreen(language, sound = sound, haptic = haptic,
+                                onSound = { sound = it; preferences.edit().putBoolean("action_sounds", it).apply() },
+                                onHaptic = { haptic = it; preferences.edit().putBoolean("action_haptics", it).apply() },
+                                onLanguage = {
                                 language = it
                                 preferences.edit().putString("language", it).apply()
                             }, onBack = { screen = "account" })

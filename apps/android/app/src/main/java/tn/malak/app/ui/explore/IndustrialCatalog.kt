@@ -28,7 +28,7 @@ internal data class IndustrialDocument(val title: String, val page: String, val 
 
 internal data class IndustrialPlan(
     val zone: IndustrialZone, val layoutDate: String, val offerDate: String,
-    val lots: List<IndustrialLot>, val documents: List<IndustrialDocument>, val shapes: FeatureCollection
+    val lots: List<IndustrialLot>, val documents: List<IndustrialDocument>
 ) {
     fun camera(fallback: DiscoveryPoint): Pair<DiscoveryPoint, Double> {
         val locations = lots.mapNotNull(IndustrialLot::anchor)
@@ -43,7 +43,21 @@ internal data class IndustrialPlan(
     }
 }
 
-internal data class IndustrialCatalog(val capturedAt: String, val zones: List<IndustrialZone>) {
+internal data class IndustrialGovernorate(val place: AtlasPlace, val lots: Int, val focus: DiscoveryPoint)
+
+internal fun industrialGovernorates(places: List<AtlasPlace>, zones: List<IndustrialZone>): List<IndustrialGovernorate> {
+    val zonesByGovernorate = zones.groupBy { it.governorate }
+    return places.filter { it.id.startsWith("TN-") }.map { place ->
+        val local = zonesByGovernorate[place.arabic].orEmpty()
+        val focus = local.filter { it.shapeCount > 0 }.mapNotNull { it.center }.minByOrNull {
+            kotlin.math.hypot(it.latitude - place.point.latitude, it.longitude - place.point.longitude)
+        } ?: place.point
+        IndustrialGovernorate(place, local.sumOf { it.shapeCount }, focus)
+    }
+}
+
+internal data class IndustrialCatalog(val capturedAt: String, val zones: List<IndustrialZone>,
+    val governorates: List<IndustrialGovernorate>) {
     fun mapFeatures(language: String): FeatureCollection = FeatureCollection.fromFeatures(zones.mapNotNull { zone ->
         val point = zone.center ?: return@mapNotNull null
         Feature.fromGeometry(Point.fromLngLat(point.longitude, point.latitude)).apply {
@@ -56,28 +70,40 @@ internal data class IndustrialCatalog(val capturedAt: String, val zones: List<In
 internal fun loadIndustrialCatalog(context: Context): IndustrialCatalog {
     val catalog = context.readAfi("overview")
     val rows = catalog.getJSONArray("zones")
-    return IndustrialCatalog(catalog.getString("captured_at"), List(rows.length()) { index ->
+    val zones = List(rows.length()) { index ->
         val row = rows.getJSONObject(index)
         IndustrialZone(row.getString("id"), row.text("name_ar").orEmpty(), row.text("name_fr").orEmpty(),
             row.text("governorate").orEmpty(), row.point("center"), row.getInt("shapes"))
-    })
+    }
+    return IndustrialCatalog(catalog.getString("captured_at"), zones, industrialGovernorates(readAtlasPlaces(context), zones))
+}
+
+private fun lotShape(zoneId: String, row: JSONObject): Feature? {
+    val shape = row.optJSONObject("geometry") ?: return null
+    val fields = JSONObject().put("id", row.getString("id")).put("zoneId", zoneId)
+        .put("number", row.text("number").orEmpty())
+    return Feature.fromJson(JSONObject().put("type", "Feature")
+        .put("geometry", shape).put("properties", fields).toString())
+}
+
+internal fun loadIndustrialShapes(context: Context, catalog: IndustrialCatalog): FeatureCollection {
+    val result = mutableListOf<Feature>()
+    for (zone in catalog.zones.filter { it.shapeCount > 0 }) {
+        val rows = context.readAfi(zone.id).getJSONArray("lots")
+        for (i in 0 until rows.length()) lotShape(zone.id, rows.getJSONObject(i))?.let(result::add)
+    }
+    return FeatureCollection.fromFeatures(result)
 }
 
 internal fun loadIndustrialPlan(context: Context, zone: IndustrialZone): IndustrialPlan {
     require(Regex("[0-9]{1,12}").matches(zone.id))
     val plan = context.readAfi(zone.id)
     val rows = plan.getJSONArray("lots")
-    val shapes = mutableListOf<Feature>()
     val lots = List(rows.length()) { index ->
         val row = rows.getJSONObject(index)
         val id = row.getString("id")
         val number = row.text("number")
         val anchor = row.point("anchor")
-        row.optJSONObject("geometry")?.let { shape ->
-            val fields = JSONObject().put("id", id).put("number", number.orEmpty())
-            shapes += Feature.fromJson(JSONObject().put("type", "Feature")
-                .put("geometry", shape).put("properties", fields).toString())
-        }
         IndustrialLot(id, number, row.text("area_m2"), row.text("estimated_area_m2"), row.text("price_dtn_m2"),
             row.text("price_basis") == "lot", row.optBoolean("listed"), row.text("offer_status") == "available", anchor)
     }
@@ -89,7 +115,7 @@ internal fun loadIndustrialPlan(context: Context, zone: IndustrialZone): Industr
         }
     }
     return IndustrialPlan(zone, plan.getString("layout_date"), plan.getString("offer_date"), lots,
-        documents, FeatureCollection.fromFeatures(shapes))
+        documents)
 }
 
 internal fun industrialDocumentUrl(raw: String?, pdf: Boolean = false): String? {

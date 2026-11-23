@@ -108,6 +108,7 @@ internal fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmiss
                      onDocumentRead: ((CertificateIdentityReview) -> Unit)? = null,
                      onSubmitted:(String)->Unit={onBack()}) {
     val context=LocalContext.current
+    val feedback=LocalFeedback.current
     val ownerSession=LocalOwnerEvidenceSession.current
     val authenticatedOwnerSession=LocalAuthenticatedOwnerSession.current
     val pilotOcrSession=LocalPilotOcrSession.current
@@ -1443,11 +1444,12 @@ internal fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmiss
                 }
                 else if(step==2 && onDocumentRead!=null){
                     pairReport?.takeIf { it.reviewId != null }?.let { report ->
+                        feedback(AppCue.Confirm)
                         onDocumentRead(report)
                         prefs.edit().clear().apply()
                     }
                 }
-                else if(step<3){step++;showInvalid=false;saveMessage=0}
+                else if(step<3){feedback(AppCue.Action);step++;showInvalid=false;saveMessage=0}
                 else if(directVerification&&pilotOcrSession!=null&&!sending){
                     val review=pairReport?.reviewId
                     val listingId=resubmission?.optString("id").orEmpty()
@@ -1491,6 +1493,7 @@ internal fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmiss
                                 if(requestEpoch==sendEpoch&&pairReport?.reviewId==review){
                                     submittedReference=reference
                                     submittedId=receipt.optString("id");submittedStatus=receipt.optString("status")
+                                    feedback(AppCue.Confirm)
                                     submitted=true;submissionMessage=R.string.submission_sent
                                 }
                             }catch(cancel:CancellationException){throw cancel}

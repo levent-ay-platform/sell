@@ -16,6 +16,7 @@ import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -290,7 +291,8 @@ internal fun PremiumAccountScreen(
 
 @Composable
 internal fun PremiumSettingsScreen(
-    language: String, onLanguage: (String) -> Unit, onBack: () -> Unit
+    language: String, onLanguage: (String) -> Unit, onBack: () -> Unit,
+    sound: Boolean, haptic: Boolean, onSound: (Boolean) -> Unit, onHaptic: (Boolean) -> Unit
 ) {
     val context = LocalContext.current
     Column(
@@ -342,6 +344,13 @@ internal fun PremiumSettingsScreen(
                 }
             }
         }
+        Surface(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+            shape = RoundedCornerShape(20.dp), color = Color.White, border = BorderStroke(1.dp, Brand.Border)) {
+            Column(Modifier.padding(horizontal = 18.dp, vertical = 8.dp)) {
+                FeedbackSetting(s(R.string.action_sounds), sound, onSound)
+                FeedbackSetting(s(R.string.action_haptics), haptic, onHaptic)
+            }
+        }
         if (BuildConfig.MALAK_DIRECT_PUBLISHING) {
             val fingerprint = remember(context) { PilotOcrLogin.deviceFingerprint(context) }
             Surface(
@@ -359,5 +368,14 @@ internal fun PremiumSettingsScreen(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun FeedbackSetting(label: String, enabled: Boolean, change: (Boolean) -> Unit) {
+    Row(Modifier.fillMaxWidth().toggleable(value = enabled, role = Role.Switch, onValueChange = change)
+        .heightIn(min = 52.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(label, Modifier.weight(1f), color = Brand.Ink)
+        Switch(checked = enabled, onCheckedChange = null)
     }
 }

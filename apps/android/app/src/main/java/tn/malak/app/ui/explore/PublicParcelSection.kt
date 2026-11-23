@@ -40,6 +40,8 @@ import androidx.compose.ui.window.DialogProperties
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import tn.malak.app.ui.AppCue
+import tn.malak.app.ui.LocalFeedback
 import tn.malak.app.R
 import tn.malak.app.ui.Brand
 import tn.malak.app.ui.s
@@ -190,6 +192,7 @@ internal fun PropertyDocumentViewer(
     readBytes: (PublicPropertyDocument) -> ByteArray = ::downloadPublicDocument
 ) {
     val context = LocalContext.current
+    val feedback = LocalFeedback.current
     val isPdf = document.mime == "application/pdf"
     var zoom by rememberSaveable(document.id) { mutableFloatStateOf(1f) }
     var page by rememberSaveable(document.id) { mutableIntStateOf(document.startPage) }
@@ -239,11 +242,11 @@ internal fun PropertyDocumentViewer(
                         if (isPdf && shown.count > 1) {
                             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.SpaceBetween) {
-                                IconButton(onClick = { page-- }, enabled = page > 0) {
+                                IconButton(onClick = { feedback(AppCue.Step); page-- }, enabled = page > 0) {
                                     Icon(Icons.AutoMirrored.Outlined.ArrowBack, s(R.string.parcel_previous))
                                 }
                                 Text(s(R.string.parcel_page, page + 1, shown.count))
-                                IconButton(onClick = { page++ }, enabled = page + 1 < shown.count) {
+                                IconButton(onClick = { feedback(AppCue.Step); page++ }, enabled = page + 1 < shown.count) {
                                     Icon(Icons.AutoMirrored.Outlined.ArrowForward, s(R.string.parcel_next))
                                 }
                             }

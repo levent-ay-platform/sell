@@ -20,8 +20,7 @@ import org.junit.runner.RunWith
 class MapHomeTest {
     @Test
     fun mapOpensWithCompactSearchAndShowsNoSampleListings() {
-        assumeTrue(BuildConfig.MALAK_V2_DISCOVERY && BuildConfig.MALAK_DISCOVERY_BASE_URL.isEmpty()
-            && !BuildConfig.MALAK_DIRECT_PUBLISHING)
+        assumeTrue(BuildConfig.MALAK_V2_DISCOVERY && BuildConfig.MALAK_DISCOVERY_BASE_URL.isEmpty())
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext
         context.getSharedPreferences("malak_public_preferences", 0).edit().putString("language", "fr").commit()
@@ -32,9 +31,32 @@ class MapHomeTest {
         val globe = By.desc("Vue du globe")
         val propertyMap = By.desc("Carte immobilière interactive")
         val hasGlobe = BuildConfig.MALAK_MAP_STYLE_URL.isEmpty()
-        if (hasGlobe && android.animation.ValueAnimator.areAnimatorsEnabled()) {
+        if (hasGlobe) {
             assertTrue(device.wait(Until.hasObject(globe), 20_000))
-            assertTrue(device.wait(Until.gone(globe), 6_000))
+            assertFalse("The globe should wait for the buyer", device.wait(Until.gone(globe), 4_000))
+            assertTrue(device.takeScreenshot(File(context.cacheDir, "arrival-globe.png")))
+            val radar = By.desc("Radar immobilier")
+            device.findObject(radar).click()
+            assertTrue(device.wait(Until.hasObject(propertyMap), 8_000))
+            assertTrue(device.wait(Until.hasObject(By.text("Rechercher dans le cercle")), 5_000))
+            assertTrue(device.wait(Until.hasObject(By.text("Lots cartographiés par gouvernorat · AFI")), 8_000))
+            // The camera idle event can precede the first frame of the local badge layer.
+            val deadline = android.os.SystemClock.uptimeMillis() + 10_000
+            var badgePixels = 0
+            while (badgePixels < 180 && android.os.SystemClock.uptimeMillis() < deadline) {
+                val frame = instrumentation.uiAutomation.takeScreenshot()
+                val bitmap = frame.copy(android.graphics.Bitmap.Config.ARGB_8888, false)
+                badgePixels = 0
+                for (y in 0 until bitmap.height step 3) for (x in 0 until bitmap.width step 3) {
+                    if (bitmap.getPixel(x, y) == 0xFF145D68.toInt()) badgePixels++
+                }
+                frame.recycle()
+                bitmap.recycle()
+                if (badgePixels < 180) android.os.SystemClock.sleep(250)
+            }
+            device.takeScreenshot(File(context.cacheDir, "tunisia-radar.png"))
+            assertTrue("Governorate badges did not render", badgePixels >= 180)
+            device.pressBack()
         }
         val search = By.text("Ville ou quartier")
         val houses = By.text("Maisons")
@@ -72,7 +94,7 @@ class MapHomeTest {
         }
 
         device.findObject(By.text("Explorer")).click()
-        assertTrue(device.wait(Until.hasObject(By.text("La recherche est indisponible dans cette version.")), 10_000))
+        if (!BuildConfig.MALAK_DIRECT_PUBLISHING) assertTrue(device.wait(Until.hasObject(By.text("La recherche est indisponible dans cette version.")), 10_000))
         assertFalse(device.hasObject(By.textContains("annonces fictives")))
         assertFalse(device.hasObject(By.textContains("Terrain résidentiel près de la mer")))
 
@@ -95,6 +117,7 @@ class MapHomeTest {
         assertFalse(device.hasObject(By.text("Villas")))
         val adminLayer = By.desc("Limites administratives Atlas")
         assertTrue(device.hasObject(adminLayer))
+        assertTrue(device.hasObject(By.desc("Lots industriels cartographiés")))
         device.findObject(adminLayer).click()
         device.waitForIdle()
         device.takeScreenshot(File(context.cacheDir, "layers-qa.png"))
@@ -102,7 +125,12 @@ class MapHomeTest {
         assertTrue(device.wait(Until.hasObject(done), 5_000))
         device.findObject(done).click()
         assertTrue(device.wait(Until.gone(done), 5_000))
-        assertTrue(device.wait(Until.hasObject(By.textContains("© OpenStreetMap")), 5_000))
+        val credit = By.textContains("© OpenStreetMap")
+        assertTrue(device.wait(Until.gone(credit), 5_000))
+        device.findObject(layers).click()
+        device.wait(Until.findObject(adminLayer), 5_000).click()
+        device.findObject(done).click()
+        assertTrue(device.wait(Until.hasObject(credit), 5_000))
         device.takeScreenshot(File(context.cacheDir, "administrative-atlas.png"))
     }
 }
