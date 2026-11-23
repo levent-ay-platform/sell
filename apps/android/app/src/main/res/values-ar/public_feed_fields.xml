@@ -2,5 +2,5 @@
 <resources>
     <string name="v2_public_kind_unavailable">نوع العقار غير محدد في المصدر</string>
     <string name="v2_public_type_filter_note">بعض الإعلانات المنشورة لا تحتوي نوع العقار في المصدر، لذلك قد تخفيها فلاتر النوع.</string>
-    <string name="v2_public_location_unknown_note">بعض الإعلانات لا تحتوي موقعاً عاماً صالحاً. يمكنك رؤيتها في القائمة، لكن موقعها غير مؤكد.</string>
+    <string name="v2_public_location_unknown_note">الإعلانات دون إحداثيات منشورة تظهر في القائمة؛ ويظهر موضعها بعد إضافته.</string>
 </resources>
