@@ -2,11 +2,11 @@
 <resources>
     <string name="direct_publish">Publish property</string>
     <string name="direct_preview">Preview listing</string>
-    <string name="direct_preview_note">This listing will be shown with an approximate location. You can verify it after publishing.</string>
+    <string name="direct_preview_note">Your listing will appear within the chosen area. You can complete verification after publishing.</string>
     <string name="direct_missing_fields">Check the title, area, price and locality, and set a point on the map.</string>
     <string name="direct_publish_failed">Could not save the property. Check your connection and try again.</string>
     <string name="direct_choose_location">Set location on the map</string>
-    <string name="direct_change_location">Change approximate location</string>
+    <string name="direct_change_location">Change listing map marker</string>
     <string name="direct_pin_hint">Move the map to put the pin near the property.</string>
     <string name="direct_confirm_pin">Use this location</string>
     <string name="direct_save">Save changes</string>
@@ -30,7 +30,7 @@
     <string name="direct_stage_location">Photos and location</string>
     <string name="direct_stage_details">Details and price</string>
     <string name="direct_choose_kind">Choose a property type.</string>
-    <string name="direct_check_location">Enter the area and choose the approximate location on the map.</string>
+    <string name="direct_check_location">Enter the area and choose your listing marker on the map.</string>
     <string name="direct_next">Continue</string>
     <string name="direct_check_details">Enter a title, a valid surface area and an asking price.</string>
 </resources>
