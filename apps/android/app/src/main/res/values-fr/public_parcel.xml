@@ -2,7 +2,7 @@
     <string name="parcel_boundaries">Limites de la parcelle</string>
     <string name="parcel_official">Limite cadastrale vérifiée à la source</string>
     <string name="parcel_georeferenced">Géoréférencée à partir du document</string>
-    <string name="parcel_estimate">Limite indicative proposée par le propriétaire</string>
+    <string name="parcel_estimate">Contour fourni par le déposant</string>
     <string name="parcel_local_only">Contour du plan sans calage géographique</string>
     <string name="parcel_references">Titre %1$s · Lot %2$s</string>
     <string name="parcel_plot">Lot %1$s</string>
