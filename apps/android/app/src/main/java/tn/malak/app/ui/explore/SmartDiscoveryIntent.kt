@@ -71,7 +71,6 @@ private fun normalizeSmartText(value: String): String {
 private fun hasAnyPhrase(text: String, vararg phrases: String): Boolean =
     phrases.any { " $it " in " $text " }
 
-private val numericToken = Regex("""([0-9]{1,9})\s*(الف|k|mille)?""")
 private val priceWithCurrency = Regex(
     """([0-9]{2,9})\s*(الف|k|mille)?\s*(?:دينار|دنانير|دت|dt|tnd|dinars?)"""
 )
@@ -137,7 +136,7 @@ internal fun interpretSmartDiscovery(query: String, places: List<AtlasPlace>): S
         firstArea in 10..10_000_000 && secondArea in firstArea..10_000_000
 
     val documents = hasAnyPhrase(
-        text, "وثائق", "وثيقه", "اوراق", "رسم عقاري", "شهاده ملكيه",
+        text, "وثائق", "وثايق", "وثيقه", "اوراق", "رسم عقاري", "شهاده ملكيه",
         "شهادات ملكيه", "document", "documents", "titre foncier", "cadastre"
     )
 
