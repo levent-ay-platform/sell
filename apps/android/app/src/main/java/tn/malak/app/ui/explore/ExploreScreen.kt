@@ -16,7 +16,6 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CenterFocusStrong
-import androidx.compose.material.icons.outlined.Factory
 import androidx.compose.material.icons.outlined.Radar
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.ExpandLess
@@ -584,84 +583,64 @@ internal fun ExploreScreen(
                 if (markerFailed && showSalesLayer) Surface(shape = RoundedCornerShape(16.dp), color = Brand.Pearl) {
                     ResultMessage(s(R.string.v2_find_error), retry = { refresh++ })
                 }
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(7.dp, Alignment.End),
-                    verticalAlignment = Alignment.CenterVertically) {
-                    FilledTonalButton(
-                        onClick = { feedback(AppCue.Action); atlasLensOpen = true },
-                        colors = ButtonDefaults.filledTonalButtonColors(
-                            containerColor = Brand.Pearl, contentColor = Brand.Crimson)
-                    ) {
-                        Icon(Icons.Outlined.Map, null, Modifier.size(17.dp))
-                        Spacer(Modifier.width(4.dp))
-                        Text(s(R.string.atlas_lens_short), maxLines = 1)
-                    }
-                    FilledTonalButton(
-                        onClick = { feedback(AppCue.Action); showIndustrialLayer = true; radarEditing = false; industrialSearchTerm = ""; industrialSheet = "zones" },
-                        colors = ButtonDefaults.filledTonalButtonColors(containerColor = Brand.Pearl, contentColor = Brand.Ink)
-                    ) {
-                        Icon(Icons.Outlined.Factory, null, Modifier.size(17.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text(s(R.string.afi_shortcut), maxLines = 1)
-                    }
-                    if (mapReady || openingGlobe) FilledIconButton(
-                        onClick = {
-                            val fromWorld = openingGlobe || globeVisible || zoom < 3
-                            feedback(AppCue.Radar)
-                            selectedId = null
-                            industrialZoneId = null
-                            industrialLotId = null
-                            openingGlobe = false
-                            flyToTunisia = false
-                            recenterSearch = false
-                            radarEditing = true
-                            val center = activeRadar?.center ?: DiscoveryPoint(centerLatitude, centerLongitude)
-                            val target = center.takeIf { it in InitialBounds } ?: InitialCenter
-                            radarRadius = activeRadar?.radiusKm ?: radarRadius
-                            if (fromWorld) {
-                                jump = null
-                                flyToTunisia = true
-                            } else {
-                                jump = CameraJump(target, 10.6 - log2(radarRadius / 5.0), ++jumpSerial)
+                Surface(
+                    modifier = Modifier.align(Alignment.End),
+                    shape = RoundedCornerShape(24.dp),
+                    color = Brand.Pearl,
+                    contentColor = Brand.Ink,
+                    border = BorderStroke(1.dp, Brand.Border)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (mapReady || openingGlobe) IconButton(
+                            onClick = {
+                                val fromWorld = openingGlobe || globeVisible || zoom < 3
+                                feedback(AppCue.Radar)
+                                selectedId = null
+                                industrialZoneId = null
+                                industrialLotId = null
+                                openingGlobe = false
+                                flyToTunisia = false
+                                recenterSearch = false
+                                radarEditing = true
+                                val center = activeRadar?.center ?: DiscoveryPoint(centerLatitude, centerLongitude)
+                                val target = center.takeIf { it in InitialBounds } ?: InitialCenter
+                                radarRadius = activeRadar?.radiusKm ?: radarRadius
+                                if (fromWorld) {
+                                    jump = null
+                                    flyToTunisia = true
+                                } else {
+                                    jump = CameraJump(target, 10.6 - log2(radarRadius / 5.0), ++jumpSerial)
+                                }
                             }
-                        },
-                        colors = IconButtonDefaults.filledIconButtonColors(
-                            containerColor = Brand.Pearl, contentColor = Brand.Crimson
-                        )
-                    ) { Icon(Icons.Outlined.Radar, s(R.string.radar_title)) }
-                    FilledIconButton(
-                        onClick = { feedback(AppCue.Action); showLayers = true },
-                        colors = IconButtonDefaults.filledIconButtonColors(
-                            containerColor = Brand.Pearl, contentColor = Brand.Crimson
-                        )
-                    ) { Icon(Icons.Outlined.Layers, s(R.string.v2_layers)) }
-                }
-                if (mapReady && (globeVisible || zoom < 4.4 ||
-                        DiscoveryPoint(centerLatitude, centerLongitude) !in InitialBounds)) {
-                    FilledIconButton(
-                        onClick = {
-                            focusManager.clearFocus()
-                            openingGlobe = false
-                            jump = null
-                            recenterSearch = false
-                            areaMoved = false
-                            selectedId = null
-                            radarSelection = ""
-                            radarEditing = false
-                            placeId = null
-                            searchText = ""
-                            committed = InitialBounds.encode()
-                            committedZoom = InitialZoom.toInt()
-                            visible = committed
-                            centerLatitude = InitialCenter.latitude
-                            centerLongitude = InitialCenter.longitude
-                            zoom = InitialZoom
-                            flyToTunisia = true
-                        },
-                        modifier = Modifier.align(Alignment.End),
-                        colors = IconButtonDefaults.filledIconButtonColors(
-                            containerColor = Brand.Pearl, contentColor = Brand.Ink
-                        )
-                    ) { Icon(Icons.Outlined.CenterFocusStrong, s(R.string.v2_recenter_tunisia)) }
+                        ) { Icon(Icons.Outlined.Radar, s(R.string.radar_title), tint = Brand.Crimson) }
+                        IconButton(
+                            onClick = { feedback(AppCue.Action); showLayers = true }
+                        ) { Icon(Icons.Outlined.Layers, s(R.string.v2_layers)) }
+                        if (mapReady && (globeVisible || zoom < 4.4 ||
+                                DiscoveryPoint(centerLatitude, centerLongitude) !in InitialBounds)) {
+                            IconButton(
+                                onClick = {
+                                    focusManager.clearFocus()
+                                    openingGlobe = false
+                                    jump = null
+                                    recenterSearch = false
+                                    areaMoved = false
+                                    selectedId = null
+                                    radarSelection = ""
+                                    radarEditing = false
+                                    placeId = null
+                                    searchText = ""
+                                    committed = InitialBounds.encode()
+                                    committedZoom = InitialZoom.toInt()
+                                    visible = committed
+                                    centerLatitude = InitialCenter.latitude
+                                    centerLongitude = InitialCenter.longitude
+                                    zoom = InitialZoom
+                                    flyToTunisia = true
+                                }
+                            ) { Icon(Icons.Outlined.CenterFocusStrong, s(R.string.v2_recenter_tunisia)) }
+                        }
+                    }
                 }
                 Spacer(Modifier.weight(1f))
                 if (measuredShape != null && nozhaMapPoint != null) {
@@ -918,7 +897,14 @@ internal fun ExploreScreen(
                     fitIndustrialZone = null
                 }
             },
+            onAtlasLens = {
+                feedback(AppCue.Action)
+                showLayers = false
+                atlasLensOpen = true
+            },
             onBrowseIndustrial = {
+                feedback(AppCue.Action)
+                radarEditing = false
                 showIndustrialLayer = true
                 showLayers = false
                 industrialSearchTerm = ""

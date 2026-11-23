@@ -27,7 +27,7 @@ import tn.malak.app.R
 import tn.malak.app.ui.Brand
 import tn.malak.app.ui.s
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 internal fun MapLayersSheet(
     salesVisible: Boolean,
@@ -42,6 +42,7 @@ internal fun MapLayersSheet(
     onAdministrativeVisible: (Boolean) -> Unit,
     onIndustrialVisible: (Boolean) -> Unit,
     onBrowseIndustrial: () -> Unit,
+    onAtlasLens: () -> Unit,
     onDismiss: () -> Unit
 ) {
     ModalBottomSheet(
@@ -60,6 +61,18 @@ internal fun MapLayersSheet(
                     Icon(Icons.Outlined.Close, s(R.string.close), tint = Brand.Ink)
                 }
             }
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = onAtlasLens) {
+                    Icon(Icons.Outlined.Map, null, Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text(s(R.string.atlas_lens_short))
+                }
+                OutlinedButton(onClick = onBrowseIndustrial) {
+                    Icon(Icons.Outlined.Factory, null, Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text(s(R.string.afi_browse))
+                }
+            }
             LayerSwitch(Icons.Outlined.Layers, s(R.string.layer_sales),
                 s(if (listingsAvailable) R.string.layer_sales_hint else R.string.v2_not_configured),
                 salesVisible && listingsAvailable, onSalesVisible.takeIf { listingsAvailable })
@@ -67,7 +80,6 @@ internal fun MapLayersSheet(
                 industrialVisible, onIndustrialVisible)
             LayerSwitch(Icons.Outlined.Map, s(R.string.afi_lots_layer), s(R.string.afi_lots_hint),
                 lotsVisible && industrialVisible, onLotsVisible.takeIf { industrialVisible })
-            TextButton(onClick = onBrowseIndustrial) { Text(s(R.string.afi_browse)) }
             LayerSwitch(Icons.Outlined.Map, s(R.string.layer_atlas_admin), s(R.string.layer_atlas_admin_hint),
                 administrativeVisible, onAdministrativeVisible)
             LayerSwitch(Icons.Outlined.Map, s(R.string.layer_atlas),

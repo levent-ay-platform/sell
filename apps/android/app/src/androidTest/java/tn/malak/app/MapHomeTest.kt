@@ -94,7 +94,11 @@ class MapHomeTest {
         }
 
         device.findObject(By.text("Explorer")).click()
-        if (!BuildConfig.MALAK_DIRECT_PUBLISHING) assertTrue(device.wait(Until.hasObject(By.text("La recherche est indisponible dans cette version.")), 10_000))
+        if (!BuildConfig.MALAK_DIRECT_PUBLISHING && BuildConfig.MALAK_PUBLIC_LISTINGS_BASE_URL.isEmpty()) {
+            assertTrue(device.wait(Until.hasObject(By.text("La recherche est indisponible dans cette version.")), 10_000))
+        } else {
+            assertTrue(device.wait(Until.hasObject(By.text("Carte")), 10_000))
+        }
         assertFalse(device.hasObject(By.textContains("annonces fictives")))
         assertFalse(device.hasObject(By.textContains("Terrain résidentiel près de la mer")))
 
@@ -112,7 +116,11 @@ class MapHomeTest {
 
         val layers = By.desc("Couches de la carte")
         assertTrue(device.wait(Until.hasObject(layers), 5_000))
+        assertFalse(device.hasObject(By.text("Atlas Lens")))
+        assertFalse(device.hasObject(By.text("Zones industrielles")))
         device.findObject(layers).click()
+        assertTrue(device.wait(Until.hasObject(By.text("Atlas Lens")), 5_000))
+        assertTrue(device.hasObject(By.text("Parcourir les zones AFI")))
         assertTrue(device.wait(Until.hasObject(By.text("Biens à vendre")), 5_000))
         assertFalse(device.hasObject(By.text("Villas")))
         val adminLayer = By.desc("Limites administratives Atlas")
