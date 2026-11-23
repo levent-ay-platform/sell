@@ -13,7 +13,10 @@ import java.io.IOException
 internal class PilotPublicDiscoverySource(private val origin: String) : DiscoverySource {
     private suspend fun publicGet(path: String, missingAllowed: Boolean = false): JSONObject? =
         withContext(Dispatchers.IO) {
-            val connection = discoveryConnection(origin + path, "application/json")
+            val connection = discoveryConnection(origin + path, "application/json").apply {
+                // Identify the QA app explicitly instead of using the generic Dalvik URLConnection UA.
+                setRequestProperty("User-Agent", "Amlak-Android/0.5.1 (public-feed-readonly-qa)")
+            }
             try {
                 val status = connection.responseCode
                 if (missingAllowed && status == 404) return@withContext null
