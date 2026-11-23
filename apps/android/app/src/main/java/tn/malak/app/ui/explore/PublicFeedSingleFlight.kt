@@ -23,7 +23,13 @@ internal class PublicFeedSingleFlight<T>(private val loadFresh: suspend () -> T)
     suspend fun get(): T {
         val request = synchronized(lock) {
             pending?.takeUnless { it.isCompleted }
-                ?: scope.async(start = CoroutineStart.LAZY) { loadFresh() }.also { pending = it }
+                ?: scope.async(start = CoroutineStart.LAZY) { loadFresh() }.also { request ->
+                    pending = request
+                    // Drop the completed response reference immediately: no retained listing cache.
+                    request.invokeOnCompletion {
+                        synchronized(lock) { if (pending === request) pending = null }
+                    }
+                }
         }
         request.start()
         return request.await()
