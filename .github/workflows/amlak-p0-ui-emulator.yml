@@ -54,7 +54,7 @@ jobs:
           disable-animations: true
           emulator-options: '-no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot'
           script: |
-            bash -lc 'set -e; gradle -p apps/android :app:connectedDebugAndroidTest -PmalakV2Discovery=true -Pandroid.testInstrumentationRunnerArguments.class=tn.malak.app.PublicFeedAreaOnlyUiTest --no-daemon; mkdir -p qa-public-feed-ui; adb pull /sdcard/Pictures/AmlakQA/p0-public-feed-fr.png qa-public-feed-ui/; test -s qa-public-feed-ui/p0-public-feed-fr.png'
+            bash -lc 'set -e; gradle -p apps/android :app:connectedDebugAndroidTest -PmalakV2Discovery=true -Pandroid.testInstrumentationRunnerArguments.class=tn.malak.app.PublicFeedAreaOnlyUiTest,tn.malak.app.NozhaPublicCardContractTest --no-daemon; mkdir -p qa-public-feed-ui; adb pull /sdcard/Pictures/AmlakQA/p0-public-feed-fr.png qa-public-feed-ui/; test -s qa-public-feed-ui/p0-public-feed-fr.png'
       - name: Publish screenshots and test reports (even on failure)
         if: always()
         uses: actions/upload-artifact@v4
