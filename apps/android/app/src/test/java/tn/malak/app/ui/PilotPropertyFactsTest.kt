@@ -44,6 +44,7 @@ class PilotPropertyFactsTest{
         assertTrue(sameListingArea("٩٠٠٫٥٠", fact))
         assertFalse(sameListingArea("275,5", fact))
         assertFalse(sameListingArea("", fact))
+        assertFalse(sameListingArea("9005E-1", fact))
         assertNull(listingAreaEvidence("OWNERSHIP_CERTIFICATE", listOf(fact, fact.copy(status = "LOW_CONFIDENCE"))))
     }
 }

@@ -29,5 +29,7 @@ internal fun pilotAutofill(kind: String?, facts: List<PilotPropertyFact>): Map<S
     return mapOf("area" to fact.value)
 }
 
-internal fun sameListingArea(entered: String, evidence: PilotPropertyFact): Boolean =
-    listingNumber(entered).toBigDecimalOrNull()?.compareTo(evidence.value.toBigDecimal()) == 0
+internal fun sameListingArea(entered: String, evidence: PilotPropertyFact): Boolean {
+    val number = listingNumber(entered)
+    return listingDecimalPattern.matches(number) && number.toBigDecimal().compareTo(evidence.value.toBigDecimal()) == 0
+}

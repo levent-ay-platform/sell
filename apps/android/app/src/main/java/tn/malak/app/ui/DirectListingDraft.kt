@@ -35,13 +35,13 @@ internal data class DirectListingDraft(
         DirectListingStage.entries.take(stage.ordinal).firstOrNull { !canContinue(it) } ?: stage
 }
 
-private val Decimal = Regex("[0-9]{1,12}(?:\\.[0-9]{1,3})?")
+internal val listingDecimalPattern = Regex("[0-9]{1,12}(?:\\.[0-9]{1,3})?")
 private val MaxPrice = BigDecimal("1000000000000")
 private val MaxArea = BigDecimal("1000000000")
 
 private fun validAmount(input: String, maximum: BigDecimal): Boolean {
     val normalized = listingNumber(input)
-    if (!Decimal.matches(normalized)) return false
+    if (!listingDecimalPattern.matches(normalized)) return false
     val amount = normalized.toBigDecimal()
     return amount.signum() == 1 && amount <= maximum
 }
