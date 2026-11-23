@@ -2,8 +2,8 @@ package tn.malak.app.ui.explore
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Close
@@ -49,7 +49,8 @@ internal fun AtlasLensSheet(
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     ) {
         Column(
-            Modifier.fillMaxWidth().padding(horizontal = 16.dp).navigationBarsPadding(),
+            Modifier.fillMaxWidth().heightIn(max = 560.dp).verticalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp).navigationBarsPadding(),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -118,12 +119,10 @@ internal fun AtlasLensSheet(
                         Text(s(R.string.atlas_lens_empty),
                             color = Brand.Muted, style = MaterialTheme.typography.bodyLarge)
                     } else {
-                        LazyColumn(
-                            Modifier.heightIn(max = 390.dp),
-                            contentPadding = PaddingValues(bottom = 16.dp),
+                        Column(
                             verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            items(nearby.take(15), key = { it.zone.id }) { hit ->
+                            nearby.take(15).forEach { hit ->
                                 Surface(
                                     onClick = { onZone(hit.zone.id) },
                                     color = Color.White, contentColor = Brand.Ink,
@@ -154,7 +153,7 @@ internal fun AtlasLensSheet(
                                     }
                                 }
                             }
-                            if (nearby.size > 15) item {
+                            if (nearby.size > 15) {
                                 Text(s(R.string.atlas_lens_limited, 15, nearby.size),
                                     color = Brand.Muted,
                                     style = MaterialTheme.typography.bodySmall)
