@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="v2_public_kind_unavailable">Type de bien non précisé par la source</string>
+    <string name="v2_public_type_filter_note">Certaines annonces n’ont pas de type de bien dans la source et peuvent être exclues par ce filtre.</string>
+    <string name="v2_public_location_unknown_note">Certaines annonces n’ont pas de coordonnées publiques valides. Consultez la liste ; leur position est inconnue.</string>
 </resources>
