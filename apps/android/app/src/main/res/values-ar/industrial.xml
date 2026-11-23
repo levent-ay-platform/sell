@@ -5,7 +5,7 @@
     <string name="afi_browse">تصفّح مناطق AFI</string>
     <string name="afi_search">ابحث عن منطقة أو ولاية</string>
     <string name="afi_plans">المخططات والمقاسم</string>
-    <string name="afi_indicative">مخطط AFI إرشادي · الحدود تقريبية</string>
+    <string name="afi_indicative">مخطط AFI · حدود المقاسم بحسب طبقة التخطيط</string>
     <string name="afi_snapshot_date">نسخة AFI بتاريخ ‎%1$s</string>
     <string name="afi_documents">وثائق AFI</string>
     <string name="afi_original">افتح صفحة المصدر</string>
@@ -19,7 +19,7 @@
     <string name="afi_no_lots">لا توجد مقاسم في هذا العرض.</string>
     <string name="afi_source">الخريطة الأصلية للوكالة</string>
     <string name="afi_load_failed">تعذّر فتح المخطط الصناعي.</string>
-    <string name="afi_estimated_area">مساحة تقديرية · ‎%1$s م²</string>
+    <string name="afi_estimated_area">مساحة محسوبة من مخطط AFI · ‎%1$s م²</string>
     <string name="afi_no_shape">لا يوجد مضلع منشور لهذا المقسم.</string>
     <string name="afi_lot_price">سعر المقسم المنشور · ‎%1$s د.ت/م²</string>
     <string name="afi_zone_price">تعريفة المنطقة لدى AFI · ‎%1$s د.ت/م²</string>
