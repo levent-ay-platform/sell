@@ -3,7 +3,8 @@ package tn.malak.app.ui.explore
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import androidx.compose.foundation.Canvas
-import android.animation.ValueAnimator
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.input.pointer.pointerInput
 import android.os.SystemClock
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -39,7 +40,7 @@ internal const val WorldGlobeBlendEnd = 1.82
 
 @Composable
 internal fun WorldGlobe(center: DiscoveryPoint, zoom: Double, modifier: Modifier, spin: Boolean,
-    onSpinLongitude: (Double) -> Unit) {
+    onStopSpin: () -> Unit, onSpinLongitude: (Double) -> Unit) {
     val context = LocalContext.current
     val land = remember(context) {
         // Natural Earth 1:110m public-domain land, rasterized in longitude/latitude.
@@ -55,8 +56,11 @@ internal fun WorldGlobe(center: DiscoveryPoint, zoom: Double, modifier: Modifier
     val latitude = (center.latitude * 2).roundToInt() / 2.0
     val longitude = (center.longitude * 2).roundToInt() / 2.0
     val spinPosition by rememberUpdatedState(onSpinLongitude)
+    val stopSpin by rememberUpdatedState(onStopSpin)
     val lifecycle = LocalLifecycleOwner.current.lifecycle
-    val animated = spin && ValueAnimator.areAnimatorsEnabled()
+    // The globe is interactive content, not a decorative Android animator.
+    // Continue turning even when the device's animation-duration scale is zero.
+    val animated = spin
     val projection by produceState<GlobeProjection?>(null, latitude) {
         value = withContext(Dispatchers.Default) { GlobeProjection(latitude) }
     }
@@ -80,7 +84,10 @@ internal fun WorldGlobe(center: DiscoveryPoint, zoom: Double, modifier: Modifier
         }
     }
     val alpha = ((WorldGlobeBlendEnd - zoom) / .35).coerceIn(0.0, 1.0).toFloat()
-    GlobeSky(modifier.graphicsLayer { this.alpha = alpha }) {
+    val tapToStop = if (spin) Modifier.pointerInput(Unit) {
+        detectTapGestures(onTap = { stopSpin() })
+    } else Modifier
+    GlobeSky(modifier.graphicsLayer { this.alpha = alpha }.then(tapToStop)) {
         Canvas(Modifier.matchParentSize()) {
             val frame = image ?: return@Canvas
             val diameter = (minOf(size.width, size.height) * .71 * 2.0.pow(zoom - WorldZoom)).roundToInt()
