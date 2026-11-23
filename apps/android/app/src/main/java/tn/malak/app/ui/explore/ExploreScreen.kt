@@ -831,7 +831,7 @@ internal fun ExploreScreen(
                             flyToTunisia = false
                             mapMode = true
                             onViewModeChanged(true)
-                            jump = CameraJump(point, 16.2, ++jumpSerial)
+                            jump = CameraJump(point, 17.3, ++jumpSerial)
                         }
                     })
             }
