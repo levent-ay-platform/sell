@@ -346,6 +346,8 @@ internal fun ExploreScreen(
         showSalesLayer && (if (activeRadar != null) nozhaForRadar else matchesProjectFilters)
     }
 
+    val nozhaPlanVisible = nozhaMapPoint != null && zoom >= 13 && privatePlanPoint != null &&
+        DiscoveryBounds.decode(visible)?.contains(privatePlanPoint) == true
     val opened = detailId
 
     val selected = selectedId?.let { id ->
@@ -716,12 +718,12 @@ internal fun ExploreScreen(
                     Surface(shape = RoundedCornerShape(16.dp), color = Brand.Pearl) {
                         ResultMessage(s(R.string.v2_map_data_unavailable))
                     }
-                } else if (showSalesLayer && source != null && !openingGlobe && !areaMoved && !globeVisible &&
+                } else if (showSalesLayer && source != null && !openingGlobe && !areaMoved && !globeVisible && !nozhaPlanVisible &&
                     !listLoading && !listFailed && page.listings.isEmpty() && !markerFailed) {
                     Surface(shape = RoundedCornerShape(16.dp), color = Brand.Pearl) {
                         ResultMessage(s(R.string.v2_empty))
                     }
-                } else if (showSalesLayer && mapReady && !openingGlobe && !globeVisible && markerScope.value.listings.isEmpty() &&
+                } else if (showSalesLayer && mapReady && !openingGlobe && !globeVisible && !nozhaPlanVisible && markerScope.value.listings.isEmpty() &&
                     markerScope.value.clusters.isEmpty() && page.listings.isNotEmpty()
                 ) {
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
