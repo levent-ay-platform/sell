@@ -203,7 +203,7 @@
     <string name="camera_stabilize">Stabilisez la carte et le téléphone</string>
     <string name="camera_focus_fields">Stabilisez le téléphone et gardez toute la carte nette</string>
     <string name="camera_correct_angle">Redressez la carte et alignez ses bords</string>
-    <string name="camera_preview_quality_only">Cadre et netteté estimés ; lecture réelle après la photo.</string>
+    <string name="camera_preview_quality_only">Le cadre facilite la prise de vue ; la lecture commence après la capture.</string>
     <string name="camera_shutter_anytime_hint">Prenez la photo quand la carte est nette. Vous pourrez la reprendre ensuite.</string>
     <string name="camera_align_hint">Cadrez les quatre coins de la carte</string>
     <string name="camera_more_light">Augmentez la lumière</string>
@@ -434,7 +434,7 @@
     <string name="v2_land">Terrains</string>
     <string name="v2_apartment">Appartements</string>
     <string name="v2_house">Maisons</string>
-    <string name="v2_approximate">Repère approximatif sur la carte</string>
+    <string name="v2_approximate">Repère de l’annonce sur la carte</string>
     <string name="v2_area_only">Secteur uniquement</string>
     <string name="v2_location_exact">Emplacement partagé</string>
     <string name="v2_location_unknown">Emplacement indisponible</string>
