@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="atlas_lens_short">Atlas Lens</string>
+    <string name="atlas_lens_title">Atlas Lens · Analyse locale</string>
+    <string name="atlas_lens_map_center">Centre de carte sélectionné</string>
+    <string name="atlas_lens_radius_note">Découvrez les zones AFI proches du point choisi.</string>
+    <string name="atlas_lens_radius_chip">%1$d km</string>
+    <string name="atlas_lens_nearby_zones">%1$d zones AFI à proximité</string>
+    <string name="atlas_lens_planned_lots">%1$d lots planifiés dans ces zones (total)</string>
+    <string name="atlas_lens_disclaimer">Distances à vol d’oiseau jusqu’au centre des zones. Les lots sont comptés sur la totalité de chaque plan, pas seulement dans le rayon. Ce ne sont pas des annonces de vente.</string>
+    <string name="atlas_lens_cadastre_unknown">Les données AFI ne prouvent ni les limites cadastrales ni la propriété.</string>
+    <string name="atlas_lens_empty">Aucun centre de zone répertorié dans ce rayon pour cette version. Une donnée inconnue ne vaut pas une couverture nulle.</string>
+    <string name="atlas_lens_distance">≈%1$s km</string>
+    <string name="atlas_lens_limited">Affichage des %1$d premières zones sur %2$d.</string>
+</resources>
