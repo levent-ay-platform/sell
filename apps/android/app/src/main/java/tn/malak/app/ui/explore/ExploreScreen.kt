@@ -152,6 +152,7 @@ internal fun ExploreScreen(
     var showIndustrialLayer by rememberSaveable { mutableStateOf(true) }
     var showLotLayer by rememberSaveable { mutableStateOf(true) }
     var industrialSheet by rememberSaveable { mutableStateOf<String?>(null) }
+    var industrialSearchTerm by rememberSaveable { mutableStateOf("") }
     var industrialZoneId by rememberSaveable { mutableStateOf<String?>(null) }
     var industrialLotId by rememberSaveable { mutableStateOf<String?>(null) }
     var fitIndustrialZone by remember { mutableStateOf<String?>(null) }
@@ -412,6 +413,37 @@ internal fun ExploreScreen(
                     searchText = it
                     if (it.isBlank()) { placeId = null; selectedId = null }
                 },
+                onSmartSearch = { intent ->
+                    feedback(AppCue.Confirm)
+                    filters = intent.applyTo(filters)
+                    radarSelection = ""
+                    selectedId = null
+                    intent.place?.let { place ->
+                        openingGlobe = false
+                        flyToTunisia = false
+                        searchText = if (language == "ar") place.arabic else place.french
+                        placeId = null // Offline Atlas place labels cannot be treated as server IDs.
+                        val point = place.point
+                        val area = DiscoveryBounds(point.longitude - .11, point.latitude - .09,
+                            point.longitude + .11, point.latitude + .09)
+                        centerLatitude = point.latitude
+                        centerLongitude = point.longitude
+                        zoom = 12.3
+                        committedZoom = 12
+                        visible = area.encode()
+                        committed = visible
+                        areaMoved = false
+                        if (mapMode) {
+                            recenterSearch = true
+                            jump = CameraJump(point, zoom, ++jumpSerial)
+                        }
+                    }
+                    if (intent.industrial) {
+                        showIndustrialLayer = true
+                        industrialSearchTerm = intent.place?.arabic.orEmpty()
+                        industrialSheet = "zones"
+                    }
+                },
                 onPlace = { place ->
                     openingGlobe = false
                     flyToTunisia = false
@@ -475,7 +507,7 @@ internal fun ExploreScreen(
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(7.dp, Alignment.End),
                     verticalAlignment = Alignment.CenterVertically) {
                     FilledTonalButton(
-                        onClick = { feedback(AppCue.Action); showIndustrialLayer = true; radarEditing = false; industrialSheet = "zones" },
+                        onClick = { feedback(AppCue.Action); showIndustrialLayer = true; radarEditing = false; industrialSearchTerm = ""; industrialSheet = "zones" },
                         colors = ButtonDefaults.filledTonalButtonColors(containerColor = Brand.Pearl, contentColor = Brand.Ink)
                     ) {
                         Icon(Icons.Outlined.Factory, null, Modifier.size(17.dp))
@@ -731,6 +763,7 @@ internal fun ExploreScreen(
             onBrowseIndustrial = {
                 showIndustrialLayer = true
                 showLayers = false
+                industrialSearchTerm = ""
                 industrialSheet = "zones"
             },
             onDismiss = { showLayers = false }
@@ -740,6 +773,7 @@ internal fun ExploreScreen(
     if (activeIndustrialSheet != null) {
         IndustrialMapSheet(
             industrialCatalog, industrialPlan, activeIndustrialSheet == "plan", language,
+            initialSearch = industrialSearchTerm,
             failed = industrialLoadFailed || activeIndustrialSheet == "plan" && industrialPlanFailed,
             onZone = { chooseIndustrialZone(it.id) },
             onLot = { lot ->
@@ -760,7 +794,8 @@ private fun ExploreHeader(
     searchText: String, language: String, source: DiscoverySource?, filters: DiscoveryFilters,
     mapMode: Boolean,
     onAlerts: () -> Unit, onAccount: () -> Unit,
-    onSearchChange: (String) -> Unit, onPlace: (DiscoveryPlace) -> Unit, onKind: (String?) -> Unit,
+    onSearchChange: (String) -> Unit, onSmartSearch: (SmartDiscoveryIntent) -> Unit,
+    onPlace: (DiscoveryPlace) -> Unit, onKind: (String?) -> Unit,
     onFilters: () -> Unit, onMode: () -> Unit
 ) {
     val focus = LocalFocusManager.current
@@ -772,6 +807,10 @@ private fun ExploreHeader(
     var suggestions by remember(source, language, searchText) { mutableStateOf<List<DiscoveryPlace>?>(null) }
     var placeError by remember(source, language, searchText) { mutableStateOf(false) }
     var atlasPlaces by remember(context) { mutableStateOf<List<AtlasPlace>?>(null) }
+    val smartIntent = remember(searchText, atlasPlaces) {
+        interpretSmartDiscovery(searchText, atlasPlaces.orEmpty())
+    }
+    val smartSentence = smartIntent.actionable && searchText.trim().contains(" ")
     val activeFilters = listOf(
         filters.kind != null,
         filters.minPrice != null || filters.maxPrice != null,
@@ -885,8 +924,29 @@ private fun ExploreHeader(
                     )
                 ) { FilterIndicator(activeFilters) }
             }
+            if (searching && smartSentence) {
+                Surface(shape = RoundedCornerShape(14.dp), color = Brand.NeutralContainer) {
+                    Row(Modifier.fillMaxWidth().padding(10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                            Text(s(R.string.smart_search_detected),
+                                style = MaterialTheme.typography.labelLarge, color = Brand.Ink)
+                            Text(smartIntent.labels(language).joinToString(" · "),
+                                maxLines = 3, overflow = TextOverflow.Ellipsis,
+                                style = MaterialTheme.typography.bodySmall, color = Brand.Ink)
+                            Text(s(R.string.smart_search_grounded),
+                                maxLines = 2, overflow = TextOverflow.Ellipsis,
+                                style = MaterialTheme.typography.labelSmall, color = Brand.Muted)
+                        }
+                        TextButton(onClick = { onSmartSearch(smartIntent); dismissSearch() }) {
+                            Text(s(R.string.smart_search_apply))
+                        }
+                    }
+                }
+            }
             val results = suggestions
-            if (searching && (results != null || placeError)) {
+            if (searching && !smartSentence && (results != null || placeError)) {
                 when {
                     placeError -> ResultMessage(s(R.string.v2_places_error))
                     results.isNullOrEmpty() -> ResultMessage(s(R.string.v2_places_empty))
