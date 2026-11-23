@@ -1,5 +1,7 @@
 package tn.malak.app
 
+import android.content.ContentValues
+import android.provider.MediaStore
 import androidx.activity.compose.setContent
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -42,8 +44,20 @@ class PublicFeedAreaOnlyUiTest {
                 device.wait(Until.findObject(By.textContains("Type de bien non précisé")), 8_000))
             assertNotNull("Unknown public location must be visible",
                 device.wait(Until.findObject(By.textContains("Secteur uniquement")), 8_000))
-            assertTrue("Unable to capture list screenshot", device.takeScreenshot(
-                File(context.getExternalFilesDir(null), "p0-public-feed-fr.png")))
+            val capture = File(context.getExternalFilesDir(null), "p0-public-feed-fr.png")
+            assertTrue("Unable to capture list screenshot", device.takeScreenshot(capture))
+            // Scoped Android media export survives instrumentation app cleanup.
+            val metadata = ContentValues().apply {
+                put(MediaStore.Images.Media.DISPLAY_NAME, "p0-public-feed-fr.png")
+                put(MediaStore.Images.Media.MIME_TYPE, "image/png")
+                put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/AmlakQA")
+            }
+            val exported = requireNotNull(
+                context.contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, metadata)
+            )
+            requireNotNull(context.contentResolver.openOutputStream(exported)).use { stream ->
+                capture.inputStream().use { it.copyTo(stream) }
+            }
 
             device.findObject(title).click()
             assertNotNull("Cannot open item detail from list",
