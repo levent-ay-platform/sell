@@ -14,4 +14,13 @@ class DiscoveryRadarTest {
         assertEquals(radar, DiscoveryRadar.decode(radar.encode()))
         assertNull(DiscoveryRadar.decode("36.85,11.09,1000"))
     }
+    @Test
+    fun distanceIsZeroAtCenterAndRespectsSelectedRadius() {
+        val center = DiscoveryPoint(36.63, 10.62)
+        val radar = DiscoveryRadar(center, 2)
+        assertEquals(0.0, radar.distanceKm(center), 0.000001)
+        assertTrue(radar.contains(DiscoveryPoint(36.635, 10.622)))
+        assertFalse(radar.contains(DiscoveryPoint(36.7, 10.62)))
+    }
+
 }
