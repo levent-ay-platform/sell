@@ -40,8 +40,20 @@ internal enum class NozhaLotStatus {
 }
 internal data class NozhaLot(
     val code: String, val state: NozhaLotStatus,
-    val area: String?, val askingMinor: String?, val inquiryAllowed: Boolean
-)
+    val area: String?, val askingMinor: String?, val inquiryAllowed: Boolean,
+    val pricingBasis: String?
+) {
+    fun askingLabel(ar: Boolean): String? {
+        val amount = askingMinor ?: return null
+        val money = BigDecimal(amount).movePointLeft(3).stripTrailingZeros().toPlainString() + " TND"
+        return when (pricingBasis) {
+            "total" -> money
+            "per_sqm" -> "$money / ${if (ar) "م²" else "m²"}"
+            "starting_from" -> if (ar) "ابتداءً من $money" else "À partir de $money"
+            else -> null
+        }
+    }
+}
 internal data class NozhaProjectCard(
     val updatedAt: String,
     val current: Boolean,
@@ -93,14 +105,15 @@ internal fun decodeNozhaProject(body: JSONObject, nowMillis: Long): NozhaProject
                 it.toBigDecimalOrNull()?.signum() == 1
         }
         val ask = entry.optJSONObject("asking")
+        val basis = ask?.optString("pricingBasis")
         val amount = if (forSale && state.canInquire(current) && ask != null &&
             ask.optString("currency") == "TND" && ask.optInt("exponent") == 3 &&
-            ask.optString("pricingBasis") in setOf("total","per_sqm","starting_from"))
+            basis in setOf("total","per_sqm","starting_from"))
             ask.optString("amountMinor").takeIf {
                 it.matches(Regex("^\\d{1,15}$")) &&
                     it.toBigDecimalOrNull()?.signum() == 1
             } else null
-        lots += NozhaLot(code, state, area, amount, forSale && state.canInquire(current))
+        lots += NozhaLot(code, state, area, amount, forSale && state.canInquire(current), basis)
     }
     val counts = NozhaLotStatus.entries.associateWith { target ->
         lots.count { it.state == target }
@@ -220,9 +233,8 @@ internal fun NozhaProjectDetail(
                     Text(lot.state.label(ar))
                     Text((if (ar) "المساحة: " else "Surface : ") + (lot.area ?: "-") +
                         (if (ar) " م²" else " m²"))
-                    if (lot.askingMinor != null && lot.inquiryAllowed && data.current) {
-                        Text((if (ar) "السعر: " else "Prix : ") +
-                            BigDecimal(lot.askingMinor).movePointLeft(3).toPlainString() + " TND")
+                    if (lot.inquiryAllowed && data.current) {
+                        lot.askingLabel(ar)?.let { Text((if (ar) "السعر: " else "Prix : ") + it) }
                     }
                     Text(if (ar) "الحدود القانونية والملكية تحتاج توثيقاً مستقلاً" else
                         "Titre et limites légales à vérifier séparément")

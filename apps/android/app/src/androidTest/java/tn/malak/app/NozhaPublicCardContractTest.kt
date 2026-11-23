@@ -1,6 +1,17 @@
 package tn.malak.app
 
+import androidx.activity.compose.setContent
+import androidx.compose.material3.MaterialTheme
+import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
+import androidx.test.uiautomator.By
+import androidx.test.uiautomator.UiDevice
+import androidx.test.uiautomator.Until
+import tn.malak.app.MainActivity
+import tn.malak.app.ui.AmlakColorScheme
+import tn.malak.app.ui.AmlakTypography
+import tn.malak.app.ui.explore.NozhaProjectDetail
 import org.json.JSONObject
 import org.junit.Assert.*
 import org.junit.Test
@@ -49,6 +60,40 @@ class NozhaPublicCardContractTest {
         assertNull(card.lots[1].askingMinor)
         assertFalse(card.lots[2].inquiryAllowed)
         assertNotEquals(NozhaLotStatus.SOLD.color, NozhaLotStatus.AVAILABLE.color)
+    }
+
+    @Test fun pricingBasisSurvivesProjectionAndEveryPriceCarriesItsUnit() {
+        val payload = fixture()
+        val ask = payload.getJSONArray("lots").getJSONObject(0).getJSONObject("asking")
+        ask.put("amountMinor", "125500")
+        for ((basis, expected) in listOf(
+            "total" to "125.5 TND",
+            "per_sqm" to "125.5 TND / m²",
+            "starting_from" to "À partir de 125.5 TND"
+        )) {
+            ask.put("pricingBasis", basis)
+            val lot = requireNotNull(decodeNozhaProject(payload, now)).lots.first()
+            assertEquals(expected, lot.askingLabel(ar = false))
+        }
+    }
+
+    @Test fun projectCardRendersPricePerSquareMeterInTheLotDialog() {
+        val payload = fixture()
+        payload.getJSONArray("lots").getJSONObject(0).getJSONObject("asking").put("pricingBasis", "per_sqm")
+        val card = requireNotNull(decodeNozhaProject(payload, now))
+        val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
+        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            scenario.onActivity { activity ->
+                activity.setContent {
+                    MaterialTheme(colorScheme = AmlakColorScheme, typography = AmlakTypography) {
+                        NozhaProjectDetail(card, "fr", onBack = {}, onLotInquiry = {})
+                    }
+                }
+            }
+            val lot = device.wait(Until.findObject(By.text("7")), 8_000)
+            requireNotNull(lot).click()
+            assertTrue(device.wait(Until.hasObject(By.text("Prix : 18900 TND / m²")), 5_000))
+        }
     }
 
     @Test fun staleSnapshotNeverPromotesAvailableToForSale() {

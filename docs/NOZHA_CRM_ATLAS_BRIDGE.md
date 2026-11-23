@@ -21,9 +21,15 @@
 4. **Atlas verification section:** `titleReference` if independently matched to an authorized official document; source ID/sha256/document issue date; `plotReference`, cadastral plan, document authority, local plan vs true WGS84 geometry distinction, PAU zone/stated vocation only if spatially verified. Latest independent reviewer decision and owner/public release consent must exist for public approved renditions.
 5. **Three independent trust states**: inventory current (CRM); documents reviewed (Amlak/Atlas); legal owner & cadastral outline match (independently confirmed). **Never use a single green ownership badge when merely CRM truth is present.**
 
+## Fresh read-only follow-up (2026-11-23)
+
+- The isolated audit script ran against the authorized CRM connection inside the existing runtime using a consistent read-only transaction. The successful recheck at 10:40 UTC refreshed the commercial completeness audit. No raw Nozha rows, prices, parcel coordinates, title strings or private documents are included here.
+- The MySQL driver returned string flags for computed geometry columns. The audit now counts only numeric or string 1, correcting false positives caused by treating string 0 as truthy. The corrected result found local plan geometry, zero lot geographic geometries and zero lot GPS centroids.
+- The private Atlas catalogue's document filename/path and GeoPAU title search returned no matches for the project name variants or commercial reference. The name index returned two administrative-sector candidates. A name by itself cannot identify the project or its title. A reviewed official source/reference match and separate publication authorization are still required.
+- Android preserves the CRM pricing basis and displays the unit in the lot dialog. The emulator test renders the buyer card using a synthetic payload, with a specific assertion for TND per square meter.
+
 ## Live blockers / acceptance
-- A read-only Huawei WSL probe on 2026-11-23 timed out; therefore **no fresh MySQL Nozha counts are yet verified**. Do not replace October counts with a guess.
-- Need an authorized operator to execute the committed read-only Nozha audit in the CRM environment, inspect conflicts, and approve per-project/public content rights separately from user data. No production SQL writes.
+- The fresh read-only audit is complete. Per-project and per-document publication approval is still required independently of commercial completeness.
 - Need to match source plan/document permissions and independently find official cadastral references; current project code is NOT a legal TF.
 - Only after manager-approved publication decision: implement a separate read-only public API with strict TTL/authorization/revocation and consume it through Amlak map/list/Nozha card in QA. No false direct CRM DB access from an Android client.
 - Keep Draft PR #22 separate; do not merge/deploy live CRM or Amlak without approval and backout plan.
