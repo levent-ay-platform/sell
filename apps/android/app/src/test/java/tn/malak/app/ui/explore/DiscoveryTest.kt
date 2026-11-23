@@ -68,6 +68,17 @@ class DiscoveryTest {
     }
 
     @Test
+    fun legacyPublicFeedDoesNotPlaceZeroCoordinatesOrForeignPointsOnTunisianMap() {
+        assertNull(publicPilotListingPoint("0", "0"))
+        assertNull(publicPilotListingPoint("", ""))
+        assertNull(publicPilotListingPoint("36.88", ""))
+        assertNull(publicPilotListingPoint("95", "11"))
+        assertNull(publicPilotListingPoint("35.0", "0.0"))
+        assertNull(publicPilotListingPoint("nan", "11"))
+        assertEquals(DiscoveryPoint(36.88, 11.0), publicPilotListingPoint("36.88", "11.0"))
+    }
+
+    @Test
     fun publicFeedMissingKindIsUnknownAndNotSilentlyClassifiedAsLand() {
         assertEquals("UNKNOWN", publicListingKind(""))
         assertEquals("UNKNOWN", publicListingKind("terrain"))
