@@ -5,7 +5,8 @@ import android.media.AudioAttributes
 import android.media.AudioManager
 import android.media.SoundPool
 import android.os.SystemClock
-import android.provider.Settings
+import android.os.VibrationEffect
+import android.os.Vibrator
 import android.view.HapticFeedbackConstants
 import android.view.View
 import androidx.compose.runtime.*
@@ -24,13 +25,14 @@ internal val LocalFeedback = staticCompositionLocalOf<(AppCue) -> Unit> { {} }
 
 private class CuePlayer(private val context: Context, private val view: View) {
     private val audio = context.getSystemService(AudioManager::class.java)
+    private val vibrator = context.getSystemService(Vibrator::class.java)
     private val pool = SoundPool.Builder().setMaxStreams(2).setAudioAttributes(
-        AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ASSISTANCE_SONIFICATION)
+        AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA)
             .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build()
     ).build()
     private val ready = mutableSetOf<Int>()
     private val sounds: Map<AppCue, Int>
-    private var lastCue = -1000L
+    private var lastStep = -1000L
 
     init {
         pool.setOnLoadCompleteListener { _, id, status -> if (status == 0) ready.add(id) }
@@ -39,13 +41,32 @@ private class CuePlayer(private val context: Context, private val view: View) {
 
     fun play(cue: AppCue, sound: Boolean, haptic: Boolean) {
         val now = SystemClock.uptimeMillis()
-        if (!view.hasWindowFocus() || now - lastCue < (if (cue == AppCue.Step) 140L else 70L)) return
-        lastCue = now
-        if (haptic) view.performHapticFeedback(cue.haptic)
+        // Rate-limit only slider ticks. Do not accidentally suppress a distinct tap cue.
+        if (cue == AppCue.Step) {
+            if (now - lastStep < 140L) return
+            lastStep = now
+        }
+        if (haptic) {
+            val duration = when (cue) {
+                AppCue.Step -> 14L
+                AppCue.Radar -> 38L
+                AppCue.Confirm -> 28L
+                AppCue.Action -> 20L
+            }
+            if (vibrator?.hasVibrator() == true) {
+                runCatching {
+                    vibrator.vibrate(VibrationEffect.createOneShot(
+                        duration, VibrationEffect.DEFAULT_AMPLITUDE))
+                }.onFailure { view.performHapticFeedback(cue.haptic) }
+            } else {
+                view.performHapticFeedback(cue.haptic)
+            }
+        }
         val id = sounds[cue] ?: return
-        if (sound && id in ready && audio?.ringerMode == AudioManager.RINGER_MODE_NORMAL &&
-            Settings.System.getInt(context.contentResolver, Settings.System.SOUND_EFFECTS_ENABLED, 1) != 0) {
-            val volume = if (cue == AppCue.Step) .27f else .43f
+        // Feedback follows the user's media volume and in-app preference.
+        // Touch-sound and ringer toggles must not silently disable app audio.
+        if (sound && id in ready && (audio?.getStreamVolume(AudioManager.STREAM_MUSIC) ?: 0) > 0) {
+            val volume = if (cue == AppCue.Step) .55f else .75f
             pool.play(id, volume, volume, 1, 0, 1f)
         }
     }
