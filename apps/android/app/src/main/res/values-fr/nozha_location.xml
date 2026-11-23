@@ -1,7 +1,7 @@
 <resources>
-    <string name="nozha_project_approximate">Nozha · Emplacement approximatif du projet</string>
+    <string name="nozha_project_approximate">Nozha · Projet sur la carte</string>
     <string name="nozha_open_plan">Voir le lotissement sur la carte</string>
-    <string name="nozha_plan_notice">La position des limites est approximative sur la carte</string>
+    <string name="nozha_plan_notice">Contour du plan Nozha ; l’alignement géographique se valide avec la référence du plan.</string>
     <string name="nozha_crm_individual_title">CRM : titre individuel</string>
     <string name="nozha_crm_title_recorded">Une référence foncière est enregistrée dans le CRM</string>
     <string name="nozha_side_lengths">Longueurs selon le plan : %1$s</string>
