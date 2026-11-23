@@ -163,8 +163,10 @@ export function compareUnifiedPrivateDocumentIdentity(
   const quality=[...document.pages,...frontIdentity.pages]
     .some(p=>(p.qualityWarnings?.length??0)>0);
   if(quality){
+    // Advisory quality flags must not discard source-backed private clues.
+    // Continue to identify the document role and contradictions below, but
+    // never present a positive match while any scanned page needs review.
     reasons.add('SCAN_QUALITY_NEEDS_REVIEW');
-    return {...base,reasons:[...reasons]};
   }
   const roles:RoleTextResult[]=[];
   let matchedRightsHolder:MatchedPrivateRightsHolder|null=null;
@@ -364,6 +366,13 @@ export function compareUnifiedPrivateDocumentIdentity(
     // never evidence that no party was printed in the document.
     assessment='NO_PERSON_IDENTIFIED';
     reasons.add('NO_ROLE_LABELED_PERSON');
+  }
+  if(quality&&(assessment==='ROLE_TEXT_MATCH_ONLY'||
+               assessment==='NAME_ONLY_REVIEW')){
+    // Show the extracted role evidence to the authorized reviewer without
+    // treating an imperfect capture as a positive preliminary match.
+    assessment='INSUFFICIENT_EVIDENCE';
+    matchedRightsHolder=null;
   }
   return {...base,assessment,roles,matchedRightsHolder,reasons:[...reasons]};
 }
