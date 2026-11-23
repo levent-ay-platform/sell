@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="atlas_lens_short">Atlas Lens</string>
+    <string name="atlas_lens_title">Atlas Lens · Area insight</string>
+    <string name="atlas_lens_map_center">Selected map center</string>
+    <string name="atlas_lens_radius_note">Explore AFI planning zones near the selected point.</string>
+    <string name="atlas_lens_radius_chip">%1$d km</string>
+    <string name="atlas_lens_nearby_zones">%1$d nearby AFI planning zones</string>
+    <string name="atlas_lens_planned_lots">%1$d planned lots in those zones (total)</string>
+    <string name="atlas_lens_disclaimer">Distances are straight-line estimates to zone centers. The lot counts cover entire zone plans, not lots inside the radius, and are not for-sale listings.</string>
+    <string name="atlas_lens_cadastre_unknown">No cadastral or ownership verification is implied by this AFI context.</string>
+    <string name="atlas_lens_empty">No zone centers are recorded within this radius in the local snapshot. Unknown coverage is not zero coverage.</string>
+    <string name="atlas_lens_distance">≈%1$s km</string>
+    <string name="atlas_lens_limited">Showing %1$d of %2$d zones.</string>
+</resources>
