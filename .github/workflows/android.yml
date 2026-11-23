@@ -84,6 +84,62 @@ jobs:
           path: apps/android/app/build/outputs/apk/debug/app-debug.apk
           retention-days: 3
           if-no-files-found: error
+      # Read-only connected QA: the deployed public feed works independently of the
+      # newer /api/v1/discovery router. Never enable direct owner publishing here.
+      - name: Build map-first read-only connected listings QA APK
+        if: ${{ github.event_name == 'pull_request' && github.head_ref == 'codex/malak-v2-map-parcel-foundation' }}
+        run: |
+          set -euo pipefail
+          gradle -p apps/android :app:assembleDebug \
+            -PmalakV2Discovery=true \
+            -PmalakPublicListingsBaseUrl=https://malak-api.ayasofia.shop \
+            --no-daemon
+          apk=apps/android/app/build/outputs/apk/debug/app-debug.apk
+          size="$(stat -c %s "$apk")"
+          echo "Read-only public feed QA APK bytes: $size"
+          test "$size" -le 60000000
+          unzip -p "$apk" 'classes*.dex' | strings | grep -F 'malak-api.ayasofia.shop' >/dev/null || {
+            echo 'MISSING_PUBLIC_LISTINGS_ORIGIN_IN_CONNECTED_QA' >&2
+            exit 1
+          }
+          if unzip -Z1 "$apk" | grep -Ei '(^|/)(inference\\.onnx|.*\\.traineddata|libonnxruntime.*\\.so|libopencv.*\\.so|libtesseract.*\\.so)
+        if: ${{ github.event_name == 'pull_request' && github.head_ref == 'feat/individual-property-triage-20261110' }}
+        run: |
+          set -euo pipefail
+          url=https://malak-api.ayasofia.shop
+          gradle -p apps/android :app:assembleDebug "-PmalakPrivateBaseUrl=$url" --no-daemon
+          apk=apps/android/app/build/outputs/apk/debug/app-debug.apk
+          size="$(stat -c %s "$apk")"
+          echo "Connected Malak public HTTPS QA APK bytes: $size; hard limit 60000000"
+          test "$size" -le 60000000
+          unzip -p "$apk" 'classes*.dex' | strings | grep -F 'malak-api.ayasofia.shop' >/dev/null || {
+            echo "MISSING_REAL_QA_ENDPOINT_IN_APK" >&2
+            exit 1
+          }
+          if unzip -Z1 "$apk" | grep -Ei '(^|/)(inference\.onnx|.*\\.traineddata|libonnxruntime.*\\.so|libopencv.*\\.so|libtesseract.*\\.so)$'; then
+            echo 'HEAVY_OCR_ASSET_IN_APK' >&2
+            exit 1
+          fi
+      - name: Upload Malak public HTTPS OCR pilot QA APK
+        if: ${{ github.event_name == 'pull_request' && github.head_ref == 'feat/individual-property-triage-20261110' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: malak-PUBLIC-HTTPS-OCR-PILOT-QA-${{ github.sha }}
+          path: apps/android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 3
+          if-no-files-found: error
+; then
+            echo 'HEAVY_OCR_ASSET_IN_CONNECTED_QA' >&2
+            exit 1
+          fi
+      - name: Upload read-only connected listings QA APK
+        if: ${{ github.event_name == 'pull_request' && github.head_ref == 'codex/malak-v2-map-parcel-foundation' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: amlak-map-public-feed-readonly-${{ github.sha }}
+          path: apps/android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 3
+          if-no-files-found: error
       - name: Build public HTTPS Malak OCR QA APK (Draft PR only)
         if: ${{ github.event_name == 'pull_request' && github.head_ref == 'feat/individual-property-triage-20261110' }}
         run: |
