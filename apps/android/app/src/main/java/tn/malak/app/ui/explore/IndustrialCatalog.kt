@@ -67,6 +67,28 @@ internal data class IndustrialCatalog(val capturedAt: String, val zones: List<In
     })
 }
 
+// Radar results are local AFI subdivision records, never inferred sale advertisements.
+internal data class IndustrialRadarHit(val zone: IndustrialZone, val lotsInside: Int, val approximate: Boolean)
+
+internal fun findIndustrialRadarHits(
+    radar: DiscoveryRadar, catalog: IndustrialCatalog, loadPlan: (IndustrialZone) -> IndustrialPlan
+): List<IndustrialRadarHit> = catalog.zones.mapNotNull { zone ->
+    // A 10 km margin includes lots towards the edge of a zone without loading
+    // polygon-heavy plans on the opposite side of Tunisia on each radar search.
+    if (zone.center != null && radar.distanceKm(zone.center) > radar.radiusKm + 10) {
+        return@mapNotNull null
+    }
+    val plan = runCatching { loadPlan(zone) }.getOrNull() ?: return@mapNotNull null
+    val anchored = plan.lots.mapNotNull(IndustrialLot::anchor)
+    val exactCount = anchored.count(radar::contains)
+    when {
+        exactCount > 0 -> IndustrialRadarHit(zone, exactCount, approximate = false)
+        anchored.isEmpty() && zone.center?.let(radar::contains) == true ->
+            IndustrialRadarHit(zone, plan.lots.size, approximate = true)
+        else -> null
+    }
+}.sortedWith(compareByDescending<IndustrialRadarHit> { it.lotsInside }.thenBy { it.zone.id })
+
 internal fun loadIndustrialCatalog(context: Context): IndustrialCatalog {
     val catalog = context.readAfi("overview")
     val rows = catalog.getJSONArray("zones")
