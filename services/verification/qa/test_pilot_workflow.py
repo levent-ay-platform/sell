@@ -1,3 +1,4 @@
+import hashlib
 import tempfile
 import unittest
 import json
@@ -15,6 +16,32 @@ class AdminPasswordCompatibility(unittest.TestCase):
         self.assertEqual(admin_password_digest('a-long-test-password', salt), expected)
         with patch('pilot_workflow.hashlib.scrypt', None, create=True):
             self.assertEqual(admin_password_digest('a-long-test-password', salt), expected)
+
+    def test_persisted_admin_can_switch_providers_and_failed_logins_create_no_sessions(self):
+        with tempfile.TemporaryDirectory() as folder:
+            store = PilotStore(Path(folder))
+            password = 'test-only-كلمة-مرور'
+            email = 'fixture@example.test'
+            store.bootstrap_admin(email, password)
+            with patch.object(hashlib, 'scrypt', None, create=True):
+                first = store.admin_login(email, password)
+                self.assertEqual(store.admin_authenticate(first['bearer']), first['id'])
+                store.bootstrap_admin('second@example.test', password)
+                for name, secret in [(email, 'wrong'), ('missing@example.test', password)]:
+                    with self.assertRaises(WorkflowError) as denied:
+                        store.admin_login(name, secret)
+                    self.assertEqual(denied.exception.status, 401)
+            self.assertIn('bearer', store.admin_login('second@example.test', password))
+            with store.db() as db:
+                self.assertEqual(db.execute('SELECT COUNT(*) FROM admin_sessions').fetchone()[0], 2)
+
+    def test_bootstrap_rejects_passwords_that_the_login_form_cannot_accept(self):
+        with tempfile.TemporaryDirectory() as folder:
+            store = PilotStore(Path(folder))
+            with self.assertRaises(WorkflowError):
+                store.bootstrap_admin('fixture@example.test', 'x' * 201)
+            store.bootstrap_admin('fixture@example.test', 'x' * 200)
+            self.assertIn('bearer', store.admin_login('fixture@example.test', 'x' * 200))
 
 class Workflow(unittest.TestCase):
     def test_enrolled_device_is_required_for_login_and_existing_bearers(self):

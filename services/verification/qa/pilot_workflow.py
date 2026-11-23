@@ -17,6 +17,8 @@ from pathlib import Path
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.kdf.scrypt import Scrypt
 
+MAX_ADMIN_PASSWORD_LENGTH = 200
+
 class WorkflowError(Exception):
     def __init__(self,status=422,code='INVALID_REQUEST'):
         self.status=status;self.code=code
@@ -497,12 +499,15 @@ CREATE TABLE IF NOT EXISTS pilot_parcel_links(
     def own_submissions(self,user):
         with self.db() as db:return [self._submission(db,r) for r in db.execute("SELECT * FROM submissions WHERE account_id=? AND status<>'DRAFT' ORDER BY created DESC",(user,)).fetchall()]
     def bootstrap_admin(self,email,password):
-        if not isinstance(email,str) or '@' not in email or len(email)>200 or len(password)<14:raise WorkflowError()
+        if not isinstance(email, str) or '@' not in email or len(email) > 200:
+            raise WorkflowError()
+        if not isinstance(password, str) or not 14 <= len(password) <= MAX_ADMIN_PASSWORD_LENGTH:
+            raise WorkflowError()
         salt=secrets.token_hex(16)
         hashed=admin_password_digest(password,bytes.fromhex(salt))
         with self.db() as db:db.execute('INSERT INTO admins VALUES(?,?,?,?)',(ident(),email.strip().lower(),salt,hashed))
     def admin_login(self,email,password):
-        if not isinstance(email,str) or not isinstance(password,str) or len(password)>200:raise WorkflowError(401,'LOGIN_DENIED')
+        if not isinstance(email,str) or not isinstance(password,str) or len(password)>MAX_ADMIN_PASSWORD_LENGTH:raise WorkflowError(401,'LOGIN_DENIED')
         with self.db() as db:
             row=db.execute('SELECT * FROM admins WHERE email=?',(email.strip().lower(),)).fetchone()
             # Equal work for unknown accounts.
