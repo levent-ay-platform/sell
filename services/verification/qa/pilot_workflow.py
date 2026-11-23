@@ -3,6 +3,7 @@
 Separate from legal verification: publishing never verifies a person or title.
 """
 import hashlib
+import math
 import hmac
 import json
 import os
@@ -474,8 +475,8 @@ CREATE TABLE IF NOT EXISTS pilot_parcel_links(
             features.append({
                 'type':'Feature','id':row['id'],
                 'geometry':{'type':'Point','coordinates':[float(row['longitude']),float(row['latitude'])]},
-                'properties':{'listingId':row['id'],'title':row['title'],'kind':row.get('kind','LAND'),
-                              'locationAccuracy':'APPROXIMATE'},
+                'properties':{'listingId':row['id'],'title':row['title'],'kind':row['kind'],
+                              'locationAccuracy':row['locationAccuracy']},
             })
         return {'type':'FeatureCollection','features':features}
 
@@ -586,5 +587,48 @@ CREATE TABLE IF NOT EXISTS pilot_parcel_links(
             if not row:raise WorkflowError(404,'NOT_FOUND')
             sealed=row['sealed']
             return self.cipher.decrypt(sealed[:12],sealed[12:],(row['review_id']+':'+eid).encode())
+    @staticmethod
+    def _public_listing_fields(listing):
+        """Strict public allowlist, independent from mutable private review snapshots.
+
+        A legacy reviewed submission has no property kind: UNKNOWN means unknown,
+        never inferred LAND. Exact owner-supplied coordinates stay private; only
+        a rounded, approximate point is exposed where coordinates are plausible.
+        This does NOT certify title, seller consent for a cadastral boundary, or
+        legal parcel accuracy.
+        """
+        kinds = ('LAND', 'APARTMENT', 'HOUSE', 'VILLA', 'FACTORY')
+        kind = listing.get('kind')
+        result = {key: listing.get(key, '') for key in
+                  ('title', 'region', 'description', 'area', 'price')}
+        result['kind'] = kind if kind in kinds else 'UNKNOWN'
+        try:
+            latitude = float(listing.get('latitude') or '')
+            longitude = float(listing.get('longitude') or '')
+            valid = (math.isfinite(latitude) and math.isfinite(longitude)
+                     and 29 <= latitude <= 39 and 7 <= longitude <= 13)
+        except (ValueError, TypeError, OverflowError):
+            valid = False
+        if valid:
+            # Public ~1 km precision, never return saved private coordinates.
+            result['latitude'] = f'{latitude:.2f}'
+            result['longitude'] = f'{longitude:.2f}'
+            result['locationAccuracy'] = 'APPROXIMATE'
+        else:
+            result['latitude'] = None
+            result['longitude'] = None
+            result['locationAccuracy'] = 'AREA_ONLY' if result['region'] else 'UNKNOWN'
+        return result
+
     def public_listings(self):
-        with self.db() as db:return [{'id':r['id'],**json.loads(r['listing']),'publishedAt':r['updated'],'ownershipVerified':False,'photos':[x['id'] for x in db.execute("SELECT id FROM evidence WHERE review_id=? AND kind='PHOTO'",(r['review_id'],))]} for r in db.execute("SELECT * FROM submissions WHERE status='PUBLISHED' ORDER BY updated DESC").fetchall()]
+        with self.db() as db:
+            return [
+                {'id': row['id'], **self._public_listing_fields(json.loads(row['listing'])),
+                 'publishedAt': row['updated'], 'ownershipVerified': False,
+                 'photos': [photo['id'] for photo in db.execute(
+                     "SELECT id FROM evidence WHERE review_id=? AND kind='PHOTO'",
+                     (row['review_id'],))]}
+                for row in db.execute(
+                    "SELECT * FROM submissions WHERE status='PUBLISHED' ORDER BY updated DESC"
+                ).fetchall()
+            ]
