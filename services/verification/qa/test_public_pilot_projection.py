@@ -1,7 +1,7 @@
 """P0/P1 public Pilot projection tests: deterministic and no private source access."""
 import unittest
 
-from pilot_workflow import PilotStore
+from pilot_workflow import PilotStore, WorkflowError
 
 
 class PublicPilotProjection(unittest.TestCase):
@@ -54,6 +54,23 @@ class PublicPilotProjection(unittest.TestCase):
                 self.assertIsNone(public['latitude'])
                 self.assertIsNone(public['longitude'])
                 self.assertEqual(public['locationAccuracy'], 'AREA_ONLY')
+
+    def test_direct_public_listing_cannot_claim_a_position_outside_tunisia(self):
+        base = {
+            'title':'QA property','region':'Nabeul','description':'',
+            'area':'120','price':'50000','kind':'LAND'
+        }
+        for lat, lon in [('0','0'),('36','0'),('37','17'),('40','10'),('25','11')]:
+            with self.subTest(lat=lat,lon=lon):
+                with self.assertRaises(WorkflowError) as denied:
+                    PilotStore._direct_fields({
+                        **base,'latitude':lat,'longitude':lon,
+                    })
+                self.assertEqual(denied.exception.code, 'PUBLIC_LOCATION_OUT_OF_SCOPE')
+        allowed = PilotStore._direct_fields({
+            **base,'latitude':'36.87978','longitude':'11.00488',
+        })
+        self.assertEqual((allowed['latitude'],allowed['longitude']),('36.880','11.005'))
 
     def test_unknown_kind_never_falls_back_to_land_or_a_sale_claim(self):
         base = {'title':'QA','region':'Tunis','area':'100','price':'40000'}
