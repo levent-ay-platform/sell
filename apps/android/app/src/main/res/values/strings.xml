@@ -204,6 +204,7 @@
     <string name="camera_focus_fields">Hold the phone steady and keep the whole card clear</string>
     <string name="camera_correct_angle">Level the card and align its edges</string>
     <string name="camera_preview_quality_only">Outline and clarity are estimates; actual fields are read after capture.</string>
+    <string name="camera_shutter_anytime_hint">Take the photo when the card looks clear. You can retake it afterward.</string>
     <string name="camera_align_hint">Fit all four corners inside the frame</string>
     <string name="camera_more_light">Move to brighter light</string>
     <string name="camera_reduce_glare">Avoid reflections and direct glare</string>

@@ -204,6 +204,7 @@
     <string name="camera_focus_fields">Stabilisez le téléphone et gardez toute la carte nette</string>
     <string name="camera_correct_angle">Redressez la carte et alignez ses bords</string>
     <string name="camera_preview_quality_only">Cadre et netteté estimés ; lecture réelle après la photo.</string>
+    <string name="camera_shutter_anytime_hint">Prenez la photo quand la carte est nette. Vous pourrez la reprendre ensuite.</string>
     <string name="camera_align_hint">Cadrez les quatre coins de la carte</string>
     <string name="camera_more_light">Augmentez la lumière</string>
     <string name="camera_reduce_glare">Évitez les reflets</string>

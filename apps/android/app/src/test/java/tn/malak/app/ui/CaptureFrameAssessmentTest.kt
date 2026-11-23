@@ -59,6 +59,14 @@ class CaptureFrameAssessmentTest {
         val sample=card()
         assertEquals(CaptureHint.MOVING,result(sample,plain(9)).hint)
     }
+    @Test fun captureIsNotBlockedByFalliblePreviewHints(){
+        CaptureHint.entries.forEach { hint ->
+            assertTrue("Preview hint $hint must not disable capture",
+                CaptureShutterPolicy.canCapture(true,false,hint))
+            assertFalse(CaptureShutterPolicy.canCapture(false,false,hint))
+            assertFalse(CaptureShutterPolicy.canCapture(true,true,hint))
+        }
+    }
     @Test fun malformedInputNeverPasses(){
         assertEquals(CaptureHint.WAIT,
             CaptureFrameAssessment.evaluate(intArrayOf(1),cols,rows,null))

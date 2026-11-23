@@ -21,6 +21,15 @@ internal data class FrameAssessment(
     val zones:List<Boolean> = emptyList()
 )
 
+/** Live border/clarity detection is fallible on patterned tables and ID cards.
+ * It may offer advice but must never block taking a real photo for OCR review.
+ */
+internal object CaptureShutterPolicy {
+    @Suppress("UNUSED_PARAMETER")
+    fun canCapture(cameraReady:Boolean,capturing:Boolean,qualityHint:CaptureHint):Boolean =
+        cameraReady && !capturing
+}
+
 internal object CaptureFrameAssessment {
     // Approximate text-bearing regions on the normalized Tunisian CIN FRONT.
     // These rectangles measure local contrast only; they never decode characters.

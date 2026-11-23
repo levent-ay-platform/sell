@@ -252,17 +252,12 @@ internal fun TunisianIdCamera(
     }
     DisposableEffect(Unit){onDispose{active.set(false);executor.shutdown()}}
     BackHandler{onClose()}
+    // Lighting warnings remain useful, but contour/texture estimates must
+    // not repeatedly tell a user to move an already legible CIN.
     val hint=when(pictureQuality.hint){
         CaptureHint.DARK->R.string.camera_more_light
         CaptureHint.GLARE->R.string.camera_reduce_glare
-        CaptureHint.TOO_FAR->R.string.camera_move_closer
-        CaptureHint.MOVE_BACK->R.string.camera_move_back
-        CaptureHint.MOVING->R.string.camera_stabilize
-        CaptureHint.FOCUS->R.string.camera_focus_fields
-        CaptureHint.TILT->R.string.camera_correct_angle
-        CaptureHint.GOOD->R.string.camera_hold_steady
-        CaptureHint.CIN_UNCLEAR->R.string.camera_cin_manual_hint
-        CaptureHint.WAIT->R.string.camera_align_hint
+        else->R.string.camera_shutter_anytime_hint
     }
     Box(Modifier.fillMaxSize().background(Color(0xFF10151C))){
         if(permission){
@@ -321,8 +316,7 @@ internal fun TunisianIdCamera(
                                 }}
                             }
                         })
-                    },enabled=ready&&!capturing&&
-                        pictureQuality.hint in setOf(CaptureHint.GOOD,CaptureHint.CIN_UNCLEAR),
+                    },enabled=CaptureShutterPolicy.canCapture(ready,capturing,pictureQuality.hint),
                         colors=ButtonDefaults.buttonColors(containerColor=Color.White),
                         shape=CircleShape,modifier=Modifier.size(76.dp),
                         contentPadding=PaddingValues(0.dp)){
