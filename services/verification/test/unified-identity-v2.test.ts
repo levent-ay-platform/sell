@@ -12,7 +12,7 @@ const wrap=(text:readonly string[],isIdentity=false,confidence:number|null=.99):
 });
 const identity=wrap(['Nom et prénom: Leila Ben Salem','CIN: 00001122'],true);
 
-test('blur warning keeps matched role clues but never promotes preliminary agreement',()=>{
+test('blurred certificate retains the legal role label but not an identity match',()=>{
  const doc=wrap(['شهادة ملكية','Propriétaire: Leila Ben Salem','CIN: 00001122']);
  const flagged:IngestedDocument={...doc,pages:doc.pages.map(p=>({
    ...p,qualityWarnings:['POSSIBLE_BLUR' as const]
@@ -22,7 +22,8 @@ test('blur warning keeps matched role clues but never promotes preliminary agree
  assert.equal(result.detectedKind,'OWNERSHIP_CERTIFICATE');
  assert.equal(result.assessment,'INSUFFICIENT_EVIDENCE');
  assert.equal(result.roles[0]?.role,'REGISTERED_HOLDER');
- assert.equal(result.roles[0]?.assessment,'PRELIMINARY_TEXT_AGREEMENT');
+ assert.equal(result.roles[0]?.assessment,'INSUFFICIENT_OR_AMBIGUOUS');
+ assert.equal(result.roles[0]?.documentCinStatus,'AMBIGUOUS_OR_LOW_CONFIDENCE');
  assert.ok(result.reasons.includes('SCAN_QUALITY_NEEDS_REVIEW'));
  assert.equal(result.matchedRightsHolder,null);
  assert.equal(result.legalOwnershipVerified,false);
@@ -30,16 +31,17 @@ test('blur warning keeps matched role clues but never promotes preliminary agree
  assert.equal(result.mayPublish,false);
  assert.equal(JSON.stringify(result).includes('Leila'),false);
 });
-test('quality warning cannot conceal an explicit identity CIN disagreement',()=>{
+test('low quality cannot assert an untrustworthy CIN conflict or a match',()=>{
  const doc=wrap(['شهادة ملكية','Propriétaire: Leila Ben Salem','CIN: 12345678']);
  const flagged:IngestedDocument={...doc,pages:doc.pages.map(p=>({
    ...p,qualityWarnings:['LOW_CONTRAST' as const]
  }))};
  const result=compareUnifiedPrivateDocumentIdentity(flagged,identity,
    ['OWNERSHIP_CERTIFICATE']);
- assert.equal(result.assessment,'CONFLICT_REVIEW');
+ assert.equal(result.assessment,'INSUFFICIENT_EVIDENCE');
+ assert.equal(result.roles[0]?.role,'REGISTERED_HOLDER');
+ assert.equal(result.roles[0]?.documentCinStatus,'AMBIGUOUS_OR_LOW_CONFIDENCE');
  assert.ok(result.reasons.includes('SCAN_QUALITY_NEEDS_REVIEW'));
- assert.ok(result.reasons.includes('CIN_TEXT_DIFFERS'));
  assert.equal(result.mayPublish,false);
 });
 
