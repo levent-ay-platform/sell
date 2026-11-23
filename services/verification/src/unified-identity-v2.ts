@@ -163,9 +163,9 @@ export function compareUnifiedPrivateDocumentIdentity(
   const quality=[...document.pages,...frontIdentity.pages]
     .some(p=>(p.qualityWarnings?.length??0)>0);
   if(quality){
-    // Advisory quality flags must not discard source-backed private clues.
-    // Continue to identify the document role and contradictions below, but
-    // never present a positive match while any scanned page needs review.
+    // Advisory quality flags must not discard source-backed role labels.
+    // Downstream comparators independently treat questionable text or CIN
+    // as ambiguous; keep the role for review but not a positive match.
     reasons.add('SCAN_QUALITY_NEEDS_REVIEW');
   }
   const roles:RoleTextResult[]=[];
