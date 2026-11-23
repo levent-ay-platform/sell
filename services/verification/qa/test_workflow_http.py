@@ -121,6 +121,9 @@ class HttpWorkflow(unittest.TestCase):
         self.assertEqual(publish(second, rid)[0], 404)
         public, = self.request('/api/public/listings')[1]['listings']
         self.assertEqual((public['id'], public['area']), (sid, '275'))
+        self.assertEqual(public['kind'], 'LAND')
+        self.assertEqual(public['locationAccuracy'], 'APPROXIMATE')
+        self.assertEqual((public['latitude'], public['longitude']), ('36.85','10.10'))
         self.assertNotIn('reviewId', public)
         self.assertNotIn('propertyFacts', public)
 
@@ -166,6 +169,9 @@ class HttpWorkflow(unittest.TestCase):
         self.assertEqual(private[1]['listing']['verificationStatus'],'UNDER_REVIEW')
         public,=self.request('/api/public/listings')[1]['listings']
         self.assertEqual(public['id'],sid)
+        self.assertEqual(public['kind'],'LAND')
+        self.assertEqual(public['locationAccuracy'],'APPROXIMATE')
+        self.assertEqual((public['latitude'],public['longitude']),('36.85','11.09'))
         self.assertFalse(public['ownershipVerified'])
         self.assertNotIn('reviewId',public)
         self.assertNotIn('customerName',public)
