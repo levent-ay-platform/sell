@@ -2,11 +2,11 @@
 <resources>
     <string name="direct_publish">Publier le bien</string>
     <string name="direct_preview">Aperçu de l’annonce</string>
-    <string name="direct_preview_note">Le bien apparaîtra à un emplacement approximatif. Vous pourrez le faire vérifier après publication.</string>
+    <string name="direct_preview_note">L’annonce apparaîtra dans la zone choisie. Vous pourrez compléter la vérification après publication.</string>
     <string name="direct_missing_fields">Vérifiez le titre, la localité, la surface et le prix, puis placez le repère sur la carte.</string>
     <string name="direct_publish_failed">Impossible d’enregistrer le bien. Vérifiez la connexion et réessayez.</string>
     <string name="direct_choose_location">Choisir sur la carte</string>
-    <string name="direct_change_location">Modifier l’emplacement approximatif</string>
+    <string name="direct_change_location">Modifier le repère de l’annonce</string>
     <string name="direct_pin_hint">Déplacez la carte pour placer le repère près du bien.</string>
     <string name="direct_confirm_pin">Confirmer cet emplacement</string>
     <string name="direct_save">Enregistrer les changements</string>
