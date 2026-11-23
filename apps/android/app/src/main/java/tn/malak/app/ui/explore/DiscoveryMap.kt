@@ -102,6 +102,7 @@ internal fun DiscoveryMap(
     onArrivalFinished: () -> Unit = {},
     onGlobeVisible: (Boolean) -> Unit = {},
     onGestureStarted: () -> Unit = {},
+    onGlobeTap: () -> Unit = {},
     onCameraMoving: (Boolean) -> Unit = {},
     onCameraIdle: (DiscoveryCamera, Boolean) -> Unit,
     onListing: (String) -> Unit,
@@ -126,6 +127,7 @@ internal fun DiscoveryMap(
     val globeCallback by rememberUpdatedState(onGlobeVisible)
     val movingCallback by rememberUpdatedState(onCameraMoving)
     val gestureCallback by rememberUpdatedState(onGestureStarted)
+    val globeTapCallback by rememberUpdatedState(onGlobeTap)
     val radarVisible by rememberUpdatedState(radar != null)
     val mapView = remember(context) {
         MapLibre.getInstance(context)
@@ -378,7 +380,10 @@ internal fun DiscoveryMap(
     Box(modifier.background(Brand.Pearl)) {
         if (globeEnabled && (radar == null || worldCamera != null)) GlobeSky(Modifier.matchParentSize())
         AndroidView(factory = { mapView }, modifier = Modifier.fillMaxSize())
-        worldCamera?.let { (center, zoom) -> WorldGlobe(center, zoom, Modifier.matchParentSize(), spinGlobe) { spinLongitude = it } }
+        worldCamera?.let { (center, zoom) ->
+            WorldGlobe(center, zoom, Modifier.matchParentSize(), spinGlobe,
+                onStopSpin = { globeTapCallback() }, onSpinLongitude = { spinLongitude = it })
+        }
         if (radarPath != null && worldCamera == null) {
             val projectedCenter = radarCamera?.target?.let { map?.projection?.toScreenLocation(it) }
             Canvas(Modifier.matchParentSize().clipToBounds()) {
