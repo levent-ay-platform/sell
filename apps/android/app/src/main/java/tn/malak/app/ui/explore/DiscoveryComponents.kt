@@ -84,6 +84,10 @@ internal fun ListingCard(
                     s(R.string.v2_area, discoveryNumber(it, language))
                 })
                 Text(facts.joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = Brand.Muted)
+                if (listing.kind == "UNKNOWN") {
+                    Text(s(R.string.v2_public_kind_unavailable),
+                        style = MaterialTheme.typography.labelSmall, color = Brand.Muted)
+                }
             }
         }
     }
