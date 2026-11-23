@@ -2,7 +2,7 @@
     <string name="parcel_boundaries">Parcel boundaries</string>
     <string name="parcel_official">Source-verified cadastral boundary</string>
     <string name="parcel_georeferenced">Georeferenced from a document</string>
-    <string name="parcel_estimate">Owner-submitted estimate</string>
+    <string name="parcel_estimate">Boundary supplied by the listing owner</string>
     <string name="parcel_local_only">Plan outline without geographic alignment</string>
     <string name="parcel_references">Title %1$s · Plot %2$s</string>
     <string name="parcel_plot">Plot %1$s</string>
