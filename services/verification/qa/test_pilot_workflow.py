@@ -144,6 +144,10 @@ class Workflow(unittest.TestCase):
         for key in ['phone','customerName','evidence','report','reviewId']:
             self.assertNotIn(key,cards[0])
         self.assertFalse(cards[0]['ownershipVerified'])
+        self.assertEqual(cards[0]['kind'], 'UNKNOWN')
+        self.assertEqual(cards[0]['locationAccuracy'], 'AREA_ONLY')
+        self.assertIsNone(cards[0]['latitude'])
+        self.assertIsNone(cards[0]['longitude'])
         with self.assertRaises(WorkflowError): self.store.decide(admin['id'],sub['id'],'REJECTED',data,'Stale',1)
         self.store.decide(admin['id'],sub['id'],'PAUSED',data,'Paused',2)
         self.assertEqual(self.store.public_listings(),[])
