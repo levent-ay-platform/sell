@@ -1,14 +1,37 @@
 package tn.malak.app.ui.explore
 
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import org.json.JSONObject
-import tn.malak.app.ui.OwnerPairException
-import tn.malak.app.ui.PilotListingClient
+import tn.malak.app.ui.readPilotBytes
+import java.io.IOException
 
-/** The Pilot gateway exposes its published records as a small public feed. */
+/**
+ * Published-only public feed; never carries owner bearer, OTP, private coordinates or write routes.
+ * This adapter is for the currently deployed Pilot public API, not the newer /api/v1/discovery API.
+ */
 internal class PilotPublicDiscoverySource(private val origin: String) : DiscoverySource {
+    private suspend fun publicGet(path: String, missingAllowed: Boolean = false): JSONObject? =
+        withContext(Dispatchers.IO) {
+            val connection = discoveryConnection(origin + path, "application/json")
+            try {
+                val status = connection.responseCode
+                if (missingAllowed && status == 404) return@withContext null
+                if (status != 200) throw IOException("Public discovery HTTP $status")
+                val body = connection.inputStream.use { readPilotBytes(it, 1024 * 1024) }
+                JSONObject(body.toString(Charsets.UTF_8)).also {
+                    if (!it.optBoolean("ok", false)) throw IOException("Invalid public discovery response")
+                }
+            } finally {
+                connection.disconnect()
+            }
+        }
+
     private suspend fun listings(): List<DiscoveryListing> {
-        val rows = PilotListingClient.call(null, "/api/public/listings").getJSONArray("listings")
-        return (0 until rows.length()).mapNotNull { i -> decodePilotListing(rows.getJSONObject(i), origin) }
+        val rows = requireNotNull(publicGet("/api/public/listings")).getJSONArray("listings")
+        return (0 until rows.length()).mapNotNull { i ->
+            decodePilotListing(rows.getJSONObject(i), origin)
+        }
     }
 
     override suspend fun list(query: DiscoveryQuery, cursor: String?) =
@@ -21,11 +44,8 @@ internal class PilotPublicDiscoverySource(private val origin: String) : Discover
 
     override suspend fun parcel(id: String): PublicParcel {
         if (!PilotRecordId.matches(id)) return PublicParcel()
-        return try {
-            decodePublicParcel(PilotListingClient.call(null, "/api/v1/listings/$id/parcel"), origin, id)
-        } catch (error: OwnerPairException) {
-            if (error.statusCode == 404) PublicParcel() else throw error
-        }
+        return publicGet("/api/v1/listings/$id/parcel", missingAllowed = true)
+            ?.let { decodePublicParcel(it, origin, id) } ?: PublicParcel()
     }
 
     override suspend fun suggest(text: String, language: String): List<DiscoveryPlace> {
