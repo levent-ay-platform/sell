@@ -5,7 +5,7 @@
     <string name="afi_browse">Parcourir les zones AFI</string>
     <string name="afi_search">Zone ou gouvernorat</string>
     <string name="afi_plans">Plans et lots</string>
-    <string name="afi_indicative">Plan indicatif AFI · limites approximatives</string>
+    <string name="afi_indicative">Plan AFI · Contours selon la couche d’aménagement</string>
     <string name="afi_snapshot_date">Référence AFI du %1$s</string>
     <string name="afi_documents">Documents AFI</string>
     <string name="afi_original">Ouvrir la page source</string>
@@ -19,7 +19,7 @@
     <string name="afi_no_lots">Aucun lot dans cette vue.</string>
     <string name="afi_source">Carte officielle AFI</string>
     <string name="afi_load_failed">Le plan industriel est indisponible.</string>
-    <string name="afi_estimated_area">Surface estimée · %1$s m²</string>
+    <string name="afi_estimated_area">Surface calculée du plan AFI · %1$s m²</string>
     <string name="afi_no_shape">Contour non publié pour ce lot.</string>
     <string name="afi_lot_price">Prix indiqué du lot · %1$s TND/m²</string>
     <string name="afi_zone_price">Tarif AFI de la zone · %1$s TND/m²</string>
