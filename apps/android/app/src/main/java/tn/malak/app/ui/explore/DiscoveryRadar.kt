@@ -16,15 +16,17 @@ internal data class DiscoveryRadar(val center: DiscoveryPoint, val radiusKm: Int
                 center.longitude + longitudeSpan, center.latitude + latitudeSpan)
         }
 
-    fun contains(point: DiscoveryPoint): Boolean {
+    fun distanceKm(point: DiscoveryPoint): Double {
         val lat1 = Math.toRadians(center.latitude)
         val lat2 = Math.toRadians(point.latitude)
         val halfLon = Math.toRadians(point.longitude - center.longitude) / 2
-        val distance = 2 * asin(sqrt(
+        val angle = 2 * asin(sqrt(
             (sin((lat2 - lat1) / 2).pow(2) + cos(lat1) * cos(lat2) * sin(halfLon).pow(2)).coerceIn(0.0, 1.0)
         ))
-        return distance <= angularRadius
+        return EarthRadiusKm * angle
     }
+
+    fun contains(point: DiscoveryPoint): Boolean = distanceKm(point) <= radiusKm
 
     fun ring(): List<DiscoveryPoint> {
         val lat = Math.toRadians(center.latitude)
