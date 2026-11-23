@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="smart_search_detected">Critères reconnus</string>
+    <string name="smart_search_apply">Appliquer</string>
+    <string name="smart_search_grounded">Seuls les critères reconnus sont appliqués, sans inventer d’informations.</string>
+</resources>
