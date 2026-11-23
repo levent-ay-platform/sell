@@ -12,7 +12,7 @@
     <string name="radar_results_title">Résultats du radar</string>
     <string name="radar_afi_note">Lots AFI cartographiés, sans annonce de vente ni disponibilité confirmée.</string>
     <string name="radar_afi_inside">%1$d lots cartographiés dans le cercle</string>
-    <string name="radar_afi_approximate">Position approximative — coordonnées de lots non publiées</string>
+    <string name="radar_afi_approximate">Zone affichée sur la carte · Coordonnées des lots non publiées</string>
     <string name="radar_sale_results">Biens à vendre</string>
     <string name="radar_no_results">Aucun lot AFI cartographié ni annonce immobilière dans ce cercle.</string>
 </resources>
