@@ -35,10 +35,10 @@
     <string name="parcel_editor_stated_area">المساحة المدونة (م²)</string>
     <string name="parcel_editor_scale_title">قياسات المخطط</string>
     <string name="parcel_editor_scale_hint">أدخل طول ضلع معروف أدناه واستخدمه لضبط المقياس.</string>
-    <string name="parcel_editor_calculated_area">المساحة التقديرية · %1$.1f م²</string>
-    <string name="parcel_editor_calculated_perimeter">المحيط التقديري · %1$.1f م</string>
-    <string name="parcel_editor_scale_caution">تقديرات مبنية على الضلع المرجعي. قارنها بالمخطط.</string>
-    <string name="parcel_editor_calculated_length">≈ %1$.1f م</string>
+    <string name="parcel_editor_calculated_area">مساحة محسوبة من مقياس المخطط · %1$.1f م²</string>
+    <string name="parcel_editor_calculated_perimeter">محيط محسوب من مقياس المخطط · %1$.1f م</string>
+    <string name="parcel_editor_scale_caution">القياسات محسوبة من الضلع المرجعي داخل المخطط؛ تثبيت الموقع على الخريطة مسار مستقل.</string>
+    <string name="parcel_editor_calculated_length">محسوب: %1$.1f م</string>
     <string name="parcel_editor_use_reference">استخدامه لضبط المقياس</string>
     <string name="parcel_editor_reference_selected">الضلع المرجعي محدد</string>
     <string name="parcel_editor_pick_reading">اختيار قياس من المخطط</string>
