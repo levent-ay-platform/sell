@@ -1,5 +1,5 @@
 # CURRENT — Amlak / Atlas Tunisia
-_Last audited: 2026-11-22 (Europe/Istanbul). This is the navigation and checkpoint index, not a replacement for the authoritative issue records._
+_Last audited: 2026-11-23 (Europe/Istanbul). This is the navigation and checkpoint index, not a replacement for the authoritative issue records._
 
 ## Source-of-truth ownership (do not create competing master plans)
 
@@ -12,6 +12,13 @@ _Last audited: 2026-11-22 (Europe/Istanbul). This is the navigation and checkpoi
 | Older seller OCR flow | [Draft PR #14](https://github.com/levent-ay-platform/sell/pull/14) | Do not assume merged or deployed. |
 
 **Approved public app name: Amlak.** Earlier code/paths use MALAK/Malak for historical compatibility. The existing Android package identifier `tn.malak.app` was deliberately not renamed to avoid data loss; technical slugs are not consumer branding.
+
+## 2026-11-23 document area and handoff review
+
+- The owner can keep the entered area, use the document area, or offer part of it. Both seller forms show the eligible area, document family and page. A direct draft restores its private review by ID. A gateway advertising `draftDocumentReview` can attach that review in the publication transaction. The area in the buyer card follows the owner’s choice. The live capability endpoint returned HTTP 404 on the read-only check.
+- Android passed 87 unit tests. On the connected-build emulator the seller form displayed a fixture of 900 m² on page 2 beside an entered 275 m², then previewed each choice and a manually entered 180 m². The startup check passed. The separate handoff emulator showed Arabic Alerts, Explore and the signed-out publishing entry at 130% font size. Real owner scans and a physical handset still need acceptance.
+- The admin password compatibility review reproduced the fixed vector independently and exercised stored hashes in both provider directions. Bootstrap now enforces the login length limit. Local QA passed 33 Python and 397 TypeScript tests. The protected Mac worktrees were inventoried read-only. The recovery directory requires a different OS account, so this pass did not independently verify its manifest.
+- Connected Android QA APK SHA-256 `9ae0d2fa51fce92c86bf862b0b6e1fdcc0ec4f14cb6ee9f681b0023c4fdbbe5f`. The buyer and Atlas publication contract remains in [Issue #21](https://github.com/levent-ay-platform/sell/issues/21).
 
 ## 2026-11-22 safety and product decision (after Codex quota)
 
