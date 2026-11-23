@@ -9,4 +9,10 @@
     <string name="afi_shortcut">Zones industrielles</string>
     <string name="pilot_device_id">Identifiant de l’appareil Pilot</string>
     <string name="pilot_device_hint">Transmettez cet identifiant en privé à votre administrateur Pilot pour activer cet appareil.</string>
+    <string name="radar_results_title">Résultats du radar</string>
+    <string name="radar_afi_note">Lots AFI cartographiés, sans annonce de vente ni disponibilité confirmée.</string>
+    <string name="radar_afi_inside">%1$d lots cartographiés dans le cercle</string>
+    <string name="radar_afi_approximate">Position approximative — coordonnées de lots non publiées</string>
+    <string name="radar_sale_results">Biens à vendre</string>
+    <string name="radar_no_results">Aucun lot AFI cartographié ni annonce immobilière dans ce cercle.</string>
 </resources>
