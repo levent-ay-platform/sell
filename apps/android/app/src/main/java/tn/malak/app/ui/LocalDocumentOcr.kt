@@ -20,6 +20,9 @@ internal object LocalDocumentOcr {
         val issue:FrontIssue?=null,
         val cinFull:String?=null
     ) {
+        /** Advisory OCR coverage, not identity verification. */
+        val extractedFieldCount:Int get() =
+            listOf(surname,givenName,cinFull,birthDate).count { !it.isNullOrBlank() }
         private val readableCore:Boolean get()=
             issue==null&&surname!=null&&givenName!=null&&fullName!=null&&
             confidence>=65&&

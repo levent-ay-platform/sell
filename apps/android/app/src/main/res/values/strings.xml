@@ -217,6 +217,8 @@
     <string name="camera_front_action">Photograph and read the card</string>
     <string name="camera_cin_manual_hint">CIN unclear; capture allowed for human review only</string>
     <string name="camera_review_manual">Some fields need review. You can keep this photo or retake it.</string>
+    <string name="camera_review_empty">No identity fields were extracted. Retake the photo or keep it for manual review; identity remains unverified.</string>
+    <string name="camera_fields_progress">Extracted fields: %1$d of %2$d</string>
     <string name="camera_pilot_no_ocr">A test phone/PIN does not authenticate identity OCR. The photo can be reviewed locally, but fields cannot be read until verified owner login and a connected private OCR service.</string>
     <string name="camera_review_title">Card details</string>
     <string name="camera_review_scanning">Reading identity fields with the private OCR service…</string>

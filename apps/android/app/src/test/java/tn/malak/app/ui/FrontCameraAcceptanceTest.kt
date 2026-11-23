@@ -11,6 +11,16 @@ class FrontCameraAcceptanceTest {
         cinFull="01234567"
     )
 
+    @Test fun missingFieldsDisplayPartialExtractionWithoutInventingIdentity() {
+        assertEquals(4,complete().extractedFieldCount)
+        assertEquals(2,complete().copy(surname=null,birthDate=null).extractedFieldCount)
+        val empty=complete().copy(surname=null,givenName=null,fullName=null,
+            cinFull=null,cinLast4=null,birthDate=null,confidence=0)
+        assertEquals(0,empty.extractedFieldCount)
+        assertTrue(empty.readyForCameraAcceptance)
+        assertFalse(empty.readyForReview)
+    }
+
     @Test fun allFourExtractedFieldsPermitPreliminaryCapture() {
         assertTrue(complete().readyForCameraAcceptance)
     }

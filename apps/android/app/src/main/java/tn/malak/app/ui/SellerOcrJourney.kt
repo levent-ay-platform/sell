@@ -789,6 +789,8 @@ internal fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmiss
                                 // duplicate "unreadable" failure cards.
                                 Column(verticalArrangement=Arrangement.spacedBy(2.dp)){
                                     IdFieldsReadout(scan,placeholder)
+                                    if(scan!=null)Text(s(R.string.camera_fields_progress,
+                                        scan.extractedFieldCount,4),color=Brand.Muted,fontSize=12.sp)
                                 }
                                 val message=when{
                                     frontReadBusy->R.string.camera_review_scanning
@@ -803,8 +805,12 @@ internal fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmiss
                                     frontRead?.issue!=null->
                                         R.string.camera_review_failed
                                     scan?.readyForCameraAcceptance==true->
-                                        if(scan.cinFull!=null&&scan.birthDate!=null&&scan.fullName!=null)
-                                            R.string.camera_review_ready else R.string.camera_review_manual
+                                        when {
+                                            scan.extractedFieldCount==0->R.string.camera_review_empty
+                                            scan.cinFull!=null&&scan.birthDate!=null&&scan.fullName!=null->
+                                                R.string.camera_review_ready
+                                            else->R.string.camera_review_manual
+                                        }
                                     else->R.string.camera_review_required_fields
                                 }
                                 Text(s(message),color=Brand.Muted,

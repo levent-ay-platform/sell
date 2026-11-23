@@ -217,6 +217,8 @@
     <string name="camera_front_action">تصوير البطاقة واستخراج البيانات</string>
     <string name="camera_cin_manual_hint">رقم الهوية غير واضح؛ يمكن التصوير للمراجعة البشرية فقط</string>
     <string name="camera_review_manual">بعض البيانات تحتاج مراجعة. يمكنك اعتماد الصورة أو إعادة التقاطها.</string>
+    <string name="camera_review_empty">ما قدرنا نقرأ أي حقل من الهوية. فيك تعيد التصوير أو تحتفظ بالصورة للمراجعة اليدوية؛ الهوية غير موثقة.</string>
+    <string name="camera_fields_progress">الحقول المستخرجة: %1$d من %2$d</string>
     <string name="camera_pilot_no_ocr">الرقم والرمز التجريبي ما بيسمحوا بقراءة الهوية. فيك تراجع الصورة هون، لكن استخراج البيانات يحتاج دخول موثّق وخدمة OCR خاصة متصلة.</string>
     <string name="camera_review_title">بيانات بطاقة التعريف</string>
     <string name="camera_review_scanning">جارٍ قراءة الحقول عبر خدمة OCR الخاصة…</string>
