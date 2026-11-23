@@ -292,6 +292,13 @@ CREATE TABLE IF NOT EXISTS pilot_parcel_links(
         kind = data.get('kind')
         if kind not in ('LAND','APARTMENT','HOUSE','VILLA','FACTORY') or not fields['latitude']:
             raise WorkflowError()
+        latitude = float(fields['latitude'])
+        longitude = float(fields['longitude'])
+        # A public Tunisia property must not be created at 0,0 or abroad.
+        # The coarse bounding-box check is not a title/parcel boundary proof.
+        if not (math.isfinite(latitude) and math.isfinite(longitude)
+                and 29 <= latitude <= 39 and 7 <= longitude <= 13):
+            raise WorkflowError(422, 'PUBLIC_LOCATION_OUT_OF_SCOPE')
         for coordinate in ('latitude','longitude'):
             fields[coordinate] = format(float(fields[coordinate]), '.3f')
         fields['kind'] = kind
