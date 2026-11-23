@@ -1,0 +1,29 @@
+# Nozha → Amlak first real CRM project — initial bridge checkpoint (2026-11-23)
+
+## Scope and existing source
+- Source CRM: `levent-ay-platform/facebook-ads-crm`, tenant `casaimed-iaa4rp`, CRM property ID `3`, **CRM property code `561663` (NOT a land title number)**, title `Nozha`.
+- Controlled CRM branch: `feat/nozha-amlak-public-card-20261123`, [Draft PR #986](https://github.com/levent-ay-platform/facebook-ads-crm/pull/986). Do not pull unreviewed CRM code into production.
+- Baseline last verified data: CRM canonical Nozha closeout **2026-10-01**, 48 lots, 36 available, 12 blocked, 0 reserved/sold at that date. This is a **historical snapshot**, not current availability or prices. 6 customer-shareable photos, 2 source masterplans **none customer-shareable**, 43/48 local plan shapes, **0 lot GPS polygons** at that audit date. No official TF reference (`legalTitleRef` was null); model `individual_title` was a CRM statement, not legal ownership proof. Agricultural land classification is a CRM commercial field, **not a zoning permit**.
+- Nozha `nozha-source-masterplan-v2` is a digitized geometrical reconstruction based on a WhatsApp source-plan image; its `inventoryAuthority=source_plan_only` and its georeference confidence `approximate` explicitly require visual acceptance. **Do not auto-publish this drawing or call it cadastral geometry.**
+- Read-only `atlas-tree-v1.sqlite` Mac scan found no document/resource names containing `Nozha` in selected name/title/source/path columns at 2026-11-23; this is **not an exhaustive TF/plot search** and proves neither no official plan nor a TF connection. Official Atlas #20 is the source for later match provenance.
+
+## Implemented in CRM Draft PR #986 (source-only)
+- `server/modules/realEstate/nozhaAmlakPublicProjection.ts` accepts a Nozha-specific, tenant-scoped source snapshot with an independent manager-approved, expiring publication decision. It projects only project code/title, named advertiser **CasaImed Group (marketing agent, NOT legal owner)**, lot code/status/area/valid public ask, time-freshness, approved approximate project point and independent verification labels.
+- `available` = green and for-sale ONLY while CRM snapshot is fresh; `sold` = red in the project plan but never an active sale target; `reserved` amber; `hold` amber/yellow; `blocked` neutral grey. Nozha local source plan and unapproved source file/lot GPS polygons never leave the projection.
+- Reject missing/mismatched project/tenant/approval or expired publication grant. Stale snapshots cannot show actionable asking prices or available-for-inquiry flags. Never expose customer names, phone numbers, deal/transaction IDs, seller's exact point, title number or private documents.
+- The CRM data completeness audit `scripts/audit-nozha-amlak-readonly.ts` is **SELECT-only** inside a read-only consistent MySQL transaction. It outputs status counts, price/area completeness and geometry coverage without identifying customers or sharing exact location/title reference.
+- Tests and isolated GHA must pass on exact CRM PR SHA before connected work. **No public CRM API route exists yet and no live data export was approved**.
+
+## Planned Amlak public-card contract
+1. **Header:** Nozha, location accuracy and updated-at, publisher `CasaImed Group — marketed by`, project and lot code, approved photo(s).
+2. **Inventory:** five CRM states and exact current lot code; mobile masterplan only when manager authorizes both publication and plan rights. Sold remains red but excluded from buying/radar. For no georeferenced approved lot boundary, show a neutral list/map-area label, NOT fabricated coordinates.
+3. **Commercial section:** valid latest asking amount (pricing basis total/per-sqm/from), area, installments/deposit for the **selected lot**, per-lot source version; customer-shareable water/electricity source/status, no contradictory promise of legal construction rights.
+4. **Atlas verification section:** `titleReference` if independently matched to an authorized official document; source ID/sha256/document issue date; `plotReference`, cadastral plan, document authority, local plan vs true WGS84 geometry distinction, PAU zone/stated vocation only if spatially verified. Latest independent reviewer decision and owner/public release consent must exist for public approved renditions.
+5. **Three independent trust states**: inventory current (CRM); documents reviewed (Amlak/Atlas); legal owner & cadastral outline match (independently confirmed). **Never use a single green ownership badge when merely CRM truth is present.**
+
+## Live blockers / acceptance
+- A read-only Huawei WSL probe on 2026-11-23 timed out; therefore **no fresh MySQL Nozha counts are yet verified**. Do not replace October counts with a guess.
+- Need an authorized operator to execute the committed read-only Nozha audit in the CRM environment, inspect conflicts, and approve per-project/public content rights separately from user data. No production SQL writes.
+- Need to match source plan/document permissions and independently find official cadastral references; current project code is NOT a legal TF.
+- Only after manager-approved publication decision: implement a separate read-only public API with strict TTL/authorization/revocation and consume it through Amlak map/list/Nozha card in QA. No false direct CRM DB access from an Android client.
+- Keep Draft PR #22 separate; do not merge/deploy live CRM or Amlak without approval and backout plan.
