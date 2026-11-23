@@ -87,3 +87,47 @@ The public gateway exposes only reviewed/redacted/rightful **derived projections
 3. Build a bounded, read-only **private-to-public reviewed export** for a single Nabeul/Kélibia slice with typed source records, provenance and rights.
 4. Extend Amlak discovery with evidence links and source-specific results, then implement Land X-Ray on those vetted links.
 5. Add swappable LLM tool orchestration and explanations behind a feature flag only after grounded deterministic tools and evaluation fixtures pass.
+
+## P1 public Pilot feed reconciliation (2026-11-23, Draft only)
+
+The deployed legacy Mac Pilot public route (`/api/public/listings`) and the proposed
+Postgres V2 verified discovery (`/api/v1/discovery`) are **different services**.
+Neither route is a substitute for the other's authorization rules. Android
+public-feed QA uses the former read-only until the V2 route is really deployed.
+
+**Server output contract in source** (`services/verification/qa/pilot_workflow.py`):
+
+- Public allowlist: `id,title,region,description,area,price,kind,latitude,
+  longitude,locationAccuracy,publishedAt,ownershipVerified,photos`. No private
+  identity, phone, case/review IDs, encrypted evidence, seller notes, or source
+  secrets. A public response is never proof of legal ownership.
+- **Direct owner-publication only:** coordinates may be shared as a **coarse**
+  2-decimal-degree approximate point after explicit owner publication, with
+  Tunisia-bounded, finite input validation. Raw owner coordinates stay private.
+  This is *not* a surveyed cadastral boundary or a verified parcel.
+- **Admin-reviewed legacy submission:** no distinct public-point consent exists;
+  even when the private review recorded coordinates, the public card is
+  `AREA_ONLY`. Its original place fields remain untouched.
+- Missing or unsupported `kind` is `UNKNOWN`, never assumed `LAND` from
+  a title/region/OCR. Existing direct listings retain exactly their explicit
+  type. `ownershipVerified` stays `false` for a mere Pilot publication.
+- `status=PUBLISHED` only is returned; `PAUSED`, `DRAFT`, removed and
+  rejected items must disappear. Same immutable listing ID is preserved during
+  direct publish → later private document review → owner pause/resume.
+- `/api/atlas/listings` uses the **same public filtered/rounded projection**;
+  no separate exact-location leak or `LAND` fallback.
+- `publishedAt` in the existing legacy service is currently sourced from
+  `submissions.updated` and therefore can change on edit/verification.
+  **Do not label this the historical first publication date** until a separate
+  durable first-publication timestamp exists. This is a later migration gate.
+
+**Acceptance evidence:** isolated Python + HTTP synthetic suite on
+`.github/workflows/amlak-pilot-public-contract.yml` exercises direct/public
+projection, same ID, pausing, moderation, private evidence, verified-badge
+separation, out-of-country rejects, and missing-type behavior. Do **not**
+enable the new source in production from a green test alone. Require staging
+backup/rollback, owner approval, observable live `kind`/accuracy, no 0,0,
+public list + radar + map parity, and post-withdrawal revocation.
+
+**Status:** code/CI staging-ready only; production Mac server, SQLite and
+Cloudflare/Huawei routing were **not touched**.
