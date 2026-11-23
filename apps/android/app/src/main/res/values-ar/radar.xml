@@ -12,7 +12,7 @@
     <string name="radar_results_title">نتائج بحث الرادار</string>
     <string name="radar_afi_note">قطع صناعية مرسومة من مخططات AFI، وليست إعلانات بيع أو تأكيداً للتوفر.</string>
     <string name="radar_afi_inside">%1$d قطعة مرسومة داخل دائرة الرادار</string>
-    <string name="radar_afi_approximate">موقع تقريبي — إحداثيات القطع غير منشورة</string>
+    <string name="radar_afi_approximate">موضع المنطقة على الخريطة · إحداثيات المقاسم غير منشورة</string>
     <string name="radar_sale_results">عقارات معروضة للبيع</string>
     <string name="radar_no_results">لم نجد قطع AFI مرسومة أو إعلانات بيع داخل هذه الدائرة.</string>
 </resources>
