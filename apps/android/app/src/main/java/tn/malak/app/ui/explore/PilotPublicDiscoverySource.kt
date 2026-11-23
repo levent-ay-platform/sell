@@ -66,8 +66,7 @@ internal fun decodePilotListing(row: JSONObject, origin: String): DiscoveryListi
     val id = row.optString("id")
     if (!PilotRecordId.matches(id)) return null
     val photo = row.optJSONArray("photos")?.optString(0)?.takeIf(PilotRecordId::matches)
-    val point = discoveryPoint(row.optString("latitude").toDoubleOrNull(),
-        row.optString("longitude").toDoubleOrNull(), "APPROXIMATE")
+    val point = publicPilotListingPoint(row.optString("latitude"), row.optString("longitude"))
     val title = row.optString("title").trim().takeIf(String::isNotEmpty) ?: return null
     val region = row.optString("region").trim()
     val price = row.optString("price").trim().takeIf { it.toBigDecimalOrNull()?.signum() == 1 }.orEmpty()
@@ -78,6 +77,16 @@ internal fun decodePilotListing(row: JSONObject, origin: String): DiscoveryListi
         photo?.let { "$origin/api/public/photos/$it" },
         row.optString("description").trim().takeIf(String::isNotBlank))
 }
+
+/**
+ * Legacy public-feed coordinates are not guaranteed to carry location-accuracy
+ * metadata. Accept only a plausible Tunisian public point; 0,0 and coordinates
+ * outside the country are *not* pins. This is a coarse data-quality guard, not
+ * cadastral/ownership validation or an assertion of exact public accuracy.
+ */
+internal fun publicPilotListingPoint(latitude: String?, longitude: String?): DiscoveryPoint? =
+    discoveryPoint(latitude?.toDoubleOrNull(), longitude?.toDoubleOrNull(), "APPROXIMATE")
+        ?.takeIf { it.latitude in 29.0..39.0 && it.longitude in 7.0..13.0 }
 
 /** The current public Pilot feed does NOT include a kind field. Unknown is not LAND. */
 internal fun publicListingKind(value: String): String =
