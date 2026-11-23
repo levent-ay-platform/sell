@@ -2,11 +2,11 @@
 <resources>
     <string name="direct_publish">انشر العقار</string>
     <string name="direct_preview">عاين الإعلان</string>
-    <string name="direct_preview_note">سيظهر العقار بموقع تقريبي. يمكنك إكمال التوثيق بعد النشر.</string>
+    <string name="direct_preview_note">سيظهر الإعلان ضمن المنطقة المختارة. يمكنك إكمال التوثيق بعد النشر.</string>
     <string name="direct_missing_fields">راجع العنوان والمنطقة والمساحة والسعر وحدد موقع العقار على الخريطة.</string>
     <string name="direct_publish_failed">تعذّر حفظ العقار. تحقق من الاتصال وحاول مرة أخرى.</string>
     <string name="direct_choose_location">اختر الموقع على الخريطة</string>
-    <string name="direct_change_location">عدّل الموقع التقريبي</string>
+    <string name="direct_change_location">تعديل موقع الإعلان</string>
     <string name="direct_pin_hint">حرّك الخريطة حتى يصبح الدبوس قريباً من العقار.</string>
     <string name="direct_confirm_pin">اعتمد هذا الموقع</string>
     <string name="direct_save">احفظ التعديلات</string>
@@ -30,7 +30,7 @@
     <string name="direct_stage_location">الصور والموقع</string>
     <string name="direct_stage_details">التفاصيل والسعر</string>
     <string name="direct_choose_kind">اختر نوع العقار.</string>
-    <string name="direct_check_location">أدخل المنطقة وحدّد الموقع التقريبي على الخريطة.</string>
+    <string name="direct_check_location">أدخل المنطقة وحدد موقع الإعلان على الخريطة.</string>
     <string name="direct_next">متابعة</string>
     <string name="direct_check_details">أدخل عنواناً ومساحة وسعراً صالحين.</string>
 </resources>
