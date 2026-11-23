@@ -78,7 +78,7 @@ private val priceWithCurrency = Regex(
 private val budgetWithNumber = Regex(
     """(?:ميزانيه|ميزانيتي|budget|prix|تفوتش|تتعداش|اقل من|حدود|maximum|moins de|pas plus de)\s*(?:ب|de|a|est|هو)?\s*([0-9]{2,9})\s*(الف|k|mille)?"""
 )
-private val areaUnit = """(?:متر|م2|m2|m²|sqm|metres?|meters?)"""
+private val areaUnit = """(?:متر|م2|m2|m²|m|sqm|metres?|meters?)"""
 private val areaRange = Regex(
     """(?:بين|من|entre|de)?\s*([0-9]{2,7})\s*(?:و|الى|a|et|to)\s*([0-9]{2,7})\s*$areaUnit"""
 )
@@ -138,7 +138,7 @@ internal fun interpretSmartDiscovery(query: String, places: List<AtlasPlace>): S
 
     val documents = hasAnyPhrase(
         text, "وثائق", "وثيقه", "اوراق", "رسم عقاري", "شهاده ملكيه",
-        "document", "documents", "titre foncier", "cadastre"
+        "شهادات ملكيه", "document", "documents", "titre foncier", "cadastre"
     )
 
     return SmartDiscoveryIntent(
