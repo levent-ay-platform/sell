@@ -1,0 +1,47 @@
+name: Amlak P1 Pilot public contract (isolated)
+
+on:
+  pull_request:
+    branches: [codex/malak-pilot-complete, main]
+    paths:
+      - 'services/verification/qa/**'
+      - '.github/workflows/amlak-pilot-public-contract.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: amlak-pilot-public-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  public-contract:
+    if: ${{ github.event_name == 'pull_request' && github.head_ref == 'codex/malak-v2-map-parcel-foundation' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout without credentials
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install bounded QA dependencies only
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check -r services/verification/qa/requirements-runtime.txt
+      - name: Run isolated public projection, owner lifecycle and local HTTP contracts
+        env:
+          PYTHONPATH: services/verification/qa
+          MALAK_DIRECT_PUBLISHING: '0'
+        run: |
+          set -euo pipefail
+          python -m unittest -v test_public_pilot_projection test_pilot_workflow test_workflow_http
+      - name: Verify no deployment or production changes
+        run: |
+          set -euo pipefail
+          test -f services/verification/qa/pilot_workflow.py
+          echo 'P1 QA tests run with temporary SQLite and localhost only; no public publish route executed.'
