@@ -27,12 +27,16 @@ internal class PilotPublicDiscoverySource(private val origin: String) : Discover
             }
         }
 
-    private suspend fun listings(): List<DiscoveryListing> {
+    // Map, list and place suggestions may request the same public feed at once.
+    // Share an *in-progress* network response, never a stale completed response.
+    private val sharedRead = PublicFeedSingleFlight {
         val rows = requireNotNull(publicGet("/api/public/listings")).getJSONArray("listings")
-        return (0 until rows.length()).mapNotNull { i ->
+        (0 until rows.length()).mapNotNull { i ->
             decodePilotListing(rows.getJSONObject(i), origin)
         }
     }
+
+    private suspend fun listings(): List<DiscoveryListing> = sharedRead.get()
 
     override suspend fun list(query: DiscoveryQuery, cursor: String?) =
         DiscoveryPage(listings().filter { it.matchesPilotQuery(query) })
