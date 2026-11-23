@@ -14,6 +14,8 @@ import androidx.test.uiautomator.Until
 import java.io.ByteArrayOutputStream
 import java.io.File
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
 import org.junit.Test
@@ -74,6 +76,16 @@ class BuyerDiscoveryTest {
             // The retained preview and the visible filter badge confirm the selection after Back.
             device.waitFor(By.text("1"))
             device.takeScreenshot(File(context.cacheDir, "buyer-return.png"))
+
+            val original = requireNotNull(BuyerFixture.lastMarkerBounds.get())
+            val viewport = device.waitFor(map).visibleBounds
+            device.swipe(viewport.centerX(), viewport.centerY(),
+                viewport.centerX() + viewport.width() / 4, viewport.centerY(), 16)
+            val deadline = android.os.SystemClock.uptimeMillis() + 8_000
+            while (BuyerFixture.lastMarkerBounds.get() == original &&
+                android.os.SystemClock.uptimeMillis() < deadline) Thread.sleep(100)
+            assertNotEquals(original, BuyerFixture.lastMarkerBounds.get())
+            assertFalse(device.hasObject(By.text("Rechercher ici")))
         }
     }
 
@@ -82,6 +94,7 @@ class BuyerDiscoveryTest {
 }
 
 private object BuyerFixture : DiscoverySource {
+    val lastMarkerBounds = java.util.concurrent.atomic.AtomicReference<tn.malak.app.ui.explore.DiscoveryBounds?>()
     private val point = DiscoveryPoint(36.87978, 11.00488)
     private val land = DiscoveryListing("test-land", "Terrain de validation UI", "Kélibia", "LAND",
         "128000", "420", null, point, "APPROXIMATE", null, null)
@@ -92,7 +105,10 @@ private object BuyerFixture : DiscoverySource {
     override suspend fun list(query: DiscoveryQuery, cursor: String?) =
         DiscoveryPage(listOf(land).filter { point in query.bounds && query.filters.kind == "LAND" })
 
-    override suspend fun markers(query: DiscoveryQuery, zoom: Int) = DiscoveryMarkers(list(query).listings)
+    override suspend fun markers(query: DiscoveryQuery, zoom: Int): DiscoveryMarkers {
+        lastMarkerBounds.set(query.bounds)
+        return DiscoveryMarkers(list(query).listings)
+    }
 
     override suspend fun detail(id: String) = land.takeIf { it.id == id }
 

@@ -10,6 +10,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Factory
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Layers
 import androidx.compose.material.icons.outlined.Map
 import androidx.compose.material.icons.outlined.Search
@@ -17,6 +18,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.contentDescription
@@ -43,6 +45,7 @@ internal fun MapLayersSheet(
     onIndustrialVisible: (Boolean) -> Unit,
     onBrowseIndustrial: () -> Unit,
     onAtlasLens: () -> Unit,
+    onSources: () -> Unit,
     onDismiss: () -> Unit
 ) {
     ModalBottomSheet(
@@ -57,6 +60,9 @@ internal fun MapLayersSheet(
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text(s(R.string.v2_layers), modifier = Modifier.weight(1f),
                     style = MaterialTheme.typography.headlineSmall, color = Brand.Ink)
+                IconButton(onClick = onSources) {
+                    Icon(Icons.Outlined.Info, s(R.string.discover_map_sources), tint = Brand.Ink)
+                }
                 IconButton(onClick = onDismiss) {
                     Icon(Icons.Outlined.Close, s(R.string.close), tint = Brand.Ink)
                 }
@@ -120,4 +126,28 @@ private fun LayerSwitch(
             }
         }
     }
+}
+
+@Composable
+internal fun MapSourcesDialog(onDismiss: () -> Unit) {
+    val uri = LocalUriHandler.current
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(s(R.string.discover_map_sources)) },
+        text = {
+            Column {
+                TextButton(onClick = { uri.openUri("https://www.openstreetmap.org/copyright") }) {
+                    Text("© OpenStreetMap")
+                }
+                TextButton(onClick = { uri.openUri("https://openmaptiles.org/") }) {
+                    Text("© OpenMapTiles")
+                }
+                TextButton(onClick = { uri.openUri("https://openfreemap.org/") }) {
+                    Text("OpenFreeMap")
+                }
+                Text(s(R.string.layer_atlas_credit), style = MaterialTheme.typography.bodySmall)
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text(s(R.string.close)) } }
+    )
 }

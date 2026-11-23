@@ -137,8 +137,11 @@ class MapHomeTest {
         assertTrue(device.wait(Until.gone(credit), 5_000))
         device.findObject(layers).click()
         device.wait(Until.findObject(adminLayer), 5_000).click()
-        device.findObject(done).click()
-        assertTrue(device.wait(Until.hasObject(credit), 5_000))
+        val sources = By.desc("Sources de la carte")
+        device.wait(Until.findObject(sources), 5_000).click()
+        assertTrue(device.wait(Until.hasObject(By.text("© OpenStreetMap")), 5_000))
+        device.pressBack()
+        assertFalse(device.hasObject(By.text("© OpenStreetMap")))
         device.takeScreenshot(File(context.cacheDir, "administrative-atlas.png"))
     }
 }

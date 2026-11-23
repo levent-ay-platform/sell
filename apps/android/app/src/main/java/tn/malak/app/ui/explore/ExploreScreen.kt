@@ -40,7 +40,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
-import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.hideFromAccessibility
@@ -109,6 +108,8 @@ internal fun ExploreScreen(
     var globeVisible by remember { mutableStateOf(false) }
     var cameraMoving by remember { mutableStateOf(false) }
     var mapReady by remember { mutableStateOf(false) }
+    var mapCreditShown by rememberSaveable { mutableStateOf(false) }
+    var showMapSources by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(mapMode) {
         if (!mapMode) {
             openingGlobe = false
@@ -132,11 +133,16 @@ internal fun ExploreScreen(
     var centerLatitude by rememberSaveable { mutableDoubleStateOf(InitialCenter.latitude) }
     var centerLongitude by rememberSaveable { mutableDoubleStateOf(InitialCenter.longitude) }
     var zoom by rememberSaveable { mutableDoubleStateOf(InitialZoom) }
+    val showMapCredit = mapMode && mapReady && !openingGlobe && !globeVisible && zoom >= 1.82 && !mapCreditShown
+    LaunchedEffect(showMapCredit) {
+        if (showMapCredit) {
+            delay(5_000)
+            mapCreditShown = true
+        }
+    }
     var committedZoom by rememberSaveable { mutableIntStateOf(InitialZoom.toInt()) }
     var visible by rememberSaveable { mutableStateOf(InitialBounds.encode()) }
-    var viewportSearchable by remember { mutableStateOf(true) }
     var committed by rememberSaveable { mutableStateOf(InitialBounds.encode()) }
-    var areaMoved by rememberSaveable { mutableStateOf(false) }
     var searchText by rememberSaveable { mutableStateOf("") }
     var placeId by rememberSaveable { mutableStateOf<String?>(null) }
     var filters by rememberSaveable(stateSaver = FilterSaver) { mutableStateOf(DiscoveryFilters()) }
@@ -346,8 +352,6 @@ internal fun ExploreScreen(
         showSalesLayer && (if (activeRadar != null) nozhaForRadar else matchesProjectFilters)
     }
 
-    val nozhaPlanVisible = nozhaMapPoint != null && zoom >= 13 && privatePlanPoint != null &&
-        DiscoveryBounds.decode(visible)?.contains(privatePlanPoint) == true
     val opened = detailId
 
     val selected = selectedId?.let { id ->
@@ -404,6 +408,7 @@ internal fun ExploreScreen(
                 onGlobeVisible = { globeVisible = it },
                 onCameraMoving = { cameraMoving = it },
                 onGestureStarted = {
+                    if (showMapCredit) mapCreditShown = true
                     openingGlobe = false
                     flyToTunisia = false
                     recenterSearch = false
@@ -422,20 +427,24 @@ internal fun ExploreScreen(
                     centerLatitude = current.center.latitude
                     centerLongitude = current.center.longitude
                     zoom = current.zoom
-                    viewportSearchable = current.searchableBounds
-                    if (viewportSearchable) visible = current.bounds.encode()
+                    if (current.searchableBounds) visible = current.bounds.encode()
                     if (recenterSearch) {
-                        if (viewportSearchable) {
+                        if (current.searchableBounds) {
                             committed = visible
                             committedZoom = zoom.toInt()
                         }
                         recenterSearch = false
-                        areaMoved = false
                         jump = null
                     } else if (gesture) {
                         atlasLensFocus = null
                         atlasLensPlaceLabel = null
-                        areaMoved = true
+                        if (current.searchableBounds && current.zoom > 1.82 &&
+                            source != null && showSalesLayer && activeRadar == null && !radarEditing) {
+                            committed = visible
+                            committedZoom = current.zoom.toInt()
+                            placeId = null
+                            searchText = ""
+                        }
                         selectedId = null
                     }
                 },
@@ -511,7 +520,6 @@ internal fun ExploreScreen(
                         committedZoom = 12
                         visible = area.encode()
                         committed = visible
-                        areaMoved = false
                         if (mapMode) {
                             recenterSearch = true
                             jump = CameraJump(point, zoom, ++jumpSerial)
@@ -541,7 +549,6 @@ internal fun ExploreScreen(
                     centerLatitude = point.latitude; centerLongitude = point.longitude; zoom = 12.3
                     committedZoom = 12
                     visible = area.encode(); committed = visible
-                    areaMoved = false
                     if (mapMode && !sameCamera) {
                         recenterSearch = true
                         jump = CameraJump(point, zoom, ++jumpSerial)
@@ -565,23 +572,6 @@ internal fun ExploreScreen(
             )
 
             if (mapMode) {
-                if (areaMoved && mapReady && viewportSearchable && !globeVisible && source != null &&
-                    showSalesLayer && activeRadar == null && !radarEditing) {
-                    FilledTonalButton(
-                        onClick = {
-                            committed = visible
-                            committedZoom = zoom.toInt()
-                            placeId = null
-                            searchText = ""
-                            selectedId = null
-                            areaMoved = false
-                        },
-                        modifier = Modifier.align(Alignment.CenterHorizontally),
-                        colors = ButtonDefaults.filledTonalButtonColors(
-                            containerColor = Brand.Pearl, contentColor = Brand.Crimson
-                        )
-                    ) { Text(s(R.string.v2_search_area)) }
-                }
                 if (markerFailed && showSalesLayer) Surface(shape = RoundedCornerShape(16.dp), color = Brand.Pearl) {
                     ResultMessage(s(R.string.v2_find_error), retry = { refresh++ })
                 }
@@ -626,7 +616,6 @@ internal fun ExploreScreen(
                                     openingGlobe = false
                                     jump = null
                                     recenterSearch = false
-                                    areaMoved = false
                                     selectedId = null
                                     radarSelection = ""
                                     radarEditing = false
@@ -666,14 +655,13 @@ internal fun ExploreScreen(
                 if (lotLoadFailed && needLotShapes) {
                     ResultMessage(s(R.string.v2_find_error), retry = { lotRetry++ })
                 }
-                if (showAdministrativeLayer && mapReady && !globeVisible) {
-                    val uriHandler = LocalUriHandler.current
+                if (showMapCredit) {
                     Surface(
-                        onClick = { uriHandler.openUri("https://www.openstreetmap.org/copyright") },
+                        onClick = { mapCreditShown = true; showMapSources = true },
                         modifier = Modifier.align(Alignment.End),
                         shape = RoundedCornerShape(8.dp), color = Brand.Pearl, contentColor = Brand.Ink
                     ) {
-                        Text(s(R.string.layer_atlas_credit), modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
+                        Text(s(R.string.discover_base_map_credit), modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
                             style = MaterialTheme.typography.labelSmall)
                     }
                 }
@@ -700,7 +688,6 @@ internal fun ExploreScreen(
                             placeId = null
                             searchText = ""
                             selectedId = null
-                            areaMoved = false
                             showSalesLayer = true
                             committedZoom = zoom.toInt()
                             radarEditing = false
@@ -717,23 +704,6 @@ internal fun ExploreScreen(
                     source == null && industrialCatalog == null) {
                     Surface(shape = RoundedCornerShape(16.dp), color = Brand.Pearl) {
                         ResultMessage(s(R.string.v2_map_data_unavailable))
-                    }
-                } else if (showSalesLayer && source != null && !openingGlobe && !areaMoved && !globeVisible && !nozhaPlanVisible &&
-                    !listLoading && !listFailed && page.listings.isEmpty() && !markerFailed) {
-                    Surface(shape = RoundedCornerShape(16.dp), color = Brand.Pearl) {
-                        ResultMessage(s(R.string.v2_empty))
-                    }
-                } else if (showSalesLayer && mapReady && !openingGlobe && !globeVisible && !nozhaPlanVisible && markerScope.value.listings.isEmpty() &&
-                    markerScope.value.clusters.isEmpty() && page.listings.isNotEmpty()
-                ) {
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        if (source is PilotPublicDiscoverySource && page.listings.any { it.point == null }) {
-                            Text(s(R.string.v2_public_location_unknown_note),
-                                style = MaterialTheme.typography.bodySmall, color = Brand.Muted)
-                        }
-                        OutlinedButton(onClick = { mapMode = false; onViewModeChanged(false) }) {
-                            Text(s(R.string.v2_map_skip))
-                        }
                     }
                 }
                 Spacer(Modifier.height(32.dp))
@@ -881,6 +851,9 @@ internal fun ExploreScreen(
             filters = it; showFilters = false; selectedId = null
         }
     }
+    if (showMapSources) {
+        MapSourcesDialog(onDismiss = { showMapSources = false })
+    }
     if (showLayers) {
         MapLayersSheet(
             salesVisible = showSalesLayer, atlasVisible = showAtlasLayer,
@@ -912,6 +885,7 @@ internal fun ExploreScreen(
                 industrialSearchTerm = ""
                 industrialSheet = "zones"
             },
+            onSources = { showLayers = false; showMapSources = true },
             onDismiss = { showLayers = false }
         )
     }
