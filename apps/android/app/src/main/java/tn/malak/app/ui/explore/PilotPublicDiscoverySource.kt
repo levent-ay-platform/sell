@@ -64,11 +64,22 @@ internal fun decodePilotListing(row: JSONObject, origin: String): DiscoveryListi
     val photo = row.optJSONArray("photos")?.optString(0)?.takeIf(PilotRecordId::matches)
     val point = discoveryPoint(row.optString("latitude").toDoubleOrNull(),
         row.optString("longitude").toDoubleOrNull(), "APPROXIMATE")
-    return DiscoveryListing(id, row.getString("title"), row.getString("region"),
-        row.optString("kind"), row.getString("price"), row.optString("area"), null, point,
+    val title = row.optString("title").trim().takeIf(String::isNotEmpty) ?: return null
+    val region = row.optString("region").trim()
+    val price = row.optString("price").trim().takeIf { it.toBigDecimalOrNull()?.signum() == 1 }.orEmpty()
+    val area = row.optString("area").trim().takeIf { it.toBigDecimalOrNull()?.signum() == 1 }
+    return DiscoveryListing(id, title, region,
+        publicListingKind(row.optString("kind")), price, area, null, point,
         if (point != null) "APPROXIMATE" else "AREA_ONLY",
-        photo?.let { "$origin/api/public/photos/$it" }, row.optString("description").takeIf(String::isNotBlank))
+        photo?.let { "$origin/api/public/photos/$it" },
+        row.optString("description").trim().takeIf(String::isNotBlank))
 }
+
+/** The current public Pilot feed does NOT include a kind field. Unknown is not LAND. */
+internal fun publicListingKind(value: String): String =
+    value.trim().uppercase(java.util.Locale.ROOT).takeIf {
+        it in setOf("LAND", "APARTMENT", "HOUSE", "VILLA", "FACTORY")
+    } ?: "UNKNOWN"
 
 private val PilotRecordId = Regex("[0-9a-f-]{36}")
 
