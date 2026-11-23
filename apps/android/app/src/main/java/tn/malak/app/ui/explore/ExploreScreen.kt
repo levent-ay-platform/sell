@@ -674,7 +674,7 @@ internal fun ExploreScreen(
                     markerScope.value.clusters.isEmpty() && page.listings.isNotEmpty()
                 ) {
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        if (source is PilotPublicDiscoverySource) {
+                        if (source is PilotPublicDiscoverySource && page.listings.any { it.point == null }) {
                             Text(s(R.string.v2_public_location_unknown_note),
                                 style = MaterialTheme.typography.bodySmall, color = Brand.Muted)
                         }
