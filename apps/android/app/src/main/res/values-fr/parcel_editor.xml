@@ -35,10 +35,10 @@
     <string name="parcel_editor_stated_area">Surface déclarée (m²)</string>
     <string name="parcel_editor_scale_title">Mesures du plan</string>
     <string name="parcel_editor_scale_hint">Saisissez la longueur connue d’un côté ci-dessous pour régler l’échelle.</string>
-    <string name="parcel_editor_calculated_area">Surface estimée · %1$.1f m²</string>
-    <string name="parcel_editor_calculated_perimeter">Périmètre estimé · %1$.1f m</string>
-    <string name="parcel_editor_scale_caution">Estimations basées sur le côté de référence. Comparez-les au plan.</string>
-    <string name="parcel_editor_calculated_length">≈ %1$.1f m</string>
+    <string name="parcel_editor_calculated_area">Surface calculée depuis le plan · %1$.1f m²</string>
+    <string name="parcel_editor_calculated_perimeter">Périmètre calculé depuis le plan · %1$.1f m</string>
+    <string name="parcel_editor_scale_caution">Mesures calculées avec le côté de référence du plan ; le positionnement cartographique se valide séparément.</string>
+    <string name="parcel_editor_calculated_length">Calculé : %1$.1f m</string>
     <string name="parcel_editor_use_reference">Utiliser pour régler l’échelle</string>
     <string name="parcel_editor_reference_selected">Côté de référence sélectionné</string>
     <string name="parcel_editor_pick_reading">Choisir une mesure du plan</string>
