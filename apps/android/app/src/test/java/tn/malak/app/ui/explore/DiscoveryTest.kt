@@ -48,4 +48,39 @@ class DiscoveryTest {
         assertNull(DiscoveryBounds.decode("10.55,36.38,9,37.09"))
         assertEquals(area, DiscoveryBounds.decode(common["bbox"]!!))
     }
+    @Test
+    fun publishedPilotFeedUsesTheSameFiltersForMapAndList() {
+        val listing = DiscoveryListing(
+            id = "12345678-1234-4234-8234-123456789012",
+            title = "Terrain", region = "Nabeul", kind = "LAND",
+            priceTnd = "80000", areaM2 = "300", rooms = null,
+            point = DiscoveryPoint(36.88, 11.0), locationAccuracy = "APPROXIMATE",
+            photoUrl = null, description = null
+        )
+        val bounds = DiscoveryBounds(10.5, 36.6, 11.5, 37.2)
+        val query = DiscoveryQuery(bounds, null,
+            DiscoveryFilters(kind = "LAND", maxPrice = "90000", minArea = "240", maxArea = "360"))
+        assertTrue(listing.matchesPilotQuery(query))
+        assertFalse(listing.matchesPilotQuery(query.copy(
+            filters = query.filters.copy(maxPrice = "70000"))))
+        assertFalse(listing.matchesPilotQuery(query.copy(
+            bounds = DiscoveryBounds(8.0, 33.0, 9.0, 34.0))))
+    }
+
+    @Test
+    fun areaOnlyPublicListingStaysOnListButNeverGetsAFabricatedRadarPin() {
+        val areaOnly = DiscoveryListing(
+            id = "12345678-1234-4234-8234-123456789012",
+            title = "Terrain", region = "Nabeul", kind = "LAND",
+            priceTnd = "75000", areaM2 = "300", rooms = null,
+            point = null, locationAccuracy = "AREA_ONLY",
+            photoUrl = null, description = null
+        )
+        val bounds = DiscoveryBounds(10.5, 36.6, 11.5, 37.2)
+        assertTrue(areaOnly.matchesPilotQuery(DiscoveryQuery(bounds, null, DiscoveryFilters())))
+        val radar = DiscoveryRadar(DiscoveryPoint(36.85, 11.0), 10)
+        assertFalse(areaOnly.matchesPilotQuery(DiscoveryQuery(bounds, null, DiscoveryFilters(), radar)))
+        assertNull(areaOnly.point)
+    }
+
 }
