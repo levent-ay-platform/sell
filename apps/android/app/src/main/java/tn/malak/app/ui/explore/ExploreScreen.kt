@@ -153,6 +153,9 @@ internal fun ExploreScreen(
     var showLotLayer by rememberSaveable { mutableStateOf(true) }
     var industrialSheet by rememberSaveable { mutableStateOf<String?>(null) }
     var industrialSearchTerm by rememberSaveable { mutableStateOf("") }
+    var atlasLensOpen by rememberSaveable { mutableStateOf(false) }
+    var atlasLensFocus by remember { mutableStateOf<DiscoveryPoint?>(null) }
+    var atlasLensPlaceLabel by remember { mutableStateOf<String?>(null) }
     var industrialZoneId by rememberSaveable { mutableStateOf<String?>(null) }
     var industrialLotId by rememberSaveable { mutableStateOf<String?>(null) }
     var fitIndustrialZone by remember { mutableStateOf<String?>(null) }
@@ -360,6 +363,8 @@ internal fun ExploreScreen(
                         areaMoved = false
                         jump = null
                     } else if (gesture) {
+                        atlasLensFocus = null
+                        atlasLensPlaceLabel = null
                         areaMoved = true
                         selectedId = null
                     }
@@ -415,10 +420,14 @@ internal fun ExploreScreen(
                 },
                 onSmartSearch = { intent ->
                     feedback(AppCue.Confirm)
+                    atlasLensFocus = null
+                    atlasLensPlaceLabel = null
                     filters = intent.applyTo(filters)
                     radarSelection = ""
                     selectedId = null
                     intent.place?.let { place ->
+                        atlasLensFocus = place.point
+                        atlasLensPlaceLabel = if (language == "ar") place.arabic else place.french
                         openingGlobe = false
                         flyToTunisia = false
                         searchText = if (language == "ar") place.arabic else place.french
@@ -445,6 +454,8 @@ internal fun ExploreScreen(
                     }
                 },
                 onPlace = { place ->
+                    atlasLensFocus = place.point
+                    atlasLensPlaceLabel = place.label
                     openingGlobe = false
                     flyToTunisia = false
                     feedback(AppCue.Action)
@@ -506,6 +517,15 @@ internal fun ExploreScreen(
                 }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(7.dp, Alignment.End),
                     verticalAlignment = Alignment.CenterVertically) {
+                    FilledTonalButton(
+                        onClick = { feedback(AppCue.Action); atlasLensOpen = true },
+                        colors = ButtonDefaults.filledTonalButtonColors(
+                            containerColor = Brand.Pearl, contentColor = Brand.Crimson)
+                    ) {
+                        Icon(Icons.Outlined.Map, null, Modifier.size(17.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text(s(R.string.atlas_lens_short), maxLines = 1)
+                    }
                     FilledTonalButton(
                         onClick = { feedback(AppCue.Action); showIndustrialLayer = true; radarEditing = false; industrialSearchTerm = ""; industrialSheet = "zones" },
                         colors = ButtonDefaults.filledTonalButtonColors(containerColor = Brand.Pearl, contentColor = Brand.Ink)
@@ -654,6 +674,14 @@ internal fun ExploreScreen(
                 }
                 Spacer(Modifier.height(32.dp))
             } else {
+                OutlinedButton(
+                    onClick = { feedback(AppCue.Action); atlasLensOpen = true },
+                    modifier = Modifier.align(Alignment.End)
+                ) {
+                    Icon(Icons.Outlined.Map, null, Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text(s(R.string.atlas_lens_short))
+                }
                 if (mapIssue) ResultMessage(s(R.string.v2_tiles_error), retry = {
                     mapIssue = false
                     mapReady = false
@@ -767,6 +795,22 @@ internal fun ExploreScreen(
                 industrialSheet = "zones"
             },
             onDismiss = { showLayers = false }
+        )
+    }
+    if (atlasLensOpen) {
+        AtlasLensSheet(
+            focus = atlasLensFocus ?: DiscoveryPoint(centerLatitude, centerLongitude),
+            placeLabel = atlasLensPlaceLabel,
+            catalog = industrialCatalog,
+            loadFailed = industrialLoadFailed,
+            language = language,
+            onZone = { zoneId ->
+                atlasLensOpen = false
+                showIndustrialLayer = true
+                chooseIndustrialZone(zoneId)
+                industrialSheet = "plan"
+            },
+            onDismiss = { atlasLensOpen = false }
         )
     }
     val activeIndustrialSheet = industrialSheet
