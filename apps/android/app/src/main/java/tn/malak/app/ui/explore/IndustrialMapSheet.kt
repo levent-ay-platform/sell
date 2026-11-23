@@ -27,10 +27,10 @@ import tn.malak.app.ui.s
 @Composable
 internal fun IndustrialMapSheet(
     catalog: IndustrialCatalog?, plan: IndustrialPlan?, showPlan: Boolean, language: String,
-    failed: Boolean, onZone: (IndustrialZone) -> Unit, onLot: (IndustrialLot) -> Unit,
+    initialSearch: String = "", failed: Boolean, onZone: (IndustrialZone) -> Unit, onLot: (IndustrialLot) -> Unit,
     onBrowse: () -> Unit, onDismiss: () -> Unit
 ) {
-    var query by rememberSaveable { mutableStateOf("") }
+    var query by rememberSaveable(initialSearch) { mutableStateOf(initialSearch) }
     var listedOnly by rememberSaveable(plan?.zone?.id) { mutableStateOf(false) }
     var openPdf by rememberSaveable(plan?.zone?.id) { mutableStateOf<String?>(null) }
     val uriHandler = LocalUriHandler.current
