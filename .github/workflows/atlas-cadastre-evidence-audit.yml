@@ -1,0 +1,32 @@
+name: Atlas cadastre evidence audit (candidate-only)
+
+on:
+  push:
+    branches:
+      - feat/atlas-cadastre-audit-20261124
+    paths:
+      - scripts/atlas_cadastre_evidence_audit.py
+      - scripts/tests/test_atlas_cadastre_evidence_audit.py
+      - .github/workflows/atlas-cadastre-evidence-audit.yml
+  pull_request:
+    paths:
+      - scripts/atlas_cadastre_evidence_audit.py
+      - scripts/tests/test_atlas_cadastre_evidence_audit.py
+      - .github/workflows/atlas-cadastre-evidence-audit.yml
+
+permissions:
+  contents: read
+
+jobs:
+  candidate-only-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Unit tests — source preservation / no official promotion / private reporting
+        run: python -m unittest discover -s scripts/tests -p 'test_atlas_cadastre_evidence_audit.py' -v
+      - name: Compile audit module
+        run: python -m py_compile scripts/atlas_cadastre_evidence_audit.py
