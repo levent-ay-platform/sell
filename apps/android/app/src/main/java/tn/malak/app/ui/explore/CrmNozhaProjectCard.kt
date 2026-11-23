@@ -40,7 +40,7 @@ internal enum class NozhaLotStatus {
 }
 internal data class NozhaLot(
     val code: String, val state: NozhaLotStatus,
-    val area: String?, val askingMinor: String?
+    val area: String?, val askingMinor: String?, val inquiryAllowed: Boolean
 )
 internal data class NozhaProjectCard(
     val updatedAt: String,
@@ -93,14 +93,14 @@ internal fun decodeNozhaProject(body: JSONObject, nowMillis: Long): NozhaProject
                 it.toBigDecimalOrNull()?.signum() == 1
         }
         val ask = entry.optJSONObject("asking")
-        val amount = if (state.canInquire(current) && ask != null &&
+        val amount = if (forSale && state.canInquire(current) && ask != null &&
             ask.optString("currency") == "TND" && ask.optInt("exponent") == 3 &&
             ask.optString("pricingBasis") in setOf("total","per_sqm","starting_from"))
             ask.optString("amountMinor").takeIf {
                 it.matches(Regex("^\\d{1,15}$")) &&
                     it.toBigDecimalOrNull()?.signum() == 1
             } else null
-        lots += NozhaLot(code, state, area, amount)
+        lots += NozhaLot(code, state, area, amount, forSale && state.canInquire(current))
     }
     val counts = NozhaLotStatus.entries.associateWith { target ->
         lots.count { it.state == target }
@@ -220,7 +220,7 @@ internal fun NozhaProjectDetail(
                     Text(lot.state.label(ar))
                     Text((if (ar) "المساحة: " else "Surface : ") + (lot.area ?: "-") +
                         (if (ar) " م²" else " m²"))
-                    if (lot.askingMinor != null && lot.state.canInquire(data.current)) {
+                    if (lot.askingMinor != null && lot.inquiryAllowed && data.current) {
                         Text((if (ar) "السعر: " else "Prix : ") +
                             BigDecimal(lot.askingMinor).movePointLeft(3).toPlainString() + " TND")
                     }
@@ -229,7 +229,7 @@ internal fun NozhaProjectDetail(
                 }
             },
             confirmButton = {
-                if (lot.state.canInquire(data.current)) Button(onClick = {
+                if (lot.inquiryAllowed && data.current) Button(onClick = {
                     selected = null
                     onLotInquiry(lot.code)
                 }) { Text(if (ar) "استفسر" else "Se renseigner") }
