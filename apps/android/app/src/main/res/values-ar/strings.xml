@@ -203,7 +203,7 @@
     <string name="camera_stabilize">ثبّت البطاقة والهاتف</string>
     <string name="camera_focus_fields">ثبّت الهاتف وخلي البطاقة كاملة وواضحة</string>
     <string name="camera_correct_angle">عدّل ميلان البطاقة لتصبح مستقيمة</string>
-    <string name="camera_preview_quality_only">حدود البطاقة والوضوح تقديرية، قراءة البيانات بعد الالتقاط.</string>
+    <string name="camera_preview_quality_only">الإطار يساعدك على التصوير؛ قراءة البيانات تبدأ بعد الالتقاط.</string>
     <string name="camera_shutter_anytime_hint">صوّر البطاقة لما تكون واضحة، وفينا نعيد التصوير بعد المعاينة.</string>
     <string name="camera_align_hint">خلّي زوايا البطاقة الأربع داخل الإطار</string>
     <string name="camera_more_light">قرّب البطاقة من ضوء أفضل</string>
@@ -434,7 +434,7 @@
     <string name="v2_land">أراضٍ</string>
     <string name="v2_apartment">شقق</string>
     <string name="v2_house">منازل</string>
-    <string name="v2_approximate">دبوس الموقع تقريبي</string>
+    <string name="v2_approximate">موضع الإعلان على الخريطة</string>
     <string name="v2_area_only">المنطقة فقط</string>
     <string name="v2_location_exact">موقع مشارَك</string>
     <string name="v2_location_unknown">الموقع غير متاح</string>
