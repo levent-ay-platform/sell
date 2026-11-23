@@ -31,7 +31,7 @@ class PublicPilotProjection(unittest.TestCase):
             'kind': 'LAND',
             'latitude': '36.87978493', 'longitude': '11.004884',
         }
-        exposed = PilotStore._public_listing_fields(private)
+        exposed = PilotStore._public_listing_fields(private, allow_public_location=True)
         self.assertEqual(exposed['kind'], 'LAND')
         self.assertEqual(exposed['locationAccuracy'], 'APPROXIMATE')
         self.assertEqual(exposed['latitude'], '36.88')
@@ -50,10 +50,21 @@ class PublicPilotProjection(unittest.TestCase):
             with self.subTest(lat=lat,lon=lon):
                 public = PilotStore._public_listing_fields({
                     **base, 'latitude':lat, 'longitude':lon,
-                })
+                }, allow_public_location=True)
                 self.assertIsNone(public['latitude'])
                 self.assertIsNone(public['longitude'])
                 self.assertEqual(public['locationAccuracy'], 'AREA_ONLY')
+
+    def test_admin_reviewed_legacy_location_does_not_prove_public_map_consent(self):
+        private = {
+            'title':'Legacy synthetic','region':'Nabeul','area':'100','price':'50000',
+            'kind':'LAND','latitude':'36.87978','longitude':'11.00488',
+        }
+        public = PilotStore._public_listing_fields(private)
+        self.assertIsNone(public['latitude'])
+        self.assertIsNone(public['longitude'])
+        self.assertEqual(public['locationAccuracy'],'AREA_ONLY')
+        self.assertEqual(private['latitude'],'36.87978')
 
     def test_direct_public_listing_cannot_claim_a_position_outside_tunisia(self):
         base = {
