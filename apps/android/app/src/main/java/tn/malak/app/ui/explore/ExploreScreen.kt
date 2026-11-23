@@ -143,6 +143,7 @@ internal fun ExploreScreen(
     var radarEditing by rememberSaveable { mutableStateOf(false) }
     var radarRadius by rememberSaveable { mutableIntStateOf(5) }
     var radarSelection by rememberSaveable { mutableStateOf("") }
+    var radarResultsOpen by rememberSaveable { mutableStateOf(false) }
     val activeRadar = DiscoveryRadar.decode(radarSelection)
     val radarPreview = if (radarEditing) DiscoveryRadar.decode("$centerLatitude,$centerLongitude,$radarRadius") else null
     var showSalesLayer by rememberSaveable { mutableStateOf(true) }
@@ -156,13 +157,22 @@ internal fun ExploreScreen(
     var fitIndustrialZone by remember { mutableStateOf<String?>(null) }
     var industrialLoadFailed by remember { mutableStateOf(false) }
     val context = LocalContext.current
-    val industrialCatalog by produceState<IndustrialCatalog?>(null, context, showIndustrialLayer) {
-        if (showIndustrialLayer && value == null) {
-            industrialLoadFailed = false
+    val industrialCatalog by produceState<IndustrialCatalog?>(null, context) {
+        industrialLoadFailed = false
+        value = withContext(Dispatchers.IO) {
+            runCatching { loadIndustrialCatalog(context) }.getOrNull()
+        }
+        industrialLoadFailed = value == null
+    }
+    // The offline AFI catalog is searchable even when the sale API is not configured.
+    val radarIndustrialHits by produceState<List<IndustrialRadarHit>?>(null, activeRadar, industrialCatalog) {
+        value = null
+        val radar = activeRadar
+        val catalog = industrialCatalog
+        if (radar != null && catalog != null) {
             value = withContext(Dispatchers.IO) {
-                runCatching { loadIndustrialCatalog(context) }.getOrNull()
+                findIndustrialRadarHits(radar, catalog) { zone -> loadIndustrialPlan(context, zone) }
             }
-            industrialLoadFailed = value == null
         }
     }
     var allLots by remember(industrialCatalog) { mutableStateOf<FeatureCollection?>(null) }
@@ -324,6 +334,10 @@ internal fun ExploreScreen(
                     flyToTunisia = false
                     recenterSearch = false
                     jump = null
+                },
+                onGlobeTap = {
+                    openingGlobe = false
+                    feedback(AppCue.Action)
                 },
                 selectedId = selectedId,
                 priceLabel = { discoveryNumber(it.priceTnd, language) },
@@ -556,7 +570,10 @@ internal fun ExploreScreen(
                     }
                 }
                 if (radarEditing) {
-                    RadarControls(radarRadius, !flyToTunisia && !cameraMoving && radarPreview != null && source != null, source != null,
+                    RadarControls(radarRadius,
+                        !flyToTunisia && !cameraMoving && radarPreview != null &&
+                            (source != null || industrialCatalog != null),
+                        source != null || industrialCatalog != null,
                         onRadius = { radius ->
                             if (radarRadius != radius) {
                                 radarRadius = radius
@@ -579,6 +596,7 @@ internal fun ExploreScreen(
                             showSalesLayer = true
                             committedZoom = zoom.toInt()
                             radarEditing = false
+                            radarResultsOpen = true
                         },
                         onClose = { radarEditing = false })
                 } else if (showSalesLayer && selected != null) {
@@ -587,7 +605,8 @@ internal fun ExploreScreen(
                     IndustrialMapCard(industrialZone, industrialPlan, industrialLot, language,
                         onOpen = { industrialSheet = "plan" },
                         onDismiss = { industrialZoneId = null; industrialLotId = null })
-                } else if (showSalesLayer && mapReady && !globeVisible && source == null) {
+                } else if (showSalesLayer && mapReady && !globeVisible &&
+                    source == null && industrialCatalog == null) {
                     Surface(shape = RoundedCornerShape(16.dp), color = Brand.Pearl) {
                         ResultMessage(s(R.string.v2_map_data_unavailable))
                     }
@@ -663,6 +682,27 @@ internal fun ExploreScreen(
             industrialLotId != null -> industrialLotId = null
             else -> industrialZoneId = null
         }
+    }
+    if (radarResultsOpen && activeRadar != null) {
+        RadarResultsSheet(
+            radar = activeRadar,
+            industrialHits = radarIndustrialHits,
+            industrialFailed = industrialLoadFailed,
+            listings = page.listings,
+            listingsLoading = listLoading,
+            listingsFailed = listFailed,
+            listingsAvailable = source != null,
+            language = language,
+            onIndustrialZone = { zoneId ->
+                radarResultsOpen = false
+                chooseIndustrialZone(zoneId)
+            },
+            onListing = { id ->
+                radarResultsOpen = false
+                detailId = id
+            },
+            onDismiss = { radarResultsOpen = false }
+        )
     }
     if (showFilters) {
         DiscoveryFilterSheet(filters, onDismiss = { showFilters = false }) {
