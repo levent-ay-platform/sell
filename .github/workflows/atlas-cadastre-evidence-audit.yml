@@ -13,6 +13,7 @@ on:
       - scripts/atlas_sqlite_snapshot.py
       - scripts/atlas_ocr_backlog.py
       - scripts/atlas_pdf_blob_inventory.py
+      - scripts/atlas_pdf_vector_candidates.py
       - scripts/tests/test_atlas_cadastre_evidence_audit.py
       - scripts/tests/test_atlas_geometry_evidence.py
       - scripts/tests/test_atlas_public_projection.py
@@ -22,6 +23,7 @@ on:
       - scripts/tests/test_atlas_sqlite_snapshot.py
       - scripts/tests/test_atlas_ocr_backlog.py
       - scripts/tests/test_atlas_pdf_blob_inventory.py
+      - scripts/tests/test_atlas_pdf_vector_candidates.py
       - .github/workflows/atlas-cadastre-evidence-audit.yml
   pull_request:
     paths:
@@ -33,6 +35,7 @@ on:
       - scripts/atlas_sqlite_snapshot.py
       - scripts/atlas_ocr_backlog.py
       - scripts/atlas_pdf_blob_inventory.py
+      - scripts/atlas_pdf_vector_candidates.py
       - scripts/tests/test_atlas_cadastre_evidence_audit.py
       - scripts/tests/test_atlas_geometry_evidence.py
       - scripts/tests/test_atlas_public_projection.py
@@ -42,6 +45,7 @@ on:
       - scripts/tests/test_atlas_sqlite_snapshot.py
       - scripts/tests/test_atlas_ocr_backlog.py
       - scripts/tests/test_atlas_pdf_blob_inventory.py
+      - scripts/tests/test_atlas_pdf_vector_candidates.py
       - .github/workflows/atlas-cadastre-evidence-audit.yml
 
 permissions:
@@ -56,6 +60,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+      - name: Install optional PDF vector parser for synthetic fixtures
+        run: python -m pip install 'pypdf>=6,<7'
       - name: Evidence inventory / georeferencing / public release gates
         run: |
           python -m unittest discover -s scripts/tests -p 'test_atlas_cadastre_evidence_audit.py' -v
@@ -67,5 +73,6 @@ jobs:
           python -m unittest discover -s scripts/tests -p 'test_atlas_sqlite_snapshot.py' -v
           python -m unittest discover -s scripts/tests -p 'test_atlas_ocr_backlog.py' -v
           python -m unittest discover -s scripts/tests -p 'test_atlas_pdf_blob_inventory.py' -v
+          python -m unittest discover -s scripts/tests -p 'test_atlas_pdf_vector_candidates.py' -v
       - name: Compile Atlas pipeline
         run: python -m py_compile scripts/atlas_cadastre_evidence_audit.py scripts/atlas_geometry_evidence.py scripts/atlas_public_projection.py scripts/atlas_amlak_private_bridge.py scripts/atlas_document_linkage.py scripts/atlas_sqlite_snapshot.py scripts/atlas_ocr_backlog.py scripts/atlas_pdf_blob_inventory.py scripts/tests/test_atlas_pdf_blob_inventory.py
