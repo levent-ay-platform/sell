@@ -101,6 +101,41 @@ The `atlas_sqlite_snapshot` command uses the actual SQLite Backup API through st
 
 **Current proof:** The CI workflow executes synthetic audit, document linkage, independent GCP QA, safe release, private Amlak bridge and a full offline CLI smoke that tests removal on revocation. Passing these tests proves the software gates, not actual official-plan provenance, archive-wide GIS coverage, device-level Android UX, or live source consistency. No source archive files were committed or exposed.
 
+## Live Mac metadata-only decision — 2026-11-24
+
+**Actual canonical LEVENT-MAC reads succeeded** through AI Agent CTR for read-only metadata and aggregate SQL. This is not based on synthetic CI. The operational `/Users/levent/Projects/tunisia-atlas/data/control/catalogue.sqlite` exists and currently has **208,605,184 bytes**; SQLite header byte pair `[2,2]` indicates WAL-format and **neither `-wal` nor `-shm` was present** during the preflight. Do not open/rewrite/repair that live database or claim it has a consistent Backup API copy yet. All figures below come from a separate **main-file-only private diagnostic** and may not reflect newer transactions.
+
+| Scope | Main-file-only observation |
+| --- | ---: |
+| PDF resource rows | 3,097 |
+| Distinct hashed PDFs | 2,829 |
+| PDF resource rows without SHA | 2 |
+| Indexed document rows | 822 |
+| Page rows | 21,831 |
+| Page rows with nonblank text | 13,481 |
+| Pages without usable text | 8,350 |
+| PDFs with nonblank indexed text | 635 |
+| Indexed documents `ocr_pending` | 207 |
+| Indexed documents `mixed_ocr_pending` | 101 |
+| Indexed documents `processing_failed` | 2 |
+
+Source-associated PDF digests (overlaps across different sources must not be summed as globally unique): OTC **137**, GeoPAU **764**, AFH **276**, OTHER **1,658**. Their missing document-index associations: OTC **79**, GeoPAU **0**, AFH **275**, OTHER **1,655**. Their `ocr_pending` or `mixed_ocr_pending` associations: OTC **48**, GeoPAU **260**, AFH **1**, OTHER **1**. In the OCR text index, two OTC-origin document hashes contained the word `cadastre`; **this is a keyword observation, not an official plan or title/parcel proof**. The historical initial nine cadastre-keyword document candidates also remain unverified.
+
+**Priority shift:** verify actual blob existence, signature and SHA before OCR; index the unindexed PDF resources by original hash without destructive deduplication; run bounded OCR for real missing-text pages; review the source/issuer provenance of the two OTC text hints and all Nabeul/Kélibia priority results; only then certify any particular `Plan de cadastre`. Do not automatically classify an AFH subdivision or GeoPAU planning PDF as official cadastral geometry.
+
+The new `scripts/atlas_ocr_backlog.py` stages a **private, metadata-only, source-aware queue** with `VERIFY_BLOB_AND_INDEX`, `OCR_REQUIRED_AFTER_BLOB_CHECK`, `REVIEW_INDEX_FAILURE` and `TEXT_AVAILABLE_REVIEW`. Each SHA retains all source-resource pointers; filename/locality hints affect ordering only. The tool does not open document blobs and does not assert an official plan, nor does it modify the live catalogue. Synthetic tests are in `scripts/tests/test_atlas_ocr_backlog.py`.
+
+Run only against a previously verified private stable database copy, never the live SQLite path:
+
+```sh
+python3 -m scripts.atlas_ocr_backlog \
+  --db /private/atlas-snapshots/owner-consistent.sqlite \
+  --snapshot-kind transactional_backup \
+  --output /private/atlas-reports/ocr-backlog-private.json
+```
+
+If the only available artifact is the historical mainfile-only copy, the explicit `--snapshot-kind mainfile_diagnostic` is required; resulting findings are diagnostic only. Do not upload private queue/hash/source IDs to public CI or Android bundles. An attempted additional Mac source-blob eligibility inspection was client-blocked **before dispatch**; it produced no verification evidence.
+
 ## Next gates
 
 1. Capture a transactionally consistent owner-authorized backup, verify SHA256, integrity, counts and rights.
