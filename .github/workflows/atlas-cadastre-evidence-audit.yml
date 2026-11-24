@@ -8,18 +8,22 @@ on:
       - scripts/atlas_cadastre_evidence_audit.py
       - scripts/atlas_geometry_evidence.py
       - scripts/atlas_public_projection.py
+      - scripts/atlas_amlak_private_bridge.py
       - scripts/tests/test_atlas_cadastre_evidence_audit.py
       - scripts/tests/test_atlas_geometry_evidence.py
       - scripts/tests/test_atlas_public_projection.py
+      - scripts/tests/test_atlas_amlak_private_bridge.py
       - .github/workflows/atlas-cadastre-evidence-audit.yml
   pull_request:
     paths:
       - scripts/atlas_cadastre_evidence_audit.py
       - scripts/atlas_geometry_evidence.py
       - scripts/atlas_public_projection.py
+      - scripts/atlas_amlak_private_bridge.py
       - scripts/tests/test_atlas_cadastre_evidence_audit.py
       - scripts/tests/test_atlas_geometry_evidence.py
       - scripts/tests/test_atlas_public_projection.py
+      - scripts/tests/test_atlas_amlak_private_bridge.py
       - .github/workflows/atlas-cadastre-evidence-audit.yml
 
 permissions:
@@ -39,5 +43,6 @@ jobs:
           python -m unittest discover -s scripts/tests -p 'test_atlas_cadastre_evidence_audit.py' -v
           python -m unittest discover -s scripts/tests -p 'test_atlas_geometry_evidence.py' -v
           python -m unittest discover -s scripts/tests -p 'test_atlas_public_projection.py' -v
+          python -m unittest discover -s scripts/tests -p 'test_atlas_amlak_private_bridge.py' -v
       - name: Compile Atlas pipeline
-        run: python -m py_compile scripts/atlas_cadastre_evidence_audit.py scripts/atlas_geometry_evidence.py scripts/atlas_public_projection.py
+        run: python -m py_compile scripts/atlas_cadastre_evidence_audit.py scripts/atlas_geometry_evidence.py scripts/atlas_public_projection.py scripts/atlas_amlak_private_bridge.py
