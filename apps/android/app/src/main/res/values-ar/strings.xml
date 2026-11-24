@@ -477,4 +477,6 @@
     <string name="owner_share_parts">أجزاء صاحب الحق المطابق</string>
     <string name="owner_share_percentage">نسبة الحصة الحسابية</string>
     <string name="owner_share_warning">مساحة الرسم والحصة لا تثبتان حدود قطعة مفرزة أو مساحة البيع. راجع الحقوق المطبوعة.</string>
+    <string name="owner_estate_area_conflict">قراءات مساحة الرسم متعارضة. راجع الشهادة؛ لم تُعتمد أي مساحة.</string>
+    <string name="owner_estate_fields_conflict">توجد قراءات عقارية متعارضة. راجع الشهادة.</string>
 </resources>

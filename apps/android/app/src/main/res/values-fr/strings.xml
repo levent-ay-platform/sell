@@ -468,4 +468,6 @@
     <string name="owner_share_parts">Parts du titulaire correspondant</string>
     <string name="owner_share_percentage">Pourcentage calculé de la quote-part</string>
     <string name="owner_share_warning">La superficie du titre et la quote-part ne prouvent ni une parcelle privative ni une superficie à vendre. Vérifier les droits inscrits.</string>
+    <string name="owner_estate_area_conflict">Les lectures de la superficie divergent. Vérifier le certificat ; aucune superficie retenue.</string>
+    <string name="owner_estate_fields_conflict">Certaines lectures foncières divergent. Vérifier le certificat.</string>
 </resources>

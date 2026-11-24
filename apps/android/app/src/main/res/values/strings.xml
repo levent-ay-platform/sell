@@ -477,4 +477,6 @@
     <string name="owner_share_parts">Matched owner rights parts</string>
     <string name="owner_share_percentage">Calculated share percentage</string>
     <string name="owner_share_warning">The estate area and a share do not establish an exclusive plot or sale area. Review the printed rights.</string>
+    <string name="owner_estate_area_conflict">Estate area readings disagree. Review the certificate; no area was selected.</string>
+    <string name="owner_estate_fields_conflict">Some property readings disagree. Review the certificate.</string>
 </resources>

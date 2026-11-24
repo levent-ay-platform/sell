@@ -45,6 +45,11 @@ internal fun OwnerDocumentReadout(report:CertificateIdentityReview,onDateRefresh
             }
             Text(s(R.string.owner_share_warning),fontSize=12.sp,color=Brand.Muted)
         }
+        if("CPF_PROPERTY_AREA_CONFLICT" in report.reasons){
+            Text(s(R.string.owner_estate_area_conflict),fontSize=12.sp,color=MaterialTheme.colorScheme.error)
+        }else if("CPF_PROPERTY_FIELDS_CONFLICT" in report.reasons){
+            Text(s(R.string.owner_estate_fields_conflict),fontSize=12.sp,color=MaterialTheme.colorScheme.error)
+        }
         ownerExtractedValues(report.detectedKind,report.sourceFacts).forEach{field->
             HorizontalDivider()
             Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(10.dp)){
