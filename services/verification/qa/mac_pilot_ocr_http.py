@@ -247,6 +247,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.send_response(status)
         self.send_header("X-Request-Id",secrets.token_hex(12))
         self.send_header("X-Malak-Source-Revision",os.environ.get("MALAK_SOURCE_SHA","development"))
+        if self.path == "/healthz":
+            self.send_header("X-Malak-Vision-Ready","1" if getattr(self.server.pilot,"vision_worker_ready",False) else "0")
+            self.send_header("X-Malak-Dual-Reader","vision-consensus-v1")
         self.send_header("Content-Type","application/json; charset=utf-8")
         self.send_header("Content-Length",str(len(raw)))
         self.send_header("Cache-Control","no-store, max-age=0")
@@ -260,9 +263,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if getattr(self.server,"workflow",None) and self.server.workflow.dispatch(self,"GET"):return
         if self.path == "/healthz":
             self.result(200,{"ok":True,"engine":"arabic-v5",
-                             "modelReady":True,"pilotQa":True,
-                              "visionWorkerReady":getattr(self.server.pilot,'vision_worker_ready',False),
-                              "dualReaderRevision":"vision-consensus-v1"})
+                             "modelReady":True,"pilotQa":True})
         else:
             self.result(404,{"ok":False})
 

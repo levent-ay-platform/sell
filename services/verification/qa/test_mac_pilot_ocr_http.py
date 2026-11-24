@@ -114,6 +114,15 @@ class Contract(unittest.TestCase):
         self.assertEqual(self.request("/internal/v1/owner/cases",
             b'{"test":true}',{"Content-Type":"application/json"})[0],404)
 
+    def test_health_reports_native_readiness_without_changing_body(self):
+        conn=HTTPConnection("127.0.0.1",self.server.server_port,timeout=5)
+        try:
+            conn.request("GET","/healthz");r=conn.getresponse()
+            self.assertEqual(r.getheader("X-Malak-Vision-Ready"),"0")
+            self.assertEqual(r.getheader("X-Malak-Dual-Reader"),"vision-consensus-v1")
+            r.read()
+        finally:conn.close()
+
     def test_health_is_private_ready_status_only(self):
         status,payload=self.request("/healthz",method="GET")
         self.assertEqual(status,200)
