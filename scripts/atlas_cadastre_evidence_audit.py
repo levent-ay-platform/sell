@@ -49,6 +49,11 @@ FAMILY_PATTERNS = {
         r"plan\s+d.implantation|مخطط\s+طبوغراف",
         re.IGNORECASE,
     ),
+    "TRANSFER_DOCUMENT_HINT": re.compile(
+        r"carte\\s+de\\s+mutation|acte\\s+de\\s+vente|"
+        r"بطاقة\\s+نقل|عقد\\s+بيع",
+        re.IGNORECASE,
+    ),
     "OWNERSHIP_DOCUMENT_HINT": re.compile(
         r"certificat\s+(?:de\s+)?propri[eé]t[eé]|attestation\s+de\s+propri[eé]t[eé]|"
         r"شهادة\s+(?:اشتراك\s+)?ملكية|عقد\s+بيع",
@@ -129,6 +134,8 @@ def audit_snapshot(db: Path, *, snapshot_kind: str) -> dict:
             if sha is not None
         }
         page_hits: dict[str, set[int]] = defaultdict(set)
+        pdf_hashes_with_pages: set[str] = set()
+        pdf_hashes_with_ocr_text: set[str] = set()
         title_refs: dict[str, set[str]] = defaultdict(set)
         parcel_refs: dict[str, set[str]] = defaultdict(set)
         pages_scanned = 0
@@ -137,8 +144,12 @@ def audit_snapshot(db: Path, *, snapshot_kind: str) -> dict:
         ):
             pages_scanned += 1
             key = str(sha)
-            if key not in resources_per_hash or not ocr:
+            if key not in resources_per_hash:
                 continue
+            pdf_hashes_with_pages.add(key)
+            if not ocr or not str(ocr).strip():
+                continue
+            pdf_hashes_with_ocr_text.add(key)
             if CADASTRAL_WORDS.search(ocr):
                 if page is not None:
                     page_hits[key].add(int(page))
@@ -188,8 +199,29 @@ def audit_snapshot(db: Path, *, snapshot_kind: str) -> dict:
             for key in review_keys
         ]
 
+        unknown_keys = sorted(set(resources_per_hash) - set(review_keys))
+        # The unknown set remains explicitly addressable in the private report,
+        # including PDFs with no indexed document and PDFs without extracted text.
+        unresolved_pdf_documents = [
+            {
+                "document_sha256": key,
+                "resource_rows": resources_per_hash[key],
+                "indexed_document_present": key in indexed_docs,
+                "page_rows_present": key in pdf_hashes_with_pages,
+                "ocr_text_present": key in pdf_hashes_with_ocr_text,
+                "status": "UNCLASSIFIED_RETAINED",
+                "reason": (
+                    "NO_OCR_TEXT" if key not in pdf_hashes_with_ocr_text
+                    else "NO_RECOGNIZED_HINTS"
+                ),
+            }
+            for key in unknown_keys
+        ]
+        if len(review_queue) + len(unresolved_pdf_documents) != len(resources_per_hash):
+            raise AssertionError("Every hashed PDF must be accounted for once")
+
         report = {
-            "schema_version": 1,
+            "schema_version": 2,
             "audit_kind": "CADASTRAL_CANDIDATES_ONLY",
             "snapshot_kind": snapshot_kind,
             "live_consistent": False if snapshot_kind == "mainfile_diagnostic" else None,
@@ -203,6 +235,11 @@ def audit_snapshot(db: Path, *, snapshot_kind: str) -> dict:
                     "SELECT COUNT(*) FROM documents"
                 ).fetchone()[0],
                 "ocr_page_rows_scanned": pages_scanned,
+                "pdf_hashes_with_page_rows": len(pdf_hashes_with_pages),
+                "pdf_hashes_with_ocr_text": len(pdf_hashes_with_ocr_text),
+                "pdf_hashes_missing_document_index": sum(
+                    key not in indexed_docs for key in resources_per_hash
+                ),
                 "pdf_resource_rows_with_indexed_document": sum(
                     count for key, count in resources_per_hash.items()
                     if key in indexed_docs
@@ -214,10 +251,14 @@ def audit_snapshot(db: Path, *, snapshot_kind: str) -> dict:
                     bool(title_refs.get(key) or parcel_refs.get(key))
                     for key in resources_per_hash
                 ),
-                "pdf_documents_untriaged_unknown": len(resources_per_hash) - len(review_queue),
+                "pdf_documents_untriaged_unknown": len(unresolved_pdf_documents),
+                "pdf_documents_unknown_without_ocr_text": sum(
+                    key not in pdf_hashes_with_ocr_text for key in unknown_keys
+                ),
             },
             "candidates": candidates,
             "review_queue": review_queue,
+            "unresolved_pdf_documents": unresolved_pdf_documents,
             "review_queue_semantics": "HINTS_ONLY; unknown remains unknown; no official status implied",
             "verified_official_cadastral_plans": None,
             "verified_georeferenced_parcels": None,
@@ -276,6 +317,11 @@ def main() -> None:
         "snapshot_kind": args.snapshot_kind,
         "candidate_documents": result["counts"]["cadastral_keyword_candidate_documents"],
         "triage_review_documents": result["counts"]["triage_review_documents"],
+        "unclassified_retained": result["counts"]["pdf_documents_untriaged_unknown"],
+        "pdf_hashes_without_ocr_text": (
+            result["counts"]["distinct_pdf_sha256"]
+            - result["counts"]["pdf_hashes_with_ocr_text"]
+        ),
         "official_verified": "UNKNOWN",
         "live_consistent": result["live_consistent"],
     }))
