@@ -6,6 +6,9 @@ on:
     paths:
       - scripts/atlas_archive_deep_review.py
       - scripts/atlas_source_registry.py
+      - scripts/atlas_spatial_context.py
+      - scripts/tests/test_atlas_spatial_context.py
+      - scripts/requirements-atlas-spatial.txt
       - scripts/tests/test_atlas_source_registry.py
       - scripts/atlas_pdf_blob_inventory.py
       - scripts/tests/test_atlas_archive_deep_review.py
@@ -21,6 +24,6 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - run: python -m pip install -r scripts/requirements-atlas-review.txt
+      - run: python -m pip install -r scripts/requirements-atlas-review.txt -r scripts/requirements-atlas-spatial.txt
       - run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends poppler-utils tesseract-ocr tesseract-ocr-ara tesseract-ocr-fra fonts-dejavu-core
       - run: python -m unittest discover -s scripts/tests -p 'test_atlas_*.py' -v
