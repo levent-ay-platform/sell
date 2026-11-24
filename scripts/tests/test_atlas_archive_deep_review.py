@@ -56,3 +56,15 @@ class DeepArchiveTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError,"SHA_OR_HEADER"):
                 review_pdf(pdf,"0"*64,base/"wrong.json")
             self.assertFalse((base/"wrong.json").exists())
+
+    def test_native_window_page_separators_and_fallback(self):
+        from unittest.mock import patch
+        from scripts.atlas_archive_deep_review import native_window
+        with patch("scripts.atlas_archive_deep_review._command",return_value=("First\f\fThird\f","COMPLETED")) as cmd:
+            self.assertEqual(native_window(Path("x.pdf"),Path("."),1,3),
+                             [("First","COMPLETED"),("","COMPLETED"),("Third","COMPLETED")])
+            self.assertEqual(cmd.call_count,1)
+        with patch("scripts.atlas_archive_deep_review._command",side_effect=[
+            ("no boundaries","COMPLETED"),("One","COMPLETED"),(None,"TIMEOUT")]) as cmd:
+            self.assertEqual(native_window(Path("x.pdf"),Path("."),1,2),[("One","COMPLETED"),(None,"TIMEOUT")])
+            self.assertEqual(cmd.call_count,3)

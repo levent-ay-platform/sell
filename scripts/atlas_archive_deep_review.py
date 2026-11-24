@@ -96,6 +96,20 @@ def _command(args, work, timeout=45):
         out.unlink(missing_ok=True)
 
 
+def native_window(staged,work,start,end):
+    # One Poppler invocation for the window, retaining explicit page separators.
+    # If separators or output limits are ambiguous, fall back to individual pages.
+    args=["pdftotext","-f",str(start),"-l",str(end),"-layout","-enc","UTF-8",str(staged),"-"]
+    text,status=_command(args,work,timeout=90)
+    if status=="COMPLETED" and text is not None:
+        parts=text.split("\f")
+        if len(parts)==end-start+2 and not parts[-1].strip():
+            return [(part,"COMPLETED") for part in parts[:-1]]
+    return [_command(["pdftotext","-f",str(page),"-l",str(page),
+                    "-layout","-enc","UTF-8",str(staged),"-"],work)
+            for page in range(start,end+1)]
+
+
 def review_pdf(source, expected_sha, output, *, start_page=1, max_pages=20, raster=False, adaptive_raster=False):
     source, output = Path(source), Path(output)
     if not re.fullmatch("[a-f0-9]{64}", expected_sha):
@@ -140,9 +154,8 @@ def review_pdf(source, expected_sha, output, *, start_page=1, max_pages=20, rast
                 raise ValueError("PAGE_START_OUT_OF_RANGE")
             end = min(count, start_page + max_pages - 1)
             pages = []
-            for page in range(start_page, end + 1):
-                native, status = _command(["pdftotext", "-f", str(page), "-l", str(page),
-                    "-layout", "-enc", "UTF-8", str(staged), "-"], work)
+            native_results=native_window(staged,work,start_page,end)
+            for page,(native,status) in zip(range(start_page,end+1),native_results):
                 observations = [{"method": "native_layout", "status": status,
                                  "evidence": extract_candidates(native) if native is not None else None}]
                 if raster and (not adaptive_raster or native is None or not native.strip()):

@@ -173,20 +173,29 @@ def review_document(row,roots,folder,config,remaining):
             break
         else:
             result=None
+            failure_reasons=set()
             for loc in row["locations_private"]:
                 try:
                     src=_safe_relative(roots[loc["root_number"]-1],loc["relative_path_private"])
                     result=review_pdf(src,sha,path,start_page=start,max_pages=limit,
                                       raster=raster,adaptive_raster=adaptive)
                     break
-                except (OSError,ValueError):
-                    # If a committed window exists it must be validated, not replaced.
+                except (OSError,ValueError) as exc:
+                    # Only known non-sensitive reason codes leave the worker.
+                    code=str(exc)
+                    allowed={"ARCHIVE_PDF_SIZE_LIMIT","PDF_SHA_OR_HEADER_MISMATCH",
+                        "PDF_PAGE_COUNT_UNAVAILABLE_COMMAND_FAILED","PDF_PAGE_COUNT_UNAVAILABLE_TIMEOUT",
+                        "PDF_PAGE_COUNT_UNAVAILABLE_COMPLETED","PDF_PAGE_COUNT_UNAVAILABLE_OUTPUT_LIMIT",
+                        "REQUIRED_TOOLS_MISSING","PAGE_START_OUT_OF_RANGE","ARCHIVE_FILE_UNAVAILABLE",
+                        "SYMLINK_REVIEW_REQUIRED"}
+                    failure_reasons.add(code if code in allowed else "OTHER_WORKER_OR_FILE_ERROR")
                     if path.exists() or path.is_symlink():
                         raise
             new+=1
             if result is None:
                 failure={"kind":"PRIVATE_ATLAS_DEEP_FAILURE","document_sha256_private":sha,
-                         "page_start":start,"status":"ALL_APPROVED_COPIES_REJECTED_OR_UNREADABLE"}
+                         "page_start":start,"status":"ALL_APPROVED_COPIES_REJECTED_OR_UNREADABLE",
+                         "reason_codes":sorted(failure_reasons)}
                 write_private_json(failpath,failure)
                 observed_files.add(failpath.name)
                 break
@@ -212,6 +221,7 @@ def review_document(row,roots,folder,config,remaining):
         state="PENDING" if not windows else "PARTIAL"
     return windows,{"state":state,"pages_attempted":start-1,"document_pages":total,
                     "observation_failures":failures,"new_windows":new,
+                    "failure_reason_codes":failure.get("reason_codes",["UNSPECIFIED_LEGACY_FAILURE"]) if failure else [],
                     "next_page":None if total is not None and start>total else start}
 
 
@@ -281,6 +291,35 @@ def merge_index(base,audit,window_map,states,scopes,sources,plan_sha):
     return base
 
 
+def diagnostic_cohorts(plan,window_map,states,metadata):
+    groups={}
+    for row in plan["rows_private"]:
+        sha=row["document_sha256_private"]
+        windows=window_map.get(sha,[])
+        state=states[sha]
+        obs=[o for w in windows for p in w["pages_private"] for o in p["observations"]]
+        evidence=[o["evidence"] for o in obs if o["status"]=="COMPLETED" and isinstance(o.get("evidence"),dict)]
+        native=[o["evidence"] for o in obs if o["method"]=="native_layout" and o["status"]=="COMPLETED" and isinstance(o.get("evidence"),dict)]
+        pages=state.get("document_pages")
+        flags={"documents":1,"reviewed_documents":bool(windows),
+            "with_completed_observation":bool(evidence),"with_native_text":any(e["text_present"] for e in native),
+            "with_title_evidence":any(e["title_candidates"] for e in evidence),
+            "with_parcel_evidence":any(e["parcel_candidates"] for e in evidence),
+            "with_cadastral_hint":any(e["cadastral_term_present"] for e in evidence),
+            "observed_over_8_pages":type(pages) is int and pages>8,
+            "observed_over_32_pages":type(pages) is int and pages>32,
+            "pages_attempted":state["pages_attempted"],
+            "native_pages_without_text":sum(not e["text_present"] for e in native),
+            "native_pages_with_text":sum(e["text_present"] for e in native)}
+        labels=["ALL","V1_"+row["first_pass_state"]]+["SOURCE_"+v for v in metadata[sha]["origins"]]
+        for label in labels:
+            g=groups.setdefault(label,{"metrics":Counter(),"states":Counter(),"failure_reasons_nonexclusive":Counter()})
+            g["metrics"].update(flags)
+            g["states"][state["state"]]+=1
+            g["failure_reasons_nonexclusive"].update(state.get("failure_reason_codes",[]))
+    return groups
+
+
 def run_full(run,roots,output,*,raster_mode="adaptive",max_pages=500,max_windows=0,
              scopes_path=None,sources_path=None,max_scan_files=20000,max_scan_bytes=12*1024**3,max_probe_files=100000):
     if raster_mode not in ("adaptive","all","none") or not 1<=max_pages<=10000 or max_windows<0:
@@ -339,13 +378,17 @@ def run_full(run,roots,output,*,raster_mode="adaptive",max_pages=500,max_windows
         index_name=f"property-index-combined-{stamp}.json"
         write_private_json(output/index_name,index)
         pending=sum(s["state"] in ("PENDING","PARTIAL") for s in states.values())
+        backlog,_=private_json(dirs[0]/"backlog.json")
+        metadata={_sha(r["document_sha256_private"].lower()):r for r in backlog["backlog_private"]+backlog["text_ready_private"]}
+        if set(metadata)!=set(docs):raise ValueError("BACKLOG_DIAGNOSTIC_BINDING_MISMATCH")
+        cohorts=diagnostic_cohorts(plan,window_map,states,metadata)
         report={"kind":"PRIVATE_ATLAS_FULL_REVIEW_SUMMARY","schema_version":1,
             "counts":{**plan["counts"],"review_states":dict(Counter(s["state"] for s in states.values())),
                      "page_attempts":sum(s["pages_attempted"] for s in states.values()),
                      "observation_failures":sum(s.get("observation_failures",0) for s in states.values()),
                      "new_windows_this_invocation":used,"pending_available_documents":pending,
                      "candidate_document_links":index["counts"]["documents_with_candidate_links"]},
-            "comparison":index["comparison_private"],"available_queue_attempted":pending==0,
+            "comparison":index["comparison_private"],"diagnostic_cohorts_nonexclusive":cohorts,"available_queue_attempted":pending==0,
             "combined_index_name_private":index_name,"official_plan_count":None,"public_export_permitted":False}
         write_private_json(output/f"summary-{stamp}.json",report)
         return report
@@ -370,7 +413,8 @@ def main():
                scopes_path=a.scopes,sources_path=a.sources,max_scan_files=a.max_scan_files,
                max_scan_bytes=a.max_scan_bytes,max_probe_files=a.max_probe_files)
     print(json.dumps({"private_review_summary_written":True,"counts":r["counts"],
-                      "comparison":r["comparison"],"available_queue_attempted":r["available_queue_attempted"],
+                      "comparison":r["comparison"],"diagnostic_cohorts_nonexclusive":r["diagnostic_cohorts_nonexclusive"],
+                      "available_queue_attempted":r["available_queue_attempted"],
                       "official_plans_verified":"UNKNOWN"}))
 
 
