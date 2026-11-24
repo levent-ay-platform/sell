@@ -50,8 +50,8 @@ FAMILY_PATTERNS = {
         re.IGNORECASE,
     ),
     "TRANSFER_DOCUMENT_HINT": re.compile(
-        r"carte\\s+de\\s+mutation|acte\\s+de\\s+vente|"
-        r"بطاقة\\s+نقل|عقد\\s+بيع",
+        r"carte\s+de\s+mutation|acte\s+de\s+vente|"
+        r"بطاقة\s+نقل|عقد\s+بيع",
         re.IGNORECASE,
     ),
     "OWNERSHIP_DOCUMENT_HINT": re.compile(
