@@ -89,4 +89,12 @@
     <string name="intake_boundary_remove_local">حذف الرسم المحلي</string>
     <string name="intake_boundary_pilot_not_sent">الرسم التجريبي لن يُرسل مع هذا الإعلان. تبقى المساحة المختارة ضمن التفاصيل.</string>
     <string name="intake_boundary_draft_notice">الرسم مسودة خاصة وليس حدوداً رسمية.</string>
+    <string name="intake_georef_title">ربط المخطط بالخريطة</string>
+    <string name="intake_georef_instruction">طابق الزوايا المرقمة مع نفس النقاط على الخريطة؛ النقطة الرابعة للتحقق.</string>
+    <string name="intake_georef_progress">نقاط الربط: %1$d من 4</string>
+    <string name="intake_georef_unavailable">المخطط يحتاج أربعة زوايا متباعدة؛ استخدم الرسم اليدوي.</string>
+    <string name="intake_georef_failed">الربط غير متسق. راجع النقاط الأربع.</string>
+    <string name="intake_georef_residual">فرق نقطة التحقق: %1$s م</string>
+    <string name="intake_georef_accept">استخدام الحدود للمراجعة</string>
+    <string name="intake_georef_disclaimer">ربط يدوي اعتماداً على نقاطك؛ ليس رفعاً مساحياً رسمياً ولا إثبات ملكية.</string>
 </resources>

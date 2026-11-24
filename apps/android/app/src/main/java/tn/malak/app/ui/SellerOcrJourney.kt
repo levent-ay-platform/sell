@@ -59,6 +59,8 @@ import tn.malak.app.ui.parcel.OwnerMapBoundaryEditor
 import tn.malak.app.ui.parcel.measureOwnerMap
 import tn.malak.app.ui.parcel.OwnerBoundaryDraftStore
 import tn.malak.app.ui.parcel.saveOwnerMapBoundary
+import tn.malak.app.ui.parcel.PlanMapControlEditor
+import tn.malak.app.ui.parcel.planControlIndices
 import tn.malak.app.ui.parcel.selectedFact
 import java.util.Locale
 import java.util.UUID
@@ -181,6 +183,7 @@ internal fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmiss
     var showListingExtras by rememberSaveable(draftFile){mutableStateOf(false)}
     var chooseListingPoint by rememberSaveable(draftFile){mutableStateOf(false)}
     var chooseMapBoundary by remember(draftFile){mutableStateOf(false)}
+    var georefDraft by remember(draftFile){mutableStateOf<OwnerPlanDraft?>(null)}
     val boundaryStore=remember(draftFile,readingForListing,resubmission?.optString("id")){
         if(draftScope.isNullOrBlank()||readingForListing)null
         else OwnerBoundaryDraftStore(context.applicationContext,draftFile+":"+(resubmission?.optString("id")?:"new"))
@@ -811,23 +814,27 @@ internal fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmiss
             region=suggestion;lastAutoRegion=suggestion
         }
     }
+    val keepMapDrawing:(List<DiscoveryPoint>)->Unit={points->
+        mapBoundary=points;chooseMapBoundary=false;georefDraft=null
+        boundaryStore?.let{store->
+            boundaryLocalBusy=true
+            scope.launch{
+                try{
+                    withContext(Dispatchers.IO){store.save(points)}
+                    boundaryLocalStatus=R.string.intake_boundary_saved_local
+                }catch(cancel:CancellationException){throw cancel}
+                catch(_:Exception){boundaryLocalStatus=R.string.intake_boundary_storage_error}
+                finally{boundaryLocalBusy=false}
+            }
+        }
+    }
     if(chooseMapBoundary){
-        OwnerMapBoundaryEditor(SmartListingAssist.coordinates(listingLatitude,listingLongitude)
-            ?.let{DiscoveryPoint(it.first,it.second)},mapBoundary,
-            onDismiss={chooseMapBoundary=false},onSave={points->
-                mapBoundary=points;chooseMapBoundary=false
-                boundaryStore?.let{store->
-                    boundaryLocalBusy=true
-                    scope.launch{
-                        try{
-                            withContext(Dispatchers.IO){store.save(points)}
-                            boundaryLocalStatus=R.string.intake_boundary_saved_local
-                        }catch(cancel:CancellationException){throw cancel}
-                        catch(_:Exception){boundaryLocalStatus=R.string.intake_boundary_storage_error}
-                        finally{boundaryLocalBusy=false}
-                    }
-                }
-            })
+        OwnerMapBoundaryEditor(locationPoint,mapBoundary,
+            onDismiss={chooseMapBoundary=false},onSave=keepMapDrawing)
+    }
+    georefDraft?.let{draft->
+        PlanMapControlEditor(draft,locationPoint?:mapBoundary.firstOrNull(),
+            onDismiss={georefDraft=null},onAccept=keepMapDrawing)
     }
     if(chooseListingPoint){
         DirectLocationPicker(
@@ -1092,6 +1099,11 @@ internal fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmiss
                                 Text(s(R.string.intake_open_plan))
                             }
                             if(draft!=null){
+                                if(planControlIndices(draft.vertices).size==4)OutlinedButton(onClick={georefDraft=draft},
+                                    enabled=boundaryLocalReady&&!boundaryLocalBusy&&!boundarySendBusy,modifier=Modifier.fillMaxWidth()){
+                                    Icon(Icons.Outlined.Map,null,Modifier.size(18.dp));Spacer(Modifier.width(6.dp))
+                                    Text(s(R.string.intake_georef_title))
+                                }
                                 Text(s(R.string.parcel_editor_vertices,(draft.vertices.size-1).coerceAtLeast(0)),color=Brand.Muted)
                                 draft.statedAreaM2?.let{Text(it+" m²",fontWeight=FontWeight.SemiBold)}
                                 if(draft.edges.isNotEmpty())Text(draft.edges.joinToString(" · "){"${it.ordinal}: ${it.lengthM} m"},fontSize=12.sp,color=Brand.Muted)

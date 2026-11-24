@@ -89,4 +89,12 @@
     <string name="intake_boundary_remove_local">Supprimer le tracé local</string>
     <string name="intake_boundary_pilot_not_sent">Le tracé pilote ne sera pas envoyé avec cette annonce. La surface choisie reste dans les détails.</string>
     <string name="intake_boundary_draft_notice">Tracé privé, pas une limite officielle.</string>
+    <string name="intake_georef_title">Relier le plan à la carte</string>
+    <string name="intake_georef_instruction">Associez les sommets numérotés aux mêmes points sur la carte ; le quatrième sert au contrôle.</string>
+    <string name="intake_georef_progress">Points : %1$d sur 4</string>
+    <string name="intake_georef_unavailable">Quatre sommets espacés nécessaires ; utilisez le tracé manuel.</string>
+    <string name="intake_georef_failed">Correspondance incohérente. Vérifiez les quatre points.</string>
+    <string name="intake_georef_residual">Écart du point de contrôle : %1$s m</string>
+    <string name="intake_georef_accept">Utiliser les limites pour examen</string>
+    <string name="intake_georef_disclaimer">Placement manuel à partir de vos points ; ni levé officiel ni preuve de propriété.</string>
 </resources>

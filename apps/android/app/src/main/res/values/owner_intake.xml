@@ -89,4 +89,12 @@
     <string name="intake_boundary_remove_local">Remove local drawing</string>
     <string name="intake_boundary_pilot_not_sent">Pilot drawing will not be submitted with this listing. Chosen area stays in the details.</string>
     <string name="intake_boundary_draft_notice">Private draft drawing, not an official boundary.</string>
+    <string name="intake_georef_title">Align plan to map</string>
+    <string name="intake_georef_instruction">Match the numbered corners to the same map points; the fourth is a check.</string>
+    <string name="intake_georef_progress">Control points: %1$d of 4</string>
+    <string name="intake_georef_unavailable">Four well-spaced corners required; use manual drawing.</string>
+    <string name="intake_georef_failed">Control points are inconsistent. Review all four.</string>
+    <string name="intake_georef_residual">Check-point difference: %1$s m</string>
+    <string name="intake_georef_accept">Use boundary for review</string>
+    <string name="intake_georef_disclaimer">Manual placement from your points; not an official survey or ownership proof.</string>
 </resources>
