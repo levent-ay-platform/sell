@@ -59,6 +59,9 @@ class CadastreEvidenceAuditTest(unittest.TestCase):
         self.assertEqual(report["counts"]["pdf_resource_rows_without_sha"], 1)
         self.assertEqual(report["counts"]["pdf_resource_rows_with_indexed_document"], 3)
         self.assertEqual(report["counts"]["cadastral_keyword_candidate_documents"], 1)
+        self.assertEqual(report["counts"]["triage_review_documents"], 2)
+        self.assertEqual(report["counts"]["pdf_documents_with_family_hints"], 1)
+        self.assertEqual(report["counts"]["pdf_documents_untriaged_unknown"], 0)
         candidate = report["candidates"][0]
         self.assertEqual(candidate["document_sha256"], "shared")
         self.assertEqual(candidate["resource_rows"], 2)
@@ -71,6 +74,43 @@ class CadastreEvidenceAuditTest(unittest.TestCase):
         self.assertEqual(original_hash, hashlib.sha256(self.db.read_bytes()).hexdigest())
         self.assertNotIn("source secret", str(report))
         self.assertNotIn("Plan de lotissement", str(report))
+
+    def test_broad_triage_keeps_reference_only_and_unknown_pdfs(self):
+        connection = sqlite3.connect(self.db)
+        connection.executescript(
+            """
+            INSERT INTO resources VALUES
+                ('f','Report not indexed.pdf','.pdf','unresolved'),
+                ('g','Untitled private evidence.pdf','.pdf','refs'),
+                ('h','Plan de masse.pdf','.pdf','survey'),
+                ('i','Certificat de propriete.pdf','.pdf','certificate');
+            INSERT INTO documents VALUES
+                ('refs','indexed',1),
+                ('survey','indexed',0);
+            INSERT INTO pages VALUES
+                ('refs',1,'Titre Foncier n° 0000347. Lot 0002.');
+            """
+        )
+        connection.commit()
+        connection.close()
+
+        report = audit_snapshot(self.db, snapshot_kind="mainfile_diagnostic")
+        self.assertEqual(report["counts"]["distinct_pdf_sha256"], 6)
+        self.assertEqual(report["counts"]["cadastral_keyword_candidate_documents"], 1)
+        self.assertEqual(report["counts"]["triage_review_documents"], 5)
+        self.assertEqual(report["counts"]["pdf_documents_untriaged_unknown"], 1)
+        queue = {item["document_sha256"]: item for item in report["review_queue"]}
+        self.assertNotIn("unresolved", queue)
+        self.assertIn("refs", queue)
+        self.assertTrue(queue["refs"]["has_title_reference_candidate"])
+        self.assertTrue(queue["refs"]["has_parcel_reference_candidate"])
+        self.assertFalse(queue["refs"]["cadastral_term_present"])
+        self.assertIn("TOPOGRAPHIC_PLAN_HINT", queue["survey"]["family_hints"])
+        self.assertIn("OWNERSHIP_DOCUMENT_HINT", queue["certificate"]["family_hints"])
+        self.assertEqual(queue["refs"]["status"], "NEEDS_PROVENANCE_REVIEW")
+        self.assertIsNone(report["verified_official_cadastral_plans"])
+        self.assertNotIn("Untitled private evidence", str(report))
+        self.assertNotIn("Titre Foncier n°", str(report))
 
     def test_private_output_and_no_overwrite(self):
         output = self.root / "private" / "report.json"
