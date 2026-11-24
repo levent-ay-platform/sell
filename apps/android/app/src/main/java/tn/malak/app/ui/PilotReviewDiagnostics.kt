@@ -1,6 +1,6 @@
 package tn.malak.app.ui
 
-internal data class PilotReviewDiagnostics(val reasons:List<String>,val expectedPageCount:Int?)
+internal data class PilotReviewDiagnostics(val reasons:List<String>,val expectedPageCount:Int?,val missingPages:List<Int>)
 
 /** Validate untrusted optional pilot diagnostics; keep old servers compatible. */
 internal fun pilotReviewDiagnostics(rawReasons:List<String>?,missingPages:List<Int>?,
@@ -11,5 +11,5 @@ internal fun pilotReviewDiagnostics(rawReasons:List<String>?,missingPages:List<I
     val missing=missingPages?:emptyList()
     require(missing.size<=8&&missing.all{it in 1..8}&&missing.distinct().size==missing.size)
     return PilotReviewDiagnostics(reasons.distinct(),
-        missing.maxOrNull()?.let{maxOf(it,receivedPages)})
+        missing.maxOrNull()?.let{maxOf(it,receivedPages)},missing.sorted())
 }

@@ -438,12 +438,21 @@ CREATE TABLE IF NOT EXISTS pilot_parcel_links(
                 raise WorkflowError(422,'LAND_REVIEW_REQUIRED')
             report = json.loads(db.execute('SELECT report FROM reviews WHERE id=?',(review,)).fetchone()['report'])
             facts = report.get('parcelPlanFacts',[]) + report.get('propertyFacts',[])
+            conflicts = report.get('propertyConflicts',[])
             def unique_reference(keys):
-                if any(f.get('key') in keys and f.get('status')=='CONFLICT' for f in facts):
+                if any(f.get('key') in keys for f in conflicts):
                     raise WorkflowError(422,'PARCEL_REFERENCES_REQUIRED')
-                values = {f['value'].strip().upper() for f in facts if f.get('key') in keys
-                          and f.get('status')!='CONFLICT' and isinstance(f.get('value'),str) and f['value'].strip()}
-                if len(values) != 1:
+                selected = [f for f in facts if f.get('key') in keys]
+                if any(f.get('status')=='CONFLICT' for f in selected):
+                    raise WorkflowError(422,'PARCEL_REFERENCES_REQUIRED')
+                # Any competing observation blocks the request; at least one
+                # explicit candidate is needed. Old status-less readings are
+                # not evidence of a validated reference.
+                values = {f['value'].strip().upper() for f in selected
+                          if isinstance(f.get('value'),str) and f['value'].strip()}
+                confirmed = {f['value'].strip().upper() for f in selected
+                          if f.get('status')=='CANDIDATE' and isinstance(f.get('value'),str) and f['value'].strip()}
+                if len(values) != 1 or values != confirmed:
                     raise WorkflowError(422,'PARCEL_REFERENCES_REQUIRED')
                 return values.pop()
             title_ref = unique_reference(('titleReference','registerReference'))

@@ -300,7 +300,7 @@ class HttpWorkflow(unittest.TestCase):
         self.assertEqual(self.request(owner_route+'/'+sid+'/publish',{},owner)[0],200)
         review=self.store.record_review(account,[('IDENTITY','image/jpeg',b'closed identity'),
                  ('DOCUMENT','application/pdf',b'closed title')],{'parcelPlanFacts':[
-                     {'key':'titleReference','value':'00991'}, {'key':'plotReference','value':'QA01'}]})
+                     {'key':'titleReference','value':'00991','status':'CANDIDATE'}, {'key':'plotReference','value':'QA01','status':'CANDIDATE'}]})
         saved=self.request(owner_route+'/'+sid+'/verification',{'reviewId':review},owner)[1]['listing']
         edit='/api/admin/submissions/'+sid+'/parcel-link'
         parcel='/api/v1/listings/'+sid+'/parcel'
@@ -319,6 +319,23 @@ class HttpWorkflow(unittest.TestCase):
             'boundaries':[{'id':doc,'method':'ATLAS_OFFICIAL_BOUNDARY','geometry':{'type':'Polygon',
                   'coordinates':[[[10,36],[10.001,36],[10,36.001],[10,36]]]}}],
             'documents':[{'id':doc,'kind':'CADASTRAL_PLAN','mime':'application/pdf'}]}
+        # A status-less/low-confidence reference or a retained plot conflict
+        # must stop before the independently reviewed Atlas bridge is called.
+        import json
+        with self.store.db() as db:
+            original=db.execute('SELECT report FROM reviews WHERE id=?',(review,)).fetchone()['report']
+        for mode in ('low','legacy','conflict'):
+            modified=json.loads(original)
+            if mode=='low':modified['parcelPlanFacts'][1]['status']='LOW_CONFIDENCE'
+            elif mode=='legacy':modified['parcelPlanFacts'][1].pop('status')
+            else:modified['propertyConflicts']=[{'key':'registeredPlotNumber','status':'CONFLICT'}]
+            with self.store.db() as db:
+                db.execute('UPDATE reviews SET report=? WHERE id=?',(json.dumps(modified),review))
+            bridge.projection.reset_mock()
+            self.assertEqual(self.request(edit,params,admin)[0],422)
+            bridge.projection.assert_not_called()
+        with self.store.db() as db:
+            db.execute('UPDATE reviews SET report=? WHERE id=?',(original,review))
         bridge.projection.return_value=projection
         self.assertEqual(self.request(edit,params,admin)[0],200)
         status,public=self.request(parcel)

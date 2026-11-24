@@ -41,7 +41,8 @@ internal fun OwnerReadingSummary(report:CertificateIdentityReview?,scan:LocalDoc
                 }),color=if(conflict)MaterialTheme.colorScheme.error else Brand.Ink)
                 if(details)OwnerDocumentReadout(report,onDateRefresh,dateBusy,dateError)
                 if("CERTIFICATE_PAGES_MISSING" in report.reasons){
-                    Text(s(R.string.pair_reason_pages_missing),color=MaterialTheme.colorScheme.error)
+                    Text(s(R.string.pair_reason_pages_missing)+report.missingCertificatePages.takeIf{it.isNotEmpty()}
+                        ?.joinToString(prefix=" — ",separator=", ").orEmpty(),color=MaterialTheme.colorScheme.error)
                     OutlinedButton(onClick=onPages){Text(s(R.string.owner_review_pages))}
                 }
                 TextButton(onClick=onDetails){Text(s(if(details)R.string.owner_hide_details else R.string.owner_show_details))}

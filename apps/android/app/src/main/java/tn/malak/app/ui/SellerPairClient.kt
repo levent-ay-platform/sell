@@ -60,7 +60,8 @@ internal data class CertificateIdentityReview(
     val parcelScans:List<ParcelScan> = emptyList(),
     val parcelOcrLengths:List<ParcelOcrLength> = emptyList(),
     val parcelPlanFacts:List<ParcelPlanFact> = emptyList(),
-    val propertyConflicts:List<PilotPropertyConflict> = emptyList())
+    val propertyConflicts:List<PilotPropertyConflict> = emptyList(),
+    val missingCertificatePages:List<Int> = emptyList())
 internal class OwnerPairException(val statusCode:Int):Exception("PRIVATE_PAIR_UNAVAILABLE")
 
 private const val DOC_LIMIT=12L*1024L*1024L
@@ -509,14 +510,14 @@ internal fun parsePilotComparison(envelope:JSONObject):CertificateIdentityReview
         return CertificateIdentityReview(
             "INSUFFICIENT_OR_AMBIGUOUS",null,null,"NOT_COMPARABLE",
             diagnostics.reasons,FRONT_CAPTURE,pages,1,
-            localFields=LocalOcrFields(values["registerReference"]?:
-                values["parentRegisterReference"],area,diagnostics.expectedPageCount,
+            localFields=LocalOcrFields(values["registerReference"],area,diagnostics.expectedPageCount,
                 null,null,null,null),
             detectedKind=kind,unifiedAssessment=status,unifiedRoles=roles,
             matchedRightsHolder=holder,reviewId=reviewId,
             propertyFacts=values.toMap(),propertyFactStatuses=factStatuses.toMap(),sourceFacts=sourceFacts.toList(),
             identityScan=data.optJSONObject("identityFields")?.let{LocalDocumentOcr.fromPilotReport(it)},
             parcelScans=parseParcelScans(data),parcelOcrLengths=parseParcelOcrLengths(data),
-            parcelPlanFacts=parseParcelPlanFacts(data),propertyConflicts=conflicts
+            parcelPlanFacts=parseParcelPlanFacts(data),propertyConflicts=conflicts,
+            missingCertificatePages=diagnostics.missingPages
         )
 }
