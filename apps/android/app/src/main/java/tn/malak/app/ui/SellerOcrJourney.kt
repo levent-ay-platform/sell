@@ -50,6 +50,8 @@ import tn.malak.app.ui.parcel.OwnerParcelEditor
 import tn.malak.app.ui.explore.DiscoveryPoint
 import tn.malak.app.ui.parcel.OwnerParcelEditorSource
 import tn.malak.app.ui.parcel.OwnerPlanDraft
+import tn.malak.app.ui.parcel.OwnerMapBoundaryEditor
+import tn.malak.app.ui.parcel.measureOwnerMap
 import tn.malak.app.ui.parcel.selectedFact
 import java.util.Locale
 import java.util.UUID
@@ -171,6 +173,8 @@ internal fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmiss
     var identityDateError by remember(draftFile){mutableIntStateOf(0)}
     var showListingExtras by rememberSaveable(draftFile){mutableStateOf(false)}
     var chooseListingPoint by rememberSaveable(draftFile){mutableStateOf(false)}
+    var chooseMapBoundary by remember(draftFile){mutableStateOf(false)}
+    var mapBoundary by remember(draftFile){mutableStateOf(emptyList<DiscoveryPoint>())}
     var showPrivateReading by rememberSaveable(draftFile){mutableStateOf(false)}
     var editCustomerName by remember(draftFile){mutableStateOf(false)}
     var submissionMessage by remember(draftFile){mutableIntStateOf(0)}
@@ -735,6 +739,11 @@ internal fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmiss
         return
     }
 
+    if(chooseMapBoundary){
+        OwnerMapBoundaryEditor(SmartListingAssist.coordinates(listingLatitude,listingLongitude)
+            ?.let{DiscoveryPoint(it.first,it.second)},mapBoundary,
+            onDismiss={chooseMapBoundary=false},onSave={points->mapBoundary=points;chooseMapBoundary=false})
+    }
     if(chooseListingPoint){
         DirectLocationPicker(
             SmartListingAssist.coordinates(listingLatitude,listingLongitude)?.let{DiscoveryPoint(it.first,it.second)},
@@ -972,6 +981,56 @@ internal fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmiss
                     }
                 }
                 2 -> {
+                    JourneySectionHeading(s(R.string.intake_smart_editor),Icons.Outlined.Map)
+                    JourneyPanel{
+                        val file=planFile
+                        val draft=file?.let{parcelPreviews[it.uri to planPage]}
+                        val planFacts=planReading
+                        val measured=measureOwnerMap(mapBoundary)
+                        if(file!=null){
+                            Text(s(R.string.intake_plan),fontWeight=FontWeight.SemiBold,color=Brand.Ink)
+                            Text(file.displayName,fontSize=12.sp,color=Brand.Muted,maxLines=1,overflow=TextOverflow.Ellipsis)
+                            if(file.mime=="application/pdf")Row(verticalAlignment=Alignment.CenterVertically){
+                                TextButton(onClick={planPage=(planPage-1).coerceAtLeast(1)},enabled=planPage>1){Text("−")}
+                                Text(s(R.string.intake_plan_page,planPage))
+                                TextButton(onClick={planPage=(planPage+1).coerceAtMost(8)},enabled=planPage<8){Text("+")}
+                            }
+                            OutlinedButton(onClick={
+                                parcelEditorSource=OwnerParcelEditorSource(file.uri,file.mime,planPage,planPage,
+                                    planFacts?.evidenceId,planFacts?.parcelScans?.firstOrNull{it.page==planPage},
+                                    planFacts?.parcelOcrLengths?.filter{it.page==planPage}.orEmpty(),
+                                    planFacts?.parcelPlanFacts?.selectedFact("titleReference",planPage).orEmpty(),
+                                    planFacts?.parcelPlanFacts?.selectedFact("plotReference",planPage).orEmpty(),
+                                    planFacts?.parcelPlanFacts?.selectedFact("printedAreaM2",planPage))
+                            },modifier=Modifier.fillMaxWidth()){
+                                Icon(Icons.Outlined.Edit,null,Modifier.size(18.dp));Spacer(Modifier.width(6.dp))
+                                Text(s(R.string.intake_open_plan))
+                            }
+                            if(draft!=null){
+                                Text(s(R.string.parcel_editor_vertices,(draft.vertices.size-1).coerceAtLeast(0)),color=Brand.Muted)
+                                draft.statedAreaM2?.let{Text(it+" m²",fontWeight=FontWeight.SemiBold)}
+                                if(draft.edges.isNotEmpty())Text(draft.edges.joinToString(" · "){"${it.ordinal}: ${it.lengthM} m"},fontSize=12.sp,color=Brand.Muted)
+                                draft.statedAreaM2?.takeIf{it.matches(ValidLandArea)}?.let{value->
+                                    if(!directVerification&&!readingForListing)TextButton(onClick={area=value}){Text(s(R.string.intake_use_area))}
+                                }
+                            }
+                        }else{
+                            OutlinedButton(onClick={step=0;showInvalid=false},modifier=Modifier.fillMaxWidth()){
+                                Icon(Icons.Outlined.AttachFile,null);Spacer(Modifier.width(6.dp));Text(s(R.string.intake_add_plan_first))
+                            }
+                        }
+                        HorizontalDivider(color=IntakeLine)
+                        OutlinedButton(onClick={chooseMapBoundary=true},modifier=Modifier.fillMaxWidth()){
+                            Icon(Icons.Outlined.Map,null,Modifier.size(19.dp));Spacer(Modifier.width(6.dp))
+                            Text(s(R.string.intake_map_boundary))
+                        }
+                        if(measured!=null){
+                            Text(s(R.string.parcel_editor_calculated_area,measured.areaM2),fontWeight=FontWeight.SemiBold)
+                            Text(measured.lengthsM.mapIndexed{i,v->"${i+1}: ${String.format(Locale.ROOT,"%.1f",v)} m"}.joinToString(" · "),fontSize=12.sp,color=Brand.Muted)
+                            if(!directVerification&&!readingForListing)TextButton(onClick={area=String.format(Locale.ROOT,"%.2f",measured.areaM2)}){Text(s(R.string.intake_use_area))}
+                        }
+                        Text(s(R.string.intake_map_private),fontSize=12.sp,color=Brand.Muted)
+                    }
                     JourneySectionHeading(s(if(readingForListing||directVerification)R.string.direct_analysis else R.string.step_property),Icons.Outlined.EditNote)
                     if(supplementCase!=null && (planFile!=null||extraFile!=null)){
                         SectionHeading(s(R.string.intake_supplements_heading),s(R.string.intake_supplement_owner_hint))
@@ -1536,6 +1595,14 @@ internal fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmiss
                             }
                             OwnerListingPreview(listingTitle.ifBlank{s(R.string.no_value)},region,area,price,listingDescription,listingPhotos.toList())
                             Text(s(R.string.smart_preview_disclosure),fontSize=12.sp,color=Brand.Muted)
+                        }
+                    }
+                    measureOwnerMap(mapBoundary)?.let{measurement->
+                        JourneyPanel{
+                            Text(s(R.string.intake_map_boundary),fontWeight=FontWeight.SemiBold)
+                            Text(s(R.string.parcel_editor_calculated_area,measurement.areaM2))
+                            Text(s(R.string.intake_map_private),fontSize=12.sp,color=Brand.Muted)
+                            TextButton(onClick={step=2;chooseMapBoundary=true}){Text(s(R.string.intake_review_boundary))}
                         }
                     }
                     JourneySectionHeading(s(R.string.intake_private_heading),Icons.Outlined.Lock)

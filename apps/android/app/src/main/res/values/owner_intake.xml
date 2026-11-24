@@ -52,4 +52,15 @@
     <string name="intake_pin_selected">Location pin selected; not a verified parcel boundary.</string>
     <string name="intake_manual_coordinates">Coordinates (optional)</string>
     <string name="intake_edit_documents">Edit documents</string>
+    <string name="intake_smart_editor">Smart parcel editor</string>
+    <string name="intake_map_boundary">Draw boundary on map</string>
+    <string name="intake_map_instruction">Zoom in and tap the parcel corners in order.</string>
+    <string name="intake_undo_vertex">Undo</string>
+    <string name="intake_clear_boundary">Clear</string>
+    <string name="intake_zoom_boundary">Zoom in to add corners.</string>
+    <string name="intake_keep_boundary">Keep boundary for review</string>
+    <string name="intake_map_private">Owner-drawn boundary for this session only; not official or published.</string>
+    <string name="intake_use_area">Use area in listing</string>
+    <string name="intake_add_plan_first">Add plan in documents</string>
+    <string name="intake_review_boundary">Review drawing</string>
 </resources>

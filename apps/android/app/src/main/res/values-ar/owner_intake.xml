@@ -52,4 +52,15 @@
     <string name="intake_pin_selected">تم تحديد موقع العقار، وليس اعتماد حدوده.</string>
     <string name="intake_manual_coordinates">الإحداثيات (اختياري)</string>
     <string name="intake_edit_documents">تعديل الوثائق</string>
+    <string name="intake_smart_editor">المحرر العقاري الذكي</string>
+    <string name="intake_map_boundary">رسم الحدود على الخريطة</string>
+    <string name="intake_map_instruction">كبّر الخريطة ثم اضغط على زوايا الأرض بالترتيب.</string>
+    <string name="intake_undo_vertex">تراجع</string>
+    <string name="intake_clear_boundary">مسح</string>
+    <string name="intake_zoom_boundary">كبّر الخريطة لإضافة الزوايا.</string>
+    <string name="intake_keep_boundary">حفظ الحدود للمراجعة</string>
+    <string name="intake_map_private">رسم المالك للمراجعة في هذه الجلسة فقط؛ لا يثبت الحدود الرسمية ولا يُنشر.</string>
+    <string name="intake_use_area">استخدام المساحة في الإعلان</string>
+    <string name="intake_add_plan_first">إضافة المخطط من الوثائق</string>
+    <string name="intake_review_boundary">مراجعة الرسم</string>
 </resources>

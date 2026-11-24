@@ -51,6 +51,8 @@ import org.maplibre.android.style.sources.GeoJsonSource
 import org.maplibre.geojson.Feature
 import org.maplibre.geojson.FeatureCollection
 import org.maplibre.geojson.Point
+import org.maplibre.geojson.Polygon
+import org.maplibre.geojson.LineString
 import tn.malak.app.ui.Brand
 import java.net.URI
 import kotlin.math.roundToInt
@@ -113,11 +115,14 @@ internal fun DiscoveryMap(
     onListing: (String) -> Unit,
     onCluster: (DiscoveryPoint) -> Unit,
     onFailure: () -> Unit,
-    onReady: () -> Unit
+    onReady: () -> Unit,
+    draftBoundary: List<DiscoveryPoint> = emptyList(),
+    onDraftVertex: ((DiscoveryPoint) -> Unit)? = null
 ) {
     val context = LocalContext.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val cameraCallback by rememberUpdatedState(onCameraIdle)
+    val draftTap by rememberUpdatedState(onDraftVertex)
     val nozhaLotCallback by rememberUpdatedState(onNozhaLot)
     val nozhaCallback by rememberUpdatedState(onNozha)
     val listingCallback by rememberUpdatedState(onListing)
@@ -217,6 +222,10 @@ internal fun DiscoveryMap(
                 gesture = false
             }
             nativeMap.addOnMapClickListener { location ->
+                draftTap?.let { callback ->
+                    callback(DiscoveryPoint(location.latitude,location.longitude))
+                    return@addOnMapClickListener true
+                }
                 val tap = nativeMap.projection.toScreenLocation(location)
                 val hit = RectF(tap.x - 20, tap.y - 20, tap.x + 20, tap.y + 20)
                 val feature = nativeMap.queryRenderedFeatures(hit, MARKERS).firstOrNull()
@@ -355,6 +364,28 @@ internal fun DiscoveryMap(
 
     LaunchedEffect(style, boundaries) {
         style?.let { updateBoundaryLayers(it, boundaries) }
+    }
+
+    LaunchedEffect(style,draftBoundary) {
+        val loaded=style ?: return@LaunchedEffect
+        val points=draftBoundary.map{Point.fromLngLat(it.longitude,it.latitude)}
+        val features=mutableListOf<Feature>()
+        if(points.size>=3)features.add(Feature.fromGeometry(Polygon.fromLngLats(listOf(points+points.first()))))
+        if(points.size>=2)features.add(Feature.fromGeometry(LineString.fromLngLats(points)))
+        points.forEach{features.add(Feature.fromGeometry(it))}
+        val data=FeatureCollection.fromFeatures(features)
+        val source=loaded.getSourceAs<GeoJsonSource>("owner-draft-boundary")
+        if(source!=null)source.setGeoJson(data)
+        else if(points.isNotEmpty()){
+            loaded.addSource(GeoJsonSource("owner-draft-boundary",data))
+            loaded.addLayerAbove(FillLayer("owner-draft-fill","owner-draft-boundary")
+                .withProperties(PropertyFactory.fillColor(0xFF922F48.toInt()),PropertyFactory.fillOpacity(.22f)),MARKERS)
+            loaded.addLayerAbove(LineLayer("owner-draft-line","owner-draft-boundary")
+                .withProperties(PropertyFactory.lineColor(0xFF922F48.toInt()),PropertyFactory.lineWidth(3f)),"owner-draft-fill")
+            loaded.addLayerAbove(CircleLayer("owner-draft-points","owner-draft-boundary")
+                .withProperties(PropertyFactory.circleColor(0xFFFFFFFF.toInt()),PropertyFactory.circleStrokeColor(0xFF922F48.toInt()),
+                    PropertyFactory.circleStrokeWidth(2f),PropertyFactory.circleRadius(5f)),"owner-draft-line")
+        }
     }
 
     LaunchedEffect(style, nozhaPlan) {

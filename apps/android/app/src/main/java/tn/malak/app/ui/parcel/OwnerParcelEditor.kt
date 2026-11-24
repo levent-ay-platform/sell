@@ -351,6 +351,7 @@ internal fun OwnerParcelEditor(
                         scope.launch {
                             try {
                                 saveOwnerParcelReview(session, evidenceId, source.evidencePage, page.unit, draft)
+                                onPreview(draft)
                                 onFinish(true)
                             } catch (cancel: CancellationException) {
                                 throw cancel

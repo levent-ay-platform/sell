@@ -52,4 +52,15 @@
     <string name="intake_pin_selected">Position sélectionnée ; limite parcellaire non vérifiée.</string>
     <string name="intake_manual_coordinates">Coordonnées (facultatif)</string>
     <string name="intake_edit_documents">Modifier les documents</string>
+    <string name="intake_smart_editor">Éditeur parcellaire intelligent</string>
+    <string name="intake_map_boundary">Tracer les limites sur la carte</string>
+    <string name="intake_map_instruction">Zoomez puis touchez les sommets dans leur ordre.</string>
+    <string name="intake_undo_vertex">Annuler</string>
+    <string name="intake_clear_boundary">Effacer</string>
+    <string name="intake_zoom_boundary">Zoomez pour ajouter les sommets.</string>
+    <string name="intake_keep_boundary">Garder les limites pour examen</string>
+    <string name="intake_map_private">Tracé du propriétaire pour cette session uniquement ; ni limite officielle ni publication.</string>
+    <string name="intake_use_area">Utiliser la surface pour l’annonce</string>
+    <string name="intake_add_plan_first">Ajouter le plan aux documents</string>
+    <string name="intake_review_boundary">Revoir le tracé</string>
 </resources>
