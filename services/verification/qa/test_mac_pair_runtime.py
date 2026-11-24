@@ -46,6 +46,9 @@ class Frames(unittest.TestCase):
         self.assertEqual(result['matchedRole'],'REGISTERED_HOLDER')
         facts={f['key']:f for f in result['propertyFacts']+result['extendedPropertyFacts']}
         self.assertNotIn('registeredAreaM2',facts)
+        conflict=next(f for f in result['propertyConflicts'] if f['key']=='registeredAreaM2')
+        self.assertEqual({a['value'] for a in conflict['alternatives']},{'1000','1008'})
+        self.assertTrue(all(a['view']=='PROPERTY_CROP' and a['bbox'] is None for a in conflict['alternatives']))
         self.assertEqual(facts['rightsDenominator']['value'],'4000')
         self.assertEqual(facts['registeredParcelCount']['status'],'LOW_CONFIDENCE')
         self.assertEqual(facts['registeredLandCategory']['value'],'فلاحية')

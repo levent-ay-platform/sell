@@ -359,3 +359,25 @@ test('CPF fallback retains original line evidence and conflicts rather than sele
  assert.equal(r.ownershipVerified,false);
  assert.equal(r.mayPublish,false);
 });
+
+test('numbered estate name is distinct from administrative names and title identifiers',()=>{
+ const r=reading(['شهادة ملكية','اسم العقار: ملك المثال ٢','ولاية العقار: نابل 2',
+    'مساحة العقار: 1200٫125 م م التجزئة: 4500٫125 جزء']);
+ assert.equal(field(r,'registeredPropertyName')?.value,'ملك المثال 2');
+ assert.equal(field(r,'propertyGovernorate')?.status,'ABSENT');
+ assert.equal(field(r,'registeredAreaM2')?.value,'1200.125');
+ assert.equal(field(r,'rightsDenominator')?.value,'4500.125');
+ const bad=reading(['شهادة ملكية','اسم العقار: 12345678']);
+ assert.equal(field(bad,'registeredPropertyName')?.status,'ABSENT');
+});
+test('conflicting numeric readings retain separate values and source positions for private review',()=>{
+ const r=reading(['شهادة ملكية','المساحة: 1200 م م','المساحة: 1208 م م']);
+ const f=field(r,'registeredAreaM2');
+ assert.equal(f?.status,'CONFLICT');assert.equal(f?.value,null);
+ assert.deepEqual(f?.evidence.map(e=>[e.observedValue,e.normalizedValue,e.page,e.lineIndex]),
+   [['1200','1200',1,1],['1208','1208',1,2]]);
+});
+test('Arabic thousands grouping remains unresolved instead of guessing an area',()=>{
+ const r=reading(['شهادة ملكية','المساحة: ١٬٢٠٠ م م']);
+ assert.equal(field(r,'registeredAreaM2')?.status,'ABSENT');
+});

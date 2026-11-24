@@ -30,6 +30,9 @@ export interface PrivateLandFactEvidence {
   readonly confidence:number|null;
   readonly source:RecognizedLine['source'];
   readonly bbox:OcrPixelBox|null;
+  /** Private source reading, including ambiguous decimal spelling. Never public. */
+  readonly observedValue?:string;
+  readonly normalizedValue?:string|null;
 }
 export interface PrivateLandFact {
   readonly key:LandFactKey;
@@ -51,7 +54,7 @@ export interface PrivateLandFacts {
   readonly ownershipVerified:false;
   readonly mayPublish:false;
 }
-type Shape='title'|'area'|'parts'|'plot'|'money'|'actor'|'reference'|'date'|'cin'|'place';
+type Shape='title'|'area'|'parts'|'plot'|'money'|'actor'|'reference'|'date'|'cin'|'place'|'estateName';
 interface Rule {key:LandFactKey;pattern:RegExp;shape:Shape;}
 const commonTitle:Rule={
  key:'registerReference',
@@ -65,12 +68,12 @@ const parent:Rule={
 };
 const totalArea:Rule={
  key:'registeredAreaM2',
- pattern:/^(?:(?:التجزئ[ةه])[\s:#：-]*[0-9]{1,12}(?:[.,][0-9]{1,3})?\s*(?:جزء|اجزاء)\s+)?(?:(?:ال)?مساح[ةه](?:\s+(?:الكلي[ةه]|الجملي[ةه]|العقار))?|superficie(?:\s+totale)?)[\s:#：-]*([0-9]{1,10}(?:[.,][0-9]{1,3})?)\s*(?:م\s*م|م(?:تر)?(?:\s*مربع|²|2)?|m²|m2)?(?=\s*(?:$|التجزئ[ةه]\s*[:：-]))/iu,
+ pattern:/^(?:(?:التجزئ[ةه])[\s:#：-]*[0-9]{1,12}(?:[.,٫][0-9]{1,3})?\s*(?:جزء|اجزاء)\s+)?(?:(?:ال)?مساح[ةه](?:\s+(?:الكلي[ةه]|الجملي[ةه]|العقار))?|superficie(?:\s+totale)?)[\s:#：-]*([0-9]{1,10}(?:[.,٫][0-9]{1,3})?)\s*(?:م\s*م|م(?:تر)?(?:\s*مربع|²|2)?|m²|m2)?(?=\s*(?:$|التجزئ[ةه]\s*[:：-]))/iu,
  shape:'area'
 };
 const denominator:Rule={
  key:'rightsDenominator',
- pattern:/^(?:(?:(?:ال)?مساح[ةه](?:\s+(?:الكلي[ةه]|الجملي[ةه]|العقار))?)[\s:#：-]*[0-9]{1,10}(?:[.,][0-9]{1,3})?\s*(?:م\s*م|م(?:تر)?(?:\s*مربع|²|2)?|m²|m2)?\s+)?(?:مجموع\s+(?:اجزاء|الاجزاء)\s+الملكي[ةه]|المجموع|التجزئ[ةه]|total\s+des\s+parts)[\s:#：-]*([0-9]{1,12}(?:[.,][0-9]{1,3})?)\s*(?:جزء|اجزاء)?(?=\s*(?:$|المساح[ةه]\s*[:：-]))/iu,
+ pattern:/^(?:(?:(?:ال)?مساح[ةه](?:\s+(?:الكلي[ةه]|الجملي[ةه]|العقار))?)[\s:#：-]*[0-9]{1,10}(?:[.,٫][0-9]{1,3})?\s*(?:م\s*م|م(?:تر)?(?:\s*مربع|²|2)?|m²|m2)?\s+)?(?:مجموع\s+(?:اجزاء|الاجزاء)\s+الملكي[ةه]|المجموع|التجزئ[ةه]|total\s+des\s+parts)[\s:#：-]*([0-9]{1,12}(?:[.,٫][0-9]{1,3})?)\s*(?:جزء|اجزاء)?(?=\s*(?:$|المساح[ةه]\s*[:：-]))/iu,
  shape:'parts'
 };
 const registeredPlot:Rule={
@@ -80,7 +83,7 @@ const registeredPlot:Rule={
 };
 const certificateProperty:readonly Rule[]=[
  {key:'registeredParcelCount',pattern:/^(?:(?:القطع[ةه]?\s+(?:عدد|رقم))[\s:#：-]*[0-9]{1,8}\s+)?(?:(?:مجموع|جمل[ةه]|عدد)\s+القطع|nombre\s+de\s+parcelles)[\s:#：-]*([0-9]{1,4})(?=\s*(?:$|القطع[ةه]?\s+(?:عدد|رقم)\s*[:：-]))/iu,shape:'plot'},
- {key:'registeredPropertyName',pattern:/^(?:اسم\s+العقار|nom\s+du\s+bien)\s*[:：-]\s*(.{2,80})$/iu,shape:'place'},
+ {key:'registeredPropertyName',pattern:/^(?:اسم\s+العقار|nom\s+du\s+bien)\s*[:：-]\s*(.{2,80})$/iu,shape:'estateName'},
  {key:'registeredPropertyContent',pattern:/^(?:محتو[يى]\s+العقار|consistance\s+du\s+bien)\s*[:：-]\s*(.{2,80})$/iu,shape:'place'},
  {key:'registeredLandCategory',pattern:/^(?:(?:صبغ[ةه]|صنف|تصنيف|نوع)\s+العقار|nature\s+du\s+terrain)\s*[:：-]\s*(.{2,80})$/iu,shape:'place'},
  {key:'creationNature',pattern:/^(?:طبيع[ةه]\s+الاحداث|nature\s+de\s+creation)\s*[:：-]\s*(.{2,80})$/iu,shape:'place'}
@@ -97,17 +100,17 @@ const possessedPlot:Rule={
 };
 const soldArea:Rule={
  key:'soldAreaM2',
- pattern:/^(?:(?:ال)?مساح[ةه]\s+(?:القطع[ةه]\s+)?المبيع[ةه]|المساح[ةه]\s+موضوع\s+البيع|superficie\s+vendue)[\s:#：-]*([0-9]{1,10}(?:[.,][0-9]{1,3})?)\s*(?:م(?:تر)?(?:\s*مربع|²|2)?|m²|m2)?\s*$/iu,
+ pattern:/^(?:(?:ال)?مساح[ةه]\s+(?:القطع[ةه]\s+)?المبيع[ةه]|المساح[ةه]\s+موضوع\s+البيع|superficie\s+vendue)[\s:#：-]*([0-9]{1,10}(?:[.,٫][0-9]{1,3})?)\s*(?:م(?:تر)?(?:\s*مربع|²|2)?|m²|m2)?\s*$/iu,
  shape:'area'
 };
 const possessedArea:Rule={
  key:'possessedAreaM2',
- pattern:/^(?:مساح[ةه]\s+(?:القطع[ةه]\s+)?(?:محل\s+التحويز|المعاين[ةه]|الحياز[ةه])|superficie\s+constat[eé]e)[\s:#：-]*([0-9]{1,10}(?:[.,][0-9]{1,3})?)\s*(?:م(?:تر)?(?:\s*مربع|²|2)?|m²|m2)?\s*$/iu,
+ pattern:/^(?:مساح[ةه]\s+(?:القطع[ةه]\s+)?(?:محل\s+التحويز|المعاين[ةه]|الحياز[ةه])|superficie\s+constat[eé]e)[\s:#：-]*([0-9]{1,10}(?:[.,٫][0-9]{1,3})?)\s*(?:م(?:تر)?(?:\s*مربع|²|2)?|m²|m2)?\s*$/iu,
  shape:'area'
 };
 const transferredArea:Rule={
  key:'transferredAreaM2',
- pattern:/^(?:المساح[ةه]\s+المنقول[ةه]|المساح[ةه]\s+موضوع\s+النقل|superficie\s+transf[eé]r[eé]e)[\s:#：-]*([0-9]{1,10}(?:[.,][0-9]{1,3})?)\s*(?:م(?:تر)?(?:\s*مربع|²|2)?|m²|m2)?\s*$/iu,
+ pattern:/^(?:المساح[ةه]\s+المنقول[ةه]|المساح[ةه]\s+موضوع\s+النقل|superficie\s+transf[eé]r[eé]e)[\s:#：-]*([0-9]{1,10}(?:[.,٫][0-9]{1,3})?)\s*(?:م(?:تر)?(?:\s*مربع|²|2)?|m²|m2)?\s*$/iu,
  shape:'area'
 };
 const seller:Rule={
@@ -143,7 +146,7 @@ const serviceApplicantCin=actorCin('serviceApplicantCin',
 
 const salePrice:Rule={
  key:'salePriceTnd',
- pattern:/^(?:ثمن\s+(?:البيع|العقار)|الثمن\s+الجملي|prix\s+de\s+vente)[\s:#：-]*([0-9]{1,12}(?:[.,][0-9]{1,3})?)\s*(?:دينار(?:ا)?|د\.?\s*ت\.?|dt|tnd)\s*$/iu,
+ pattern:/^(?:ثمن\s+(?:البيع|العقار)|الثمن\s+الجملي|prix\s+de\s+vente)[\s:#：-]*([0-9]{1,12}(?:[.,٫][0-9]{1,3})?)\s*(?:دينار(?:ا)?|د\.?\s*ت\.?|dt|tnd)\s*$/iu,
  shape:'money'
 };
 const receiptNumber:Rule={
@@ -153,7 +156,7 @@ const receiptNumber:Rule={
 };
 const receiptAmount:Rule={
  key:'receiptAmountTnd',
- pattern:/^(?:montant|المبلغ|total\s+g[eé]n[eé]ral)[\s:#：-]*([0-9]{1,12}(?:[.,][0-9]{1,3})?)\s*(?:dt|tnd|دينار(?:ا)?)?\s*$/iu,
+ pattern:/^(?:montant|المبلغ|total\s+g[eé]n[eé]ral)[\s:#：-]*([0-9]{1,12}(?:[.,٫][0-9]{1,3})?)\s*(?:dt|tnd|دينار(?:ا)?)?\s*$/iu,
  shape:'money'
 };
 const transferRef:Rule={
@@ -188,7 +191,7 @@ const receiptPayer:Rule={
 };
 const serviceReceiptAmount:Rule={
  key:'receiptAmountTnd',
- pattern:/^(?:المبلغ\s+(?:الجملي|المستخلص)|المبلغ|total\s+g[eé]n[eé]ral|montant\s+per[cç]u)[\s:#：-]*([0-9]{1,12}(?:[.,][0-9]{1,3})?)\s*(?:dt|tnd|دينار(?:ا)?)?\s*$/iu,
+ pattern:/^(?:المبلغ\s+(?:الجملي|المستخلص)|المبلغ|total\s+g[eé]n[eé]ral|montant\s+per[cç]u)[\s:#：-]*([0-9]{1,12}(?:[.,٫][0-9]{1,3})?)\s*(?:dt|tnd|دينار(?:ا)?)?\s*$/iu,
  shape:'money'
 };
 
@@ -232,6 +235,12 @@ function parseValue(raw:string,shape:Shape):{value:string|null;uncertain:boolean
      {value:v,uncertain:false,masked:false}:
      {value:null,uncertain:true,masked:false};
  }
+ if(shape==='estateName'){
+   // Estate names can include a numeric project/suffix, unlike an INS place.
+   // Reject free-form identifiers, additional labels, or pure numbers.
+   return v.length<=80&&/\p{L}/u.test(v)&&/^[\p{L}\p{M}\p{Zs}0-9'’.-]+$/u.test(v)&&!/[0-9]{7,}/u.test(v)?
+     {value:v,uncertain:false,masked:false}:{value:null,uncertain:false,masked:false};
+ }
  if(shape==='place'){
    return v.length<=80&&/^[\p{L}\p{M}\p{Zs}'’.-]+$/u.test(v)?
      {value:v,uncertain:false,masked:false}:{value:null,uncertain:false,masked:false};
@@ -266,8 +275,8 @@ function parseValue(raw:string,shape:Shape):{value:string|null;uncertain:boolean
    if(!/^[A-Za-z0-9/-]{2,30}$/u.test(v))return {value:null,uncertain:false,masked:false};
    return {value:v,uncertain:false,masked:false};
  }
- if(!/^\d{1,12}(?:[.,]\d{1,3})?$/u.test(v))return {value:null,uncertain:false,masked:false};
- const normalized=v.replace(',','.');
+ if(!/^\d{1,12}(?:[.,٫]\d{1,3})?$/u.test(v))return {value:null,uncertain:false,masked:false};
+ const normalized=v.replace(/[،,٫]/gu,'.');
  const n=Number(normalized);
  if(!Number.isFinite(n)||n<=0||n>1e12)return {value:null,uncertain:false,masked:false};
  // 42,910 can be a decimal in Tunisian formatting OR grouping elsewhere.
@@ -311,7 +320,7 @@ export function extractPrivateLandDocumentFacts(
    const certificate=classification.kind==='OWNERSHIP_CERTIFICATE'||
      classification.kind==='SHARED_OWNERSHIP_CERTIFICATE';
    const tail=certificate?[
-     /^(?:[\p{L}\p{M} ]{1,40})\s*[:：-]\s*[0-9]{1,10}(?:[.,][0-9]{1,3})?\s*(?:م\s*م|م(?:تر)?\s*مربع|م²|m²|m2)\s+(التجزئ[ةه]\s*[:：-]\s*[0-9]{1,12}(?:[.,][0-9]{1,3})?\s*(?:جزء|اجزاء)?)$/iu,
+     /^(?:[\p{L}\p{M} ]{1,40})\s*[:：-]\s*[0-9]{1,10}(?:[.,٫][0-9]{1,3})?\s*(?:م\s*م|م(?:تر)?\s*مربع|م²|m²|m2)\s+(التجزئ[ةه]\s*[:：-]\s*[0-9]{1,12}(?:[.,٫][0-9]{1,3})?\s*(?:جزء|اجزاء)?)$/iu,
      /^(?:[\p{L}\p{M} ]{1,40})\s*[:：-]\s*[0-9]{1,4}\s+((?:ال)?قطع[ةه]?\s+(?:عدد|رقم)\s*[:：-]\s*[0-9]{1,8})$/iu
    ].map(p=>p.exec(t)?.[1]).find(Boolean):undefined;
    for(const rule of rules){
@@ -331,7 +340,9 @@ export function extractPrivateLandDocumentFacts(
      const low=Boolean(fallback)||classification.status==='LOW_CONFIDENCE'||
        (l.confidence!==null&&l.confidence<0.90)||parsed.uncertain;
      const status:LandFactStatus=parsed.masked?'MASKED':low?'LOW_CONFIDENCE':'CANDIDATE';
-     collections.get(rule.key)!.push({value:parsed.value,status,evidence:source});
+     const evidence=rule.shape==='actor'||rule.shape==='cin'?source:{...source,
+       observedValue:match[1],normalizedValue:parsed.value};
+     collections.get(rule.key)!.push({value:parsed.value,status,evidence});
    }
  }
  const facts:PrivateLandFact[]=rules.map(rule=>{

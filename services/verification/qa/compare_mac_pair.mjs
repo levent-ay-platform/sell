@@ -66,10 +66,25 @@ try{
   facts.filter(x=>x.key===f.key).every(x=>x.value===f.value)).filter((f,i,a)=>a.findIndex(x=>x.key===f.key)===i);
  const propertyFacts=selectFacts(keys);
  const extendedPropertyFacts=selectFacts(extensionKeys);
+ // Owner-scoped report only, not public listing fields. No actor names or
+ // identity values are included. Preserve bounded numeric alternatives and
+ // whether the observation came from the original page or a derived view.
+ const originalLineCount=asTextOnlyOcrDocument(document).pages.reduce((n,p)=>n+p.lines.length,0);
+ const numericReviewKeys=new Set(['registeredAreaM2','rightsDenominator','registeredPlotNumber','registeredParcelCount']);
+ const propertyConflicts=familyFacts.filter(f=>numericReviewKeys.has(f.key)&&f.status==='CONFLICT').map(f=>({
+   key:f.key,status:'CONFLICT',alternatives:f.evidence.filter(e=>typeof e.normalizedValue==='string'&&
+     /^[0-9]{1,12}(?:[.][0-9]{1,3})?$/.test(e.normalizedValue)).slice(0,12).map(e=>({
+       value:e.normalizedValue,page:e.page,source:e.source,confidence:e.confidence,
+       view:e.lineIndex<originalLineCount?'ORIGINAL_PAGE':'PROPERTY_CROP',
+       bbox:e.lineIndex<originalLineCount?e.bbox:null
+     })),
+   truncated:f.evidence.length>12
+ }));
+
  process.stdout.write(JSON.stringify({detectedKind:comparison.detectedKind,
   assessment:comparison.assessment,matchedRole:role?.role??null,
   documentCinStatus:role?.documentCinStatus??null,
-  matchedRightsHolder:role?comparison.matchedRightsHolder:null,propertyFacts,extendedPropertyFacts,
+  matchedRightsHolder:role?comparison.matchedRightsHolder:null,propertyFacts,extendedPropertyFacts,propertyConflicts,
   reasons:[...new Set(reasons)],missingPages,
   parcelPlanScans:reading.parcelPlanScans,parcelPlanFacts:reading.parcelPlanFacts,
   parcelEdgeMeasurements:reading.parcelEdgeMeasurements,
