@@ -24,7 +24,7 @@ class PilotPropertyFactsTest{
     }
     @Test fun registeredAreaNeedsExplicitConfirmationAndSharedOrUncertainAreaIsNotOffered(){
         val fact=PilotPropertyFact("registeredAreaM2","9000",1,"ocr-ar","CANDIDATE")
-        assertEquals("9000",listingAreaEvidence("OWNERSHIP_CERTIFICATE",listOf(fact))?.value)
+        assertNull(listingAreaEvidence("OWNERSHIP_CERTIFICATE",listOf(fact)))
         assertNull(listingAreaEvidence("SHARED_OWNERSHIP_CERTIFICATE",listOf(fact)))
         assertNull(listingAreaEvidence("OWNERSHIP_CERTIFICATE",listOf(fact.copy(status="LOW_CONFIDENCE"))))
         assertFalse(pilotAutofill("OWNERSHIP_CERTIFICATE",listOf(fact)).containsKey("area"))
@@ -50,13 +50,13 @@ class PilotPropertyFactsTest{
         assertTrue(pilotAutofill("SALE_DEED", listOf(sold.copy(page = 0))).isEmpty())
     }
     @Test fun comparisonPreservesOwnerFormattingAndUsesTheDocumentPage() {
-        val fact = PilotPropertyFact("registeredAreaM2", "900.5", 3, "pdf-text", "CANDIDATE")
-        assertEquals(fact, listingAreaEvidence("OWNERSHIP_CERTIFICATE", listOf(fact)))
-        assertNull(listingAreaEvidence("SALE_DEED", listOf(fact)))
+        val fact = PilotPropertyFact("soldAreaM2", "900.5", 3, "pdf-text", "CANDIDATE")
+        assertEquals(fact, listingAreaEvidence("SALE_DEED", listOf(fact)))
+        assertNull(listingAreaEvidence("OWNERSHIP_CERTIFICATE", listOf(fact)))
         assertTrue(sameListingArea("٩٠٠٫٥٠", fact))
         assertFalse(sameListingArea("275,5", fact))
         assertFalse(sameListingArea("", fact))
         assertFalse(sameListingArea("9005E-1", fact))
-        assertNull(listingAreaEvidence("OWNERSHIP_CERTIFICATE", listOf(fact, fact.copy(status = "LOW_CONFIDENCE"))))
+        assertNull(listingAreaEvidence("SALE_DEED", listOf(fact, fact.copy(status = "LOW_CONFIDENCE"))))
     }
 }

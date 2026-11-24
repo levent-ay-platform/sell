@@ -509,3 +509,20 @@ test('two CIN-role candidates on separate unrelated buyer/seller pages cannot be
  assert.equal(r.roles.find(x=>x.role==='BUYER')?.documentCinStatus,'NOT_PRINTED');
  assert.equal(r.legalOwnershipVerified,false);
 });
+
+test('individual certificate with an owner table uses only the matched owner row',()=>{
+ const original=sharedAcrossTwoPages();
+ const individual:IngestedDocument={...original,pages:original.pages.map(p=>({...p,
+   lines:p.lines.map(l=>({...l,text:l.text.replace('شهادة اشتراك في الملكية','شهادة ملكية فردية')}))}))};
+ const r=compareUnifiedPrivateDocumentIdentity(individual,arabicFront,['OWNERSHIP_CERTIFICATE']);
+ assert.equal(r.detectedKind,'OWNERSHIP_CERTIFICATE');
+ assert.equal(r.roles[0]?.role,'SHARED_RIGHTS_HOLDER');
+ assert.equal(r.matchedRightsHolder?.printedRowOrdinal,1);
+ assert.equal(r.matchedRightsHolder?.rightsParts,'100');
+ assert.equal(r.legalOwnershipVerified,false);
+ assert.equal(r.mayPublish,false);
+ const incomplete={...individual,pages:individual.pages.slice(0,1)};
+ const blocked=compareUnifiedPrivateDocumentIdentity(incomplete,arabicFront,['OWNERSHIP_CERTIFICATE']);
+ assert.equal(blocked.matchedRightsHolder,null);
+ assert.equal(blocked.assessment,'INSUFFICIENT_EVIDENCE');
+});

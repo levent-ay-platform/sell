@@ -18,7 +18,7 @@ private val documentAreaPattern = Regex("""[1-9][0-9]{0,8}(?:\.[0-9]{1,3})?""")
 
 internal fun listingAreaEvidence(kind: String?, facts: List<PilotPropertyFact>): PilotPropertyFact? {
     val key = when (kind) {
-        "OWNERSHIP_CERTIFICATE" -> "registeredAreaM2"
+        // The whole registered estate is not the owner\u0027s sale extent, even for an individual certificate.
         "SALE_DEED" -> "soldAreaM2"
         else -> return null
     }

@@ -170,7 +170,14 @@ export function compareUnifiedPrivateDocumentIdentity(
   }
   const roles:RoleTextResult[]=[];
   let matchedRightsHolder:MatchedPrivateRightsHolder|null=null;
-  if(kind==='OWNERSHIP_CERTIFICATE'){
+  // An individual certificate can document a share of an estate. The
+  // presence of an owner-table header, not the heading alone, selects row matching.
+  const firstSpatial=document.pages.find(p=>p.page===1)?.privateSpatialPage;
+  const firstLayout=kind==='OWNERSHIP_CERTIFICATE'&&firstSpatial&&firstSpatial.words.length>0?
+    locateOwnerTableFromWords([firstSpatial]):null;
+  const hasOwnerTable=firstLayout!==null&&!firstLayout.findings.includes('HEADER_NOT_FOUND')&&
+    !firstLayout.findings.includes('NO_PAGE_1');
+  if(kind==='OWNERSHIP_CERTIFICATE'&&!hasOwnerTable){
     const r=comparePrivateCertificateIdentityOcr(textDoc,textIdentity);
     const cin=compareCertificateIdentityCinText(textDoc,textIdentity);
     if(cin.status==='NUMBER_DIFFERS_NEEDS_REVIEW'){
@@ -186,7 +193,7 @@ export function compareUnifiedPrivateDocumentIdentity(
       documentCinStatus:cin.status==='NOT_COMPARABLE'?
         'NOT_PRINTED':cin.status,
       documentPage:r.certificateName?.page??null});
-  } else if(kind==='SHARED_OWNERSHIP_CERTIFICATE'){
+  } else if(kind==='SHARED_OWNERSHIP_CERTIFICATE'||hasOwnerTable){
     // Only the identity holder's OWN row may leave this private comparison.
     // Other unreadable owners do not block it; an unrelated 8-digit number
     // must never be compared as a CIN for the selected person.
