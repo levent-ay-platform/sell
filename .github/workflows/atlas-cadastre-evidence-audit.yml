@@ -78,8 +78,8 @@ jobs:
       - name: Compile Atlas pipeline
         run: python -m py_compile scripts/atlas_cadastre_evidence_audit.py scripts/atlas_geometry_evidence.py scripts/atlas_public_projection.py scripts/atlas_amlak_private_bridge.py scripts/atlas_document_linkage.py scripts/atlas_sqlite_snapshot.py scripts/atlas_ocr_backlog.py scripts/atlas_pdf_blob_inventory.py scripts/atlas_pdf_vector_candidates.py scripts/atlas_archive_review_batch.py scripts/tests/test_atlas_pdf_blob_inventory.py scripts/tests/test_atlas_pdf_vector_candidates.py scripts/tests/test_atlas_archive_review_batch.py
 
-  atlas-macos-vector-contract:
-    runs-on: macos-15
+  atlas-portable-vector-contract:
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4

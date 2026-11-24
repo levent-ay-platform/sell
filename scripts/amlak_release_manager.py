@@ -12,7 +12,7 @@ GATES = {
     "private": (".github/workflows/amlak-private-attachments.yml", ("private-contract",)),
     "ocr": (".github/workflows/amlak-intake-ocr.yml", ("birth-date",)),
     "cpf": (".github/workflows/amlak-cpf-location-qa.yml", ("verification", "isolated-cpf-bundle", "private-http-contract", "android")),
-    "atlas": (".github/workflows/atlas-cadastre-evidence-audit.yml", ("atlas-evidence-contract", "atlas-macos-vector-contract")),
+    "atlas": (".github/workflows/atlas-cadastre-evidence-audit.yml", ("atlas-evidence-contract", "atlas-portable-vector-contract")),
     "deep": (".github/workflows/atlas-deep-review.yml", ("archive-deep-review", "reviewer-contracts")),
 }
 APK_NAME = "amlak-full-gate-connected-qa"

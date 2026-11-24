@@ -8,4 +8,6 @@ Every push to the candidate runs the existing six offline CI workflows: full And
 python3 scripts/amlak_release_manager.py --sha FULL_SHA --android FULL_GATE_RUN --private PRIVATE_RUN --ocr OCR_RUN --cpf CPF_RUN --atlas ATLAS_RUN --deep DEEP_REVIEW_RUN
 ```
 
+The Atlas portable vector contract runs on approved hosted Ubuntu, preserving the complete synthetic Atlas suite. Actual native Mac archive and runtime acceptance remains a separate operator gate; hosted CI does not certify it.
+
 This is a CI-only gate. Real certificate fields, owner share, local compatible adapter, enrolled-device authorization, actual official cadastral evidence, physical handset, Nozha live inventory and reviewed deployment remain separate. No private data in CI.
