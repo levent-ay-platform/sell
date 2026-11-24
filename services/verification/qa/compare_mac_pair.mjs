@@ -33,7 +33,9 @@ try{
 
  const keys=new Set(['registerReference','parentRegisterReference','registeredAreaM2',
   'soldAreaM2','possessedAreaM2','transferredAreaM2','registeredPlotNumber','soldPlotNumber',
-  'possessedPlotNumber','salePriceTnd','transferReference','serviceRequestNumber','serviceRequestDate','rightsDenominator']);
+  'possessedPlotNumber','salePriceTnd','transferReference','serviceRequestNumber','serviceRequestDate','rightsDenominator','propertyGovernorate','propertyDelegation','propertyImada',
+  'registeredLocationText','historicalLocality','registeredParcelCount','registeredPropertyName',
+  'registeredPropertyContent','registeredLandCategory','creationNature']);
  const selected=['ROLE_TEXT_MATCH_ONLY','NAME_ONLY_REVIEW'].includes(comparison.assessment)?
   comparison.roles.filter(r=>r.assessment==='PRELIMINARY_TEXT_AGREEMENT'):[];
  const role=selected.length===1?selected[0]:null;
