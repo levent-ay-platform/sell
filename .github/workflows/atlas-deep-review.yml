@@ -5,6 +5,8 @@ on:
   pull_request:
     paths:
       - scripts/atlas_archive_deep_review.py
+      - scripts/atlas_existing_source_benchmark.py
+      - scripts/tests/test_atlas_existing_source_benchmark.py
       - scripts/atlas_archive_diagnostics.py
       - scripts/tests/test_atlas_archive_diagnostics.py
       - scripts/atlas_archive_next_pass.py
