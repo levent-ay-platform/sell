@@ -31,10 +31,21 @@ def add_matches(hits,source_refs,sha,page,origin,title_rows,parcel_present,cadas
             if status:
                 hits[source].add((sha,page,origin,status,bool(parcel_present),bool(cadastral)))
 
+def result_reference(result):
+    # Actual Atlas search DTO. Treat its normalized reference as a retrieval
+    # token only; it may have dropped jurisdiction or a compound identifier.
+    if not isinstance(result,dict):return None
+    value=result.get("reference")
+    if type(value) is int and value>=0:value=str(value)
+    return exact_ref(value)
+
 def identity(row,result):
     # Native ID alone can recur across layers. Only compare explicit same-source fields.
     if not isinstance(result,dict):return "RESULT_SCHEMA_UNRESOLVED"
-    if not all(k in result for k in ("native_id","snapshot")):return "RESULT_SCHEMA_UNRESOLVED"
+    if not all(k in result for k in ("native_id","snapshot")):
+        if all(k in result for k in ("feature_id","layer","reference","has_geometry","areas")):
+            return "GIS_FEATURE_RETURNED_SOURCE_IDENTITY_UNPROVEN"
+        return "RESULT_SCHEMA_UNRESOLVED"
     if str(result["native_id"])!=row["native_id"] or str(result["snapshot"])!=row["snapshot"]:
         return "EXPLICIT_SOURCE_ID_MISMATCH"
     if "record_set" not in result:return "NATIVE_ID_SNAPSHOT_MATCH_GROUP_UNRESOLVED"
@@ -51,9 +62,53 @@ def benchmark(atlas,run,native,output):
         rows=list(csv.DictReader(f))
     if not rows or len(rows)>1000:raise ValueError("BOUNDED_SOURCE_SAMPLE_REQUIRED")
     refs=defaultdict(set)
-    for row in rows:
-        r=exact_ref(row["raw_reference"])
-        if r:refs[r[0]].add(r)
+    counts=Counter()
+    # Reuse existing local search implementation with a private temporary copy.
+    manifest=json.loads((data/"map-index/manifest.json").read_text())
+    db=data/"map-index"/Path(manifest["file"]).name
+    if db.is_symlink() or not db.is_file() or any(Path(str(db)+s).exists() for s in ("-wal","-shm")):
+        raise ValueError("STANDALONE_MAP_INDEX_REQUIRED")
+    sys.path.insert(0,str(atlas))
+    from atlas import title_lookup
+    details=[];shapes=Counter(); retrieved=[]
+    with tempfile.TemporaryDirectory(prefix="atlas-source-test-",dir=output.parent) as temp:
+        dst=Path(temp)/db.name;before=db.stat()
+        cp=subprocess.run(["/bin/cp","-c",str(db),str(dst)],capture_output=True)
+        if cp.returncode:shutil.copyfile(db,dst)
+        after=db.stat()
+        if (before.st_size,before.st_mtime_ns)!=(after.st_size,after.st_mtime_ns):raise ValueError("MAP_INDEX_CHANGED")
+        # Use the actual existing search engine first, before collecting PDF evidence.
+        for row in rows:
+            counts["source_rows_tested"]+=1
+            raw=exact_ref(row["raw_reference"])
+            if raw is None:counts["source_reference_compound_or_unparsed"]+=1
+            tokens=set()
+            if raw:tokens.add(raw)
+            records=[]
+            try:
+                result=title_lookup.search(dst,row["raw_reference"])
+                result=result.get("results",[]) if isinstance(result,dict) else result
+                if not isinstance(result,list):raise ValueError("UNKNOWN_RESULT_SHAPE")
+                counts["search_completed"]+=1
+                counts["search_with_results"]+=bool(result)
+                identities=[]
+                for record in result:
+                    if isinstance(record,dict):
+                        shapes.update(record.keys())
+                        token=result_reference(record)
+                        if token:tokens.add(token)
+                        records.append({k:record[k] for k in ("reference","feature_id","layer","has_geometry","areas") if k in record})
+                    identities.append(identity(row,record))
+                state="SOURCE_IDENTITY_MATCH" if "SOURCE_IDENTITY_MATCH" in identities else (
+                    "NO_RESULT" if not result else "|".join(sorted(set(identities))))
+            except Exception as exc:
+                state="SEARCH_ERROR_"+type(exc).__name__
+            counts[state]+=1
+            counts["source_rows_with_query_tokens"]+=bool(tokens)
+            counts["source_rows_recovered_by_existing_search"]+=raw is None and bool(tokens)
+            counts["source_rows_with_returned_geometry"]+=any(r.get("has_geometry") is True for r in records)
+            for token in tokens:refs[token[0]].add(token)
+            retrieved.append((row,raw,tokens,state,records))
     dirs,audit,docs,entries,last=first_chain(run)
     roots=[(data).resolve()]
     plan,_=load_plan(native,roots,last,docs)
@@ -68,7 +123,6 @@ def benchmark(atlas,run,native,output):
             for o in obs:
                 add_matches(hits,refs,sha,o.get("page"),origin,[(n,None) for n in o.get("title_reference_candidates",[])],
                             o.get("parcel_reference_candidates"),o.get("cadastral_term_present"))
-    counts=Counter()
     documents=native/"full-documents"
     # Freeze filenames once, so an active run can continue without inconsistent counts.
     paths=[]
@@ -94,49 +148,22 @@ def benchmark(atlas,run,native,output):
                            [(r["number"],r.get("suffix")) for r in e["title_candidates"]],
                            e["parcel_candidates"],e["cadastral_term_present"])
     counts["native_documents_with_windows"]=len(covered)
-    # Reuse existing local search implementation with a private temporary copy.
-    manifest=json.loads((data/"map-index/manifest.json").read_text())
-    db=data/"map-index"/Path(manifest["file"]).name
-    if db.is_symlink() or not db.is_file() or any(Path(str(db)+s).exists() for s in ("-wal","-shm")):
-        raise ValueError("STANDALONE_MAP_INDEX_REQUIRED")
-    sys.path.insert(0,str(atlas))
-    from atlas import title_lookup
-    details=[];shapes=Counter()
-    with tempfile.TemporaryDirectory(prefix="atlas-source-test-",dir=output.parent) as temp:
-        dst=Path(temp)/db.name;before=db.stat()
-        cp=subprocess.run(["/bin/cp","-c",str(db),str(dst)],capture_output=True)
-        if cp.returncode:shutil.copyfile(db,dst)
-        after=db.stat()
-        if (before.st_size,before.st_mtime_ns)!=(after.st_size,after.st_mtime_ns):raise ValueError("MAP_INDEX_CHANGED")
-        for row in rows:
-            counts["source_rows_tested"]+=1
-            ref=exact_ref(row["raw_reference"])
-            if ref is None:counts["source_reference_compound_or_unparsed"]+=1
-            try:
-                result=title_lookup.search(dst,row["raw_reference"])
-                result=result.get("results",[]) if isinstance(result,dict) else result
-                if not isinstance(result,list):raise ValueError("UNKNOWN_RESULT_SHAPE")
-                counts["search_completed"]+=1
-                counts["search_with_results"]+=bool(result)
-                identities=[]
-                for record in result:
-                    if isinstance(record,dict):shapes.update(record.keys())
-                    identities.append(identity(row,record))
-                state="SOURCE_IDENTITY_MATCH" if "SOURCE_IDENTITY_MATCH" in identities else (
-                    "NO_RESULT" if not result else "|".join(sorted(set(identities))))
-            except Exception as exc:
-                state="SEARCH_ERROR_"+type(exc).__name__
-            counts[state]+=1
-            links=sorted(hits.get(ref,set()),key=lambda x:(x[0],x[1] or 0,x[2],x[3]))
-            counts["source_rows_with_document_token_candidates"]+=bool(links)
-            counts["source_rows_with_same_observation_parcel_hint"]+=any(x[4] for x in links)
-            counts["source_rows_with_qualified_token_candidate"]+=any(x[3]=="EXACT_TOKEN_SCOPE_UNVERIFIED" for x in links)
-            details.append({"source_record_private":{"record_set":row["record_set"],"snapshot":row["snapshot"],"native_id":row["native_id"],
-                            "reference_field":row["reference_field"],"reference":row["raw_reference"]},
-                            "identity_status":state,"document_token_candidates_private":[
-                             {"sha256":x[0],"page":x[1],"origin":x[2],"status":x[3],"parcel_hint":x[4],"cadastral_hint":x[5]} for x in links],
-                            "official_plan_verified":None,"ground_verified":False})
+    for row,raw,tokens,state,records in retrieved:
+        found=set().union(*(hits.get(token,set()) for token in tokens))
+        links=sorted(found,key=lambda x:(x[0],x[1] or 0,x[2],x[3]))
+        counts["source_rows_with_document_token_candidates"]+=bool(links)
+        counts["source_rows_with_same_observation_parcel_hint"]+=any(x[4] for x in links)
+        counts["source_rows_with_qualified_token_candidate"]+=any(x[3]=="EXACT_TOKEN_SCOPE_UNVERIFIED" for x in links)
+        details.append({"source_record_private":{"record_set":row["record_set"],"snapshot":row["snapshot"],"native_id":row["native_id"],
+                        "reference_field":row["reference_field"],"reference":row["raw_reference"]},
+                        "identity_status":state,"retrieved_gis_records_private":records,
+                        "query_tokens_private":[{"number":n,"suffix":s,"origin":"RAW_EXACT" if (n,s)==raw else "EXISTING_SEARCH_DTO"}
+                                                for n,s in sorted(tokens,key=lambda x:(x[0],x[1] or ""))],
+                        "document_token_candidates_private":[
+                         {"sha256":x[0],"page":x[1],"origin":x[2],"status":x[3],"parcel_hint":x[4],"cadastral_hint":x[5]} for x in links],
+                        "official_plan_verified":None,"ground_verified":False})
     report={"kind":"PRIVATE_ATLAS_EXISTING_SOURCE_BENCHMARK","counts":dict(counts),
+            "limitations":["Search DTO references are retrieval tokens, not proof of original source identity or registry scope.","Only existing extracted title candidates searched; no raw text rescanning."],
             "result_field_names":dict(shapes),"native_sweep_is_partial":True,
             "official_plans_verified":"UNKNOWN","public_export_permitted":False}
     write_private_json(output,{**report,"rows_private":details})

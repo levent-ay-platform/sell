@@ -1,5 +1,5 @@
 import unittest
-from scripts.atlas_existing_source_benchmark import exact_ref,compare_ref,identity,add_matches
+from scripts.atlas_existing_source_benchmark import exact_ref,compare_ref,identity,add_matches,result_reference
 from collections import defaultdict
 class ExistingSourceBenchmarkTest(unittest.TestCase):
     def test_reference_exact(self):
@@ -17,3 +17,10 @@ class ExistingSourceBenchmarkTest(unittest.TestCase):
         hits=defaultdict(set)
         add_matches(hits,{"00123":{("00123","tunis")}},"a"*64,2,"NATIVE",[("00123","Tunis")],True,False)
         self.assertEqual(next(iter(hits[("00123","tunis")]))[3],"EXACT_TOKEN_SCOPE_UNVERIFIED")
+
+    def test_actual_gis_dto_is_candidate_not_identity(self):
+        row={"record_set":"R","snapshot":"S","native_id":"1"}
+        dto={"reference":"000123","feature_id":"1","layer":"L","has_geometry":True,"areas":[]}
+        self.assertEqual(result_reference(dto),("000123",None))
+        self.assertEqual(identity(row,dto),"GIS_FEATURE_RETURNED_SOURCE_IDENTITY_UNPROVEN")
+        self.assertIsNone(result_reference({**dto,"reference":"123 + 456"}))
