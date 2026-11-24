@@ -38,6 +38,65 @@ NULL_FIELDS = {
 }
 
 
+def card_retry_image(photo):
+    """Find one plausible card quadrilateral, without assuming it is an ID."""
+    import cv2
+    import numpy as np
+    h,w=photo.shape[:2]
+    scale=min(1.0,1200/max(h,w))
+    small=cv2.resize(photo,None,fx=scale,fy=scale) if scale<1 else photo
+    gray=cv2.cvtColor(small,cv2.COLOR_BGR2GRAY)
+    edges=cv2.Canny(cv2.GaussianBlur(gray,(5,5),0),45,135)
+    edges=cv2.morphologyEx(edges,cv2.MORPH_CLOSE,np.ones((5,5),np.uint8))
+    contours,_=cv2.findContours(edges,cv2.RETR_LIST,cv2.CHAIN_APPROX_SIMPLE)
+    candidates=[]
+    for contour in sorted(contours,key=cv2.contourArea,reverse=True)[:40]:
+        fraction=cv2.contourArea(contour)/(small.shape[0]*small.shape[1])
+        if not 0.07<=fraction<=0.94:continue
+        quad=cv2.approxPolyDP(contour,0.025*cv2.arcLength(contour,True),True)
+        if len(quad)!=4 or not cv2.isContourConvex(quad):continue
+        pts=quad.reshape(4,2).astype(np.float32)
+        center=pts.mean(axis=0)
+        pts=pts[np.argsort(np.arctan2(pts[:,1]-center[1],pts[:,0]-center[0]))]
+        lengths=np.linalg.norm(np.roll(pts,-1,axis=0)-pts,axis=1)
+        a=float((lengths[0]+lengths[2])/2)
+        b=float((lengths[1]+lengths[3])/2)
+        if min(a,b)<90:continue
+        ratio=max(a,b)/min(a,b)
+        if not 1.30<=ratio<=2.0:continue
+        if a<b:pts=np.roll(pts,-1,axis=0)
+        # Maintain reading orientation for ordinary landscape captures.
+        if pts[0,1]+pts[1,1]>pts[2,1]+pts[3,1]:
+            pts=np.roll(pts,-2,axis=0)
+        candidates.append((abs(ratio-1.59)+0.12*(1-fraction),pts))
+    if not candidates:return None
+    _,pts=min(candidates,key=lambda candidate:candidate[0])
+    pts=pts/scale
+    # Add a small margin to avoid losing text on the printed card edges.
+    pts=pts.mean(axis=0)+(pts-pts.mean(axis=0))*1.035
+    target=np.array([[0,0],[1599,0],[1599,1005],[0,1005]],dtype=np.float32)
+    matrix=cv2.getPerspectiveTransform(pts.astype(np.float32),target)
+    return cv2.warpPerspective(photo,matrix,(1600,1006),
+                               borderMode=cv2.BORDER_REPLICATE)
+
+
+def prefer_card_read(original, alternate):
+    """Select a complete candidate; never splice conflicting ID fields."""
+    keys=("surname","givenName","cinFull","birthDate")
+    if not isinstance(alternate,dict) or set(alternate)!=set(NULL_FIELDS):
+        return original
+    if any(original.get(k) and alternate.get(k) and
+           original[k]!=alternate[k] for k in (*keys,"cinLast4")):
+        return original
+    if any(original.get(k) and not alternate.get(k) for k in keys):
+        return original
+    if sum(bool(alternate.get(k)) for k in keys)<=sum(bool(original.get(k)) for k in keys):
+        return original
+    if alternate.get("confidencePercent",0)<65:
+        return original
+    return alternate
+
+
 class MemoryPilot:
     def __init__(self, recognizer, alphabet, ocr_module):
         self.recognizer = recognizer
@@ -130,7 +189,21 @@ class MemoryPilot:
             if min(h,w) < 175 or max(h,w) > 6000 or h*w > 25_000_000:
                 raise ValueError("invalid dimensions")
             if not self.inference_lock.acquire(blocking=False):raise RuntimeError("OCR busy")
-            try:fields = self.engine.extract_fields(photo,self.recognizer,self.alphabet)
+            try:
+                fields = self.engine.extract_fields(photo,self.recognizer,self.alphabet)
+                if isinstance(fields,dict) and set(fields)==set(NULL_FIELDS) and any(
+                        not fields.get(k) for k in ("surname","givenName","cinFull","birthDate")):
+                    alternate_image=None
+                    try:
+                        alternate_image=card_retry_image(photo)
+                        if alternate_image is not None:
+                            alternate=self.engine.extract_fields(alternate_image,self.recognizer,self.alphabet)
+                            fields=prefer_card_read(fields,alternate)
+                    except Exception:
+                        # Preserve the original result if the optional retry fails.
+                        pass
+                    finally:
+                        if alternate_image is not None:alternate_image.fill(0)
             finally:self.inference_lock.release()
             if not isinstance(fields,dict) or set(fields) != set(NULL_FIELDS):
                 raise ValueError("bad OCR response")
