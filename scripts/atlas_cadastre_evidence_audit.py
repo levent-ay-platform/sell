@@ -32,6 +32,36 @@ PARCEL_REF = re.compile(
     r"\s*(?:n[°ºo.]?\s*|num(?:é|e)ro\s*|رقم\s*)?[:#\s-]*([0-9٠-٩۰-۹]{1,12})",
     re.IGNORECASE,
 )
+# High-recall triage hints, NOT proof of official cadastre, ownership, or map coordinates.
+# A document can have multiple hints; preserve ambiguity for later source review.
+FAMILY_PATTERNS = {
+    "LOTISSEMENT_PLAN_HINT": re.compile(
+        r"plan\s+de\s+lotissement|lotissement|مخطط\s+تقسيم|تقسيم\s+عقاري",
+        re.IGNORECASE,
+    ),
+    "BOUNDARY_SURVEY_HINT": re.compile(
+        r"bornage|proc[eè]s.verbal\s+de\s+(?:bornage|d[eé]limitation)|"
+        r"محضر\s+(?:تحديد|تحويز)|مخطط\s+تحديد",
+        re.IGNORECASE,
+    ),
+    "TOPOGRAPHIC_PLAN_HINT": re.compile(
+        r"plan\s+topograph|lev[eé]\s+topograph|plan\s+de\s+masse|"
+        r"plan\s+d.implantation|مخطط\s+طبوغراف",
+        re.IGNORECASE,
+    ),
+    "OWNERSHIP_DOCUMENT_HINT": re.compile(
+        r"certificat\s+(?:de\s+)?propri[eé]t[eé]|attestation\s+de\s+propri[eé]t[eé]|"
+        r"شهادة\s+(?:اشتراك\s+)?ملكية|عقد\s+بيع",
+        re.IGNORECASE,
+    ),
+    "PLANNING_MAP_HINT": re.compile(
+        r"plan\s+d.am[eé]nagement|\bP\.?\s*A\.?\s*U\.?\b|"
+        r"مخطط\s+التهيئة",
+        re.IGNORECASE,
+    ),
+}
+
+
 DIGITS = str.maketrans("٠١٢٣٤٥٦٧٨٩۰۱۲۳۴۵۶۷۸۹", "01234567890123456789")
 
 
@@ -73,6 +103,7 @@ def audit_snapshot(db: Path, *, snapshot_kind: str) -> dict:
         no_hash = 0
         resources_per_hash: dict[str, int] = defaultdict(int)
         filename_hits: set[str] = set()
+        family_hints: dict[str, set[str]] = defaultdict(set)
         raw_count = 0
         for _resource_id, name, extension, sha in rows:
             raw_count += 1
@@ -84,6 +115,9 @@ def audit_snapshot(db: Path, *, snapshot_kind: str) -> dict:
                 continue
             key = str(sha)
             resources_per_hash[key] += 1
+            for family, family_pattern in FAMILY_PATTERNS.items():
+                if family_pattern.search(name or ""):
+                    family_hints[key].add(family)
             if CADASTRAL_WORDS.search(name or ""):
                 filename_hits.add(key)
 
@@ -108,6 +142,9 @@ def audit_snapshot(db: Path, *, snapshot_kind: str) -> dict:
             if CADASTRAL_WORDS.search(ocr):
                 if page is not None:
                     page_hits[key].add(int(page))
+            for family, family_pattern in FAMILY_PATTERNS.items():
+                if family_pattern.search(ocr):
+                    family_hints[key].add(family)
             title_refs[key].update(references(TITLE_REF, ocr))
             parcel_refs[key].update(references(PARCEL_REF, ocr))
 
@@ -130,6 +167,27 @@ def audit_snapshot(db: Path, *, snapshot_kind: str) -> dict:
                 }
             )
 
+        # This broader queue includes reference-bearing documents even without a
+        # cadastral keyword. Do not silently exclude unrecognized PDFs.
+        review_keys = sorted(
+            key for key in resources_per_hash
+            if family_hints.get(key) or title_refs.get(key) or parcel_refs.get(key)
+            or key in filename_hits or key in page_hits
+        )
+        review_queue = [
+            {
+                "document_sha256": key,
+                "resource_rows": resources_per_hash[key],
+                "family_hints": sorted(family_hints.get(key, set())),
+                "cadastral_term_present": key in filename_hits or key in page_hits,
+                "has_title_reference_candidate": bool(title_refs.get(key)),
+                "has_parcel_reference_candidate": bool(parcel_refs.get(key)),
+                "indexed_document_present": key in indexed_docs,
+                "status": "NEEDS_PROVENANCE_REVIEW",
+            }
+            for key in review_keys
+        ]
+
         report = {
             "schema_version": 1,
             "audit_kind": "CADASTRAL_CANDIDATES_ONLY",
@@ -150,8 +208,17 @@ def audit_snapshot(db: Path, *, snapshot_kind: str) -> dict:
                     if key in indexed_docs
                 ),
                 "cadastral_keyword_candidate_documents": len(candidates),
+                "triage_review_documents": len(review_queue),
+                "pdf_documents_with_family_hints": sum(bool(family_hints.get(key)) for key in resources_per_hash),
+                "pdf_documents_with_reference_candidates": sum(
+                    bool(title_refs.get(key) or parcel_refs.get(key))
+                    for key in resources_per_hash
+                ),
+                "pdf_documents_untriaged_unknown": len(resources_per_hash) - len(review_queue),
             },
             "candidates": candidates,
+            "review_queue": review_queue,
+            "review_queue_semantics": "HINTS_ONLY; unknown remains unknown; no official status implied",
             "verified_official_cadastral_plans": None,
             "verified_georeferenced_parcels": None,
             "publication_rights_verified": False,
@@ -208,6 +275,7 @@ def main() -> None:
         "audit_written": True,
         "snapshot_kind": args.snapshot_kind,
         "candidate_documents": result["counts"]["cadastral_keyword_candidate_documents"],
+        "triage_review_documents": result["counts"]["triage_review_documents"],
         "official_verified": "UNKNOWN",
         "live_consistent": result["live_consistent"],
     }))
