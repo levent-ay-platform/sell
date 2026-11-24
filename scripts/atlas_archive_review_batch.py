@@ -13,7 +13,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
-import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -111,16 +111,24 @@ def _run_child(command, seconds):
     # No child stdout/stderr, private path or OCR text is printed to the operator.
     # The existing workers are bounded, and the operator must provide OS isolation.
     try:
-        result = subprocess.run(command, cwd=REPO, capture_output=True,
-                                timeout=seconds, check=False)
-    except subprocess.TimeoutExpired:
-        return None, "WORKER_TIMEOUT"
+        child = subprocess.Popen(command, cwd=REPO, stdout=subprocess.PIPE,
+                                 stderr=subprocess.PIPE, start_new_session=True)
     except OSError:
         return None, "WORKER_UNAVAILABLE"
-    if result.returncode:
+    try:
+        stdout, _ = child.communicate(timeout=seconds)
+    except subprocess.TimeoutExpired:
+        # On supported POSIX workers, terminate the worker and its OCR/render children.
+        try:
+            os.killpg(child.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        child.communicate()
+        return None, "WORKER_TIMEOUT"
+    if child.returncode:
         return None, "WORKER_REJECTED_INPUT_OR_FAILED"
     try:
-        value = json.loads(result.stdout)
+        value = json.loads(stdout)
         if not isinstance(value, dict):
             raise ValueError("WORKER_JSON_OBJECT_REQUIRED")
         return value, "COMPLETED"
@@ -149,7 +157,7 @@ def _ocr_page_evidence(result):
 
 
 def run_batch(db, kind, roots, output, *, manifest=None, offset=0,
-              max_documents=30, ocr=False, timeout_seconds=180):
+              max_documents=30, ocr=False, timeout_seconds=180, resume_manifest=None):
     if type(offset) is not int or offset < 0 or not 1 <= max_documents <= 100:
         raise ValueError("BOUNDED_BATCH_WINDOW_REQUIRED")
     if not 10 <= timeout_seconds <= 300:
@@ -186,6 +194,26 @@ def run_batch(db, kind, roots, output, *, manifest=None, offset=0,
     queue = sorted(backlog["backlog_private"] + backlog["text_ready_private"],
                    key=lambda row: (-row["priority_score"], row["document_sha256_private"]))
     eligible = [row for row in queue if locations.get(row["document_sha256_private"].lower())]
+    # Offset continuation is only valid for the exact same eligible hash sequence.
+    # Never use a stale offset if a file appears/disappears between runs.
+    queue_hash = hashlib.sha256(json.dumps(
+        [row["document_sha256_private"].lower() for row in eligible],
+        separators=(",", ":")).encode("utf-8")).hexdigest()
+    if offset:
+        if resume_manifest is None:
+            raise ValueError("PREVIOUS_COMPLETED_MANIFEST_REQUIRED")
+        previous = Path(resume_manifest)
+        if previous.is_symlink() or not previous.is_file():
+            raise ValueError("PREVIOUS_COMPLETED_MANIFEST_REQUIRED")
+        proof = json.loads(previous.read_text(encoding="utf-8"))
+        if (proof.get("kind") != "ATLAS_PRIVATE_ARCHIVE_REVIEW_BATCH" or
+                proof.get("snapshot_sha256_private") != snapshot_hash or
+                proof.get("eligible_queue_sha256_private") != queue_hash or
+                proof.get("next_offset") != offset or
+                proof.get("ocr_requested") != ocr):
+            raise ValueError("RESUME_QUEUE_CHANGED_REVIEW_REQUIRED")
+    elif resume_manifest is not None:
+        raise ValueError("RESUME_OFFSET_REQUIRED")
     chosen = eligible[offset:offset+max_documents]
     chosen_keys = {row["document_sha256_private"].lower() for row in chosen}
     status = {}
@@ -272,6 +300,8 @@ def run_batch(db, kind, roots, output, *, manifest=None, offset=0,
             "batch_selected_hashes": len(chosen),
             "states": dict(sorted(Counter(status.values()).items())),
         },
+        "eligible_queue_sha256_private": queue_hash,
+        "ocr_requested": ocr,
         "batch_offset": offset,
         "next_offset": offset+len(chosen) if offset+len(chosen) < len(eligible) else None,
         "all_catalogue_states_private": status,
@@ -281,7 +311,7 @@ def run_batch(db, kind, roots, output, *, manifest=None, offset=0,
         "public_export_permitted": False,
         "limitations": [
             "Stable owner-approved snapshot and archive roots only; no claim of archive-wide coverage.",
-            "Each new offset is meaningful only against an unchanged snapshot and root inventory.",
+            "Offset continuation requires previous completion manifest, unchanged snapshot and eligible hash sequence.",
             "OCR service input limits and missing dependencies may leave documents for manual review.",
             "Review issuer, exact title/parcel evidence, rights and independent ground controls separately.",
         ],
@@ -298,6 +328,7 @@ def main():
     p.add_argument("--archive-root", required=True, action="append", type=Path)
     p.add_argument("--output-directory", required=True, type=Path)
     p.add_argument("--offset", type=int, default=0)
+    p.add_argument("--resume-manifest", type=Path)
     p.add_argument("--max-documents", type=int, default=30)
     p.add_argument("--ocr", action="store_true")
     p.add_argument("--timeout-seconds", type=int, default=180)
@@ -305,7 +336,7 @@ def main():
     report = run_batch(a.db, a.snapshot_kind, a.archive_root, a.output_directory,
                        manifest=a.backup_manifest, offset=a.offset,
                        max_documents=a.max_documents, ocr=a.ocr,
-                       timeout_seconds=a.timeout_seconds)
+                       timeout_seconds=a.timeout_seconds, resume_manifest=a.resume_manifest)
     print(json.dumps({"private_batch_completed": True, "counts": report["counts"],
                       "next_offset": report["next_offset"],
                       "official_plans_verified": "UNKNOWN"}))
