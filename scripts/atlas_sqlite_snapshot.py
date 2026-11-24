@@ -9,6 +9,7 @@ opened in standard mode=ro. No checkpoint, journal-mode change, or migration.
 from __future__ import annotations
 
 import argparse
+from contextlib import closing
 import hashlib
 import json
 import os
@@ -38,7 +39,7 @@ def _check_source(path):
         raise ValueError("INVALID_SQLITE_HEADER")
     wal_mode=header[18]==2 or header[19]==2
     sidecar_paths=[Path(str(path)+ending) for ending in ("-wal","-shm")]
-    if wal_mode and any(not item.is_file() for item in sidecar_paths):
+    if wal_mode and any(not item.is_file() or item.is_symlink() for item in sidecar_paths):
         raise RuntimeError("WAL_SIDECARS_MISSING_OWNER_COORDINATION_REQUIRED")
     return wal_mode
 
@@ -70,14 +71,14 @@ def backup_owner_authorized(source, target, manifest):
         os.chmod(staging,0o600)
         source_uri=source.resolve().as_uri()+"?mode=ro"
         # NO immutable=1: SQLite must see live committed state / WAL.
-        with sqlite3.connect(source_uri,uri=True,timeout=2.0) as read:
+        with closing(sqlite3.connect(source_uri,uri=True,timeout=2.0)) as read:
             read.execute("PRAGMA query_only=ON")
             source_counts=_counts(read)  # prove a normal RO SQL statement worked
-            with sqlite3.connect(staging) as write:
+            with closing(sqlite3.connect(staging)) as write:
                 read.backup(write,pages=128,sleep=0.02)
                 write.commit()
-        with sqlite3.connect(Path(staging).resolve().as_uri()+"?mode=ro&immutable=1",
-                             uri=True) as verify:
+        with closing(sqlite3.connect(Path(staging).resolve().as_uri()+"?mode=ro&immutable=1",
+                             uri=True)) as verify:
             integrity=verify.execute("PRAGMA integrity_check").fetchone()[0]
             if integrity!="ok":
                 raise ValueError("SQLITE_BACKUP_INTEGRITY_FAILED")
@@ -119,7 +120,7 @@ def main():
     report=backup_owner_authorized(args.source,args.target,args.manifest)
     print(json.dumps({"private_backup_completed":True,
                       "backup_integrity":report["backup_integrity_check"],
-                      "publicated":False}))
+                      "deployed":False}))
 
 
 if __name__=="__main__":
