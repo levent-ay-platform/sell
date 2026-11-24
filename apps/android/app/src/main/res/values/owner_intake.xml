@@ -19,4 +19,8 @@
     <string name="intake_plan_stored">Plan stored privately. Reading unavailable; retry or open the page editor.</string>
     <string name="intake_extra_stored">Additional document attached privately.</string>
     <string name="intake_supplement_failed">Unable to complete this request. Retry without selecting the file again.</string>
+    <string name="intake_local_outline_notice">Local outline suggestion only; confirm against the original plan. No map location is inferred.</string>
+    <string name="intake_local_outline_action">Use outline %1$d / %2$d</string>
+    <string name="intake_local_outline_clear">Clear suggested outline</string>
+    <string name="intake_local_outline_none">No closed shape detected. Trace the plan manually.</string>
 </resources>

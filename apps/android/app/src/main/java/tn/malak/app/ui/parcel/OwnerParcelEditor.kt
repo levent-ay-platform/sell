@@ -34,6 +34,8 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import tn.malak.app.R
 import tn.malak.app.ui.Brand
 import tn.malak.app.ui.OwnerEvidenceSession
@@ -75,6 +77,9 @@ internal fun OwnerParcelEditor(
     var saving by remember(source) { mutableStateOf(false) }
     var saveError by remember(source) { mutableStateOf(false) }
     var initialCandidate by remember(source) { mutableStateOf(false) }
+    var localCandidates by remember(source) { mutableStateOf(emptyList<List<ParcelPoint>>()) }
+    var localCandidateIndex by remember(source) { mutableIntStateOf(0) }
+    var localScanned by remember(source) { mutableStateOf(false) }
     var vertices by remember(source) { mutableStateOf(emptyList<ParcelPoint>()) }
     var edges by remember(source) { mutableStateOf(emptyMap<Int, EditableParcelEdge>()) }
     var selected by remember(source) { mutableStateOf<Int?>(null) }
@@ -107,6 +112,29 @@ internal fun OwnerParcelEditor(
             } else {
                 vertices = source.scan?.let { scaleCandidate(it, page.frame) }.orEmpty()
                 initialCandidate = vertices.isNotEmpty()
+            }
+            // Compute local hypotheses off the UI thread only when no existing
+            // user draft or server candidate is available.
+            if(prior==null && vertices.isEmpty()){
+                localCandidates=withContext(Dispatchers.Default){
+                    val scale=minOf(1.0,640.0/maxOf(page.bitmap.width,page.bitmap.height))
+                    val w=(page.bitmap.width*scale).toInt();val h=(page.bitmap.height*scale).toInt()
+                    if(w<32||h<32)emptyList() else {
+                        val small=android.graphics.Bitmap.createScaledBitmap(page.bitmap,w,h,true)
+                        try{
+                            val pixels=IntArray(w*h)
+                            small.getPixels(pixels,0,w,0,0,w,h)
+                            val mask=BooleanArray(pixels.size){i->
+                                val p=pixels[i]
+                                android.graphics.Color.alpha(p)>100 &&
+                                    (android.graphics.Color.red(p)*3+android.graphics.Color.green(p)*6+
+                                        android.graphics.Color.blue(p))/10<145
+                            }
+                            LocalPlanOutline.candidates(w,h,mask,page.frame)
+                        }finally{if(small!==page.bitmap)small.recycle()}
+                    }
+                }
+                localScanned=true
             }
             preview = page
         } catch (cancel: CancellationException) {
@@ -178,6 +206,25 @@ internal fun OwnerParcelEditor(
                         style = MaterialTheme.typography.bodySmall)
                     Text(s(R.string.parcel_editor_manual), color = Brand.Muted,
                         style = MaterialTheme.typography.bodySmall)
+                    if(localCandidates.isNotEmpty()){
+                        Text(s(R.string.intake_local_outline_notice),color=Brand.Muted,
+                            style=MaterialTheme.typography.bodySmall)
+                        OutlinedButton(onClick={
+                            vertices=localCandidates[localCandidateIndex]
+                            localCandidateIndex=(localCandidateIndex+1)%localCandidates.size
+                            edges=emptyMap();selected=null;referenceEdge=null;saveError=false
+                        },enabled=active&&vertices.isEmpty(),modifier=Modifier.fillMaxWidth()){
+                            Text(s(R.string.intake_local_outline_action,localCandidateIndex+1,localCandidates.size))
+                        }
+                        if(vertices.isNotEmpty()&&priorIsLocalCandidate(vertices,localCandidates)){
+                            TextButton(onClick={vertices=emptyList();edges=emptyMap();selected=null;referenceEdge=null}){
+                                Text(s(R.string.intake_local_outline_clear))
+                            }
+                        }
+                    } else if(localScanned){
+                        Text(s(R.string.intake_local_outline_none),color=Brand.Muted,
+                            style=MaterialTheme.typography.bodySmall)
+                    }
                 }
                 item {
                     Surface(color = Color.White, shape = MaterialTheme.shapes.medium) {
@@ -520,3 +567,5 @@ private fun closestVertex(
     }
     return closest
 }
+
+private fun priorIsLocalCandidate(vertices:List<ParcelPoint>, candidates:List<List<ParcelPoint>>):Boolean = candidates.any { it==vertices }

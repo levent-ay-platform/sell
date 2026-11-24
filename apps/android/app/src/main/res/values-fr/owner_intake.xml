@@ -19,4 +19,8 @@
     <string name="intake_plan_stored">Plan conservé en privé. Lecture indisponible ; réessayer ou ouvrir le plan.</string>
     <string name="intake_extra_stored">Document complémentaire joint en privé.</string>
     <string name="intake_supplement_failed">Impossible de terminer la demande. Réessayer sans sélectionner le fichier.</string>
+    <string name="intake_local_outline_notice">Suggestion de contour local à vérifier sur le plan original. Aucune position géographique déduite.</string>
+    <string name="intake_local_outline_action">Utiliser le contour %1$d / %2$d</string>
+    <string name="intake_local_outline_clear">Effacer le contour proposé</string>
+    <string name="intake_local_outline_none">Aucun contour fermé détecté. Tracer le plan manuellement.</string>
 </resources>
