@@ -193,3 +193,25 @@ The placeholders are not real local paths or a known document SHA. The protected
 **Limitations and fallback:** nested Form XObjects, curves, embedded images, clipping, filled-path holes and raster scans are not fully interpreted. The tool explicitly records applicable limitations; even a valid outline may be a road/building/legend/frame. Review the rendering against the original page. Use the existing raster/crop route when direct vectors are unavailable, not a fictitious outline. Do not auto-promote any geometry or document to official cadastral status.
 
 Nine synthetic PDF tests cover digest binding, graphics-state transforms, rotation/crop, rejected paths, multiple outlines, flags, page selection and the candidate-only georeference handoff. Real Mac documents, title matches and spatial coverage still require independent acceptance. The Mac archive and live SQLite database were not altered.
+
+## Unified private archive review batches — 2026-11-24
+
+`scripts/atlas_archive_review_batch.py` integrates the stable catalogue audit, source-aware OCR backlog, one or more disjoint local PDF roots, actual SHA verification, priority selection, direct PDF vector extraction, and optional existing Amlak text/OCR/raster worker in a single owner-operated POSIX command.
+
+```sh
+python3 -m scripts.atlas_archive_review_batch \
+  --db /private/owner-backup/catalogue.sqlite \
+  --snapshot-kind transactional_backup \
+  --backup-manifest /private/owner-backup/manifest.json \
+  --archive-root /private/approved/pdfs \
+  --output-directory /private/atlas-reports/run-001 \
+  --max-documents 100 --ocr
+```
+
+Paths above are placeholders. The transactional backup manifest must match the actual snapshot SHA and Backup API evidence; do not use the operational database. The alternative `mainfile_diagnostic` is a historical diagnostic only. Install the existing worker dependencies (Poppler, Tesseract Arabic/French language data, Pillow, pypdf) in the authorized isolated environment; the existing OCR worker retains its 12 MiB / 8-page limits. Direct vectors have separate 64 MiB / 32-page limits. Failed or unsupported documents remain visible for private review; these limits are not a guarantee of successful OCR or complete parsing.
+
+Each run uses a new mode-0700 output directory. Audit/backlog, separate root inventories, per-document results and the final completion manifest are private mode-0600 JSON. The worker receives a temporary private copy rehashed against the catalogue immediately before processing. The same SHA binds vector and text evidence. Raw OCR lines are not copied into the batch result: only page-local reference/family hints, optional raster contour and method/status are retained. Unknown/unhashed entries are preserved in the inventory. All hashed documents are accounted for; no automatic publication, owner match or geolocation occurs.
+
+Resume only with the previous completed manifest and the exact next offset it supplies. Repeat the same snapshot, roots and OCR choice, use a new output directory, and add `--offset N --resume-manifest /private/atlas-reports/run-001/completed-private-manifest.json`. A changed snapshot or eligible hash sequence fails closed. Previously processed documents are not selected in the next window; the new run does recheck the directory inventory and snapshot. An interrupted/failed run without a completed manifest is not a completed batch.
+
+Worker process groups are time-bounded; the operator must also enforce OS isolation and memory limits. No live DB, archive, network deployment or APK is modified. The existing reviewed link/GCP/publication/withdrawal contracts remain separate gates. Synthetic PDF text/vector integration and failure/resume tests exercise the batch; this is not acceptance on real Nabeul/Kélibia documents.
