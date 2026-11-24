@@ -1,5 +1,5 @@
 import unittest
-from scripts.atlas_existing_source_benchmark import exact_ref,compare_ref,identity,add_matches,result_reference,stored_numeric_hits,observed_source_format
+from scripts.atlas_existing_source_benchmark import exact_ref,compare_ref,identity,add_matches,result_reference,stored_numeric_hits,observed_source_format,dar_source_rows
 from collections import defaultdict
 class ExistingSourceBenchmarkTest(unittest.TestCase):
     def test_reference_exact(self):
@@ -50,3 +50,19 @@ class ExistingSourceBenchmarkTest(unittest.TestCase):
             parsed=observed_source_format(text)
             self.assertFalse(parsed["tokens"])
             self.assertTrue(parsed["weak_numbers"])
+
+    def test_dar_cohort_preserves_source_identity_without_owner_values(self):
+        import sqlite3,tempfile
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as d:
+            db=Path(d)/"property.sqlite"
+            with sqlite3.connect(db) as c:
+                c.execute("CREATE TABLE subjects(feature_id TEXT,snapshot TEXT,native_id TEXT)")
+                c.execute("CREATE TABLE title_tokens(feature_id TEXT,field TEXT,token_position INTEGER,token TEXT,status TEXT)")
+                c.execute("INSERT INTO subjects VALUES('source:1','snapshot','1')")
+                c.execute("INSERT INTO title_tokens VALUES('source:1','Titre_Foncier',0,'00123','CANDIDATE')")
+            rows,status=dar_source_rows(db)
+            self.assertEqual(status,"READ_EXISTING_SOURCE_COHORT")
+            self.assertEqual(rows[0]["raw_reference"],"00123")
+            self.assertEqual(rows[0]["source_feature_id_private"],"source:1")
+            self.assertEqual(rows[0]["record_set"],"dar_chaabane_title_tokens")

@@ -95,6 +95,26 @@ def identity(row,result):
     if "record_set" not in result:return "NATIVE_ID_SNAPSHOT_MATCH_GROUP_UNRESOLVED"
     return "SOURCE_IDENTITY_MATCH" if result["record_set"]==row["record_set"] else "EXPLICIT_SOURCE_ID_MISMATCH"
 
+def dar_source_rows(db):
+    """Read the existing Dar Chaabane source cohort without copying names or URLs."""
+    if not db.is_file() or db.is_symlink():return [],"SNAPSHOT_NOT_AVAILABLE"
+    if any(Path(str(db)+suffix).exists() for suffix in ("-wal","-shm")):
+        return [],"STANDALONE_SNAPSHOT_REQUIRED"
+    digest=_digest(db)
+    with closing(sqlite3.connect(db.resolve().as_uri()+"?mode=ro&immutable=1",uri=True)) as conn:
+        conn.execute("PRAGMA query_only=ON")
+        count=conn.execute("SELECT COUNT(*) FROM title_tokens").fetchone()[0]
+        if count>1000:return [],"SAMPLE_BOUND_EXCEEDED"
+        rows=[{"record_set":"dar_chaabane_title_tokens","snapshot":str(snapshot),
+               "native_id":str(native_id),"reference_field":field,"raw_reference":str(token),
+               "source_feature_id_private":str(feature_id),"source_token_status_private":str(status)}
+              for feature_id,snapshot,native_id,field,token,status in conn.execute(
+                  "SELECT s.feature_id,s.snapshot,s.native_id,t.field,t.token,t.status "
+                  "FROM title_tokens t JOIN subjects s ON s.feature_id=t.feature_id "
+                  "ORDER BY s.feature_id,t.field,t.token_position") if token is not None]
+    if _digest(db)!=digest:raise ValueError("DAR_SOURCE_SNAPSHOT_CHANGED")
+    return rows,"READ_EXISTING_SOURCE_COHORT"
+
 def benchmark(atlas,run,native,output):
     atlas=Path(atlas).resolve(strict=True);run=private_dir(run);native=private_dir(native)
     output=Path(output).absolute()
@@ -105,9 +125,11 @@ def benchmark(atlas,run,native,output):
     with (data/"derived/names-sweep-20261115-r3/lotissement_title_same_record.csv").open(encoding="utf-8-sig") as f:
         rows=list(csv.DictReader(f))
     if not rows or len(rows)>1000:raise ValueError("BOUNDED_SOURCE_SAMPLE_REQUIRED")
+    dar,dar_status=dar_source_rows(data/"reports/dar-chaabane-20261116/reconciliation/property-evidence.sqlite")
+    rows.extend(dar)
     refs=defaultdict(set)
     weak_refs=set()
-    counts=Counter();formats=Counter();scope_labels=Counter()
+    counts=Counter();formats=Counter();scope_labels=Counter();cohorts=defaultdict(Counter)
     # Reuse existing local search implementation with a private temporary copy.
     manifest=json.loads((data/"map-index/manifest.json").read_text())
     db=data/"map-index"/Path(manifest["file"]).name
@@ -124,6 +146,8 @@ def benchmark(atlas,run,native,output):
         if (before.st_size,before.st_mtime_ns)!=(after.st_size,after.st_mtime_ns):raise ValueError("MAP_INDEX_CHANGED")
         # Use the actual existing search engine first, before collecting PDF evidence.
         for row in rows:
+            cohort=cohorts[row["record_set"]]
+            cohort["tested"]+=1
             counts["source_rows_tested"]+=1
             parsed=observed_source_format(row["raw_reference"])
             formats[parsed["format"]]+=1
@@ -136,6 +160,7 @@ def benchmark(atlas,run,native,output):
             weak_refs.update(parsed["weak_numbers"])
             try:
                 normalized=title_lookup.normalize(row["raw_reference"])
+                if normalized is None:counts["existing_normalization_rejected"]+=1
                 token=result_reference({"reference":normalized})
                 if token and not parsed["weak_numbers"]:tokens.add(token)
             except (ValueError,TypeError):
@@ -161,7 +186,12 @@ def benchmark(atlas,run,native,output):
                 state="SEARCH_ERROR_"+type(exc).__name__
             counts[state]+=1
             counts["source_rows_with_query_tokens"]+=bool(tokens)
-            counts["source_rows_recovered_by_existing_search"]+=raw is None and bool(tokens)
+            counts["source_rows_recovered_by_observed_format"]+=raw is None and bool(parsed["tokens"])
+            counts["source_rows_with_tokens_or_weak_leads"]+=bool(tokens or parsed["weak_numbers"])
+            cohort["with_query_tokens"]+=bool(tokens)
+            cohort["with_weak_leads"]+=bool(parsed["weak_numbers"])
+            cohort["with_returned_geometry"]+=any(r.get("has_geometry") is True for r in records)
+            cohort[state]+=1
             counts["source_rows_with_returned_geometry"]+=any(r.get("has_geometry") is True for r in records)
             for token in tokens:refs[token[0]].add(token)
             retrieved.append((row,raw,tokens,state,records,parsed))
@@ -214,20 +244,25 @@ def benchmark(atlas,run,native,output):
         counts["source_rows_with_qualified_token_candidate"]+=any(x[3]=="EXACT_TOKEN_SCOPE_UNVERIFIED" for x in links)
         weak=set().union(*(numeric.get(n,set()) for n in ({n for n,s in tokens}|parsed["weak_numbers"])))
         counts["source_rows_with_untyped_numeric_text_occurrences"]+=bool(weak)
+        cohort=cohorts[row["record_set"]]
+        cohort["with_document_token_candidates"]+=bool(links)
+        cohort["with_untyped_numeric_occurrences"]+=bool(weak)
         details.append({"source_format_private":parsed["format"],"source_scope_labels_private":parsed["scope_labels_private"],
                         "ambiguous_numbers_private":sorted(parsed["weak_numbers"]),"extra_code_private":parsed["extra_code_private"],
                         "untyped_numeric_occurrences_private":[{"sha256":h,"page":p,
                         "status":"NUMBER_OCCURRENCE_NOT_TITLE_EVIDENCE"} for h,p in sorted(weak,key=lambda x:(x[0],x[1] or 0))],
                         "source_record_private":{"record_set":row["record_set"],"snapshot":row["snapshot"],"native_id":row["native_id"],
-                        "reference_field":row["reference_field"],"reference":row["raw_reference"]},
+                        "reference_field":row["reference_field"],"reference":row["raw_reference"],
+                        "source_feature_id_private":row.get("source_feature_id_private"),"source_token_status_private":row.get("source_token_status_private")},
                         "identity_status":state,"retrieved_gis_records_private":records,
-                        "query_tokens_private":[{"number":n,"suffix":s,"origin":"RAW_EXACT" if (n,s)==raw else "EXISTING_ENGINE_TOKEN"}
+                        "query_tokens_private":[{"number":n,"suffix":s,"origin":"RAW_EXACT" if (n,s)==raw else "OBSERVED_SOURCE_FORMAT" if (n,s) in parsed["tokens"] else "EXISTING_ENGINE_TOKEN"}
                                                 for n,s in sorted(tokens,key=lambda x:(x[0],x[1] or ""))],
                         "document_token_candidates_private":[
                          {"sha256":x[0],"page":x[1],"origin":x[2],"status":x[3],"parcel_hint":x[4],"cadastral_hint":x[5]} for x in links],
                         "official_plan_verified":None,"ground_verified":False})
     report={"kind":"PRIVATE_ATLAS_EXISTING_SOURCE_BENCHMARK","counts":dict(counts),
             "limitations":["Search DTO references are retrieval tokens, not proof of original source identity or registry scope.","Stored indexed text also searched for standalone numeric occurrences, which are not title evidence."],
+            "cohort_counts":{k:dict(v) for k,v in cohorts.items()},"dar_source_status":dar_status,
             "source_reference_formats":dict(formats),"source_scope_label_counts":dict(scope_labels),
             "result_field_names":dict(shapes),"native_sweep_is_partial":True,
             "official_plans_verified":"UNKNOWN","public_export_permitted":False}
