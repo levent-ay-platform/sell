@@ -2,7 +2,7 @@ name: Amlak intake OCR regression (synthetic only)
 on:
   push:
     branches: [feat/amlak-unified-intake-20261124]
-    paths: ['services/verification/ocr/**', '.github/workflows/amlak-intake-ocr.yml']
+    paths: ['services/verification/ocr/**', 'services/verification/qa/**', '.github/workflows/amlak-intake-ocr.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -20,3 +20,6 @@ jobs:
       - run: python -m pip install "numpy==1.26.4" "opencv-python-headless==4.10.0.84" "onnxruntime==1.23.2" "PyYAML==6.0.2"
       - run: python -m unittest test_cin_mac_date test_cin_v5_date -v
         working-directory: services/verification/ocr
+
+      - run: python -m unittest test_pilot_card_retry -v
+        working-directory: services/verification/qa
