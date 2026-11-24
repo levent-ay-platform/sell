@@ -20,6 +20,7 @@ import time
 import threading
 from collections import defaultdict, deque
 from pathlib import Path
+from analysis_revision import document_engine_revision
 
 # Suppress Python tracebacks containing request details.
 sys.tracebacklimit = 0
@@ -250,6 +251,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if self.path == "/healthz":
             self.send_header("X-Malak-Vision-Ready","1" if getattr(self.server.pilot,"vision_worker_ready",False) else "0")
             self.send_header("X-Malak-Dual-Reader","vision-consensus-v1")
+            self.send_header("X-Malak-Document-Revision",document_engine_revision())
         self.send_header("Content-Type","application/json; charset=utf-8")
         self.send_header("Content-Length",str(len(raw)))
         self.send_header("Cache-Control","no-store, max-age=0")
@@ -337,6 +339,7 @@ def main():
         config=json.loads(config_path.read_text())
         for key,value in config.items():
             if key.startswith("MALAK_") and isinstance(value,str):os.environ.setdefault(key,value)
+    document_engine_revision()  # reject invalid deployment metadata at startup
     if os.environ.get("MALAK_PYTHON_DEPS"):sys.path.insert(0,os.environ["MALAK_PYTHON_DEPS"])
     if len(sys.argv)<3 or sys.argv[1]!="--model-root":
         raise SystemExit("usage: mac_pilot_ocr_http.py --model-root /private/ocr/model")

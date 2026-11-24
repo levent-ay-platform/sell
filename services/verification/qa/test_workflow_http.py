@@ -109,6 +109,27 @@ class HttpWorkflow(unittest.TestCase):
             from pilot_workflow import digest
             with self.store.db() as db:db.execute('UPDATE sessions SET expires=0 WHERE digest=?',(digest(token),))
             self.assertEqual(post()[0],401);self.assertEqual(self.pair.calls,4)
+    def test_document_revision_invalidates_cache_without_changing_source_or_deleting_review(self):
+        from unittest.mock import patch
+        token=self.store.login('+21623456789','1234','A'*43)['bearer']
+        doc=b'%PDF-1.4'+b' '*30;photo=b'\xff\xd8\xff'+b' '*30
+        payload=bytes([1,1])+struct.pack('>I',len(doc))+doc+struct.pack('>I',len(photo))+photo
+        def post():
+            return self.request('/internal/v1/pilot/compare-pair',payload,token,
+                {'Content-Type':'application/octet-stream','X-Pilot-Ocr-Consent':'1','X-Pilot-Analysis-Key':'a'*64})
+        with patch.dict('os.environ',{'MALAK_SOURCE_SHA':'same-service','MALAK_DOCUMENT_ENGINE_REVISION':'1'*40}):
+            status,first=post();self.assertEqual(status,200)
+            self.assertEqual(first['documentEngineRevision'],'1'*40)
+            self.assertEqual(post()[1]['comparison']['reviewId'],first['comparison']['reviewId'])
+            self.assertEqual(self.pair.calls,1)
+        with patch.dict('os.environ',{'MALAK_SOURCE_SHA':'same-service','MALAK_DOCUMENT_ENGINE_REVISION':'2'*40}):
+            status,fresh=post();self.assertEqual(status,200)
+            self.assertEqual(fresh['documentEngineRevision'],'2'*40)
+            self.assertNotEqual(fresh['comparison']['reviewId'],first['comparison']['reviewId'])
+            self.assertEqual(self.pair.calls,2)
+            self.assertEqual(post()[1]['comparison']['reviewId'],fresh['comparison']['reviewId'])
+            self.assertEqual(self.pair.calls,2)
+            self.assertEqual(self.request('/api/pilot/reviews/'+first['comparison']['reviewId'],token=token)[0],200)
     def request(self,path,data=None,token=None,headers=None):
         h=headers or {};method='GET' if data is None else 'POST'
         if token:h['Authorization']='Bearer '+token

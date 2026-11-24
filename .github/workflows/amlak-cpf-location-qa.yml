@@ -3,7 +3,7 @@ on:
   pull_request:
     paths:
       - 'services/verification/src/document-family-fields-v2.ts'
-      - 'services/verification/qa/compare_mac_pair.mjs'
+      - 'services/verification/qa/**'
       - 'services/verification/test/document-family-fields-v2.test.ts'
       - 'apps/android/**'
       - '.github/workflows/amlak-cpf-location-qa.yml'
@@ -22,6 +22,21 @@ jobs:
         with:
           node-version: '22'
       - run: node --experimental-strip-types --test services/verification/test/*.test.ts
+  private-http-contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install --disable-pip-version-check -r services/verification/qa/requirements-runtime.txt
+      - name: Local HTTP and cache regression tests (synthetic only)
+        env:
+          PYTHONPATH: services/verification/qa
+        run: python -m unittest -v test_mac_pilot_ocr_http test_workflow_http
   android:
     runs-on: ubuntu-24.04
     timeout-minutes: 35

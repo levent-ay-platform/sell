@@ -123,6 +123,21 @@ class Contract(unittest.TestCase):
             r.read()
         finally:conn.close()
 
+    def test_health_identifies_explicit_document_engine_without_changing_source(self):
+        from unittest.mock import patch
+        from analysis_revision import analysis_cache_revision, document_engine_revision
+        with patch.dict('os.environ',{'MALAK_SOURCE_SHA':'service','MALAK_DOCUMENT_ENGINE_REVISION':'a'*40}):
+            conn=HTTPConnection("127.0.0.1",self.server.server_port,timeout=5)
+            try:
+                conn.request("GET","/healthz");r=conn.getresponse()
+                self.assertEqual(r.getheader("X-Malak-Source-Revision"),"service")
+                self.assertEqual(r.getheader("X-Malak-Document-Revision"),"a"*40)
+                self.assertEqual(analysis_cache_revision(),"service:document:"+"a"*40)
+                r.read()
+            finally:conn.close()
+        with patch.dict('os.environ',{'MALAK_DOCUMENT_ENGINE_REVISION':'invalid'}):
+            with self.assertRaises(ValueError):document_engine_revision()
+
     def test_health_is_private_ready_status_only(self):
         status,payload=self.request("/healthz",method="GET")
         self.assertEqual(status,200)

@@ -9,6 +9,7 @@ import secrets
 import time
 from datetime import datetime, timezone
 from pilot_workflow import WorkflowError
+from analysis_revision import analysis_cache_revision, document_engine_revision
 from pilot_parcel_bridge import PilotParcelBridge, UUID
 
 ID=r'[0-9a-f-]{36}'
@@ -213,7 +214,7 @@ class WorkflowRoutes:
                 fingerprint=hashlib.sha256(data).hexdigest()
                 intent=h.headers.get('X-Pilot-Analysis-Key',secrets.token_hex(32))
                 if not re.fullmatch(r'[0-9a-f]{64}',intent):raise WorkflowError(400,'INVALID_ANALYSIS_KEY')
-                revision=os.environ.get('MALAK_SOURCE_SHA','development')
+                revision=analysis_cache_revision()
                 cached=self.store.cached_analysis(user,intent,fingerprint,revision)
                 if cached:
                     review,report,same_intent,_=cached
@@ -225,7 +226,7 @@ class WorkflowRoutes:
                 # Recheck session after inference; expired session cannot save/result.
                 if self.actor(h)!=user:raise WorkflowError(401,'SESSION_REQUIRED')
                 if not cached or not cached[2]:review=self.store.record_review(user,files,report,(intent,fingerprint,revision,cached[3] if cached else int(time.time())))
-                h.result(200,{'ok':True,'pilotOcr':True,'comparison':{**report,'reviewId':review},'identityVerified':False,'ownershipVerified':False,'mayPublish':False});return True
+                h.result(200,{'ok':True,'pilotOcr':True,'comparison':{**report,'reviewId':review},'documentEngineRevision':document_engine_revision(),'identityVerified':False,'ownershipVerified':False,'mayPublish':False});return True
             if path=='/api/pilot/submissions':
                 user=self.actor(h)
                 if method=='GET':h.result(200,{'ok':True,'submissions':self.store.own_submissions(user)});return True
