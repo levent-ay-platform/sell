@@ -169,6 +169,7 @@ def build_context(source,registry,graph,gov,deleg):
         item=item if isinstance(item,dict) else {}
         k=key(item.get("source_scoped_key"))
         record={"ordinal_private":ordinal,"source_scoped_key":list(k) if k else None,
+                "geometry_input_state":item.get("geometry_input_state") if item.get("geometry_input_state") in ("GEOMETRY_NOT_MAPPED","MISSING_OR_UNSUPPORTED_GEOMETRY","WGS84_POLYGON_DECLARED_NOT_VALIDATED") else "UNSPECIFIED",
                 "geometry_kind":item.get("geometry_kind") if item.get("geometry_kind") in
                 ("CADASTRE_SOURCE","PLANNING_SOURCE","OTHER_SOURCE") else "UNKNOWN",
                 "governorate_intersections":[],"delegation_intersections":[],

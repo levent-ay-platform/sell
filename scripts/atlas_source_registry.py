@@ -144,7 +144,7 @@ def reference(value, min_digits):
     return value if re.fullmatch(r"[0-9]{%d,12}" % min_digits, value) else None
 
 
-def export_registry(path, config):
+def export_registry(path, config, *, include_geometries=False):
     if not isinstance(config,dict) or config.get("kind")!="PRIVATE_REVIEWED_SOURCE_MAPPING":
         raise ValueError("EXPLICIT_REVIEWED_MAPPING_REQUIRED")
     expected=config["snapshot_sha256_private"]
@@ -153,6 +153,7 @@ def export_registry(path, config):
     if not isinstance(mappings,list) or not 1<=len(mappings)<=100:
         raise ValueError("BOUNDED_SOURCE_MAPPINGS_REQUIRED")
     records=[]
+    geometries=[]
     seen_tables=set()
     with snapshot(path,expected,kind) as db:
         for mapping in mappings:
@@ -174,14 +175,25 @@ def export_registry(path, config):
                 if isinstance(rules.get(f),dict) and "literal" in rules[f]:
                     raise ValueError("ROW_SPECIFIC_VALUE_CANNOT_BE_LITERAL")
             names=[c["name"] for c in columns(db,table)]
-            for rule in rules.values():
+            geometry_mapping=mapping.get("geometry") if include_geometries else None
+            geometry_rule=None
+            if geometry_mapping is not None:
+                if (not isinstance(geometry_mapping,dict) or geometry_mapping.get("crs")!="EPSG:4326"
+                        or geometry_mapping.get("format")!="GeoJSON"
+                        or geometry_mapping.get("kind") not in ("CADASTRE_SOURCE","PLANNING_SOURCE","OTHER_SOURCE")):
+                    raise ValueError("EXPLICIT_WGS84_GEOJSON_MAPPING_REQUIRED")
+                geometry_rule=geometry_mapping.get("rule")
+                if not isinstance(geometry_rule,dict) or "column" not in geometry_rule or "literal" in geometry_rule:
+                    raise ValueError("ROW_GEOMETRY_FIELD_REQUIRED")
+            selected_rules=list(rules.values()) + ([geometry_rule] if geometry_rule is not None else [])
+            for rule in selected_rules:
                 if rule is not None and (not isinstance(rule,dict) or
                         ("column" in rule and rule["column"] not in names)):
                     raise ValueError("MAPPING_COLUMN_NOT_FOUND")
             count=db.execute("SELECT COUNT(*) FROM "+ident(table)).fetchone()[0]
             if len(records)+count>MAX_ROWS:
                 raise ValueError("MAX_SOURCE_ROWS_EXCEEDED")
-            selected=sorted({rule["column"] for rule in rules.values()
+            selected=sorted({rule["column"] for rule in selected_rules
                              if isinstance(rule,dict) and "column" in rule})
             sql="SELECT "+",".join(map(ident,selected))+" FROM "+ident(table)
             actual=0
@@ -200,6 +212,22 @@ def export_registry(path, config):
                     reasons.append("REGISTRY_SCOPE_UNREVIEWED")
                 if record["title_reference"] is None or record["parcel_reference"] is None:
                     reasons.append("REFERENCE_MISSING_OR_UNSAFE_REPRESENTATION")
+                if include_geometries:
+                    value=read_field(row,geometry_rule)
+                    if isinstance(value,str) and len(value)<=MAX_JSON:
+                        try:
+                            value=json.loads(value)
+                        except ValueError:
+                            value=None
+                    geometry=None
+                    state="GEOMETRY_NOT_MAPPED" if geometry_rule is None else "MISSING_OR_UNSUPPORTED_GEOMETRY"
+                    if isinstance(value,dict) and value.get("type") in ("Polygon","MultiPolygon") and isinstance(value.get("coordinates"),list):
+                        geometry={"type":value["type"],"coordinates":value["coordinates"]}
+                        state="WGS84_POLYGON_DECLARED_NOT_VALIDATED"
+                    geometries.append({"table_private":table,"scan_ordinal_private":actual,
+                        "source_scoped_key":[record[f] for f in KEY],
+                        "geometry_kind":geometry_mapping["kind"] if geometry_mapping else "UNKNOWN",
+                        "geometry_input_state":state,"geometry":geometry})
                 records.append({"table_private":table,"scan_ordinal_private":actual,
                                 "observed_fields_private":{f:scalar(raw[f]) for f in FIELDS},
                                 "source_record_private":record,"reasons":reasons})
@@ -217,13 +245,20 @@ def export_registry(path, config):
             entry["reasons"].append("DUPLICATE_SCOPED_IDENTITY")
         if not entry["reasons"]:
             candidates.append(row)
-    return {"kind":"PRIVATE_ATLAS_SOURCE_REGISTRY","schema_version":1,
+    report={"kind":"PRIVATE_ATLAS_SOURCE_REGISTRY","schema_version":1,
             "snapshot_kind":kind,"snapshot_sha256_private":expected,
             "counts":{"mapped_rows":len(records),"candidate_source_rows":len(candidates),
                       "unresolved_rows":len(records)-len(candidates),
                       "unresolved_reasons":dict(Counter(r for e in records for r in e["reasons"]))},
             "rows_private":records,"candidate_source_records_private":candidates,
             "official_plan_verified":None,"public_export_permitted":False}
+    if include_geometries:
+        if len(geometries)!=len(records):
+            raise ValueError("GEOMETRY_ROW_ACCOUNTING_MISMATCH")
+        report["geometry_projection_private"]={"kind":"PRIVATE_ATLAS_SOURCE_GEOMETRIES",
+            "crs":"EPSG:4326","snapshot_sha256_private":expected,"public_export_permitted":False,
+            "records_private":geometries}
+    return report
 
 
 def main():
@@ -236,6 +271,7 @@ def main():
     e=sub.add_parser("export")
     e.add_argument("--mapping",type=Path,required=True)
     e.add_argument("--candidate-sources-output",type=Path,required=True)
+    e.add_argument("--geometries-output",type=Path)
     for cmd in (i,e):
         cmd.add_argument("--db",type=Path,required=True)
         cmd.add_argument("--output",type=Path,required=True)
@@ -245,11 +281,15 @@ def main():
         write_private_json(a.output,report)
         counts={"tables":len(report["tables_private"])}
     else:
-        if a.output.resolve()==a.candidate_sources_output.resolve() or a.candidate_sources_output.exists():
+        outputs=[a.output,a.candidate_sources_output]+([a.geometries_output] if a.geometries_output else [])
+        if len({p.resolve() for p in outputs})!=len(outputs) or any(p.exists() or p.is_symlink() for p in outputs):
             raise ValueError("NEW_DISTINCT_OUTPUTS_REQUIRED")
-        report=export_registry(a.db,_safe_file(a.mapping))
+        report=export_registry(a.db,_safe_file(a.mapping),include_geometries=a.geometries_output is not None)
+        geometry_projection=report.pop("geometry_projection_private",None)
         write_private_json(a.output,report)
         write_private_json(a.candidate_sources_output,report["candidate_source_records_private"])
+        if a.geometries_output is not None:
+            write_private_json(a.geometries_output,geometry_projection)
         counts=report["counts"]
     print(json.dumps({"private_report_written":True,"counts":counts,"legal_links_verified":False}))
 
