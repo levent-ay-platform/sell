@@ -342,4 +342,45 @@ class HttpWorkflow(unittest.TestCase):
             self.assertEqual(result['comparison']['identityFields']['birthDate'],'2000-12-05')
             self.assertFalse(result['ownershipVerified'])
 
+    def test_private_supplements_and_boundary_http_enrollment_isolation_and_public_denial(self):
+        import io
+        from PIL import Image
+        from unittest.mock import patch
+        from pilot_workflow import digest
+        self.store.enrolled_devices={'+21623456789':digest('A'*43),'+21623456782':digest('B'*43)}
+        owner=self.store.login('+21623456789','1234','A'*43)['bearer']
+        other=self.store.login('+21623456782','1234','B'*43)['bearer']
+        uid=self.store.authenticate(owner)['id']
+        review=self.store.record_review(uid,[],{'assessment':'INSUFFICIENT_EVIDENCE'})
+        endpoint='/api/pilot/reviews/'+review
+        image=io.BytesIO()
+        Image.new('RGB',(120,120),'white').save(image,format='PNG')
+        raw=image.getvalue()
+        def upload(token,consent=True):
+            h={'Content-Type':'application/octet-stream','X-Attachment-Kind':'CADASTRAL_PLAN','X-Claimed-Mime':'image/png'}
+            if consent:h['X-Pilot-Ocr-Consent']='1'
+            return self.request(endpoint+'/attachments',raw,token,h)
+        with patch.dict('os.environ',{'MALAK_PRIVATE_REVIEW_ATTACHMENTS':'0'}):
+            self.assertEqual(self.request(endpoint+'/attachments',token=owner)[0],404)
+        with patch.dict('os.environ',{'MALAK_PRIVATE_REVIEW_ATTACHMENTS':'1'}):
+            self.assertEqual(self.request(endpoint+'/attachments')[0],401)
+            self.assertEqual(upload(owner,False)[0],400)
+            self.assertEqual(upload(other)[0],404)
+            code,res=upload(owner)
+            self.assertEqual(code,200);self.assertFalse(res['mayPublish'])
+            item=res['attachment'];path=endpoint+'/attachments/'+item['id']
+            self.assertEqual(self.request(path,token=owner),(200,raw))
+            self.assertEqual(self.request(path,token=other)[0],404)
+            self.assertEqual(self.request('/api/public/photos/'+item['id'])[0],404)
+            self.assertEqual(self.request(endpoint+'/attachments',token=owner)[1]['attachments'],[item])
+            vertices=[[10.1,36.1],[10.101,36.1],[10.101,36.101],[10.1,36.101]]
+            data={'vertices':vertices,'replaceId':None}
+            self.assertEqual(self.request(endpoint+'/boundary',data,owner)[0],400)
+            code,res=self.request(endpoint+'/boundary',data,owner,{'X-Pilot-Ocr-Consent':'1'})
+            self.assertEqual(code,200);self.assertFalse(res['boundary']['official'])
+            self.assertEqual(self.request(endpoint+'/boundary',token=owner)[1]['boundary']['vertices'],vertices)
+            self.assertEqual(self.request(endpoint+'/boundary',token=other)[0],404)
+            self.assertEqual(self.request(path,{},owner,{'X-Pilot-Ocr-Consent':'1'})[0],200)
+            self.assertEqual(self.request(path,token=owner)[0],404)
+
 if __name__=='__main__':unittest.main()

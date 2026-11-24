@@ -1972,7 +1972,7 @@ internal fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmiss
                 }
                 else if(step==2 && onDocumentRead!=null){
                     pairReport?.takeIf { it.reviewId != null }?.let { report ->
-                        if(attachmentPending){
+                        if(hasPilotReviewSession&&attachmentPending){
                             submissionMessage=R.string.intake_pilot_attachments_save
                         }else{
                             feedback(AppCue.Confirm)
