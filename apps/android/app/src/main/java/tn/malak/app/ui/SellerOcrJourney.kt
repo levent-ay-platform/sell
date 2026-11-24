@@ -1368,7 +1368,7 @@ internal fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmiss
                                         result.parcelPlanFacts.selectedFact("plotReference", page)
                                             ?: result.propertyFacts["soldPlotNumber"]
                                             ?: result.propertyFacts["registeredPlotNumber"].orEmpty(),
-                                        result.parcelPlanFacts.selectedFact("printedAreaM2", page) ?: result.localFields?.areaM2
+                                        result.parcelPlanFacts.selectedFact("printedAreaM2", page)
                                     )
                                 }, modifier = Modifier.fillMaxWidth()) {
                                     Text(s(R.string.parcel_editor_open, page))
@@ -1779,7 +1779,6 @@ internal fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmiss
                                                         read.parcelPlanFacts.selectedFact("plotReference", page)
                                                             ?: fact("soldPlotNumber", "registeredPlotNumber", "possessedPlotNumber").orEmpty(),
                                                         read.parcelPlanFacts.selectedFact("printedAreaM2", page)
-                                                            ?: fact("soldAreaM2", "registeredAreaM2", "possessedAreaM2", "transferredAreaM2")
                                                     )
                                                 }, modifier = Modifier.fillMaxWidth()) {
                                                     Text(s(R.string.parcel_editor_open, page))
