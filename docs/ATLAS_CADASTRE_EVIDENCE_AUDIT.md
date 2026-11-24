@@ -171,3 +171,25 @@ The PRIVATE_DERIVED report retains every catalogue hash, all duplicate resource 
 - All unmatched, unresolved and unreadable files are retained. Exceeded scan limits fail without emitting partial output.
 
 **Blocking gates remain:** owner-authorized WAL-consistent transactional SQLite backup, provenance/issuer and rights review, verified document↔title↔parcel links, independent georeferencing/GCP, approval and runtime revocation testing. Software CI is synthetic; real Mac archive coverage and official-plan counts are still UNKNOWN.
+
+## Direct vector PDF outlines — 2026-11-24
+
+The new `scripts/atlas_pdf_vector_candidates.py` complements the existing raster outline extractor `services/verification/ocr/parcel_scan.py`. It uses the optional BSD-licensed pypdf parser (`pypdf>=6,<7`) to read direct painted, explicitly closed straight-line page subpaths from a SHA-256-matched local PDF. It preserves multiple valid outlines, flags likely page borders, and reports open/curved/unpainted or rejected paths without choosing a parcel automatically.
+
+Use an isolated, owner-controlled process (OS memory/time limits, no network) on an approved stable local copy whose SHA was independently matched in the private inventory:
+
+```sh
+python3 -m scripts.atlas_pdf_vector_candidates \
+  --pdf /private/approved/document.pdf \
+  --expected-sha256 APPROVED_SHA256 \
+  --page 1 \
+  --output /private/atlas-reports/vector-page-1.json
+```
+
+The placeholders are not real local paths or a known document SHA. The protected JSON is private. Only aggregate counts may be copied to the public development checkpoint. Selected pages must be explicit for documents with more than 32 pages; uninspected pages remain counted. Limits include 64 MiB source PDF, 100,000 direct operations per inspected page and 1,000 retained outlines per page. These bounds are not a parser sandbox.
+
+**Coordinate contract:** page-space points are transformed by the PDF graphics state, cropbox, rotation and UserUnit to top-left display PAGE_POINT coordinates. They are not latitude/longitude or a legal ground boundary. The output can supply `page_ring` and `page_unit` for the existing georeferencing QA after the reviewer independently selects an outline and establishes controls. Never infer control points from the title number.
+
+**Limitations and fallback:** nested Form XObjects, curves, embedded images, clipping, filled-path holes and raster scans are not fully interpreted. The tool explicitly records applicable limitations; even a valid outline may be a road/building/legend/frame. Review the rendering against the original page. Use the existing raster/crop route when direct vectors are unavailable, not a fictitious outline. Do not auto-promote any geometry or document to official cadastral status.
+
+Nine synthetic PDF tests cover digest binding, graphics-state transforms, rotation/crop, rejected paths, multiple outlines, flags, page selection and the candidate-only georeference handoff. Real Mac documents, title matches and spatial coverage still require independent acceptance. The Mac archive and live SQLite database were not altered.
