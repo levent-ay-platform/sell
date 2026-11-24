@@ -456,7 +456,7 @@ internal fun parsePilotComparison(envelope:JSONObject):CertificateIdentityReview
             holder=MatchedRightsHolder(n,parts,page,state)
         }
         val facts=data.optJSONArray("propertyFacts")?:throw OwnerPairException(502)
-        if(facts.length()>18)throw OwnerPairException(502)
+        if(facts.length()>30)throw OwnerPairException(502)
         val values=mutableMapOf<String,String>()
         val factStatuses=mutableMapOf<String,String>()
         val sourceFacts=mutableListOf<PilotPropertyFact>()
@@ -469,7 +469,7 @@ internal fun parsePilotComparison(envelope:JSONObject):CertificateIdentityReview
                 "transferredAreaM2","registeredPlotNumber","soldPlotNumber",
                 "possessedPlotNumber","salePriceTnd","transferReference",
                 "serviceRequestNumber","serviceRequestDate","rightsDenominator",
-                "propertyGovernorate","propertyDelegation","propertyImada")||
+                "propertyGovernorate","propertyDelegation","propertyImada","registeredLocationText","historicalLocality","registeredParcelCount","registeredPropertyName","registeredPropertyContent","registeredLandCategory","creationNature")||
                 value.isBlank()||value.length>100||f.optInt("page") !in 1..pages||
                 values.containsKey(key))throw OwnerPairException(502)
             val factStatus=f.optString("status","LOW_CONFIDENCE")

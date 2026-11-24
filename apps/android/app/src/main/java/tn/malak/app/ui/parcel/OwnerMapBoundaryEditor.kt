@@ -20,11 +20,11 @@ import java.util.Locale
 
 @Composable
 internal fun OwnerMapBoundaryEditor(start:DiscoveryPoint?,existing:List<DiscoveryPoint>,
-    onDismiss:()->Unit,onSave:(List<DiscoveryPoint>)->Unit){
+    onDismiss:()->Unit,onSave:(List<DiscoveryPoint>)->Unit,searchCamera:DiscoveryCamera?=null){
     var points by remember{mutableStateOf(existing)}
     var ready by remember{mutableStateOf(false)}
     var failed by remember{mutableStateOf(false)}
-    var zoom by remember{mutableStateOf(if(start!=null||existing.isNotEmpty())17.0 else 7.0)}
+    var zoom by remember{mutableStateOf(if(start!=null||existing.isNotEmpty())17.0 else searchCamera?.zoom?:7.0)}
     val measurement=remember(points){measureOwnerMap(points)}
     Dialog(onDismissRequest=onDismiss,properties=DialogProperties(usePlatformDefaultWidth=false)){
         Surface(Modifier.fillMaxSize(),color=Brand.Pearl){
@@ -33,7 +33,7 @@ internal fun OwnerMapBoundaryEditor(start:DiscoveryPoint?,existing:List<Discover
                 Text(s(R.string.intake_map_instruction),Modifier.padding(horizontal=16.dp,vertical=5.dp),color=Brand.Muted)
                 Box(Modifier.weight(1f).fillMaxWidth()){
                     DiscoveryMap(styleUrl=DiscoveryStyleUrl,
-                        initial=DiscoveryCamera(existing.firstOrNull()?:start?:InitialCenter,
+                        initial=if(start==null&&existing.isEmpty()&&searchCamera!=null)searchCamera else DiscoveryCamera(existing.firstOrNull()?:start?:InitialCenter,
                             if(start!=null||existing.isNotEmpty())17.0 else 7.0,InitialBounds),
                         jump=null,markers=DiscoveryMarkers(emptyList()),selectedId=null,priceLabel={""},
                         modifier=Modifier.fillMaxSize(),onCameraIdle={camera,_->zoom=camera.zoom},

@@ -464,4 +464,13 @@
     <string name="v2_ui_sign_in">Se connecter</string>
     <string name="v2_ui_sign_out">Se déconnecter</string>
     <string name="v2_ui_my_space">Mon espace immobilier</string>
+    <string name="intake_cpf_location_text">Location as printed</string>
+    <string name="intake_cpf_historical_locality">Historical locality</string>
+    <string name="intake_cpf_parcel_count">Number of parcels</string>
+    <string name="intake_cpf_property_name">Registered property name</string>
+    <string name="intake_cpf_content">Property content</string>
+    <string name="intake_cpf_category">Land category</string>
+    <string name="intake_cpf_creation">Creation type</string>
+    <string name="intake_cpf_parts">Total ownership parts</string>
+    <string name="intake_cpf_search_scope">Map opens on the administrative search area, not the parcel location.</string>
 </resources>

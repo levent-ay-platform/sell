@@ -464,4 +464,13 @@
     <string name="v2_ui_sign_in">تسجيل الدخول</string>
     <string name="v2_ui_sign_out">تسجيل الخروج</string>
     <string name="v2_ui_my_space">مساحتي العقارية</string>
+    <string name="intake_cpf_location_text">موقع العقار حسب الوثيقة</string>
+    <string name="intake_cpf_historical_locality">المشيخة التاريخية</string>
+    <string name="intake_cpf_parcel_count">مجموع القطع</string>
+    <string name="intake_cpf_property_name">اسم العقار</string>
+    <string name="intake_cpf_content">محتوى العقار</string>
+    <string name="intake_cpf_category">صبغة العقار</string>
+    <string name="intake_cpf_creation">طبيعة الإحداث</string>
+    <string name="intake_cpf_parts">مجموع أجزاء الملكية</string>
+    <string name="intake_cpf_search_scope">تفتح الخريطة على نطاق البحث الإداري، وليس موقع القطعة المحدد.</string>
 </resources>

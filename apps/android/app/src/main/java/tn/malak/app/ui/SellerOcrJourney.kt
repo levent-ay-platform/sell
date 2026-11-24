@@ -908,7 +908,8 @@ internal fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmiss
     }
     if(chooseMapBoundary){
         OwnerMapBoundaryEditor(locationPoint,mapBoundary,
-            onDismiss={chooseMapBoundary=false},onSave=keepMapDrawing)
+            onDismiss={chooseMapBoundary=false},onSave=keepMapDrawing,
+            searchCamera=documentAdmin?.takeUnless{docLocationConflict}?.let{adminIndex?.searchCamera(it)})
     }
     georefDraft?.let{draft->
         PlanMapControlEditor(draft,locationPoint?:mapBoundary.firstOrNull(),
@@ -1271,6 +1272,7 @@ internal fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmiss
                         else if(documentAdmin!=null){
                             Text(documentAdmin.region(adminArabic),color=Brand.Ink)
                             documentAdmin.imada?.let{Text(it.label(adminArabic),color=Brand.Muted)}
+                            Text(s(R.string.intake_cpf_search_scope),fontSize=12.sp,color=Brand.Muted)
                             if(!directVerification&&!readingForListing&&adminSamples.isEmpty())TextButton(onClick={
                                 region=documentAdmin.region(adminArabic);lastAutoRegion=region
                             }){Text(s(R.string.intake_admin_use_region))}
@@ -1279,7 +1281,7 @@ internal fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmiss
                     val extracted=pairReport?.sourceFacts.orEmpty().filter{it.key in setOf(
                         "registerReference","parentRegisterReference","registeredPlotNumber","soldPlotNumber",
                         "possessedPlotNumber","registeredAreaM2","soldAreaM2","possessedAreaM2","transferredAreaM2",
-                        "propertyGovernorate","propertyDelegation","propertyImada")&&
+                        "propertyGovernorate","propertyDelegation","propertyImada","registeredLocationText","historicalLocality","registeredParcelCount","registeredPropertyName","registeredPropertyContent","registeredLandCategory","creationNature","rightsDenominator")&&
                         it.page>0&&it.value.isNotBlank()&&it.status in setOf("CANDIDATE","LOW_CONFIDENCE","CONFLICT")}
                     OwnerSourceFactsPanel(extracted,
                         onArea=if(!directVerification&&!readingForListing){{value->area=value;saveMessage=0}}else null,
@@ -2179,6 +2181,14 @@ internal fun familyFactLabel(key:String):Int=when(key){
     "possessedAreaM2"->R.string.smart_fact_possessed_area
     "transferredAreaM2"->R.string.smart_fact_transferred_area
     "soldPlotNumber"->R.string.smart_fact_sold_plot
+    "registeredLocationText"->R.string.intake_cpf_location_text
+    "historicalLocality"->R.string.intake_cpf_historical_locality
+    "registeredParcelCount"->R.string.intake_cpf_parcel_count
+    "registeredPropertyName"->R.string.intake_cpf_property_name
+    "registeredPropertyContent"->R.string.intake_cpf_content
+    "registeredLandCategory"->R.string.intake_cpf_category
+    "creationNature"->R.string.intake_cpf_creation
+    "rightsDenominator"->R.string.intake_cpf_parts
     else->R.string.smart_fact_other
 }
 

@@ -7,8 +7,12 @@ internal data class OwnerExtractedValue(val key:String,val fact:PilotPropertyFac
 internal fun ownerExtractedValues(kind:String?,facts:List<PilotPropertyFact>):List<OwnerExtractedValue> {
     val area=when(kind){"SALE_DEED"->"soldAreaM2";"TRANSFER_CARD"->"transferredAreaM2";"POSSESSION_REPORT"->"possessedAreaM2";else->"registeredAreaM2"}
     val plot=when(kind){"SALE_DEED"->"soldPlotNumber";"POSSESSION_REPORT"->"possessedPlotNumber";else->"registeredPlotNumber"}
-    return listOf(OwnerExtractedValue("registerReference",facts.firstOrNull{it.key=="registerReference"}?:facts.firstOrNull{it.key=="parentRegisterReference"}),
+    val primary=listOf(OwnerExtractedValue("registerReference",facts.firstOrNull{it.key=="registerReference"}),
         OwnerExtractedValue(area,facts.firstOrNull{it.key==area}),OwnerExtractedValue(plot,facts.firstOrNull{it.key==plot}))
+    val extraKeys=listOf("parentRegisterReference","registeredParcelCount","registeredPropertyName","registeredPropertyContent",
+        "registeredLandCategory","creationNature","rightsDenominator","propertyGovernorate","propertyDelegation","propertyImada",
+        "historicalLocality","registeredLocationText")
+    return primary+extraKeys.mapNotNull{key->facts.singleOrNull{it.key==key}?.let{OwnerExtractedValue(key,it)}}
 }
 private val documentAreaPattern = Regex("""[1-9][0-9]{0,8}(?:\.[0-9]{1,3})?""")
 

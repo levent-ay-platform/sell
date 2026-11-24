@@ -70,6 +70,20 @@ internal class AtlasAdminIndex(private val governors:List<AdminFeature>,private 
         }
         return AdminContext(gov.name,d?.name,sector?.name)
     }
+    /** Map framing only: never store this center as a listing pin. */
+    fun searchCamera(context:AdminContext):DiscoveryCamera?{
+        val feature=when{
+            context.imada!=null->sectors.singleOrNull{it.name.id==context.imada.id}
+            context.delegation!=null->delegations.singleOrNull{it.name.id==context.delegation.id}
+            else->governors.singleOrNull{it.name.id==context.governorate.id}
+        }?:return null
+        val points=feature.polygons.flatMap{it.rings.firstOrNull().orEmpty()}
+        if(points.isEmpty())return null
+        val bounds=DiscoveryBounds(points.minOf{it.longitude},points.minOf{it.latitude},points.maxOf{it.longitude},points.maxOf{it.latitude})
+        val span=maxOf(bounds.east-bounds.west,bounds.north-bounds.south,0.01)
+        val zoom=(kotlin.math.ln(360.0/span)/kotlin.math.ln(2.0)-2.0).coerceIn(5.0,13.0)
+        return DiscoveryCamera(DiscoveryPoint((bounds.south+bounds.north)/2,(bounds.west+bounds.east)/2),zoom,bounds)
+    }
     fun resolve(point:DiscoveryPoint):AdminContext?{
         if(!point.latitude.isFinite()||!point.longitude.isFinite()||point !in InitialBounds)return null
         val g=governors.map{it to it.locate(point)}.filter{it.second!=0}
