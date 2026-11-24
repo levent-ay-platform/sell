@@ -62,6 +62,11 @@ class CadastreEvidenceAuditTest(unittest.TestCase):
         self.assertEqual(report["counts"]["triage_review_documents"], 2)
         self.assertEqual(report["counts"]["pdf_documents_with_family_hints"], 1)
         self.assertEqual(report["counts"]["pdf_documents_untriaged_unknown"], 0)
+        self.assertEqual(report["counts"]["pdf_hashes_with_page_rows"], 2)
+        self.assertEqual(report["counts"]["pdf_hashes_with_ocr_text"], 2)
+        self.assertEqual(report["counts"]["pdf_hashes_missing_document_index"], 0)
+        self.assertEqual(report["schema_version"], 2)
+        self.assertEqual(report["unresolved_pdf_documents"], [])
         candidate = report["candidates"][0]
         self.assertEqual(candidate["document_sha256"], "shared")
         self.assertEqual(candidate["resource_rows"], 2)
@@ -99,6 +104,22 @@ class CadastreEvidenceAuditTest(unittest.TestCase):
         self.assertEqual(report["counts"]["cadastral_keyword_candidate_documents"], 1)
         self.assertEqual(report["counts"]["triage_review_documents"], 5)
         self.assertEqual(report["counts"]["pdf_documents_untriaged_unknown"], 1)
+        self.assertEqual(report["counts"]["pdf_documents_unknown_without_ocr_text"], 1)
+        self.assertEqual(report["counts"]["pdf_hashes_missing_document_index"], 2)
+        self.assertEqual(
+            report["counts"]["triage_review_documents"]
+            + report["counts"]["pdf_documents_untriaged_unknown"],
+            report["counts"]["distinct_pdf_sha256"],
+        )
+        self.assertEqual(report["unresolved_pdf_documents"], [{
+            "document_sha256": "unresolved",
+            "resource_rows": 1,
+            "indexed_document_present": False,
+            "page_rows_present": False,
+            "ocr_text_present": False,
+            "status": "UNCLASSIFIED_RETAINED",
+            "reason": "NO_OCR_TEXT",
+        }])
         queue = {item["document_sha256"]: item for item in report["review_queue"]}
         self.assertNotIn("unresolved", queue)
         self.assertIn("refs", queue)
@@ -136,6 +157,38 @@ class CadastreEvidenceAuditTest(unittest.TestCase):
         self.assertTrue(triaged["french"]["has_title_reference_candidate"])
         self.assertTrue(triaged["french"]["has_parcel_reference_candidate"])
         self.assertIsNone(report["verified_official_cadastral_plans"])
+
+    def test_text_without_known_hints_is_still_retained(self):
+        connection = sqlite3.connect(self.db)
+        connection.executescript(
+            """
+            INSERT INTO resources VALUES
+                ('x','Unlabeled scanned text.pdf','.pdf','free-text'),
+                ('y','بطاقة نقل ملكية.pdf','.pdf','transfer');
+            INSERT INTO pages VALUES
+                ('free-text',1,'Bonjour, document et métadonnées.');
+            """
+        )
+        connection.commit()
+        connection.close()
+        report = audit_snapshot(self.db, snapshot_kind="mainfile_diagnostic")
+        unknown = {
+            item["document_sha256"]: item
+            for item in report["unresolved_pdf_documents"]
+        }
+        self.assertEqual(unknown["free-text"]["reason"], "NO_RECOGNIZED_HINTS")
+        self.assertTrue(unknown["free-text"]["ocr_text_present"])
+        queue = {
+            item["document_sha256"]: item
+            for item in report["review_queue"]
+        }
+        self.assertIn("TRANSFER_DOCUMENT_HINT", queue["transfer"]["family_hints"])
+        self.assertEqual(
+            report["counts"]["triage_review_documents"]
+            + report["counts"]["pdf_documents_untriaged_unknown"],
+            report["counts"]["distinct_pdf_sha256"],
+        )
+        self.assertFalse(report["publication_rights_verified"])
 
     def test_private_output_and_no_overwrite(self):
         output = self.root / "private" / "report.json"
