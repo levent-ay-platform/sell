@@ -37,3 +37,16 @@ internal fun sameListingArea(entered: String, evidence: PilotPropertyFact): Bool
     val number = listingNumber(entered)
     return listingDecimalPattern.matches(number) && number.toBigDecimal().compareTo(evidence.value.toBigDecimal()) == 0
 }
+
+/** A review-only arithmetic ratio; never a sale area or a physical polygon. */
+internal fun ownerSharePercentage(parts:String?,facts:List<PilotPropertyFact>):String? {
+    val denominator=facts.filter{it.key=="rightsDenominator"}.singleOrNull()
+        ?.takeIf{it.page>0&&it.status=="CANDIDATE"}?.value ?: return null
+    val pattern=Regex("""[0-9]{1,12}(?:[.,][0-9]{1,3})?""")
+    if(parts==null||!pattern.matches(parts)||!pattern.matches(denominator))return null
+    val n=parts.replace(',','.').toBigDecimal()
+    val d=denominator.replace(',','.').toBigDecimal()
+    if(n.signum()<=0||d.signum()<=0||n>d)return null
+    return n.multiply(java.math.BigDecimal("100")).divide(d,4,java.math.RoundingMode.HALF_UP)
+        .stripTrailingZeros().toPlainString()
+}

@@ -271,7 +271,7 @@ private fun parseReview(body:JSONObject):CertificateIdentityReview {
                 else matched.optString("rightsParts")
             val status=matched.optString("status")
             val keys=matched.keys().asSequence().toSet()
-            if(kind!="SHARED_OWNERSHIP_CERTIFICATE"||
+            if(kind !in setOf("OWNERSHIP_CERTIFICATE","SHARED_OWNERSHIP_CERTIFICATE")||
                 unifiedStatus !in setOf("ROLE_TEXT_MATCH_ONLY","NAME_ONLY_REVIEW")||
                 status !in setOf("PRELIMINARY_PERSON_ROW_TEXT_ONLY","NAME_ONLY_REVIEW")||
                 (status=="NAME_ONLY_REVIEW")!=(unifiedStatus=="NAME_ONLY_REVIEW")||
@@ -447,7 +447,7 @@ internal fun parsePilotComparison(envelope:JSONObject):CertificateIdentityReview
             val parts=if(selected.isNull("rightsParts"))null
                 else selected.optString("rightsParts")
             val state=selected.optString("status")
-            if(kind!="SHARED_OWNERSHIP_CERTIFICATE"||matchedRole!="SHARED_RIGHTS_HOLDER"||
+            if(kind !in setOf("OWNERSHIP_CERTIFICATE","SHARED_OWNERSHIP_CERTIFICATE")||matchedRole!="SHARED_RIGHTS_HOLDER"||
                 n !in 1..500||page !in 1..pages||
                 state !in setOf("PRELIMINARY_PERSON_ROW_TEXT_ONLY","NAME_ONLY_REVIEW")||
                 (parts!=null&&!Regex("^[1-9][0-9]{0,10}(?:[.,][0-9]{1,3})?$")

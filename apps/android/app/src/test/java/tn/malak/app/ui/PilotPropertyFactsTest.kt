@@ -59,4 +59,16 @@ class PilotPropertyFactsTest{
         assertFalse(sameListingArea("9005E-1", fact))
         assertNull(listingAreaEvidence("SALE_DEED", listOf(fact, fact.copy(status = "LOW_CONFIDENCE"))))
     }
+
+    @Test fun ownerShareIsReviewOnlyAndRequiresUnambiguousPositiveParts(){
+        val denominator=PilotPropertyFact("rightsDenominator","40000",1,"ocr-ar","CANDIDATE")
+        assertEquals("25",ownerSharePercentage("10000",listOf(denominator)))
+        assertEquals("12.5",ownerSharePercentage("5000.000",listOf(denominator)))
+        assertNull(ownerSharePercentage(null,listOf(denominator)))
+        assertNull(ownerSharePercentage("50000",listOf(denominator)))
+        assertNull(ownerSharePercentage("0",listOf(denominator)))
+        assertNull(ownerSharePercentage("10000",listOf(denominator.copy(status="LOW_CONFIDENCE"))))
+        assertNull(ownerSharePercentage("10000",listOf(denominator,denominator.copy(value="30000"))))
+        assertNull(ownerSharePercentage("10000",listOf(denominator.copy(key="registeredAreaM2"))))
+    }
 }

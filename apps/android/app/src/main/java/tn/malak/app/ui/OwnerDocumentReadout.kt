@@ -29,6 +29,22 @@ internal fun OwnerDocumentReadout(report:CertificateIdentityReview,onDateRefresh
         }
         if(dateBusy)LinearProgressIndicator(Modifier.fillMaxWidth())
         if(dateError!=0)Text(s(dateError),color=MaterialTheme.colorScheme.error,fontSize=12.sp)
+        if(report.detectedKind in setOf("OWNERSHIP_CERTIFICATE","SHARED_OWNERSHIP_CERTIFICATE")){
+            HorizontalDivider()
+            Text(s(R.string.owner_share_heading),fontWeight=FontWeight.SemiBold)
+            Row(Modifier.fillMaxWidth()){
+                Text(s(R.string.owner_share_parts),Modifier.weight(1f),fontSize=13.sp)
+                Text(report.matchedRightsHolder?.parts?:s(R.string.owner_value_unavailable),fontSize=13.sp)
+            }
+            val ratio=ownerSharePercentage(report.matchedRightsHolder?.parts,report.sourceFacts)
+            if(ratio!=null){
+                Row(Modifier.fillMaxWidth()){
+                    Text(s(R.string.owner_share_percentage),Modifier.weight(1f),fontSize=13.sp)
+                    Text(ratio+"%",fontSize=13.sp)
+                }
+            }
+            Text(s(R.string.owner_share_warning),fontSize=12.sp,color=Brand.Muted)
+        }
         ownerExtractedValues(report.detectedKind,report.sourceFacts).forEach{field->
             HorizontalDivider()
             Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(10.dp)){

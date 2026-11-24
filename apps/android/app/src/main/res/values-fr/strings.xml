@@ -464,4 +464,8 @@
     <string name="v2_ui_sign_in">Se connecter</string>
     <string name="v2_ui_sign_out">Se déconnecter</string>
     <string name="v2_ui_my_space">Mon espace immobilier</string>
+    <string name="owner_share_heading">Quote-part du propriétaire — à vérifier</string>
+    <string name="owner_share_parts">Parts du titulaire correspondant</string>
+    <string name="owner_share_percentage">Pourcentage calculé de la quote-part</string>
+    <string name="owner_share_warning">La superficie du titre et la quote-part ne prouvent ni une parcelle privative ni une superficie à vendre. Vérifier les droits inscrits.</string>
 </resources>

@@ -473,4 +473,8 @@
     <string name="intake_cpf_creation">طبيعة الإحداث</string>
     <string name="intake_cpf_parts">مجموع أجزاء الملكية</string>
     <string name="intake_cpf_search_scope">تفتح الخريطة على نطاق البحث الإداري، وليس موقع القطعة المحدد.</string>
+    <string name="owner_share_heading">حصة المالك — للمراجعة</string>
+    <string name="owner_share_parts">أجزاء صاحب الحق المطابق</string>
+    <string name="owner_share_percentage">نسبة الحصة الحسابية</string>
+    <string name="owner_share_warning">مساحة الرسم والحصة لا تثبتان حدود قطعة مفرزة أو مساحة البيع. راجع الحقوق المطبوعة.</string>
 </resources>

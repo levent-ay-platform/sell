@@ -473,4 +473,8 @@
     <string name="intake_cpf_creation">Creation type</string>
     <string name="intake_cpf_parts">Total ownership parts</string>
     <string name="intake_cpf_search_scope">Map opens on the administrative search area, not the parcel location.</string>
+    <string name="owner_share_heading">Ownership share — review</string>
+    <string name="owner_share_parts">Matched owner rights parts</string>
+    <string name="owner_share_percentage">Calculated share percentage</string>
+    <string name="owner_share_warning">The estate area and a share do not establish an exclusive plot or sale area. Review the printed rights.</string>
 </resources>
