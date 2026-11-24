@@ -19,6 +19,28 @@ def exact_ref(raw):
     m=re.fullmatch(r"([0-9]{3,12})(?:\s*[/\\]\s*([A-Za-z0-9\u0600-\u06ff-]{1,32}))?",v)
     return (m[1],m[2].casefold() if m[2] else None) if m else None
 
+def observed_source_format(value):
+    """Parse only observed source shapes; retain compound numbers as weak leads."""
+    v=unicodedata.normalize("NFKC",str(value)).translate(DIGITS)
+    v="".join(c for c in v if unicodedata.category(c)!="Cf").strip()
+    scope=sorted(set(x.casefold() for x in re.findall(r"Ariana|Tunis",v,re.I)))
+    single=re.fullmatch(r"(?:TFN\s*:?\s*)?([0-9]{3,12})\s*(Ariana|Tunis)?(?:\s+(S[0-9]+))?",v,re.I)
+    if single and int(single[1]) and (not single[3] or single[2]):
+        return {"format":"SINGLE_WITH_EXTRA_CODE" if single[3] else "SINGLE_SCOPED" if single[2] else "SINGLE_UNSCOPED",
+                "scope_labels_private":scope,"tokens":{(single[1],None)},"weak_numbers":set(),
+                "extra_code_private":single[3]}
+    # Slash components and explicit multiple TFN labels are not assumed to be
+    # independent titles. They are only standalone-number retrieval leads.
+    if re.fullmatch(r"[0-9]{3,12}(?:\s+[0-9]{3,12})+",v):
+        return {"format":"MULTIPLE_BARE_NUMBERS","scope_labels_private":scope,
+                "tokens":set(),"weak_numbers":set(v.split()),"extra_code_private":None}
+    if re.fullmatch(r"TFN\s*:?\s*[0-9]{3,12}(?:\s*/\s*[0-9]{1,12})+\s*(?:Ariana|Tunis)?",v,re.I) or (
+        re.match(r"^TFN",v,re.I) and re.search(r"/\s*TFN",v,re.I)):
+        return {"format":"COMPOUND_UNRESOLVED","scope_labels_private":scope,"tokens":set(),
+                "weak_numbers":set(re.findall(r"(?<!\d)[0-9]{3,12}(?!\d)",v)),"extra_code_private":None}
+    return {"format":"UNRECOGNIZED","scope_labels_private":scope,"tokens":set(),
+            "weak_numbers":set(),"extra_code_private":None}
+
 def compare_ref(source,number,suffix):
     candidate=exact_ref(number+("/"+suffix if suffix else "")) if isinstance(number,str) else None
     if source is None or candidate is None or source[0]!=candidate[0]:return None
@@ -56,7 +78,7 @@ def stored_numeric_hits(db,expected,docs,refs):
             if len(txt)>2*1024**2:
                 counts["oversize_indexed_text_pages_skipped"]+=1;continue
             text=unicodedata.normalize("NFKC",txt).translate(DIGITS)
-            for token in set(re.findall(r"(?<!\d)\d{3,12}(?!\d)",text))&refs.keys():
+            for token in set(re.findall(r"(?<!\d)\d{3,12}(?!\d)",text))&set(refs):
                 result[token].add((sha,page))
     if _digest(db)!=expected:raise ValueError("SNAPSHOT_CHANGED")
     return result,counts
@@ -84,7 +106,8 @@ def benchmark(atlas,run,native,output):
         rows=list(csv.DictReader(f))
     if not rows or len(rows)>1000:raise ValueError("BOUNDED_SOURCE_SAMPLE_REQUIRED")
     refs=defaultdict(set)
-    counts=Counter()
+    weak_refs=set()
+    counts=Counter();formats=Counter();scope_labels=Counter()
     # Reuse existing local search implementation with a private temporary copy.
     manifest=json.loads((data/"map-index/manifest.json").read_text())
     db=data/"map-index"/Path(manifest["file"]).name
@@ -102,14 +125,19 @@ def benchmark(atlas,run,native,output):
         # Use the actual existing search engine first, before collecting PDF evidence.
         for row in rows:
             counts["source_rows_tested"]+=1
+            parsed=observed_source_format(row["raw_reference"])
+            formats[parsed["format"]]+=1
+            scope_labels.update(parsed["scope_labels_private"])
             raw=exact_ref(row["raw_reference"])
             if raw is None:counts["source_reference_compound_or_unparsed"]+=1
-            tokens=set()
-            if raw:tokens.add(raw)
+            tokens=set(parsed["tokens"])
+            if raw and parsed["format"] not in ("COMPOUND_UNRESOLVED","MULTIPLE_BARE_NUMBERS"):tokens.add(raw)
+            if parsed["weak_numbers"]:counts["source_rows_with_ambiguous_number_leads"]+=1
+            weak_refs.update(parsed["weak_numbers"])
             try:
                 normalized=title_lookup.normalize(row["raw_reference"])
                 token=result_reference({"reference":normalized})
-                if token:tokens.add(token)
+                if token and not parsed["weak_numbers"]:tokens.add(token)
             except (ValueError,TypeError):
                 counts["existing_normalization_rejected"]+=1
             records=[]
@@ -124,7 +152,7 @@ def benchmark(atlas,run,native,output):
                     if isinstance(record,dict):
                         shapes.update(record.keys())
                         token=result_reference(record)
-                        if token:tokens.add(token)
+                        if token and not parsed["weak_numbers"]:tokens.add(token)
                         records.append({k:record[k] for k in ("reference","feature_id","layer","has_geometry","areas") if k in record})
                     identities.append(identity(row,record))
                 state="SOURCE_IDENTITY_MATCH" if "SOURCE_IDENTITY_MATCH" in identities else (
@@ -136,7 +164,7 @@ def benchmark(atlas,run,native,output):
             counts["source_rows_recovered_by_existing_search"]+=raw is None and bool(tokens)
             counts["source_rows_with_returned_geometry"]+=any(r.get("has_geometry") is True for r in records)
             for token in tokens:refs[token[0]].add(token)
-            retrieved.append((row,raw,tokens,state,records))
+            retrieved.append((row,raw,tokens,state,records,parsed))
     dirs,audit,docs,entries,last=first_chain(run)
     roots=[(data).resolve()]
     plan,_=load_plan(native,roots,last,docs)
@@ -176,17 +204,19 @@ def benchmark(atlas,run,native,output):
                            [(r["number"],r.get("suffix")) for r in e["title_candidates"]],
                            e["parcel_candidates"],e["cadastral_term_present"])
     counts["native_documents_with_windows"]=len(covered)
-    numeric,numeric_counts=stored_numeric_hits(run/"catalogue.sqlite",last[0]["snapshot_sha256_private"],docs,refs)
+    numeric,numeric_counts=stored_numeric_hits(run/"catalogue.sqlite",last[0]["snapshot_sha256_private"],docs,set(refs)|weak_refs)
     counts.update(numeric_counts)
-    for row,raw,tokens,state,records in retrieved:
+    for row,raw,tokens,state,records,parsed in retrieved:
         found=set().union(*(hits.get(token,set()) for token in tokens))
         links=sorted(found,key=lambda x:(x[0],x[1] or 0,x[2],x[3]))
         counts["source_rows_with_document_token_candidates"]+=bool(links)
         counts["source_rows_with_same_observation_parcel_hint"]+=any(x[4] for x in links)
         counts["source_rows_with_qualified_token_candidate"]+=any(x[3]=="EXACT_TOKEN_SCOPE_UNVERIFIED" for x in links)
-        weak=set().union(*(numeric.get(n,set()) for n,s in tokens))
+        weak=set().union(*(numeric.get(n,set()) for n in ({n for n,s in tokens}|parsed["weak_numbers"])))
         counts["source_rows_with_untyped_numeric_text_occurrences"]+=bool(weak)
-        details.append({"untyped_numeric_occurrences_private":[{"sha256":h,"page":p,
+        details.append({"source_format_private":parsed["format"],"source_scope_labels_private":parsed["scope_labels_private"],
+                        "ambiguous_numbers_private":sorted(parsed["weak_numbers"]),"extra_code_private":parsed["extra_code_private"],
+                        "untyped_numeric_occurrences_private":[{"sha256":h,"page":p,
                         "status":"NUMBER_OCCURRENCE_NOT_TITLE_EVIDENCE"} for h,p in sorted(weak,key=lambda x:(x[0],x[1] or 0))],
                         "source_record_private":{"record_set":row["record_set"],"snapshot":row["snapshot"],"native_id":row["native_id"],
                         "reference_field":row["reference_field"],"reference":row["raw_reference"]},
@@ -198,6 +228,7 @@ def benchmark(atlas,run,native,output):
                         "official_plan_verified":None,"ground_verified":False})
     report={"kind":"PRIVATE_ATLAS_EXISTING_SOURCE_BENCHMARK","counts":dict(counts),
             "limitations":["Search DTO references are retrieval tokens, not proof of original source identity or registry scope.","Stored indexed text also searched for standalone numeric occurrences, which are not title evidence."],
+            "source_reference_formats":dict(formats),"source_scope_label_counts":dict(scope_labels),
             "result_field_names":dict(shapes),"native_sweep_is_partial":True,
             "official_plans_verified":"UNKNOWN","public_export_permitted":False}
     write_private_json(output,{**report,"rows_private":details})

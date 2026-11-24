@@ -1,5 +1,5 @@
 import unittest
-from scripts.atlas_existing_source_benchmark import exact_ref,compare_ref,identity,add_matches,result_reference,stored_numeric_hits
+from scripts.atlas_existing_source_benchmark import exact_ref,compare_ref,identity,add_matches,result_reference,stored_numeric_hits,observed_source_format
 from collections import defaultdict
 class ExistingSourceBenchmarkTest(unittest.TestCase):
     def test_reference_exact(self):
@@ -38,3 +38,15 @@ class ExistingSourceBenchmarkTest(unittest.TestCase):
             result,counts=stored_numeric_hits(db,_digest(db),{"a"*64:{}},{"00123":{("00123",None)}})
             self.assertEqual(result["00123"],{("a"*64,1)})
             self.assertEqual(counts["indexed_text_pages_checked"],2)
+
+    def test_observed_attached_scope_and_extra_code(self):
+        for text,number,scope in [("TFN99999Ariana","99999","ariana"),("TFN9999Tunis","9999","tunis"),("TFN99999 Tunis S9","99999","tunis")]:
+            parsed=observed_source_format(text)
+            self.assertEqual(parsed["tokens"],{(number,None)})
+            self.assertEqual(parsed["scope_labels_private"],[scope])
+        self.assertEqual(observed_source_format("TFN99999 Tunis S9")["extra_code_private"],"S9")
+    def test_compounds_never_promoted_to_titles(self):
+        for text in ("TFN99999/9Ariana","TFN:99999/9999/99999Tunis","TFN99999Ariana/TFN99999/9999Ariana TBD:99999","999999   999999"):
+            parsed=observed_source_format(text)
+            self.assertFalse(parsed["tokens"])
+            self.assertTrue(parsed["weak_numbers"])
