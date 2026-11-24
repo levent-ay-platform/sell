@@ -5,11 +5,16 @@ on:
     paths:
       - 'apps/android/**'
       - '.github/workflows/amlak-unified-intake-qa.yml'
+  pull_request:
+    paths:
+      - 'apps/android/**'
+      - '.github/workflows/amlak-unified-intake-qa.yml'
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
   connected-apk:
+    if: github.event_name != 'pull_request' || github.head_ref == 'feat/amlak-unified-intake-20261124'
     runs-on: ubuntu-24.04
     timeout-minutes: 35
     steps:
@@ -45,6 +50,7 @@ jobs:
           retention-days: 5
           if-no-files-found: error
   offline-intake-ui:
+    if: github.event_name != 'pull_request' || github.head_ref == 'feat/amlak-unified-intake-20261124'
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     steps:
