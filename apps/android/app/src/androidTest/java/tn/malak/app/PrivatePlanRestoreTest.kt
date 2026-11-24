@@ -16,14 +16,15 @@ class PrivatePlanRestoreTest {
     @Test fun restoredPrivatePdfIsSeekableAndRevocable()=runBlocking {
         val context=InstrumentationRegistry.getInstrumentation().targetContext
         val raw=ByteArrayOutputStream().use { out->
-            PdfDocument().use { pdf->
+            val pdf=PdfDocument()
+            try {
                 for(i in 1..2){
                     val page=pdf.startPage(PdfDocument.PageInfo.Builder(300+i*50,500,i).create())
                     page.canvas.drawColor(android.graphics.Color.WHITE)
                     pdf.finishPage(page)
                 }
                 pdf.writeTo(out)
-            }
+            }finally{pdf.close()}
             out.toByteArray()
         }
         val uri=PrivateCaptureMemory.addDocument(raw,"application/pdf")
