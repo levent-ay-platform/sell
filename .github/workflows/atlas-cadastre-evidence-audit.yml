@@ -15,6 +15,8 @@ on:
       - scripts/atlas_pdf_blob_inventory.py
       - scripts/atlas_pdf_vector_candidates.py
       - scripts/atlas_archive_review_batch.py
+      - scripts/atlas_property_index.py
+      - scripts/tests/test_atlas_property_index.py
       - scripts/atlas_environment_preflight.py
       - scripts/requirements-atlas-review.txt
       - scripts/tests/test_atlas_environment_preflight.py
@@ -45,6 +47,8 @@ on:
       - scripts/atlas_pdf_blob_inventory.py
       - scripts/atlas_pdf_vector_candidates.py
       - scripts/atlas_archive_review_batch.py
+      - scripts/atlas_property_index.py
+      - scripts/tests/test_atlas_property_index.py
       - scripts/atlas_environment_preflight.py
       - scripts/requirements-atlas-review.txt
       - scripts/tests/test_atlas_environment_preflight.py
@@ -100,6 +104,7 @@ jobs:
           python -m unittest discover -s scripts/tests -p 'test_atlas_pdf_blob_inventory.py' -v
           python -m unittest discover -s scripts/tests -p 'test_atlas_pdf_vector_candidates.py' -v
           python -m unittest discover -s scripts/tests -p 'test_atlas_archive_review_batch.py' -v
+          python -m unittest discover -s scripts/tests -p 'test_atlas_property_index.py' -v
           test -f /usr/share/fonts/truetype/dejavu/DejaVuSans.ttf
           PYTHONPATH=scripts/tests:. python -m unittest test_atlas_archive_review_batch.ArchiveBatchTest.test_image_only_pdf_real_ocr -v
       - name: Compile Atlas pipeline
