@@ -5,12 +5,13 @@ import hashlib
 import json
 from pathlib import Path
 import sqlite3
+import shutil
 import tempfile
 import unittest
 from unittest.mock import patch
 
 from pypdf import PdfWriter
-from pypdf.generic import DecodedStreamObject, NameObject
+from pypdf.generic import DecodedStreamObject, NameObject, DictionaryObject
 
 from scripts.atlas_archive_review_batch import run_batch, _ocr_page_evidence
 
@@ -76,11 +77,52 @@ class ArchiveBatchTest(unittest.TestCase):
         self.assertIsNone(r["official_plan_count"])
         self.assertEqual(result.stat().st_mode & 0o777, 0o600)
         self.assertEqual((self.base/"output").stat().st_mode & 0o777, 0o700)
-        second = self.run_one("second", offset=1, max_documents=1)
+        second = self.run_one("second", offset=1, max_documents=1,
+                              resume_manifest=self.base/"output"/"completed-private-manifest.json")
         self.assertEqual(second["all_catalogue_states_private"][self.b], "PRIVATE_REVIEW_REQUIRED")
         self.assertIsNone(second["next_offset"])
         self.assertEqual(self.db.read_bytes(), initial)
         self.assertEqual(hashlib.sha256((self.root/"priority.pdf").read_bytes()).hexdigest(), self.a)
+
+    def test_resume_requires_same_eligible_sequence(self):
+        self.run_one(max_documents=1)
+        proof = self.base/"output"/"completed-private-manifest.json"
+        with self.assertRaisesRegex(ValueError, "PREVIOUS_COMPLETED_MANIFEST"):
+            self.run_one("no-proof", offset=1, max_documents=1)
+        (self.root/"priority.pdf").unlink()
+        with self.assertRaisesRegex(ValueError, "RESUME_QUEUE_CHANGED"):
+            self.run_one("changed", offset=1, max_documents=1, resume_manifest=proof)
+        self.assertFalse((self.base/"changed"/"completed-private-manifest.json").exists())
+
+    @unittest.skipUnless(shutil.which("pdftotext") and shutil.which("pdfinfo"),
+                         "Poppler required for actual native PDF-text worker")
+    def test_actual_existing_text_worker_and_vector_share_sha(self):
+        file = self.root / "priority.pdf"
+        w = PdfWriter()
+        page = w.add_blank_page(width=600, height=300)
+        font = DictionaryObject({NameObject("/Type"):NameObject("/Font"),
+                                 NameObject("/Subtype"):NameObject("/Type1"),
+                                 NameObject("/BaseFont"):NameObject("/Helvetica")})
+        page[NameObject("/Resources")] = DictionaryObject({
+            NameObject("/Font"): DictionaryObject({NameObject("/F1"): w._add_object(font)})})
+        obj = DecodedStreamObject()
+        obj.set_data(b"BT /F1 14 Tf 20 250 Td (T.F. 00012345 Parcelle 0021 PRIVATE_OWNER) Tj ET 20 30 60 40 re S")
+        page[NameObject("/Contents")] = w._add_object(obj)
+        with file.open("wb") as f:
+            w.write(f)
+        sha = hashlib.sha256(file.read_bytes()).hexdigest()
+        with sqlite3.connect(self.db) as c:
+            for table in ("resources", "documents", "pages"):
+                c.execute("UPDATE "+table+" SET sha256=? WHERE sha256=?", (sha,self.a))
+        r = self.run_one(max_documents=1, ocr=True)
+        self.assertEqual(r["all_catalogue_states_private"][sha], "PRIVATE_REVIEW_REQUIRED")
+        entry = json.loads((self.base/"output"/"documents"/"000001.json").read_text())
+        self.assertEqual(entry["ocr_status"], "COMPLETED")
+        self.assertEqual(entry["vector_status"], "COMPLETED")
+        self.assertEqual(entry["vector_evidence_private"]["document_sha256_private"], sha)
+        self.assertEqual(entry["page_reference_evidence_private"][0]["title_reference_candidates"], ["00012345"])
+        self.assertEqual(entry["page_reference_evidence_private"][0]["parcel_reference_candidates"], ["0021"])
+        self.assertNotIn("PRIVATE_OWNER", json.dumps(entry))
 
     def test_requires_transactional_manifest_not_just_label(self):
         with self.assertRaisesRegex(ValueError, "OWNER_BACKUP_MANIFEST_REQUIRED"):
