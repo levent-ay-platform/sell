@@ -47,6 +47,7 @@ import androidx.compose.ui.unit.sp
 import tn.malak.app.BuildConfig
 import tn.malak.app.R
 import tn.malak.app.ui.parcel.OwnerParcelEditor
+import tn.malak.app.ui.explore.DiscoveryPoint
 import tn.malak.app.ui.parcel.OwnerParcelEditorSource
 import tn.malak.app.ui.parcel.OwnerPlanDraft
 import tn.malak.app.ui.parcel.selectedFact
@@ -1039,7 +1040,7 @@ internal fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmiss
                         }
                     }
                     if(!directVerification && !readingForListing){
-                    if(!hasPilotReviewSession){
+                    if(!hasPilotReviewSession&&pairReport!=null){
                         JourneyToggleRow(s(R.string.intake_reading_details),Icons.Outlined.FactCheck,showPrivateReading){showPrivateReading=!showPrivateReading}
                     }
                     if((!hasPilotReviewSession&&(showPrivateReading||pairReport==null))||(hasPilotReviewSession&&showAnalysisDetails)){
