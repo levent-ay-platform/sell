@@ -470,7 +470,7 @@ internal fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmiss
                         if(si>=0&&!c.isNull(si))size=c.getLong(si)
                     }
                 }
-                require(size in 20..MAX_DOC_BYTES)
+                require(size in 20..(if(hasPilotReviewSession&&target!=OwnerIntakeKind.Identity)PILOT_PHOTO_MAX_BYTES else MAX_DOC_BYTES))
                 ChosenDocument(uri,label.ifBlank{"Document"},size,checkNotNull(mime))
             }.getOrNull()
             localIntakeError=if(accepted==null)R.string.file_rejected else 0
@@ -506,6 +506,59 @@ internal fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmiss
     // evidence may be attached only to an actual existing owner case.
     val supplementCase=if(!hasPilotReviewSession && pairReport!=null)
         ownerSession ?: provisionedCase else null
+    val pilotAttachmentReview=pairReport?.reviewId.takeIf{hasPilotReviewSession}
+    val remoteAttachments=remember(draftFile,pilotAttachmentReview){mutableStateMapOf<String,PilotListingClient.Attachment>()}
+    val uploadedAttachmentKeys=remember(draftFile,pilotAttachmentReview){mutableStateMapOf<String,String>()}
+    var attachmentReady by remember(draftFile,pilotAttachmentReview){mutableStateOf(false)}
+    var attachmentLoading by remember(draftFile,pilotAttachmentReview){mutableStateOf(false)}
+    var attachmentSaving by remember(draftFile,pilotAttachmentReview){mutableStateOf(false)}
+    var attachmentError by remember(draftFile,pilotAttachmentReview){mutableStateOf(false)}
+    var attachmentRetry by remember(draftFile,pilotAttachmentReview){mutableIntStateOf(0)}
+    val attachmentPending=(planFile?.uploadKey!=uploadedAttachmentKeys["CADASTRAL_PLAN"])||
+        (extraFile?.uploadKey!=uploadedAttachmentKeys["OTHER_LEGAL_PROOF"])||
+        (planFile==null&&remoteAttachments.containsKey("CADASTRAL_PLAN"))||
+        (extraFile==null&&remoteAttachments.containsKey("OTHER_LEGAL_PROOF"))
+    LaunchedEffect(pilotAttachmentReview,pilotOcrSession,attachmentRetry){
+        val review=pilotAttachmentReview?:return@LaunchedEffect
+        val session=pilotOcrSession?:return@LaunchedEffect
+        attachmentLoading=true;attachmentReady=false;attachmentError=false
+        try{
+            val list=PilotListingClient.attachments(session,review)
+            remoteAttachments.clear()
+            for(item in list){
+                remoteAttachments[item.kind]=item
+                val current=if(item.kind=="CADASTRAL_PLAN")planFile else extraFile
+                if(current==null){
+                    val bytes=PilotListingClient.downloadAttachment(session,review,item)
+                    val uri=try{PrivateCaptureMemory.addDocument(bytes,item.mime)}
+                        catch(e:Exception){bytes.fill(0);throw e}
+                    val doc=ChosenDocument(uri,s(if(item.kind=="CADASTRAL_PLAN")R.string.intake_plan else R.string.intake_extra),
+                        bytes.size.toLong(),item.mime)
+                    if(item.kind=="CADASTRAL_PLAN")planFile=doc else extraFile=doc
+                    uploadedAttachmentKeys[item.kind]=doc.uploadKey
+                }
+            }
+            attachmentReady=true
+        }catch(cancel:CancellationException){throw cancel}
+        catch(_:Exception){attachmentError=true}
+        finally{attachmentLoading=false}
+    }
+    suspend fun syncPilotAttachments(){
+        val review=pilotAttachmentReview?:return
+        val session=pilotOcrSession?:return
+        if(!attachmentPending)return
+        if(!attachmentReady)throw OwnerPairException(503)
+        for((kind,file) in listOf("CADASTRAL_PLAN" to planFile,"OTHER_LEGAL_PROOF" to extraFile)){
+            val saved=remoteAttachments[kind]
+            if(file==null){
+                if(saved!=null)PilotListingClient.removeAttachment(session,review,saved)
+                remoteAttachments.remove(kind);uploadedAttachmentKeys.remove(kind)
+            }else if(uploadedAttachmentKeys[kind]!=file.uploadKey){
+                val item=PilotListingClient.uploadAttachment(context,session,review,kind,file.uri,file.length,file.mime,saved)
+                remoteAttachments[kind]=item;uploadedAttachmentKeys[kind]=file.uploadKey
+            }
+        }
+    }
     var planRequest by remember(supplementCase,planFile?.uploadKey){mutableIntStateOf(0)}
     var planReading by remember(supplementCase,planFile?.uploadKey){mutableStateOf<ReadOcrResult?>(null)}
     var planBusy by remember(supplementCase,planFile?.uploadKey){mutableStateOf(false)}
@@ -1008,7 +1061,7 @@ internal fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmiss
                         persistAccess=intakePhotos!=null,compact=true)
                     if(directVerification)Text(s(if(resubmission?.optString("kind")=="LAND")R.string.direct_land_documents else R.string.direct_home_documents),fontSize=12.sp,color=Brand.Muted)
                     if(planFile!=null||extraFile!=null)Text(s(if(hasOwnerReviewSession&&!hasPilotReviewSession)
-                        R.string.intake_supplement_owner_hint else R.string.intake_optional_preview_only),fontSize=12.sp,color=Brand.Muted)
+                        R.string.intake_supplement_owner_hint else if(hasPilotReviewSession)R.string.intake_pilot_attachments_hint else R.string.intake_optional_preview_only),fontSize=12.sp,color=Brand.Muted)
                     intakeDetails?.let{kind->
                         AlertDialog(onDismissRequest={intakeDetails=null},
                             title={Text(s(when(kind){
@@ -1215,6 +1268,29 @@ internal fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmiss
                         onArea=if(!directVerification&&!readingForListing){{value->area=value;saveMessage=0}}else null,
                         areaEvidence=pairReport?.let{listingAreaEvidence(it.detectedKind,it.sourceFacts)})
                     JourneySectionHeading(s(if(readingForListing||directVerification)R.string.direct_analysis else R.string.step_property),Icons.Outlined.EditNote)
+                    if(hasPilotReviewSession&&pilotAttachmentReview!=null&&(planFile!=null||extraFile!=null||remoteAttachments.isNotEmpty()||attachmentError)){
+                        JourneyPanel{
+                            Text(s(R.string.intake_supplements_heading),fontWeight=FontWeight.SemiBold)
+                            Text(s(if(attachmentReady&&!attachmentPending)R.string.intake_pilot_attachments_saved
+                                else R.string.intake_pilot_attachments_hint),fontSize=12.sp,color=Brand.Muted)
+                            if(attachmentLoading||attachmentSaving)LinearProgressIndicator(Modifier.fillMaxWidth())
+                            if(attachmentError){
+                                Text(s(R.string.intake_supplement_failed),color=MaterialTheme.colorScheme.error)
+                                TextButton(onClick={attachmentRetry++},enabled=!attachmentLoading&&!attachmentSaving){Text(s(R.string.owner_retry))}
+                            }
+                            if(attachmentReady&&attachmentPending)OutlinedButton(onClick={
+                                attachmentSaving=true;attachmentError=false
+                                scope.launch{
+                                    try{syncPilotAttachments()}
+                                    catch(cancel:CancellationException){throw cancel}
+                                    catch(_:Exception){attachmentError=true}
+                                    finally{attachmentSaving=false}
+                                }
+                            },enabled=!attachmentSaving&&!attachmentLoading,modifier=Modifier.fillMaxWidth()){
+                                Text(s(R.string.intake_pilot_attachments_save))
+                            }
+                        }
+                    }
                     if(supplementCase!=null && (planFile!=null||extraFile!=null)){
                         SectionHeading(s(R.string.intake_supplements_heading),s(R.string.intake_supplement_owner_hint))
                         planFile?.let{file->
@@ -1795,12 +1871,12 @@ internal fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmiss
                         JourneyStatusLine(s(R.string.identity_section),
                             s(if(identitySelected||pairReport!=null)R.string.intake_added else R.string.intake_empty),identitySelected||pairReport!=null)
                         JourneyStatusLine(s(R.string.intake_plan),
-                            s(if(planReading?.status=="READY")R.string.intake_plan_read_ready else if(planFile!=null)R.string.intake_added else R.string.intake_optional),planFile!=null)
+                            s(if(planReading?.status=="READY")R.string.intake_plan_read_ready else if(planFile!=null&&uploadedAttachmentKeys["CADASTRAL_PLAN"]==planFile?.uploadKey)R.string.intake_pilot_attachments_saved else if(planFile!=null)R.string.intake_added else R.string.intake_optional),planFile!=null)
                         JourneyStatusLine(s(R.string.intake_extra),
-                            s(if(extraReceipt!=null)R.string.intake_extra_stored else if(extraFile!=null)R.string.intake_added else R.string.intake_optional),extraFile!=null)
+                            s(if(extraReceipt!=null||(extraFile!=null&&uploadedAttachmentKeys["OTHER_LEGAL_PROOF"]==extraFile?.uploadKey))R.string.intake_extra_stored else if(extraFile!=null)R.string.intake_added else R.string.intake_optional),extraFile!=null)
                         Text(s(R.string.intake_private_short),fontSize=12.sp,color=Brand.Muted)
                         if(planFile!=null||extraFile!=null)Text(s(if(hasOwnerReviewSession&&!hasPilotReviewSession)
-                            R.string.intake_supplement_owner_hint else R.string.intake_optional_preview_only),fontSize=12.sp,color=Brand.Muted)
+                            R.string.intake_supplement_owner_hint else if(hasPilotReviewSession)R.string.intake_pilot_attachments_hint else R.string.intake_optional_preview_only),fontSize=12.sp,color=Brand.Muted)
                         TextButton(onClick={step=0;showInvalid=false}){Icon(Icons.Outlined.Edit,null,Modifier.size(18.dp));Spacer(Modifier.width(6.dp));Text(s(R.string.intake_edit_documents))}
                     }
                     if(!directVerification){
@@ -1885,9 +1961,13 @@ internal fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmiss
                 }
                 else if(step==2 && onDocumentRead!=null){
                     pairReport?.takeIf { it.reviewId != null }?.let { report ->
-                        feedback(AppCue.Confirm)
-                        onDocumentRead(report)
-                        prefs.edit().clear().apply()
+                        if(attachmentPending){
+                            submissionMessage=R.string.intake_pilot_attachments_save
+                        }else{
+                            feedback(AppCue.Confirm)
+                            onDocumentRead(report)
+                            prefs.edit().clear().apply()
+                        }
                     }
                 }
                 else if(step<3){feedback(AppCue.Action);step=OwnerIntakePolicy.next(step);showInvalid=false;saveMessage=0}
@@ -1899,6 +1979,7 @@ internal fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmiss
                         sending=true
                         requestJob=scope.launch{
                             try{
+                                syncPilotAttachments()
                                 PilotListingClient.call(pilotOcrSession,"/api/pilot/direct-listings/$listingId/verification",
                                     org.json.JSONObject().put("reviewId",review))
                                 prefs.edit().remove("review_id").remove("review_scope").remove("request_key").apply()
@@ -1925,6 +2006,7 @@ internal fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmiss
                         val sendEpoch=++requestEpoch
                         requestJob=scope.launch{
                             try{
+                                syncPilotAttachments()
                                 listingPhotos.toList().forEach{photo->
                                     PilotListingClient.photo(context,pilotOcrSession,review,photo.uri,photo.length)
                                 }
@@ -1944,7 +2026,7 @@ internal fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmiss
                     }
                 }
                 else if(pilotOcrSession==null)saveLocalDraft()
-            }, enabled=(!intakeStep||requiredCount==2)&&!boundaryLocalBusy&&!boundarySendBusy&&!sending&&!submitted&&!identityDateBusy&&!planBusy&&!extraBusy&&!(step==2&&pilotOcrSession!=null&&pairReport==null), modifier=Modifier.fillMaxWidth().heightIn(min=54.dp),
+            }, enabled=(!intakeStep||requiredCount==2)&&!boundaryLocalBusy&&!boundarySendBusy&&!sending&&!submitted&&!identityDateBusy&&!planBusy&&!extraBusy&&!attachmentLoading&&!attachmentSaving&&!(step==2&&pilotOcrSession!=null&&pairReport==null), modifier=Modifier.fillMaxWidth().heightIn(min=54.dp),
                 shape=RoundedCornerShape(17.dp),colors=ButtonDefaults.buttonColors(
                     containerColor = if (needsCertificate) Brand.NeutralContainer else Brand.Crimson,
                     contentColor = if (needsCertificate) Brand.Ink else Color.White

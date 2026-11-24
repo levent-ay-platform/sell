@@ -19,14 +19,18 @@ internal object PrivateCaptureMemory {
     private const val AUTHORITY = "tn.malak.app.privatecapture"
     private const val MAX_BYTES = 12 * 1024 * 1024
     private val held = mutableMapOf<String, ByteArray>()
+    private val media = mutableMapOf<String, String>()
 
-    fun addJpeg(encoded:ByteArray):Uri {
+    fun addJpeg(encoded:ByteArray):Uri = addDocument(encoded,"image/jpeg")
+    fun addDocument(encoded:ByteArray,mime:String):Uri {
+        require(mime in setOf("image/jpeg","image/png","image/tiff","application/pdf"))
         require(encoded.size in 20..MAX_BYTES)
         synchronized(held) {
             if(held.size>=12 || held.values.sumOf { it.size.toLong() } + encoded.size > 32L*1024*1024)
                 throw IllegalStateException("CAPTURE_CAPACITY")
             val id=UUID.randomUUID().toString()
             held[id]=encoded
+            media[id]=mime
             return Uri.Builder().scheme("content").authority(AUTHORITY)
                 .appendPath(id).build()
         }
@@ -38,9 +42,10 @@ internal object PrivateCaptureMemory {
         if(uri.authority!=AUTHORITY)return@synchronized null
         held[uri.lastPathSegment]
     }
+    fun mime(uri:Uri):String?=synchronized(held){if(uri.authority==AUTHORITY)media[uri.lastPathSegment] else null}
     fun discard(uri:Uri){
         if(uri.authority!=AUTHORITY)return
-        synchronized(held){held.remove(uri.lastPathSegment)?.fill(0)}
+        synchronized(held){held.remove(uri.lastPathSegment)?.fill(0);media.remove(uri.lastPathSegment)}
     }
     fun isPrivate(uri:Uri):Boolean=uri.authority==AUTHORITY
 }
@@ -50,7 +55,7 @@ class PrivateCaptureProvider:ContentProvider() {
     private fun data(uri:Uri)=PrivateCaptureMemory.get(uri)
         ?:throw FileNotFoundException("Capture no longer available")
     override fun getType(uri:Uri):String?=
-        if(PrivateCaptureMemory.get(uri)!=null) "image/jpeg" else null
+        PrivateCaptureMemory.mime(uri)
     override fun query(uri:Uri,projection:Array<out String>?,selection:String?,
         selectionArgs:Array<out String>?,sortOrder:String?):Cursor {
         val bytes=data(uri)

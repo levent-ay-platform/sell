@@ -97,4 +97,7 @@
     <string name="intake_georef_residual">فرق نقطة التحقق: %1$s م</string>
     <string name="intake_georef_accept">استخدام الحدود للمراجعة</string>
     <string name="intake_georef_disclaimer">ربط يدوي اعتماداً على نقاطك؛ ليس رفعاً مساحياً رسمياً ولا إثبات ملكية.</string>
+    <string name="intake_pilot_attachments_save">حفظ الوثائق الخاصة</string>
+    <string name="intake_pilot_attachments_hint">يتم حفظ المخطط والوثيقة الإضافية بعد تأكيد الخادم فقط. يبقى الملف خاصاً للمراجعة.</string>
+    <string name="intake_pilot_attachments_saved">محفوظة بشكل خاص</string>
 </resources>

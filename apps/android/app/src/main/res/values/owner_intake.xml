@@ -97,4 +97,7 @@
     <string name="intake_georef_residual">Check-point difference: %1$s m</string>
     <string name="intake_georef_accept">Use boundary for review</string>
     <string name="intake_georef_disclaimer">Manual placement from your points; not an official survey or ownership proof.</string>
+    <string name="intake_pilot_attachments_save">Save private documents</string>
+    <string name="intake_pilot_attachments_hint">Plan and extra document are saved only after server confirmation. Review remains private.</string>
+    <string name="intake_pilot_attachments_saved">Saved privately</string>
 </resources>
