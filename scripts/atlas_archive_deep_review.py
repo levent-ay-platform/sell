@@ -113,6 +113,8 @@ def review_pdf(source, expected_sha, output, *, start_page=1, max_pages=20, rast
         raise ValueError("EXISTING_PRIVATE_OUTPUT_PARENT_REQUIRED")
     if output.parent.stat().st_mode & 0o077:
         raise ValueError("PRIVATE_OUTPUT_PARENT_REQUIRED")
+    source = source.resolve(strict=True)
+    output = output.parent.resolve(strict=True) / output.name
     old = os.umask(0o077)
     try:
         with tempfile.TemporaryDirectory(prefix="deep-review-", dir=output.parent) as temp:

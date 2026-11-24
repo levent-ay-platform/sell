@@ -31,7 +31,7 @@ class DeepArchiveTests(unittest.TestCase):
             (root/"not-a-pdf.bin").write_bytes(b"not PDF")
             backlog=base/"backlog.json"
             backlog.write_text(json.dumps({"kind":"ATLAS_PRIVATE_OCR_BACKLOG_CANDIDATES_ONLY",
-              "snapshot_kind":"mainfile_diagnostic","counts":{"distinct_hashed_pdfs":1,"pdf_rows_without_sha":0},
+              "snapshot_kind":"mainfile_diagnostic","unhashed_pdf_resource_ids_private":[],"counts":{"distinct_hashed_pdfs":1,"pdf_rows_without_sha":0},
               "backlog_private":[{"document_sha256_private":key,"resource_rows":1,"resource_ids_private":["x"]}]}))
             self.assertEqual(scan_pdf_blobs(backlog,root)["counts"]["catalogue_hashes_with_pdf_header_hint"],0)
             report=scan_pdf_blobs(backlog,root,probe_other_extensions=True)
