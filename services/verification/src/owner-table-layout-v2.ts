@@ -80,7 +80,9 @@ interface Header {
 const ordinalLabel=(s:string)=>/العدد|الرتبي|الترتيبي/u.test(norm(s));
 const identityLabel=(s:string)=>/هوية|المالك|اللقب|الجنسية/u.test(norm(s));
 const shareLabel=(s:string)=>/موضوع|الملكية/u.test(norm(s));
-const isParts=(s:string)=>/^\d{1,9}(?:[.,]\d{1,3})?$/u.test(s);
+const normalizeParts=(s:string)=>norm(s).replace(/[٠-٩]/gu,d=>String(d.charCodeAt(0)-0x660))
+  .replace(/[۰-۹]/gu,d=>String(d.charCodeAt(0)-0x6f0)).replace(/٫/gu,'.');
+const isParts=(s:string)=>/^(?:0|[1-9]\d{0,8})(?:[.,]\d{1,3})?$/u.test(normalizeParts(s));
 const partLabel=(s:string)=>/^(?:جزء|اجزاء)$/u.test(norm(s));
 const cinLabel=(s:string)=>/^(?:cin|c\.i\.n\.?|رقم\s*بطاقة\s*التعريف)$/iu.test(norm(s));
 const cinDigits=(s:string)=>s.replace(/[٠-٩]/gu,d=>String(d.charCodeAt(0)-0x660))
@@ -173,7 +175,7 @@ export function locateOwnerTableFromWords(pages:readonly SpatialPage[]):SpatialT
       const rowWords=page.words.filter(w=>{
         const y=middle(w.bbox),x=center(w.bbox)/page.width;
         return y>=top&&y<bottom&&w.confidence>=.75&&
-          x>header.shareX-page.width*.001/page.width&&x<header.ordinalX+.07;
+          x>=header.shareX-.085&&x<header.ordinalX+.07;
       });
       const shareWords=rowWords.filter(w=>
         Math.abs(center(w.bbox)/page.width-header.shareX)<.085);
@@ -182,7 +184,7 @@ export function locateOwnerTableFromWords(pages:readonly SpatialPage[]):SpatialT
         partLabel(q.text)&&Math.abs(center(q.bbox)-center(w.bbox))<page.width*.08&&
         middle(q.bbox)>middle(w.bbox)&&middle(q.bbox)-middle(w.bbox)<page.height*.065));
       if(chosen.length===1){
-        result.push(makeCell(chosen[0],n,'rightsParts',chosen[0].text,chosen[0].confidence));
+        result.push(makeCell(chosen[0],n,'rightsParts',normalizeParts(chosen[0].text),chosen[0].confidence));
       }else findings.add(chosen.length?'SHARE_AMBIGUOUS':'SHARE_NOT_LOCATED');
       const identityWords=rowWords.filter(w=>{
         const x=center(w.bbox)/page.width;

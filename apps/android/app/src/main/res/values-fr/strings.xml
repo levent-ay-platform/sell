@@ -470,4 +470,5 @@
     <string name="owner_share_warning">La superficie du titre et la quote-part ne prouvent ni une parcelle privative ni une superficie à vendre. Vérifier les droits inscrits.</string>
     <string name="owner_estate_area_conflict">Les lectures de la superficie divergent. Vérifier le certificat ; aucune superficie retenue.</string>
     <string name="owner_estate_fields_conflict">Certaines lectures foncières divergent. Vérifier le certificat.</string>
+    <string name="owner_page_count_unreadable">La pagination imprimée est illisible ou incertaine. Vérifier les pages du document.</string>
 </resources>

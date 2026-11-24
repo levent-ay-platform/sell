@@ -24,7 +24,7 @@ function normalizeDigits(s:string):string{
 }
 /** No guessed thousands separators; only decimal dot OR comma is supported. */
 function parseMilliparts(raw:string):bigint|null {
-  const text=normalizeDigits(raw.trim());
+  const text=normalizeDigits(raw.trim()).replace(/٫/gu,'.');
   if(!/^(?:0|[1-9][0-9]{0,11})(?:[.,][0-9]{1,3})?$/u.test(text))return null;
   const [integer,decimal='']=text.replace(',','.').split('.');
   const n=BigInt(integer)*1000n+BigInt((decimal+'000').slice(0,3));

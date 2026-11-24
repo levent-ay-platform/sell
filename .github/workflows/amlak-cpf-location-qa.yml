@@ -2,9 +2,9 @@ name: Amlak CPF location and Android QA
 on:
   pull_request:
     paths:
-      - 'services/verification/src/document-family-fields-v2.ts'
+      - 'services/verification/src/**'
       - 'services/verification/qa/**'
-      - 'services/verification/test/document-family-fields-v2.test.ts'
+      - 'services/verification/test/**'
       - 'apps/android/**'
       - 'scripts/build-mac-cpf-bundle.py'
       - '.github/workflows/amlak-cpf-location-qa.yml'
@@ -57,7 +57,7 @@ jobs:
       - name: Local HTTP and cache regression tests (synthetic only)
         env:
           PYTHONPATH: services/verification/qa
-        run: python -m unittest -v test_mac_pilot_ocr_http test_workflow_http
+        run: python -m unittest -v test_mac_pilot_ocr_http test_workflow_http test_mac_pair_runtime
   android:
     runs-on: ubuntu-24.04
     timeout-minutes: 35

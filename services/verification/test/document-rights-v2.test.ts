@@ -43,3 +43,9 @@ test('two plots under one parent title are NEVER assumed identical',()=>{
  assert.equal(compareDocumentParcelScope(base,{...base,registerNumber:'TITLE-FAKE-2'}),'DIFFERENT_REGISTER');
  assert.equal(compareDocumentParcelScope(base,{...base,plotNumber:null}),'INSUFFICIENT_REFERENCE');
 });
+
+test('Arabic decimal separator retains exact milliparts without guessing grouping',()=>{
+ const row={rowNumber:1,parts:'٣٠٠٫١٢٥',state:'EXTRACTED' as const};
+ assert.equal(balanceOwnershipParts([row],'300.125').status,'BALANCED');
+ assert.equal(balanceOwnershipParts([{...row,parts:'٣٠٠٬١٢٥'}],'300125').status,'INVALID');
+});

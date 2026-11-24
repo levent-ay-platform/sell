@@ -45,6 +45,9 @@ internal fun OwnerDocumentReadout(report:CertificateIdentityReview,onDateRefresh
             }
             Text(s(R.string.owner_share_warning),fontSize=12.sp,color=Brand.Muted)
         }
+        if("CERTIFICATE_PAGE_COUNT_UNREADABLE" in report.reasons){
+            Text(s(R.string.owner_page_count_unreadable),fontSize=12.sp,color=Brand.Muted)
+        }
         if("CPF_PROPERTY_AREA_CONFLICT" in report.reasons){
             Text(s(R.string.owner_estate_area_conflict),fontSize=12.sp,color=MaterialTheme.colorScheme.error)
         }else if("CPF_PROPERTY_FIELDS_CONFLICT" in report.reasons){

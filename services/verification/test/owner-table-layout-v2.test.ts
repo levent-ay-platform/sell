@@ -122,3 +122,22 @@ test('competing same-row labelled CIN digits produce no CIN cell',()=>{
  assert.ok(x.findings.includes('CIN_AMBIGUOUS'));
  assert.equal(x.cells.filter(c=>c.ordinal===1&&c.field==='cin').length,0);
 });
+
+test('Arabic decimal shares and left-of-column-centre values remain within their own row',()=>{
+ const pages=sample();
+ const first={...pages[0],words:pages[0].words.map(w=>w.text==='300.125'?
+  word('٣٠٠٫١٢٥',1,552,512):w)};
+ const x=locateOwnerTableFromWords([first,pages[1]]);
+ assert.equal(x.cells.find(c=>c.ordinal===1&&c.field==='rightsParts')?.value,'300.125');
+ const a=analyzeOwnerTable(x.cells,{receivedPages:[1,2],declaredPages:2,declaredOwnerCount:7,printedTotalParts:'١٠٠٠'});
+ assert.equal(a.rightsBalance.status,'BALANCED');
+ assert.equal(a.ownershipVerified,false);
+});
+test('Arabic thousands separators are not guessed as decimal separators',()=>{
+ const pages=sample();
+ const first={...pages[0],words:pages[0].words.map(w=>w.text==='300.125'?
+  word('٣٠٠٬١٢٥',1,580,512):w)};
+ const x=locateOwnerTableFromWords([first,pages[1]]);
+ assert.ok(x.findings.includes('SHARE_NOT_LOCATED'));
+ assert.equal(x.cells.some(c=>c.ordinal===1&&c.field==='rightsParts'),false);
+});
