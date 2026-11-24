@@ -79,7 +79,8 @@ def plan_rows(backlog, audit_docs, first_entries, final_states, inventories):
     return rows
 
 
-def run_pilot(run, roots, output, *, max_documents=10, pages_per_document=5, raster=False):
+def run_pilot(run, roots, output, *, max_documents=10, pages_per_document=5, raster=False,
+              max_scan_files=20000, max_scan_bytes=12*1024**3, max_probe_files=100000):
     if not 0<=max_documents<=MAX_PILOT_DOCS or not 1<=pages_per_document<=20 or max_documents*pages_per_document>MAX_PILOT_PAGES:
         raise ValueError("BOUNDED_PILOT_REQUIRED")
     run,output=Path(run),Path(output)
@@ -118,7 +119,9 @@ def run_pilot(run, roots, output, *, max_documents=10, pages_per_document=5, ras
     os.chmod(output,0o700)
     inventories=[]
     for i,root in enumerate(roots,1):
-        inventory=scan_pdf_blobs(first/"backlog.json",root,probe_other_extensions=True)
+        inventory=scan_pdf_blobs(first/"backlog.json",root,probe_other_extensions=True,
+                                 max_files=max_scan_files,max_total_bytes=max_scan_bytes,
+                                 max_probe_files=max_probe_files)
         inventories.append(inventory)
         write_private_json(output/f"root-{i:02d}-recovery.json",inventory)
     rows=plan_rows(meta,docs,entries,last[0]["all_catalogue_states_private"],inventories)

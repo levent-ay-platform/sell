@@ -96,7 +96,7 @@ def _command(args, work, timeout=45):
         out.unlink(missing_ok=True)
 
 
-def review_pdf(source, expected_sha, output, *, start_page=1, max_pages=20, raster=False):
+def review_pdf(source, expected_sha, output, *, start_page=1, max_pages=20, raster=False, adaptive_raster=False):
     source, output = Path(source), Path(output)
     if not re.fullmatch("[a-f0-9]{64}", expected_sha):
         raise ValueError("EXPECTED_SHA256_REQUIRED")
@@ -145,7 +145,7 @@ def review_pdf(source, expected_sha, output, *, start_page=1, max_pages=20, rast
                     "-layout", "-enc", "UTF-8", str(staged), "-"], work)
                 observations = [{"method": "native_layout", "status": status,
                                  "evidence": extract_candidates(native) if native is not None else None}]
-                if raster:
+                if raster and (not adaptive_raster or native is None or not native.strip()):
                     prefix = work / "render"
                     image = prefix.with_suffix(".png")
                     _, status = _command(["pdftoppm", "-f", str(page), "-l", str(page),
@@ -165,6 +165,7 @@ def review_pdf(source, expected_sha, output, *, start_page=1, max_pages=20, rast
                       "document_page_count": count, "legacy_size_limit_exceeded": total > 12*1024**2,
                       "legacy_page_limit_exceeded": count > 8, "page_start": start_page,
                       "page_end": end, "next_page": end+1 if end < count else None,
+                      "raster_requested": raster, "adaptive_raster": adaptive_raster,
                       "pages_private": pages, "official_plan_verified": None,
                       "ground_verified": False, "public_export_permitted": False}
             write_private_json(output, result)
