@@ -10,3 +10,7 @@ They contain 24 governorates and 279 delegations. The files are administrative g
 `places.json` is an ODbL derivative of these files with bilingual names and a
 point on the largest polygon of each feature. Points are used for zooming to
 an area, and do not locate properties.
+
+## Sector / imada reference
+
+CI prepares the unmodified medium-resolution sector GeoJSON from the same pinned revision using `python3 scripts/prepare_amlak_admin_sectors.py`. Git blob `3c867f1708cb3c1f752ee32c6288dfe13b591fb5` and exact size 2,845,889 bytes are checked before inclusion; a predownloaded file may be provided with `--source`. Upstream sector attribute index contains 2,083 rows, whereas Atlas INS target is 2,082. Preserve the upstream reference separately: no forced equivalence, no claim of official cadastral or INS coverage. Actual geometry count and SHA-256 are logged by the script. © OpenStreetMap contributors · Map Tunisia by Alaa Taieb, ODbL 1.0. Local builds without the optional sector asset explicitly show imada unavailable.

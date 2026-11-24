@@ -13,7 +13,7 @@ import tn.malak.app.ui.explore.AdminContext
 
 @Composable
 internal fun OwnerAdminContextPanel(context:AdminContext?,loading:Boolean,hasLocation:Boolean,failed:Boolean,
-    arabic:Boolean,onApply:()->Unit){
+    arabic:Boolean,onApply:()->Unit,hasImadaReference:Boolean=false){
     JourneySectionHeading(s(R.string.intake_admin_title),Icons.Outlined.LocationOn)
     JourneyPanel{
         when{
@@ -21,7 +21,8 @@ internal fun OwnerAdminContextPanel(context:AdminContext?,loading:Boolean,hasLoc
             context!=null->{
                 JourneyStatusLine(s(R.string.intake_governorate),context.governorate.label(arabic),true)
                 JourneyStatusLine(s(R.string.intake_delegation),context.delegation?.label(arabic)?:s(R.string.intake_admin_unresolved),context.delegation!=null)
-                JourneyStatusLine(s(R.string.intake_imada),s(R.string.intake_imada_unavailable),false)
+                JourneyStatusLine(s(R.string.intake_imada),context.imada?.label(arabic)?:
+                    s(if(hasImadaReference)R.string.intake_admin_unresolved else R.string.intake_imada_unavailable),context.imada!=null)
                 Text(s(R.string.intake_admin_source),fontSize=12.sp,color=Brand.Muted)
                 TextButton(onClick=onApply){Text(s(R.string.intake_admin_use_region))}
             }

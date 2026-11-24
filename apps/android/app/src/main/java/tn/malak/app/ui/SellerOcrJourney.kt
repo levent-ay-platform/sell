@@ -1063,7 +1063,8 @@ internal fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmiss
                     }
                     OwnerAdminContextPanel(adminContext,adminSamples.isNotEmpty()&&adminIndex==null&&!adminLoadFailed,
                         adminSamples.isNotEmpty(),adminLoadFailed,adminArabic,
-                        onApply={adminContext?.let{region=it.region(adminArabic);lastAutoRegion=region}})
+                        onApply={adminContext?.let{region=it.region(adminArabic);lastAutoRegion=region}},
+                        hasImadaReference=(adminIndex?.sectorCount?:0)>0)
                     val extracted=pairReport?.sourceFacts.orEmpty().filter{it.key in setOf(
                         "registerReference","parentRegisterReference","registeredPlotNumber","soldPlotNumber",
                         "possessedPlotNumber","registeredAreaM2","soldAreaM2","possessedAreaM2","transferredAreaM2")&&
@@ -1640,6 +1641,7 @@ internal fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmiss
                     adminContext?.let{admin->JourneyPanel{
                         JourneyStatusLine(s(R.string.intake_governorate),admin.governorate.label(adminArabic),true)
                         JourneyStatusLine(s(R.string.intake_delegation),admin.delegation?.label(adminArabic)?:s(R.string.intake_admin_unresolved),admin.delegation!=null)
+                        JourneyStatusLine(s(R.string.intake_imada),admin.imada?.label(adminArabic)?:s(if((adminIndex?.sectorCount?:0)>0)R.string.intake_admin_unresolved else R.string.intake_imada_unavailable),admin.imada!=null)
                         Text(s(R.string.intake_admin_source),fontSize=12.sp,color=Brand.Muted)
                     }}
                     measureOwnerMap(mapBoundary)?.let{measurement->

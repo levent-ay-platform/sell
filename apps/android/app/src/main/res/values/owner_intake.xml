@@ -69,7 +69,7 @@
     <string name="intake_delegation">Delegation</string>
     <string name="intake_imada">Imada</string>
     <string name="intake_imada_unavailable">Unavailable in local reference</string>
-    <string name="intake_admin_source">Local Atlas reference (OSM): administrative context, not cadastral evidence.</string>
+    <string name="intake_admin_source">Administrative context, not cadastral evidence. © OpenStreetMap contributors · Map Tunisia</string>
     <string name="intake_admin_use_region">Use region in listing</string>
     <string name="intake_admin_choose_location">Choose a location or draw the boundary.</string>
     <string name="intake_admin_load_failed">Could not load the administrative reference.</string>

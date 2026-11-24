@@ -69,7 +69,7 @@
     <string name="intake_delegation">المعتمدية</string>
     <string name="intake_imada">العمادة</string>
     <string name="intake_imada_unavailable">غير متاحة في المرجع المحلي</string>
-    <string name="intake_admin_source">مرجع أطلس الإداري المحلي (OSM)؛ سياق الموقع وليس إثباتاً عقارياً.</string>
+    <string name="intake_admin_source">مرجع إداري للموقع، وليس إثباتاً عقارياً. © OpenStreetMap contributors · Map Tunisia</string>
     <string name="intake_admin_use_region">استخدام المنطقة في الإعلان</string>
     <string name="intake_admin_choose_location">حدد موقع العقار أو ارسم حدوده لتظهر المنطقة.</string>
     <string name="intake_admin_load_failed">تعذر تحميل المرجع الإداري.</string>

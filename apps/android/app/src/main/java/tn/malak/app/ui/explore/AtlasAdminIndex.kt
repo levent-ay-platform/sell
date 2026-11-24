@@ -47,12 +47,13 @@ internal data class AdminFeature(val name:AdminName,val parent:String?,val polyg
         return if(2 in hits)2 else if(1 in hits)1 else 0
     }
 }
-internal data class AdminContext(val governorate:AdminName,val delegation:AdminName?){
+internal data class AdminContext(val governorate:AdminName,val delegation:AdminName?,val imada:AdminName?=null){
     fun region(ar:Boolean)=listOfNotNull(delegation?.label(ar),governorate.label(ar)).joinToString(if(ar)"، " else ", ")
 }
-internal class AtlasAdminIndex(private val governors:List<AdminFeature>,private val delegations:List<AdminFeature>){
+internal class AtlasAdminIndex(private val governors:List<AdminFeature>,private val delegations:List<AdminFeature>,private val sectors:List<AdminFeature> = emptyList()){
     val governorateCount get()=governors.size
     val delegationCount get()=delegations.size
+    val sectorCount get()=sectors.size
     fun resolve(point:DiscoveryPoint):AdminContext?{
         if(!point.latitude.isFinite()||!point.longitude.isFinite()||point !in InitialBounds)return null
         val g=governors.map{it to it.locate(point)}.filter{it.second!=0}
@@ -60,7 +61,9 @@ internal class AtlasAdminIndex(private val governors:List<AdminFeature>,private 
         // Check all delegations, not just children, to avoid asserting inconsistent parent geometry.
         val d=delegations.map{it to it.locate(point)}.filter{it.second!=0}
         val delegate=d.singleOrNull()?.takeIf{it.second==1&&it.first.parent==gov.name.id}?.first
-        return AdminContext(gov.name,delegate?.name)
+        val sector=if(delegate==null)null else sectors.map{it to it.locate(point)}
+            .filter{it.second!=0}.singleOrNull()?.takeIf{it.second==1&&it.first.parent==delegate.name.id}?.first
+        return AdminContext(gov.name,delegate?.name,sector?.name)
     }
     // Agreement at the explicitly selected pin and sampled corners is contextual only.
     // It does not prove that an entire polygon lies inside the administrative unit.
@@ -70,7 +73,9 @@ internal class AtlasAdminIndex(private val governors:List<AdminFeature>,private 
         val gov=hits.first().governorate
         if(hits.any{it.governorate.id!=gov.id})return null
         val d=hits.first().delegation
-        return AdminContext(gov,d?.takeIf{candidate->hits.all{it.delegation?.id==candidate.id}})
+        val commonDelegate=d?.takeIf{candidate->hits.all{it.delegation?.id==candidate.id}}
+        val commonSector=if(commonDelegate==null)null else hits.first().imada?.takeIf{candidate->hits.all{it.imada?.id==candidate.id}}
+        return AdminContext(gov,commonDelegate,commonSector)
     }
 }
 private fun parseAdminRing(raw:JSONArray):List<DiscoveryPoint> = List(raw.length()){i->
@@ -89,7 +94,7 @@ internal fun parseAdminFeatures(text:String):List<AdminFeature>{
             else->error("UNSUPPORTED_ADMIN_GEOMETRY")
         }
         AdminFeature(AdminName(props.getString("id"),props.optString("name_ar"),props.optString("name_fr")),
-            props.optString("governorate").takeIf{it.isNotBlank()},polygons)
+            props.optString("delegation").takeIf{it.isNotBlank()}?:props.optString("governorate").takeIf{it.isNotBlank()},polygons)
     }
 }
 internal fun loadAtlasAdminIndex(context:Context):AtlasAdminIndex{
@@ -97,5 +102,8 @@ internal fun loadAtlasAdminIndex(context:Context):AtlasAdminIndex{
     val g=read("governorates");val d=read("delegations")
     require(g.size==24&&d.size==279&&g.map{it.name.id}.distinct().size==24&&d.map{it.name.id}.distinct().size==279)
     require(d.all{row->g.any{it.name.id==row.parent}})
-    return AtlasAdminIndex(g,d)
+    val sectors=try{read("sectors")}catch(_:java.io.FileNotFoundException){emptyList()}
+    require(sectors.isEmpty()||sectors.size in 2082..2083)
+    require(sectors.map{it.name.id}.distinct().size==sectors.size&&sectors.all{row->d.any{it.name.id==row.parent}})
+    return AtlasAdminIndex(g,d,sectors)
 }

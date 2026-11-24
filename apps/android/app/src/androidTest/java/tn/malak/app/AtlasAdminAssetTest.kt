@@ -17,5 +17,7 @@ class AtlasAdminAssetTest{
         val result=index.resolve(DiscoveryPoint(36.85928,10.328155))
         assertEquals("TN-11",result?.governorate?.id)
         assertEquals("delegation-1151",result?.delegation?.id)
+        assertTrue(index.sectorCount in 2082..2083)
+        assertEquals("sector-115151",index.resolve(DiscoveryPoint(36.87154,10.34767))?.imada?.id)
     }
 }
