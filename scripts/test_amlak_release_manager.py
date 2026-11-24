@@ -34,6 +34,18 @@ class GateTests(unittest.TestCase):
     def test_expired_artifact(self):
         d=self.fixture();d["actions/runs/11/artifacts?per_page=100"]["artifacts"][0]["expired"]=True
         self.assertEqual(self.run_gate(d)["status"],"BLOCKED")
+    def test_ocr_pull_request_requires_identical_checkout_tree(self):
+        d=self.fixture()
+        d["actions/runs/13"]["event"]="pull_request"
+        d["actions/runs/13/jobs?per_page=100"]["jobs"][0]["id"]=99
+        merge="c"*40
+        d[f"git/commits/{SHA}"]={"tree":{"sha":"d"*40}}
+        d[f"git/commits/{merge}"]={"tree":{"sha":"d"*40}}
+        log=lambda _: "2026-11-24T00:00:00Z [command]/usr/bin/git log -1 --format=%H\n2026-11-24T00:00:01Z "+merge
+        self.assertEqual(evaluate(SHA,IDS,d.__getitem__,log)["status"],"CI_CANDIDATE_READY")
+        d[f"git/commits/{merge}"]["tree"]["sha"]="e"*40
+        self.assertEqual(evaluate(SHA,IDS,d.__getitem__,log)["status"],"BLOCKED")
+        self.assertEqual(evaluate(SHA,IDS,d.__getitem__,lambda _: "")["status"],"BLOCKED")
     def test_no_deployment_claim(self):
         self.assertEqual(self.run_gate(self.fixture())["deployment"],"NOT_PERFORMED")
 if __name__=="__main__":unittest.main()

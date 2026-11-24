@@ -19,7 +19,25 @@ def api(path):
                             check=True, capture_output=True, text=True, timeout=40)
     return json.loads(result.stdout)
 
-def evaluate(sha, run_ids, read=api):
+def job_log(job_id):
+    result = subprocess.run(["gh", "api", "--method", "GET", f"repos/{REPO}/actions/jobs/{job_id}/logs"],
+                            check=True, capture_output=True, text=True, timeout=40)
+    return result.stdout
+
+def exact_checkout_tree(sha, jobs, read, log):
+    expected=read(f"git/commits/{sha}")["tree"]["sha"]
+    for job in jobs:
+        lines=log(job["id"]).splitlines()
+        commits=[]
+        for i,line in enumerate(lines[:-1]):
+            if "[command]/usr/bin/git log -1 --format=%H" in line:
+                found=re.search(r"\b([a-f0-9]{40})$",lines[i+1].strip())
+                if found:commits.append(found.group(1))
+        if len(commits)!=1 or read(f"git/commits/{commits[0]}")["tree"]["sha"]!=expected:
+            return False
+    return True
+
+def evaluate(sha, run_ids, read=api, log=job_log):
     if not re.fullmatch(r"[a-f0-9]{40}", sha):
         raise ValueError("Exact full candidate SHA required")
     report = {"candidate": sha, "gates": {}, "artifact": None,
@@ -31,7 +49,7 @@ def evaluate(sha, run_ids, read=api):
         run = read(f"actions/runs/{rid}")
         gate = {"run": rid, "status": "BLOCKED", "jobs": {}}
         report["gates"][key] = gate
-        if run.get("head_sha") != sha or run.get("path") != path or run.get("event") != "push":
+        if run.get("head_sha") != sha or run.get("path") != path or (run.get("event") != "push" and not (key=="ocr" and run.get("event")=="pull_request")):
             gate["reason"] = "wrong revision, workflow or event"
         elif run.get("status") != "completed":
             gate["status"] = "PENDING"
@@ -46,7 +64,10 @@ def evaluate(sha, run_ids, read=api):
                     and found[0].get("status")=="completed"
                     and found[0].get("conclusion")=="success" else "BLOCKED")
             if all(v=="PASS" for v in gate["jobs"].values()):
-                gate["status"] = "PASS"
+                if run.get("event")=="pull_request" and not exact_checkout_tree(sha,[j for j in jobs if j.get("name") in expected],read,log):
+                    gate["reason"]="PR checkout tree not proven identical"
+                else:
+                    gate["status"] = "PASS"
         all_pass &= gate["status"]=="PASS"
     if report["gates"]["android"]["status"]=="PASS":
         artifacts=read(f"actions/runs/{run_ids['android']}/artifacts?per_page=100").get("artifacts",[])
