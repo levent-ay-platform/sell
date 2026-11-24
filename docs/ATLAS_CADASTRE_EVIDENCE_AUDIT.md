@@ -45,6 +45,62 @@ Output creation uses a restrictive 0600 file, restores process umask, refuses an
 3. Run the candidate triage on that protected backup, **not against the production database**. Review the unresolved queue and PDF/source provenance manually. Confirmed official cadastral plans require authoritative documents and verified identifiers; other map types remain separate.
 4. Treat any blocked or timed-out remote command as **not executed** unless a matching canonical command-result proof explicitly confirms success.
 
+## P0–P4 operator pipeline (implementation verified on synthetic CI)
+
+The Atlas repo now includes standalone, private, non-destructive entrypoints. Invoke with `python3 -m` from the repository root. **Never pass raw DBs, names, title numbers, OCR or source URLs into CI artifacts, log output, public GitHub, static Android assets, or the web.** All arguments below denote operator-controlled private paths; do not substitute live source paths except for the authorized backup step.
+
+```sh
+# Only under the real Atlas DB owner's authorization / file-owner permissions.
+# If the live DB uses WAL but lacks its companion files, this fails closed.
+python3 -m scripts.atlas_sqlite_snapshot \
+  --source /private/atlas-live/catalogue.sqlite \
+  --target /private/atlas-snapshots/owner-consistent.sqlite \
+  --manifest /private/atlas-snapshots/owner-consistent-manifest.json
+
+python3 -m scripts.atlas_cadastre_evidence_audit \
+  --db /private/atlas-snapshots/owner-consistent.sqlite \
+  --snapshot-kind transactional_backup \
+  --output /private/atlas-reports/private-evidence.json
+
+# Scope annotations and other-source records must have already been
+# curated privately; source identity requires namespace/service/layer/OID/version.
+python3 -m scripts.atlas_document_linkage \
+  --audit /private/atlas-reports/private-evidence.json \
+  --scope-annotations /private/atlas-review/scope-annotations.json \
+  --source-records /private/atlas-review/source-records.json \
+  --output /private/atlas-reports/link-candidates.json
+
+# Operator-supplied page outline + at least 3 fit GCPs, 1 held-out GCP.
+python3 -m scripts.atlas_geometry_evidence \
+  --input /private/atlas-review/plan-and-controls.json \
+  --output /private/atlas-reports/geometry-qa.json
+
+# REQUIRED HUMAN/OWNER-MANAGER REVIEW GATE:
+# verify official source, physical title/parcel links, 4326 geography,
+# independent control points, licensing, consent and revocations.
+# Generate separately approved private reviewed-records.json only after this.
+# ATLAS_PUBLIC_HMAC_KEY is a strong secret managed outside the repo.
+python3 -m scripts.atlas_public_projection \
+  --reviews /private/atlas-review/reviewed-records.json \
+  --revocations /private/atlas-review/current-complete-revocations.json \
+  --output /private/atlas-release/public-stage.geojson
+
+python3 -m scripts.atlas_amlak_private_bridge \
+  --reviews /private/atlas-review/reviewed-records.json \
+  --revocations /private/atlas-review/current-complete-revocations.json \
+  --output /private/atlas-release/amlak-private-import.json
+```
+
+The `atlas_sqlite_snapshot` command uses the actual SQLite Backup API through standard `mode=ro`, **without `immutable=1`**. It fails if the WAL-oriented source is missing `-wal` or `-shm`, so operator coordination is needed rather than forcibly creating sidecars, checkpointing or repairing the operational archive. A backup includes private SHA-256, integrity and row-count verification; no source database mutation is authorized. This has been tested only with synthetic source databases, **not yet executed against the live Atlas WAL database**.
+
+**Source-scoped linkage:** `atlas_document_linkage` preserves unknown/unlinked docs, composite source keys, ambiguous candidates and leading zeros. It requires the title and parcel to appear on the same page and an explicitly reviewed registry scope for candidate matches; it never marks a title or legal owner verified. Where records lack a reviewer-verified scope, no candidate edge is created.
+
+**Geometry:** `atlas_geometry_evidence` only accepts explicit PIXEL/PAGE_POINT coordinates, three or more FIT control points, independent CHECK points, Tunisia WGS84 bounds and a maximum holdout error; it also checks ring topology and printed-area disagreement. A passing result is **GEOREFERENCED_CANDIDATE**, never `GROUND_VERIFIED`. There is no CRS inference or fictitious title-to-location transform.
+
+**Release:** `atlas_public_projection` uses an explicit deny-by-default field allowlist and a private HMAC public identifier; only reviewer-verified official plans, independently reviewed ground boundaries, rights-cleared consented active listings, and a complete current revocation manifest can enter the staged public GeoJSON. `atlas_amlak_private_bridge` generates a confidential batch conforming to `ReviewedAtlasParcel` accepted by the existing `services/verification/src/atlas-parcel-exchange.ts`. It does **not** send the batch or modify Amlak/PostGIS. Publication/runtime integration still requires authenticated admin review and live read-time revocation enforcement.
+
+**Current proof:** The CI workflow executes synthetic audit, document linkage, independent GCP QA, safe release, private Amlak bridge and a full offline CLI smoke that tests removal on revocation. Passing these tests proves the software gates, not actual official-plan provenance, archive-wide GIS coverage, device-level Android UX, or live source consistency. No source archive files were committed or exposed.
+
 ## Next gates
 
 1. Capture a transactionally consistent owner-authorized backup, verify SHA256, integrity, counts and rights.
