@@ -18,6 +18,7 @@ on:
       - scripts/atlas_reviewer_workbench.py
       - scripts/atlas_georeference_case.py
       - scripts/atlas_raster_review_case.py
+      - scripts/atlas_raster_trace.html
       - scripts/tests/test_atlas_raster_review_case.py
       - scripts/tests/test_atlas_georeference_case.py
       - scripts/atlas_reviewer_workbench.html

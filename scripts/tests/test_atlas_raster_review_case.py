@@ -30,6 +30,11 @@ class RasterCaseTests(unittest.TestCase):
         self.assertEqual(len(r["outlines_private"]),1)
         self.assertEqual(hashlib.sha256((out/"page.png").read_bytes()).hexdigest(),r["page_render_private"]["sha256"])
         c=out/"case.json"
+        html=(out/"trace.html").read_text()
+        self.assertIn(hashlib.sha256(c.read_bytes()).hexdigest(),html)
+        self.assertIn("connect-src 'none'",html)
+        self.assertIn("PRIVATE_ATLAS_MANUAL_PIXEL_TRACE",html)
+        self.assertEqual((out/"trace.html").stat().st_mode&0o777,0o600)
         pts=[{"control_id":str(i),"source_evidence_sha256":"b"*64,"page":[x,y],
               "wgs84":[10+x*.000001,36-y*.000001],"role":role} for i,(x,y,role) in enumerate(
               [(0,0,"FIT"),(1000,0,"FIT"),(0,1000,"FIT"),(1000,1000,"CHECK")])]

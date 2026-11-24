@@ -2,6 +2,7 @@
 """Local scan-plan case and manually traced pixel outlines, not legal geometry."""
 from __future__ import annotations
 import argparse
+import base64
 import hashlib
 import json
 from pathlib import Path
@@ -26,6 +27,20 @@ def candidate(ring,w,h,method,ordinal=1):
     border=(max(xs)-min(xs))*(max(ys)-min(ys))/(w*h)>=.85
     return {"ordinal":ordinal,"page_ring":r,"outline_sha256":digest(r),
             "possible_frame_or_border":border,"method":method}
+
+def write_trace_workbench(output,case,png):
+    case_path=output/"case.json"
+    payload={"case_sha256":hashlib.sha256(case_path.read_bytes()).hexdigest(),
+             "document_sha256":case["document_sha256_private"],"page":case["page"],
+             "render_sha256":case["page_render_private"]["sha256"],
+             "width":case["display_width_pixels"],"height":case["display_height_pixels"],
+             "outlines":case["outlines_private"],"png":base64.b64encode(png).decode("ascii")}
+    data=json.dumps(payload,ensure_ascii=False,separators=(",",":"),allow_nan=False)
+    data=data.replace("&","\\u0026").replace("<","\\u003c").replace(">","\\u003e")
+    template=Path(__file__).with_name("atlas_raster_trace.html").read_text(encoding="utf-8")
+    if template.count("__ATLAS_TRACE_PAYLOAD__")!=1:
+        raise ValueError("TRACE_TEMPLATE_INVALID")
+    write_bytes(output/"trace.html",template.replace("__ATLAS_TRACE_PAYLOAD__",data).encode("utf-8"))
 
 def prepare_scan(index_path,pdf,sha,page,output,*,crop=None):
     sha=_sha(sha)
@@ -85,6 +100,7 @@ def prepare_scan(index_path,pdf,sha,page,output,*,crop=None):
     output.mkdir(mode=0o700)
     write_bytes(output/"page.png",png)
     write_private_json(output/"case.json",case)
+    write_trace_workbench(output,case,png)
     return case
 
 def trace(case_path,annotation_path,output):
@@ -118,6 +134,7 @@ def trace(case_path,annotation_path,output):
     output.mkdir(mode=0o700)
     write_bytes(output/"page.png",png)
     write_private_json(output/"case.json",result)
+    write_trace_workbench(output,result,png)
     return result
 
 def main():
