@@ -137,7 +137,7 @@ def assess(case_path,controls_path,output):
     controls,ph=private_json(controls_path)
     if (case.get("kind")!="PRIVATE_ATLAS_GEOREFERENCE_CASE" or case.get("schema_version")!=1
         or case.get("public_export_permitted") is not False or case.get("ground_verified") is not False
-        or case.get("official_plan_verified") is not None or case.get("page_unit")!="PAGE_POINT"):
+        or case.get("official_plan_verified") is not None or case.get("page_unit") not in ("PAGE_POINT","PIXEL")):
         raise ValueError("PRIVATE_UNVERIFIED_CASE_REQUIRED")
     if (controls.get("kind")!="PRIVATE_ATLAS_CONTROL_OBSERVATIONS" or controls.get("case_sha256")!=ch
         or controls.get("document_sha256")!=case.get("document_sha256_private")
@@ -153,7 +153,8 @@ def assess(case_path,controls_path,output):
         raise ValueError("OUTLINE_BINDING_MISMATCH")
     if selected.get("possible_frame_or_border") and controls.get("border_reviewed_as_candidate") is not True:
         raise ValueError("POSSIBLE_FRAME_REVIEW_REQUIRED")
-    w,h=case["display_width_points"],case["display_height_points"]
+    unit=case["page_unit"]
+    w,h=(case["display_width_points"],case["display_height_points"]) if unit=="PAGE_POINT" else (case["display_width_pixels"],case["display_height_pixels"])
     if not 0<w<=100000 or not 0<h<=100000 or any(not(0<=x<=w and 0<=y<=h) for x,y in r):
         raise ValueError("INVALID_CASE_FRAME")
     pts=controls.get("control_points")
@@ -171,7 +172,7 @@ def assess(case_path,controls_path,output):
             raise ValueError("CONTROL_OUTSIDE_PAGE")
     # Source digests are operator-supplied references, not authentication.
     # Check coordinates, independent holdout and residuals; never certify authority.
-    spec={"page_ring":r,"page_unit":"PAGE_POINT","target_crs":"EPSG:4326",
+    spec={"page_ring":r,"page_unit":unit,"target_crs":"EPSG:4326",
           "control_points":pts,"maximum_holdout_error_m":controls.get("maximum_holdout_error_m"),
           "printed_area_m2":controls.get("printed_area_m2")}
     if spec["printed_area_m2"] is not None:
