@@ -6,6 +6,11 @@ on:
     paths:
       - 'services/verification/**'
       - '.github/workflows/verification-core.yml'
+  push:
+    branches: [feat/amlak-unified-intake-20261124]
+    paths:
+      - 'services/verification/**'
+      - '.github/workflows/verification-core.yml'
   workflow_dispatch:
 
 permissions:

@@ -76,4 +76,8 @@
     <string name="intake_admin_unresolved">Zone non déterminée ; vérifier la position.</string>
     <string name="intake_doc_facts">Données extraites des documents</string>
     <string name="intake_doc_facts_notice">Valeurs à examiner, sans preuve de propriété ni de localisation des limites.</string>
+    <string name="intake_document_location">Localisation du bien dans le document</string>
+    <string name="intake_location_conflict">La localisation du document diffère du point choisi sur la carte. Vérifiez les deux.</string>
+    <string name="intake_parent_title">Titre foncier parent</string>
+    <string name="intake_plot_number">Numéro de parcelle</string>
 </resources>

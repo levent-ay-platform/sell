@@ -32,7 +32,7 @@ export type PilotPairPreview = {
  readonly matchedRole:string|null;
  readonly documentCinStatus:string|null;
  readonly matchedRightsHolder:UnifiedPrivateDocumentIdentityResult['matchedRightsHolder'];
- readonly propertyFacts:readonly {key:string;value:string;page:number}[];
+ readonly propertyFacts:readonly {key:string;value:string;page:number;status?:'CANDIDATE';source?:'ocr-ar'|'ocr-fr'|'pdf-text'}[];
  readonly parcelPlanScans:readonly ParcelPlanScan[];
  readonly parcelPlanFacts:readonly ParcelPlanFact[];
  readonly parcelEdgeMeasurements:readonly ParcelEdgeMeasurement[];
@@ -84,7 +84,7 @@ const FACT_KEYS=new Set([
  'soldAreaM2','possessedAreaM2','transferredAreaM2',
  'registeredPlotNumber','soldPlotNumber','possessedPlotNumber',
  'salePriceTnd','transferReference','serviceRequestNumber','serviceRequestDate',
- 'rightsDenominator'
+ 'rightsDenominator','propertyGovernorate','propertyDelegation','propertyImada'
 ]);
 export async function previewPilotPrivatePair(
  req:PilotPairRequest,deps:PilotPairDependencies
@@ -141,7 +141,8 @@ export async function previewPilotPrivatePair(
   const propertyFacts=read.privateFamilyFields.facts.filter(f=>
      FACT_KEYS.has(f.key)&&f.status==='CANDIDATE'&&
      f.value!==null&&f.evidence.length>0)
-   .map(f=>({key:f.key,value:f.value!,page:f.evidence[0]!.page}));
+   .map(f=>({key:f.key,value:f.value!,page:f.evidence[0]!.page,
+     ...(f.key.startsWith('property')?{status:'CANDIDATE' as const,source:f.evidence[0]!.source}:{})}));
   return {
    detectedKind:comparison.detectedKind,
    assessment:comparison.assessment,

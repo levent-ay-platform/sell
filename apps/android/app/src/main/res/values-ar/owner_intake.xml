@@ -76,4 +76,8 @@
     <string name="intake_admin_unresolved">تحديد غير محسوم؛ راجع الموقع.</string>
     <string name="intake_doc_facts">بيانات مستخرجة من الوثائق</string>
     <string name="intake_doc_facts_notice">قيم من الوثائق للمراجعة؛ لا تثبت الملكية أو موقع الحدود.</string>
+    <string name="intake_document_location">موقع العقار المذكور بالوثيقة</string>
+    <string name="intake_location_conflict">موقع الوثيقة لا يتفق مع الموقع المحدد على الخريطة. راجع الاثنين.</string>
+    <string name="intake_parent_title">الرسم العقاري الأم</string>
+    <string name="intake_plot_number">رقم المقسم</string>
 </resources>

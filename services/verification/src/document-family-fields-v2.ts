@@ -19,7 +19,8 @@ export type LandFactKey=
   'serviceRequestNumber'|'serviceRequestDate'|'serviceApplicant'|
   'possessionRequester'|'receiptPayer'|
   'buyerCin'|'sellerCin'|'transferorCin'|'transfereeCin'|
-  'possessionRequesterCin'|'receiptPayerCin'|'serviceApplicantCin';
+  'possessionRequesterCin'|'receiptPayerCin'|'serviceApplicantCin'|
+  'propertyGovernorate'|'propertyDelegation'|'propertyImada';
 export type LandFactStatus='CANDIDATE'|'LOW_CONFIDENCE'|'CONFLICT'|'MASKED'|'ABSENT';
 export interface PrivateLandFactEvidence {
   readonly page:number;
@@ -48,7 +49,7 @@ export interface PrivateLandFacts {
   readonly ownershipVerified:false;
   readonly mayPublish:false;
 }
-type Shape='title'|'area'|'parts'|'plot'|'money'|'actor'|'reference'|'date'|'cin';
+type Shape='title'|'area'|'parts'|'plot'|'money'|'actor'|'reference'|'date'|'cin'|'place';
 interface Rule {key:LandFactKey;pattern:RegExp;shape:Shape;}
 const commonTitle:Rule={
  key:'registerReference',
@@ -181,12 +182,20 @@ const serviceReceiptAmount:Rule={
  pattern:/^(?:المبلغ\s+(?:الجملي|المستخلص)|المبلغ|total\s+g[eé]n[eé]ral|montant\s+per[cç]u)[\s:#：-]*([0-9]{1,12}(?:[.,][0-9]{1,3})?)\s*(?:dt|tnd|دينار(?:ا)?)?\s*$/iu,
  shape:'money'
 };
+
+// Only explicitly property-scoped labels. A party's domicile, registry office,
+// birthplace or a bare governorate heading is not the location of the parcel.
+const propertyLocation:readonly Rule[]=[
+ {key:'propertyGovernorate',pattern:/^(?:ولاي[ةه]\s+(?:العقار|القطع[ةه]|الارض)|gouvernorat\s+(?:du\s+bien|de\s+la\s+parcelle|du\s+terrain))\s*[:：-]\s*(.{2,80})$/iu,shape:'place'},
+ {key:'propertyDelegation',pattern:/^(?:معتمدي[ةه]\s+(?:العقار|القطع[ةه]|الارض)|d[eé]l[eé]gation\s+(?:du\s+bien|de\s+la\s+parcelle|du\s+terrain))\s*[:：-]\s*(.{2,80})$/iu,shape:'place'},
+ {key:'propertyImada',pattern:/^(?:عماد[ةه]\s+(?:العقار|القطع[ةه]|الارض)|(?:imada|secteur)\s+(?:du\s+bien|de\s+la\s+parcelle|du\s+terrain))\s*[:：-]\s*(.{2,80})$/iu,shape:'place'}
+];
 const RULES:Readonly<Record<LandPaperKind,readonly Rule[]>>={
- OWNERSHIP_CERTIFICATE:[commonTitle,parent,totalArea,registeredPlot,denominator],
- SHARED_OWNERSHIP_CERTIFICATE:[commonTitle,parent,totalArea,registeredPlot,denominator],
- SALE_DEED:[commonTitle,parent,soldPlot,soldArea,seller,buyer,salePrice,sellerCin,buyerCin],
- POSSESSION_REPORT:[commonTitle,parent,possessedPlot,possessedArea,possessionRequester,possessionRequesterCin],
- TRANSFER_CARD:[commonTitle,parent,transferredArea,transferor,transferee,transferRef,transferorCin,transfereeCin],
+ OWNERSHIP_CERTIFICATE:[commonTitle,parent,totalArea,registeredPlot,denominator,...propertyLocation],
+ SHARED_OWNERSHIP_CERTIFICATE:[commonTitle,parent,totalArea,registeredPlot,denominator,...propertyLocation],
+ SALE_DEED:[commonTitle,parent,soldPlot,soldArea,seller,buyer,salePrice,sellerCin,buyerCin,...propertyLocation],
+ POSSESSION_REPORT:[commonTitle,parent,possessedPlot,possessedArea,possessionRequester,possessionRequesterCin,...propertyLocation],
+ TRANSFER_CARD:[commonTitle,parent,transferredArea,transferor,transferee,transferRef,transferorCin,transfereeCin,...propertyLocation],
  FINANCIAL_RECEIPT:[receiptNumber,receiptAmount,receiptPayer,receiptPayerCin],
  PROPERTY_SERVICE_RECEIPT:[commonTitle,serviceRequestNumber,serviceRequestDate,
    serviceApplicant,serviceReceiptAmount,serviceApplicantCin],
@@ -210,6 +219,10 @@ function parseValue(raw:string,shape:Shape):{value:string|null;uncertain:boolean
    return /^[0-9]{8}$/u.test(v)?
      {value:v,uncertain:false,masked:false}:
      {value:null,uncertain:true,masked:false};
+ }
+ if(shape==='place'){
+   return v.length<=80&&/^[\p{L}\p{M}\p{Zs}'’.-]+$/u.test(v)?
+     {value:v,uncertain:false,masked:false}:{value:null,uncertain:false,masked:false};
  }
  if(shape==='actor'){
    // Explicit role labels only; no CIN/DOB/transaction number in name.

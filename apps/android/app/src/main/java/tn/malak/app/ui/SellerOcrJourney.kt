@@ -750,8 +750,10 @@ internal fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmiss
     val adminSamples=remember(locationPoint,mapBoundary){(listOfNotNull(locationPoint)+mapBoundary).distinct()}
     var adminIndex by remember{mutableStateOf<AtlasAdminIndex?>(null)}
     var adminLoadFailed by remember{mutableStateOf(false)}
-    LaunchedEffect(adminSamples.isNotEmpty()){
-        if(adminSamples.isEmpty()||adminIndex!=null)return@LaunchedEffect
+    val docLocations=pairReport?.sourceFacts.orEmpty().filter{it.key in setOf("propertyGovernorate","propertyDelegation","propertyImada")}
+    val needsAdmin=adminSamples.isNotEmpty()||docLocations.isNotEmpty()
+    LaunchedEffect(needsAdmin){
+        if(!needsAdmin||adminIndex!=null)return@LaunchedEffect
         try{adminIndex=withContext(Dispatchers.IO){loadAtlasAdminIndex(context.applicationContext)}}
         catch(cancel:CancellationException){throw cancel}
         catch(_:Exception){adminLoadFailed=true}
@@ -762,9 +764,19 @@ internal fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmiss
         if(index!=null&&adminSamples.isNotEmpty())value=withContext(Dispatchers.Default){index.resolveSamples(adminSamples)}
     }
     val adminArabic=s(R.string.intake_language_code)=="ar"
+    val documentAdmin=remember(adminIndex,docLocations){
+        fun fact(key:String)=docLocations.singleOrNull{it.key==key}?.value
+        adminIndex?.resolveNames(fact("propertyGovernorate"),fact("propertyDelegation"),fact("propertyImada"))
+    }
+    val docLocationConflict=documentAdmin!=null&&adminContext!=null&&(
+        documentAdmin.governorate.id!=adminContext?.governorate?.id||
+        (documentAdmin.delegation!=null&&adminContext?.delegation!=null&&documentAdmin.delegation.id!=adminContext?.delegation?.id)||
+        (documentAdmin.imada!=null&&adminContext?.imada!=null&&documentAdmin.imada.id!=adminContext?.imada?.id))
     var lastAutoRegion by remember(draftFile){mutableStateOf<String?>(null)}
-    LaunchedEffect(adminContext,adminArabic){
-        val suggestion=adminContext?.region(adminArabic)?:return@LaunchedEffect
+    LaunchedEffect(adminContext,documentAdmin,docLocationConflict,adminSamples,adminArabic,docLocations){
+        if(docLocationConflict)return@LaunchedEffect
+        val candidate=adminContext?:documentAdmin?.takeIf{adminSamples.isEmpty()&&docLocations.all{it.status=="CANDIDATE"}}
+        val suggestion=candidate?.region(adminArabic)?:return@LaunchedEffect
         if(!directVerification&&!readingForListing&&(region.isBlank()||region==lastAutoRegion)){
             region=suggestion;lastAutoRegion=suggestion
         }
@@ -1065,9 +1077,21 @@ internal fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmiss
                         adminSamples.isNotEmpty(),adminLoadFailed,adminArabic,
                         onApply={adminContext?.let{region=it.region(adminArabic);lastAutoRegion=region}},
                         hasImadaReference=(adminIndex?.sectorCount?:0)>0)
+                    if(docLocations.isNotEmpty())JourneyPanel{
+                        Text(s(R.string.intake_document_location),fontWeight=FontWeight.SemiBold)
+                        if(docLocationConflict)Text(s(R.string.intake_location_conflict),color=MaterialTheme.colorScheme.error)
+                        else if(documentAdmin!=null){
+                            Text(documentAdmin.region(adminArabic),color=Brand.Ink)
+                            documentAdmin.imada?.let{Text(it.label(adminArabic),color=Brand.Muted)}
+                            if(!directVerification&&!readingForListing&&adminSamples.isEmpty())TextButton(onClick={
+                                region=documentAdmin.region(adminArabic);lastAutoRegion=region
+                            }){Text(s(R.string.intake_admin_use_region))}
+                        }else Text(s(R.string.intake_admin_unresolved),color=Brand.Muted)
+                    }
                     val extracted=pairReport?.sourceFacts.orEmpty().filter{it.key in setOf(
                         "registerReference","parentRegisterReference","registeredPlotNumber","soldPlotNumber",
-                        "possessedPlotNumber","registeredAreaM2","soldAreaM2","possessedAreaM2","transferredAreaM2")&&
+                        "possessedPlotNumber","registeredAreaM2","soldAreaM2","possessedAreaM2","transferredAreaM2",
+                        "propertyGovernorate","propertyDelegation","propertyImada")&&
                         it.page>0&&it.value.isNotBlank()&&it.status in setOf("CANDIDATE","LOW_CONFIDENCE","CONFLICT")}
                     OwnerSourceFactsPanel(extracted,
                         onArea=if(!directVerification&&!readingForListing){{value->area=value;saveMessage=0}}else null,
@@ -1934,6 +1958,11 @@ internal fun documentFamilyLabel(kind:String):Int=when(kind){
 }
 internal fun familyFactLabel(key:String):Int=when(key){
     "registerReference"->R.string.smart_fact_register
+    "parentRegisterReference"->R.string.intake_parent_title
+    "registeredPlotNumber","possessedPlotNumber"->R.string.intake_plot_number
+    "propertyGovernorate"->R.string.intake_governorate
+    "propertyDelegation"->R.string.intake_delegation
+    "propertyImada"->R.string.intake_imada
     "registeredAreaM2"->R.string.smart_fact_registered_area
     "soldAreaM2"->R.string.smart_fact_sold_area
     "possessedAreaM2"->R.string.smart_fact_possessed_area

@@ -271,3 +271,22 @@ test('receipt applicant has a role-bound CIN, not the service request number',()
  assert.equal(field(r,'serviceRequestNumber')?.value,'00001122');
  assert.equal(r.ownershipVerified,false);
 });
+
+test('property location uses explicit parcel labels, not owner residence or registry office',()=>{
+ const r=reading(['شهادة ملكية','معرف الرسم العقاري: 999901','المساحة الكلية: 600 م²',
+   'ولاية العقار: نابل','معتمدية العقار: قليبية','عمادة العقار: أزمور',
+   'عنوان المالك: تونس','ولاية الإصدار: تونس','ولاية: سوسة']);
+ assert.equal(field(r,'propertyGovernorate')?.value,'نابل');
+ assert.equal(field(r,'propertyDelegation')?.value,'قليبية');
+ assert.equal(field(r,'propertyImada')?.value,'ازمور');
+ const fr=reading(['شهادة ملكية','معرف الرسم العقاري: 999901',
+   'Gouvernorat du bien: Nabeul','Délégation du terrain: Kélibia']);
+ assert.equal(field(fr,'propertyGovernorate')?.value,'Nabeul');
+ assert.equal(field(fr,'propertyDelegation')?.value,'Kélibia');
+ const conflict=reading(['شهادة ملكية','معرف الرسم العقاري: 999901',
+   'ولاية العقار: نابل','ولاية العقار: سوسة']);
+ assert.equal(field(conflict,'propertyGovernorate')?.status,'CONFLICT');
+ assert.equal(field(conflict,'propertyGovernorate')?.value,null);
+ const unrelated=reading(['شهادة ملكية','معرف الرسم العقاري: 999901','ولاية: تونس','عنوان المالك: سوسة']);
+ assert.equal(field(unrelated,'propertyGovernorate')?.status,'ABSENT');
+});

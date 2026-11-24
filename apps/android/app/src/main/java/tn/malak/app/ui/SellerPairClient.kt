@@ -468,7 +468,8 @@ internal fun parsePilotComparison(envelope:JSONObject):CertificateIdentityReview
                 "registeredAreaM2","soldAreaM2","possessedAreaM2",
                 "transferredAreaM2","registeredPlotNumber","soldPlotNumber",
                 "possessedPlotNumber","salePriceTnd","transferReference",
-                "serviceRequestNumber","serviceRequestDate","rightsDenominator")||
+                "serviceRequestNumber","serviceRequestDate","rightsDenominator",
+                "propertyGovernorate","propertyDelegation","propertyImada")||
                 value.isBlank()||value.length>100||f.optInt("page") !in 1..pages||
                 values.containsKey(key))throw OwnerPairException(502)
             val factStatus=f.optString("status","LOW_CONFIDENCE")

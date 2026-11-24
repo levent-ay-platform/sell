@@ -54,6 +54,22 @@ internal class AtlasAdminIndex(private val governors:List<AdminFeature>,private 
     val governorateCount get()=governors.size
     val delegationCount get()=delegations.size
     val sectorCount get()=sectors.size
+    /** Exact bilingual names within their declared parents, no centroids or coordinates. */
+    fun resolveNames(governorate:String?,delegation:String?,imada:String?):AdminContext?{
+        fun matches(name:AdminName,value:String):Boolean{
+            fun fold(v:String)=foldPlaceName(v).replace(Regex("[أإآ]"),"ا").replace("ى","ي")
+            val query=fold(value)
+            return query.isNotBlank()&&query in listOf(fold(name.arabic),fold(name.french))
+        }
+        val g=governorate?.takeIf{it.isNotBlank()}?:return null
+        val gov=governors.singleOrNull{matches(it.name,g)}?:return null
+        val d=delegation?.let{value->delegations.singleOrNull{it.parent==gov.name.id&&matches(it.name,value)}?:return null}
+        val sector=imada?.let{value->
+            val parent=d?:return null
+            sectors.singleOrNull{it.parent==parent.name.id&&matches(it.name,value)}?:return null
+        }
+        return AdminContext(gov.name,d?.name,sector?.name)
+    }
     fun resolve(point:DiscoveryPoint):AdminContext?{
         if(!point.latitude.isFinite()||!point.longitude.isFinite()||point !in InitialBounds)return null
         val g=governors.map{it to it.locate(point)}.filter{it.second!=0}
