@@ -28,6 +28,23 @@ Main-file-only readings: 3,149 resource rows, 3,097 PDF resource rows, 822 index
 
 Private full-file SHA256, raw evidence and candidate details remain on the Mac, not in GitHub or the public Android build.
 
+## Expanded private PDF triage — 2026-11-24
+
+This branch now performs a **high-recall, candidate-only triage** across every hashed PDF resource, without requiring a cadastral keyword. It recognizes additional hints for lotissement, bornage, topographic plans, PAU/planning, ownership certificates, sale/transfer documents, and land-title/parcel references in Arabic and French (including Tunisian `عدد` and dotted `T.F.` notation). Every hint remains **unverified**, and same-hash multi-resource associations are preserved.
+
+**Exhaustive accounting:** hashed PDFs are split into a `review_queue` and a separate `unresolved_pdf_documents` queue. The latter retains SHA-256, source-row multiplicity, document-index presence, OCR page/text presence, and whether OCR is missing or text simply contains no recognized hints. The script asserts that these two private queues total exactly all distinct hashed PDF resources. PDF resource rows without a hash are counted separately and remain in the source catalogue. Unknown does not equal invalid or zero.
+
+Report `schema_version=2`; these queues, candidate references and document hashes are **PRIVATE_DERIVED**, never part of `ATLAS_PUBLIC`, GitHub workflow artifacts, public APK, or browser payloads. No official status, geo-linked geometry, title/parcel match, source license, or live-DB consistency is inferred from the hints. No new Mac archive totals have been claimed based on this branch: the expanded script still needs a clean run against a previously verified private snapshot.
+
+Output creation uses a restrictive 0600 file, restores process umask, refuses an existing target, and uses same-directory atomic link creation to avoid replacement races.
+
+### Operator verification before trusting live coverage
+
+1. Record the running Atlas DB owner/process, directory permissions and evidence of WAL state *without checkpoint, journal-mode migration, WAL file fabrication, or reopening the database read-write*. Do not equate a standalone copied main file with WAL-consistent data.
+2. Coordinate a transactionally consistent SQLite Backup API copy with the actual process/owner, via a connection that demonstrably sees current committed state. Independently check the backup integrity, source/backup schema, counts, manifest, SHA-256 and ownership (private `0600`).
+3. Run the candidate triage on that protected backup, **not against the production database**. Review the unresolved queue and PDF/source provenance manually. Confirmed official cadastral plans require authoritative documents and verified identifiers; other map types remain separate.
+4. Treat any blocked or timed-out remote command as **not executed** unless a matching canonical command-result proof explicitly confirms success.
+
 ## Next gates
 
 1. Capture a transactionally consistent owner-authorized backup, verify SHA256, integrity, counts and rights.
