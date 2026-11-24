@@ -552,7 +552,9 @@ private fun updateGovernorateCounts(style: Style, rows: List<IndustrialGovernora
         style.addSource(GeoJsonSource(AfiGovernorates, collection))
         val layer = SymbolLayer(AfiGovernorates, AfiGovernorates).withProperties(
             PropertyFactory.iconImage(Expression.get("badge")), PropertyFactory.iconSize(.80f),
-            PropertyFactory.iconPadding(1f), PropertyFactory.symbolSortKey(Expression.subtract(Expression.literal(0), Expression.get("lots")))
+            // The overview counts are intentional foreground markers, not optional base-map labels.
+            PropertyFactory.iconAllowOverlap(true), PropertyFactory.iconIgnorePlacement(true),
+            PropertyFactory.iconPadding(1f), PropertyFactory.symbolSortKey(Expression.get("lots"))
         )
         layer.minZoom = 2.5f
         layer.maxZoom = AfiZoneZoom
