@@ -514,11 +514,14 @@ internal fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmiss
     var attachmentSaving by remember(draftFile,pilotAttachmentReview){mutableStateOf(false)}
     var attachmentError by remember(draftFile,pilotAttachmentReview){mutableStateOf(false)}
     var attachmentRetry by remember(draftFile,pilotAttachmentReview){mutableIntStateOf(0)}
-    val attachmentPending=(planFile?.uploadKey!=uploadedAttachmentKeys["CADASTRAL_PLAN"])||
+    var remoteBoundary by remember(draftFile,pilotAttachmentReview){mutableStateOf<PilotListingClient.Boundary?>(null)}
+    val boundaryPending=mapBoundary!=remoteBoundary?.points.orEmpty()
+    val attachmentPending=boundaryPending||(planFile?.uploadKey!=uploadedAttachmentKeys["CADASTRAL_PLAN"])||
         (extraFile?.uploadKey!=uploadedAttachmentKeys["OTHER_LEGAL_PROOF"])||
         (planFile==null&&remoteAttachments.containsKey("CADASTRAL_PLAN"))||
         (extraFile==null&&remoteAttachments.containsKey("OTHER_LEGAL_PROOF"))
-    LaunchedEffect(pilotAttachmentReview,pilotOcrSession,attachmentRetry){
+    LaunchedEffect(pilotAttachmentReview,pilotOcrSession,attachmentRetry,boundaryLocalReady){
+        if(!boundaryLocalReady)return@LaunchedEffect
         val review=pilotAttachmentReview?:return@LaunchedEffect
         val session=pilotOcrSession?:return@LaunchedEffect
         attachmentLoading=true;attachmentReady=false;attachmentError=false
@@ -537,6 +540,13 @@ internal fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmiss
                     if(item.kind=="CADASTRAL_PLAN")planFile=doc else extraFile=doc
                     uploadedAttachmentKeys[item.kind]=doc.uploadKey
                 }
+            }
+            val savedBoundary=PilotListingClient.boundary(session,review)
+            remoteBoundary=savedBoundary
+            if(mapBoundary.isEmpty()&&savedBoundary!=null){
+                val points=savedBoundary.points
+                boundaryStore?.let{withContext(Dispatchers.IO){it.save(points)}}
+                mapBoundary=points
             }
             attachmentReady=true
         }catch(cancel:CancellationException){throw cancel}
@@ -558,6 +568,7 @@ internal fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmiss
                 remoteAttachments[kind]=item;uploadedAttachmentKeys[kind]=file.uploadKey
             }
         }
+        if(boundaryPending)remoteBoundary=PilotListingClient.saveBoundary(session,review,mapBoundary.toList(),remoteBoundary)
     }
     var planRequest by remember(supplementCase,planFile?.uploadKey){mutableIntStateOf(0)}
     var planReading by remember(supplementCase,planFile?.uploadKey){mutableStateOf<ReadOcrResult?>(null)}
@@ -1222,7 +1233,7 @@ internal fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmiss
                                         finally{boundarySendBusy=false}
                                     }
                                 },enabled=!boundarySent&&!boundarySendBusy&&!boundaryLocalBusy,modifier=Modifier.fillMaxWidth()){
-                                    Text(s(if(boundarySent)R.string.intake_boundary_case_saved else R.string.intake_boundary_case_save))
+                                    Text(s(if(boundarySent||(mapBoundary.isNotEmpty()&&mapBoundary==remoteBoundary?.points))R.string.intake_boundary_case_saved else R.string.intake_boundary_case_save))
                                 }
                                 if(boundarySendError)Text(s(R.string.intake_boundary_case_error),fontSize=12.sp,color=Brand.Crimson)
                             }
@@ -1242,7 +1253,7 @@ internal fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmiss
                                 }
                             },enabled=!boundaryLocalBusy&&!boundarySendBusy){Text(s(R.string.intake_boundary_remove_local))}
                         }
-                        Text(s(if(boundarySent)R.string.intake_boundary_case_saved else R.string.intake_map_private),fontSize=12.sp,color=Brand.Muted)
+                        Text(s(if(boundarySent||(mapBoundary.isNotEmpty()&&mapBoundary==remoteBoundary?.points))R.string.intake_boundary_case_saved else R.string.intake_map_private),fontSize=12.sp,color=Brand.Muted)
                     }
                     OwnerAdminContextPanel(adminContext,adminSamples.isNotEmpty()&&adminIndex==null&&!adminLoadFailed,
                         adminSamples.isNotEmpty(),adminLoadFailed,adminArabic,
@@ -1268,7 +1279,7 @@ internal fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmiss
                         onArea=if(!directVerification&&!readingForListing){{value->area=value;saveMessage=0}}else null,
                         areaEvidence=pairReport?.let{listingAreaEvidence(it.detectedKind,it.sourceFacts)})
                     JourneySectionHeading(s(if(readingForListing||directVerification)R.string.direct_analysis else R.string.step_property),Icons.Outlined.EditNote)
-                    if(hasPilotReviewSession&&pilotAttachmentReview!=null&&(planFile!=null||extraFile!=null||remoteAttachments.isNotEmpty())){
+                    if(hasPilotReviewSession&&pilotAttachmentReview!=null&&(planFile!=null||extraFile!=null||remoteAttachments.isNotEmpty()||mapBoundary.isNotEmpty()||remoteBoundary!=null)){
                         JourneyPanel{
                             Text(s(R.string.intake_supplements_heading),fontWeight=FontWeight.SemiBold)
                             Text(s(if(attachmentReady&&!attachmentPending)R.string.intake_pilot_attachments_saved
@@ -1859,8 +1870,8 @@ internal fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmiss
                         JourneyPanel{
                             Text(s(R.string.intake_map_boundary),fontWeight=FontWeight.SemiBold)
                             Text(s(R.string.parcel_editor_calculated_area,measurement.areaM2))
-                            Text(s(if(boundarySent)R.string.intake_boundary_case_saved else if(hasPilotReviewSession)
-                                R.string.intake_boundary_pilot_not_sent else R.string.intake_map_private),fontSize=12.sp,color=Brand.Muted)
+                            Text(s(if(boundarySent||(mapBoundary.isNotEmpty()&&mapBoundary==remoteBoundary?.points))R.string.intake_boundary_case_saved else if(hasPilotReviewSession)
+                                R.string.intake_pilot_attachments_hint else R.string.intake_map_private),fontSize=12.sp,color=Brand.Muted)
                             TextButton(onClick={step=2;chooseMapBoundary=true},enabled=boundaryLocalReady&&!boundaryLocalBusy&&!boundarySendBusy){Text(s(R.string.intake_review_boundary))}
                         }
                     }

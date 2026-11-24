@@ -97,7 +97,7 @@
     <string name="intake_georef_residual">Écart du point de contrôle : %1$s m</string>
     <string name="intake_georef_accept">Utiliser les limites pour examen</string>
     <string name="intake_georef_disclaimer">Placement manuel à partir de vos points ; ni levé officiel ni preuve de propriété.</string>
-    <string name="intake_pilot_attachments_save">Enregistrer les documents privés</string>
-    <string name="intake_pilot_attachments_hint">Le plan et le document complémentaire sont enregistrés après confirmation du serveur. Le dossier reste privé.</string>
+    <string name="intake_pilot_attachments_save">Enregistrer les documents et le tracé privés</string>
+    <string name="intake_pilot_attachments_hint">Les documents et le tracé du propriétaire sont enregistrés après confirmation du serveur. Le dossier reste privé.</string>
     <string name="intake_pilot_attachments_saved">Enregistré en privé</string>
 </resources>

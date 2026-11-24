@@ -100,6 +100,30 @@ internal object PilotListingClient {
             }finally{response.fill(0)}
         }finally{c.disconnect()}
     }
+    internal data class Boundary(val id:String,val points:List<tn.malak.app.ui.explore.DiscoveryPoint>)
+    private fun decodeBoundary(envelope:JSONObject):Boundary?{
+        val value=envelope.optJSONObject("boundary")?:return null
+        val id=value.getString("id")
+        if(!attachmentId.matches(id)||value.optBoolean("official",true)||value.optString("method")!="OWNER_TRACED_ESTIMATE")throw OwnerPairException(502)
+        val ring=value.getJSONArray("vertices")
+        if(ring.length() !in 3..64)throw OwnerPairException(502)
+        val points=List(ring.length()){i->val pair=ring.getJSONArray(i)
+            if(pair.length()!=2)throw OwnerPairException(502)
+            tn.malak.app.ui.explore.DiscoveryPoint(pair.getDouble(1),pair.getDouble(0))}
+        if(tn.malak.app.ui.parcel.measureOwnerMap(points)==null)throw OwnerPairException(502)
+        return Boundary(id,points)
+    }
+    private fun boundaryPath(review:String)=attachmentPath(review).removeSuffix("/attachments")+"/boundary"
+    suspend fun boundary(session:PilotOcrSession,review:String):Boundary?=
+        decodeBoundary(call(session,boundaryPath(review)))
+    suspend fun saveBoundary(session:PilotOcrSession,review:String,points:List<tn.malak.app.ui.explore.DiscoveryPoint>,replace:Boundary?):Boundary?{
+        if(points.isNotEmpty()&&tn.malak.app.ui.parcel.measureOwnerMap(points)==null)throw OwnerPairException(422)
+        val payload=JSONObject().put("replaceId",replace?.id?:JSONObject.NULL)
+            .put("vertices",org.json.JSONArray(points.map{org.json.JSONArray(listOf(it.longitude,it.latitude))}))
+        val response=call(session,boundaryPath(review),payload,privateReadConsent=true)
+        if(response.optBoolean("mayPublish",true))throw OwnerPairException(502)
+        return decodeBoundary(response).also{if(it?.points.orEmpty()!=points)throw OwnerPairException(502)}
+    }
     suspend fun photo(context:Context,session:PilotOcrSession,reviewId:String,uri:Uri,length:Long)=
         withContext(Dispatchers.IO){
             if(length !in 20..PILOT_PHOTO_MAX_BYTES)throw OwnerPairException(413)
