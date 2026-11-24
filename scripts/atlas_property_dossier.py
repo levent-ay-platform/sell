@@ -5,6 +5,7 @@ Candidate search only. No service, auth bypass, source download or public payloa
 """
 from __future__ import annotations
 import argparse
+import hashlib
 from collections import Counter, defaultdict
 import json
 from pathlib import Path
@@ -64,6 +65,11 @@ def lookup(index,query,spatial=None):
     if spatial is not None:
         if spatial.get("kind")!="PRIVATE_ATLAS_SPATIAL_CONTEXT" or spatial.get("public_export_permitted") is not False:
             raise ValueError("PRIVATE_SPATIAL_CONTEXT_REQUIRED")
+        if "federated_graph_sha256_private" in index or "federated_graph_sha256_private" in spatial:
+            digest=hashlib.sha256(json.dumps(graph,sort_keys=True,ensure_ascii=False,separators=(",",":"),
+                                             allow_nan=False).encode("utf-8")).hexdigest()
+            if index.get("federated_graph_sha256_private")!=digest or spatial.get("federated_graph_sha256_private")!=digest:
+                raise ValueError("FEDERATED_SPATIAL_GRAPH_BINDING_MISMATCH")
         for row in spatial["rows_private"]:
             if row.get("legal_boundary_verified") is not False:
                 raise ValueError("CANDIDATE_GEOMETRY_REQUIRED")
