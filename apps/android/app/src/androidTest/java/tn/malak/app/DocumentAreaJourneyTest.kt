@@ -25,7 +25,16 @@ import java.util.UUID
 
 @RunWith(AndroidJUnit4::class)
 class DocumentAreaJourneyTest {
-    @Test fun restoredDocumentSupportsKeepingReplacingAndOfferingPartInPreview() {
+    @Test fun restoredSaleDeedSupportsKeepingReplacingAndOfferingPartInPreview() =
+        restoredAreaJourney("SALE_DEED", "soldAreaM2", true)
+
+    @Test fun restoredIndividualCertificateCannotOfferWholeEstateAsSaleArea() =
+        restoredAreaJourney("OWNERSHIP_CERTIFICATE", "registeredAreaM2", false)
+
+    @Test fun restoredSharedCertificateCannotOfferWholeEstateAsSaleArea() =
+        restoredAreaJourney("SHARED_OWNERSHIP_CERTIFICATE", "registeredAreaM2", false)
+
+    private fun restoredAreaJourney(kind: String, areaKey: String, eligible: Boolean) {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val device = UiDevice.getInstance(instrumentation)
         val context = instrumentation.targetContext
@@ -34,9 +43,9 @@ class DocumentAreaJourneyTest {
         val key = MessageDigest.getInstance("SHA-256").digest(account.toByteArray()).joinToString("") { "%02x".format(it) }
         val prefs = context.getSharedPreferences("amlak_direct_$key", 0)
         val session = PilotOcrSession("https://example.invalid", "fixture", Long.MAX_VALUE)
-        val fact = PilotPropertyFact("registeredAreaM2", "900", 2, "pdf-text", "CANDIDATE")
+        val fact = PilotPropertyFact(areaKey, "900", 2, "pdf-text", "CANDIDATE")
         val report = CertificateIdentityReview("INSUFFICIENT_OR_AMBIGUOUS", null, null, "NOT_COMPARABLE",
-            emptyList(), "FRONT", 2, 1, detectedKind = "OWNERSHIP_CERTIFICATE",
+            emptyList(), "FRONT", 2, 1, detectedKind = kind,
             reviewId = id, sourceFacts = listOf(fact))
         prefs.edit().putInt("stage", DirectListingStage.Details.ordinal)
             .putString("kind", "LAND").putString("title", "Terrain de test").putString("region", "Nabeul")
@@ -71,6 +80,14 @@ class DocumentAreaJourneyTest {
                             }
                         }
                     }
+                }
+                if (!eligible) {
+                    visible("Aucune superficie exploitable. Saisissez la superficie proposée.")
+                    assertFalse(device.hasObject(By.text("Utiliser cette superficie")))
+                    assertFalse(device.hasObject(By.text("Proposer une partie")))
+                    preview("275")
+                    assertEquals("275", prefs.getString("area", ""))
+                    return@use
                 }
                 visible("Superficie saisie dans l’annonce · 275 m²")
                 assertTrue(device.hasObject(By.textContains("page 2")))
