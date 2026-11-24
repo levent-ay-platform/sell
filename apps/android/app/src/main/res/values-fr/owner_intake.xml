@@ -48,4 +48,8 @@
     <string name="intake_ready">Prêt pour l\'analyse</string>
     <string name="intake_analyze">Analyser et continuer</string>
     <string name="intake_analysis_disclosure">Continuer transmet le certificat et la carte pour une analyse privée.</string>
+    <string name="intake_reading_details">Détails de l’analyse des documents</string>
+    <string name="intake_pin_selected">Position sélectionnée ; limite parcellaire non vérifiée.</string>
+    <string name="intake_manual_coordinates">Coordonnées (facultatif)</string>
+    <string name="intake_edit_documents">Modifier les documents</string>
 </resources>

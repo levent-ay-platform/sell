@@ -48,4 +48,8 @@
     <string name="intake_ready">جاهز لتحليل الوثائق</string>
     <string name="intake_analyze">تحليل الوثائق والمتابعة</string>
     <string name="intake_analysis_disclosure">المتابعة ترسل الشهادة والهوية للتحليل الخاص.</string>
+    <string name="intake_reading_details">تفاصيل تحليل الوثائق</string>
+    <string name="intake_pin_selected">تم تحديد موقع العقار، وليس اعتماد حدوده.</string>
+    <string name="intake_manual_coordinates">الإحداثيات (اختياري)</string>
+    <string name="intake_edit_documents">تعديل الوثائق</string>
 </resources>

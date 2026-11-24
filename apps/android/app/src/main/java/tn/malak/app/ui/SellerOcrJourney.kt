@@ -169,6 +169,8 @@ internal fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmiss
     var identityDateBusy by remember(draftFile){mutableStateOf(false)}
     var identityDateError by remember(draftFile){mutableIntStateOf(0)}
     var showListingExtras by rememberSaveable(draftFile){mutableStateOf(false)}
+    var chooseListingPoint by rememberSaveable(draftFile){mutableStateOf(false)}
+    var showPrivateReading by rememberSaveable(draftFile){mutableStateOf(false)}
     var editCustomerName by remember(draftFile){mutableStateOf(false)}
     var submissionMessage by remember(draftFile){mutableIntStateOf(0)}
     var submissionKey by remember(draftFile){mutableStateOf(prefs.getString("request_key",null)?:UUID.randomUUID().toString())}
@@ -732,16 +734,26 @@ internal fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmiss
         return
     }
 
+    if(chooseListingPoint){
+        DirectLocationPicker(
+            SmartListingAssist.coordinates(listingLatitude,listingLongitude)?.let{DiscoveryPoint(it.first,it.second)},
+            onDismiss={chooseListingPoint=false},
+            onSelect={point->
+                listingLatitude=String.format(Locale.ROOT,"%.6f",point.latitude)
+                listingLongitude=String.format(Locale.ROOT,"%.6f",point.longitude)
+                chooseListingPoint=false
+            })
+    }
     Column(Modifier.fillMaxSize()) {
-        Row(Modifier.fillMaxWidth().padding(horizontal=16.dp,vertical=if(intakeStep)6.dp else 12.dp),
+        Row(Modifier.fillMaxWidth().padding(horizontal=16.dp,vertical=6.dp),
             verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(10.dp)) {
             IconButton(onClick={if(step>1){step=OwnerIntakePolicy.previous(step);showInvalid=false}else exitJourney()}, modifier=Modifier.size(48.dp)) {
                 Icon(Icons.AutoMirrored.Filled.ArrowBack,s(R.string.back),tint=Brand.Crimson)
             }
             Column(Modifier.weight(1f)) {
-                Text(s(if(readingForListing)R.string.listing_read_documents else if(directVerification)R.string.direct_verify else if(intakeStep)R.string.intake_property_title else R.string.seller_title), Modifier.semantics { heading() },
+                Text(s(if(readingForListing)R.string.listing_read_documents else if(directVerification)R.string.direct_verify else R.string.intake_property_title), Modifier.semantics { heading() },
                     style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = Brand.Ink)
-                Text(if(intakeStep)s(R.string.intake_step_count,displayStep+1,stepLabels.size) else s(if(directVerification || readingForListing)R.string.direct_docs_private else R.string.draft_label),
+                Text(s(R.string.intake_step_count,displayStep+1,stepLabels.size),
                     style = MaterialTheme.typography.bodySmall, color = Brand.Muted)
             }
         }
@@ -758,8 +770,8 @@ internal fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmiss
                 }
             }
         }
-        Column(Modifier.weight(1f).verticalScroll(stepScroll).padding(horizontal=16.dp,vertical=if(intakeStep)10.dp else 16.dp),
-            verticalArrangement=Arrangement.spacedBy(if(intakeStep)10.dp else 15.dp)) {
+        Column(Modifier.weight(1f).verticalScroll(stepScroll).padding(horizontal=16.dp,vertical=10.dp),
+            verticalArrangement=Arrangement.spacedBy(10.dp)) {
             when(step) {
                 0,1 -> {
                     Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically,
@@ -959,6 +971,7 @@ internal fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmiss
                     }
                 }
                 2 -> {
+                    JourneySectionHeading(s(if(readingForListing||directVerification)R.string.direct_analysis else R.string.step_property),Icons.Outlined.EditNote)
                     if(supplementCase!=null && (planFile!=null||extraFile!=null)){
                         SectionHeading(s(R.string.intake_supplements_heading),s(R.string.intake_supplement_owner_hint))
                         planFile?.let{file->
@@ -1026,7 +1039,10 @@ internal fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmiss
                         }
                     }
                     if(!directVerification && !readingForListing){
-                    if(!hasPilotReviewSession||showAnalysisDetails){
+                    if(!hasPilotReviewSession){
+                        JourneyToggleRow(s(R.string.intake_reading_details),Icons.Outlined.FactCheck,showPrivateReading){showPrivateReading=!showPrivateReading}
+                    }
+                    if((!hasPilotReviewSession&&(showPrivateReading||pairReport==null))||(hasPilotReviewSession&&showAnalysisDetails)){
                     Surface(shape=RoundedCornerShape(18.dp),color=Color.White,
                         border=BorderStroke(1.dp,CardBorder)){
                         Column(Modifier.fillMaxWidth().padding(14.dp),
@@ -1212,7 +1228,7 @@ internal fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmiss
                     }
 
                     Column(Modifier.bringIntoViewRequester(missingFieldsTarget)){
-                    SectionHeading(s(R.string.property_section),s(R.string.property_section_hint))
+                    JourneySectionHeading(s(R.string.property_section),Icons.Outlined.Home)
                     if(showInvalid&&missingListingFields.isNotEmpty()){
                         val labels=missingListingFields.map{field->s(when(field){
                             "title"->R.string.property_name
@@ -1226,7 +1242,8 @@ internal fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmiss
                     }
 
 
-                    Surface(color=Color(0xFFF2F8F5),shape=RoundedCornerShape(16.dp)){
+                    JourneyPanel {
+                    Surface(color=Color(0xFFF2F8F5),shape=RoundedCornerShape(12.dp)){
                         Column(Modifier.fillMaxWidth().padding(15.dp),
                             verticalArrangement=Arrangement.spacedBy(8.dp)){
                             Row(verticalAlignment=Alignment.CenterVertically,
@@ -1257,6 +1274,13 @@ internal fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmiss
                         label={Text(s(R.string.property_region))},modifier=Modifier.fillMaxWidth(),singleLine=true,
                         isError=showInvalid&&region.trim().length<2,
                         supportingText=if(showInvalid&&region.trim().length<2){{Text(s(R.string.field_required))}}else null)
+                    val chosenPoint=SmartListingAssist.coordinates(listingLatitude,listingLongitude)
+                    OutlinedButton(onClick={chooseListingPoint=true},modifier=Modifier.fillMaxWidth(),
+                        shape=RoundedCornerShape(12.dp)){
+                        Icon(Icons.Outlined.LocationOn,null,Modifier.size(19.dp));Spacer(Modifier.width(6.dp))
+                        Text(s(if(chosenPoint==null)R.string.direct_choose_location else R.string.direct_change_location))
+                    }
+                    if(chosenPoint!=null)Text(s(R.string.intake_pin_selected),fontSize=12.sp,color=IntakeGreen)
                     val areaFocus = remember { FocusRequester() }
                     pairReport?.let { report ->
                         listingAreaEvidence(report.detectedKind, report.sourceFacts)?.let { fact ->
@@ -1265,18 +1289,20 @@ internal fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmiss
                                 onEditPart = { area = it; areaFocus.requestFocus(); keyboard?.show() })
                         }
                     }
+                    Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp)){
                     OutlinedTextField(area,{area=it.filter { char->char.isDigit()||char=='.'||char==',' }.take(16);saveMessage=0},
-                        label={Text(s(R.string.area_m2))},modifier=Modifier.fillMaxWidth().focusRequester(areaFocus),singleLine=true,
+                        label={Text(s(R.string.area_m2))},modifier=Modifier.weight(1f).focusRequester(areaFocus),singleLine=true,
                         textStyle=TextStyle(textDirection=TextDirection.Ltr,textAlign=TextAlign.Start,fontSize=16.sp),
                         keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Decimal),
                         isError=showInvalid&&!validArea,
                         supportingText=if(showInvalid&&!validArea){{Text(s(R.string.area_invalid))}}else null)
                     OutlinedTextField(price,{price=it.filter { char->char.isDigit() }.take(15);saveMessage=0},
-                        label={Text(s(R.string.price_tnd))},modifier=Modifier.fillMaxWidth(),singleLine=true,
+                        label={Text(s(R.string.price_tnd))},modifier=Modifier.weight(1f),singleLine=true,
                         textStyle=TextStyle(textDirection=TextDirection.Ltr,textAlign=TextAlign.Start,fontSize=16.sp),
                         keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Number),
                         isError=showInvalid&&!validPrice,
                         supportingText=if(showInvalid&&!validPrice){{Text(s(R.string.price_invalid))}}else null)
+                    }
                     val unitPrice=SmartListingAssist.pricePerSquareMeter(area,price)
                     if(unitPrice!=null){
                         Surface(color=Color(0xFFF2F8F5),shape=RoundedCornerShape(15.dp)){
@@ -1292,7 +1318,7 @@ internal fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmiss
                             }
                         }
                     }
-                    HorizontalDivider(color=CardBorder)
+                    }
 
                     if(!hasPilotReviewSession){
                     Surface(color=Color(0xFFF2F8F5),shape=RoundedCornerShape(19.dp)) {
@@ -1437,20 +1463,17 @@ internal fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmiss
                             }
                         }
                     }
-                    SectionHeading(s(R.string.capacity_section),s(R.string.capacity_hint))
-                    Capacities.forEach { option ->
-                        val active=capacity==option.code
-                        Surface(Modifier.fillMaxWidth().clickable {
-                            capacity=option.code;capacityConfirmed=true;saveMessage=0
-                        },
-                            shape=RoundedCornerShape(17.dp),color=if(active)Brand.Rose else Color.White,
-                            border=BorderStroke(1.dp,if(active)Brand.Crimson else CardBorder)) {
-                            Row(Modifier.fillMaxWidth().heightIn(min=57.dp).padding(horizontal=15.dp),
-                                verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(11.dp)) {
-                                Icon(if(active)Icons.Outlined.CheckCircle else Icons.Outlined.RadioButtonUnchecked,
-                                    null,Modifier.size(22.dp),tint=if(active)Brand.Crimson else Brand.Muted)
-                                Text(s(option.label),color=Brand.Ink,fontSize=15.sp,
-                                    fontWeight=if(active)FontWeight.SemiBold else FontWeight.Normal)
+                    JourneySectionHeading(s(R.string.capacity_section),Icons.Outlined.PersonOutline)
+                    JourneyPanel {
+                        Capacities.chunked(2).forEach{row->
+                            Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp)){
+                                row.forEach{option->
+                                    FilterChip(selected=capacity==option.code,onClick={
+                                        capacity=option.code;capacityConfirmed=true;saveMessage=0
+                                    },label={Text(s(option.label),fontSize=13.sp,maxLines=2)},
+                                        modifier=Modifier.weight(1f).heightIn(min=48.dp),
+                                        leadingIcon=if(capacity==option.code){{Icon(Icons.Outlined.CheckCircle,null,Modifier.size(18.dp))}}else null)
+                                }
                             }
                         }
                     }
@@ -1468,79 +1491,77 @@ internal fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmiss
                             }
                         }
                     }
-                    OutlinedButton(onClick={showListingExtras=!showListingExtras},modifier=Modifier.fillMaxWidth()){
-                        Icon(Icons.Outlined.AddPhotoAlternate,null)
-                        Spacer(Modifier.width(8.dp));Text(s(R.string.owner_listing_extras))
+                    val descPrefix=s(R.string.smart_land_title_prefix)
+                    val descUnit=s(R.string.smart_area_unit)
+                    val descPrice=s(R.string.smart_description_price_prefix)
+                    JourneySectionHeading(s(R.string.smart_description_heading),Icons.Outlined.Notes)
+                    JourneyPanel{
+                        OutlinedTextField(listingDescription,{listingDescription=it.take(650)},
+                            modifier=Modifier.fillMaxWidth(),minLines=3,maxLines=6,
+                            label={Text(s(R.string.smart_description_heading))})
+                        TextButton(onClick={
+                            SmartListingAssist.descriptionSuggestion(region,area,price,
+                                descPrefix,descUnit,descPrice)
+                                ?.let{listingDescription=it}
+                        },enabled=validArea&&validPrice&&region.trim().length>=2){
+                            Icon(Icons.Outlined.AutoAwesome,null,Modifier.size(18.dp));Spacer(Modifier.width(6.dp))
+                            Text(s(R.string.smart_description_generate))
+                        }
                     }
-                    if(showListingExtras){
-                        SmartListingMediaStep(photos=listingPhotos,
-                            latitude=listingLatitude,onLatitude={listingLatitude=it},
-                            longitude=listingLongitude,onLongitude={listingLongitude=it},
-                            description=listingDescription,onDescription={listingDescription=it},
-                            region=region,area=area,price=price)
+                    // Photos stay in the first step. Advanced coordinate fields are optional.
+                    JourneyToggleRow(s(R.string.intake_manual_coordinates),Icons.Outlined.Map,showListingExtras){showListingExtras=!showListingExtras}
+                    if(showListingExtras)JourneyPanel{
+                        Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){
+                            OutlinedTextField(listingLatitude,{listingLatitude=it.take(14)},label={Text(s(R.string.smart_latitude))},
+                                modifier=Modifier.weight(1f),singleLine=true,keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Decimal))
+                            OutlinedTextField(listingLongitude,{listingLongitude=it.take(14)},label={Text(s(R.string.smart_longitude))},
+                                modifier=Modifier.weight(1f),singleLine=true,keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Decimal))
+                        }
                     }
                     }
                 }
                 else -> {
-                    SectionHeading(s(R.string.summary_title),s(R.string.summary_hint))
+                    JourneySectionHeading(s(R.string.summary_title),Icons.Outlined.Visibility)
                     if(directVerification){
-                        Text(listingTitle,style=MaterialTheme.typography.titleMedium,color=Brand.Ink)
-                        Text(s(R.string.direct_docs_private),color=Brand.Muted)
-                        if(submissionMessage!=0)PlainNotice(Icons.Outlined.Info,s(submissionMessage))
-                    }else if(pilotOcrSession!=null){
-                        OwnerListingPreview(listingTitle,region,area,price,listingDescription,listingPhotos.toList())
-                        Text(s(R.string.submission_customer_name)+": "+customerName,color=Brand.Muted)
-                        Text(s(R.string.summary_docs)+": "+(pairReport?.certificatePages?:files.size),color=Brand.Muted)
-                        Text(s(R.string.submission_review_hint),color=Brand.Muted,fontSize=12.sp)
-                        if(submissionMessage!=0)PlainNotice(Icons.Outlined.Info,s(submissionMessage))
+                        JourneyPanel{
+                            Text(listingTitle,style=MaterialTheme.typography.titleMedium,color=Brand.Ink)
+                            Text(s(R.string.direct_docs_private),color=Brand.Muted)
+                        }
                     }else{
-                    Surface(color=Brand.Rose,shape=RoundedCornerShape(20.dp)){
-                        Column(Modifier.fillMaxWidth().padding(17.dp),
-                            verticalArrangement=Arrangement.spacedBy(9.dp)){
-                            Row(verticalAlignment=Alignment.CenterVertically,
-                                horizontalArrangement=Arrangement.spacedBy(8.dp)){
-                                Icon(Icons.Outlined.Visibility,null,tint=Brand.Crimson)
-                                Text(s(R.string.smart_preview_heading),fontSize=13.sp,
-                                    fontWeight=FontWeight.SemiBold,color=Brand.Crimson)
+                        JourneyPanel{
+                            Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){
+                                Text(s(R.string.smart_preview_heading),fontWeight=FontWeight.Bold,color=Brand.Crimson,modifier=Modifier.weight(1f))
+                                TextButton(onClick={step=2;showInvalid=false}){Text(s(R.string.edit_property))}
                             }
-                            Text(listingTitle.ifBlank{s(R.string.no_value)},
-                                fontSize=19.sp,fontWeight=FontWeight.Bold,color=Brand.Ink)
-                            Text("${region} · ${area} m² · ${price} TND",
-                                fontSize=13.sp,color=Brand.Muted)
-                            Text(s(R.string.smart_preview_disclosure),fontSize=12.sp,
-                                color=Brand.Muted,lineHeight=19.sp)
+                            OwnerListingPreview(listingTitle.ifBlank{s(R.string.no_value)},region,area,price,listingDescription,listingPhotos.toList())
+                            Text(s(R.string.smart_preview_disclosure),fontSize=12.sp,color=Brand.Muted)
                         }
                     }
-                    Surface(shape=RoundedCornerShape(20.dp),color=Color.White,
-                        border=BorderStroke(1.dp,CardBorder)){
-                        Column(Modifier.fillMaxWidth().padding(14.dp)){
-                            OcrDataRow(s(R.string.summary_property),
-                                listingTitle.ifBlank{s(R.string.no_value)})
-                            HorizontalDivider(color=CardBorder)
-                            OcrDataRow(s(R.string.summary_region),
-                                region.ifBlank{s(R.string.no_value)})
-                            HorizontalDivider(color=CardBorder)
-                            OcrDataRow(s(R.string.summary_area),"$area m²",numeric=true)
-                            HorizontalDivider(color=CardBorder)
-                            OcrDataRow(s(R.string.summary_price),"$price TND",numeric=true)
-                            HorizontalDivider(color=CardBorder)
-                            OcrDataRow(s(R.string.summary_capacity),
-                                s(Capacities.firstOrNull{it.code==capacity}?.label
-                                    ?:R.string.malak_capacity_not_declared))
-                            HorizontalDivider(color=CardBorder)
-                            OcrDataRow(s(R.string.summary_docs),
-                                pairReport?.certificatePages?.toString()?:if(files.isNotEmpty())files.size.toString() else
-                                    s(R.string.not_uploaded))
+                    JourneySectionHeading(s(R.string.intake_private_heading),Icons.Outlined.Lock)
+                    JourneyPanel{
+                        JourneyStatusLine(s(R.string.intake_cert_title),
+                            s(if(certReady)R.string.intake_added else R.string.intake_empty),certReady)
+                        JourneyStatusLine(s(R.string.identity_section),
+                            s(if(identitySelected||pairReport!=null)R.string.intake_added else R.string.intake_empty),identitySelected||pairReport!=null)
+                        JourneyStatusLine(s(R.string.intake_plan),
+                            s(if(planReading?.status=="READY")R.string.intake_plan_read_ready else if(planFile!=null)R.string.intake_added else R.string.intake_optional),planFile!=null)
+                        JourneyStatusLine(s(R.string.intake_extra),
+                            s(if(extraReceipt!=null)R.string.intake_extra_stored else if(extraFile!=null)R.string.intake_added else R.string.intake_optional),extraFile!=null)
+                        Text(s(R.string.intake_private_short),fontSize=12.sp,color=Brand.Muted)
+                        if(planFile!=null||extraFile!=null)Text(s(if(hasOwnerReviewSession&&!hasPilotReviewSession)
+                            R.string.intake_supplement_owner_hint else R.string.intake_optional_preview_only),fontSize=12.sp,color=Brand.Muted)
+                        TextButton(onClick={step=0;showInvalid=false}){Icon(Icons.Outlined.Edit,null,Modifier.size(18.dp));Spacer(Modifier.width(6.dp));Text(s(R.string.intake_edit_documents))}
+                    }
+                    if(!directVerification){
+                        JourneyPanel{
+                            OcrDataRow(s(R.string.smart_media_heading),listingPhotos.size.toString())
+                            OcrDataRow(s(R.string.summary_capacity),s(Capacities.firstOrNull{it.code==capacity}?.label?:R.string.malak_capacity_not_declared))
+                            if(pilotOcrSession!=null)OcrDataRow(s(R.string.submission_customer_name),customerName)
+                            if(pilotOcrSession!=null)Text(s(R.string.submission_review_hint),fontSize=12.sp,color=Brand.Muted)
+                            else Text(s(R.string.draft_local),fontSize=12.sp,color=Brand.Muted)
                         }
                     }
-                    }
-                    if(!directVerification)OutlinedButton(onClick={step=2;showInvalid=false},
-                        modifier=Modifier.fillMaxWidth().heightIn(min=51.dp)) {
-                        Icon(Icons.Outlined.Edit,null,Modifier.size(20.dp))
-                        Spacer(Modifier.width(8.dp))
-                        Text(s(R.string.edit_property))
-                    }
-
+                    if(submissionMessage!=0)PlainNotice(Icons.Outlined.Info,s(submissionMessage))
                 }
             }
             if(saveMessage!=0) PlainNotice(
@@ -1548,7 +1569,7 @@ internal fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmiss
                 else Icons.Outlined.CheckCircle,
                 s(saveMessage)
             )
-            if(step==3&&pilotOcrSession==null) Text(s(R.string.draft_local),color=Brand.Muted,fontSize=12.sp)
+
         }
         key(step){
         Column(Modifier.fillMaxWidth().padding(horizontal=17.dp,vertical=12.dp),verticalArrangement=Arrangement.spacedBy(7.dp)) {
@@ -1687,9 +1708,7 @@ internal fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmiss
                 Icon(if(step==3)Icons.Outlined.Save else Icons.AutoMirrored.Filled.ArrowForward,
                     null,Modifier.size(21.dp))
             }
-            if(step<3&&!intakeStep) {
-                Text(s(R.string.smart_autosave_hint), style=MaterialTheme.typography.bodySmall, color=Brand.Muted)
-            }
+
             }
         }
         }

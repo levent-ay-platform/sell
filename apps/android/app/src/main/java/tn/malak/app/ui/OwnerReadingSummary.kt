@@ -17,8 +17,8 @@ internal fun OwnerReadingSummary(report:CertificateIdentityReview?,scan:LocalDoc
     busy:Boolean,error:Int,details:Boolean,onDetails:()->Unit,onRetry:()->Unit,onPages:()->Unit,
     onDateRefresh:(()->Unit)?=null,dateBusy:Boolean=false,dateError:Int=0) {
     Surface(color=if(busy)Brand.Rose else MaterialTheme.colorScheme.surface,
-        shape=RoundedCornerShape(22.dp),tonalElevation=2.dp){
-        Column(Modifier.fillMaxWidth().padding(18.dp),verticalArrangement=Arrangement.spacedBy(8.dp)){
+        shape=RoundedCornerShape(16.dp),border=androidx.compose.foundation.BorderStroke(1.dp,IntakeLine)){
+        Column(Modifier.fillMaxWidth().padding(12.dp),verticalArrangement=Arrangement.spacedBy(6.dp)){
             Icon(Icons.Outlined.AutoAwesome,null,tint=Brand.Crimson)
             Text(s(when{busy->R.string.owner_reading;report!=null->R.string.owner_reading_ready;else->R.string.owner_reading_retry}),
                 fontWeight=FontWeight.Bold,fontSize=20.sp)
@@ -39,12 +39,11 @@ internal fun OwnerReadingSummary(report:CertificateIdentityReview?,scan:LocalDoc
                     report.unifiedAssessment in setOf("ROLE_TEXT_MATCH_ONLY","NAME_ONLY_REVIEW")->R.string.owner_match_candidate
                     else->R.string.owner_match_review
                 }),color=if(conflict)MaterialTheme.colorScheme.error else Brand.Ink)
-                OwnerDocumentReadout(report,onDateRefresh,dateBusy,dateError)
+                if(details)OwnerDocumentReadout(report,onDateRefresh,dateBusy,dateError)
                 if("CERTIFICATE_PAGES_MISSING" in report.reasons){
                     Text(s(R.string.pair_reason_pages_missing),color=MaterialTheme.colorScheme.error)
                     OutlinedButton(onClick=onPages){Text(s(R.string.owner_review_pages))}
                 }
-                Text(s(R.string.owner_next_details),color=Brand.Muted)
                 TextButton(onClick=onDetails){Text(s(if(details)R.string.owner_hide_details else R.string.owner_show_details))}
             }
         }

@@ -363,7 +363,7 @@ private fun DirectField(value: String, update: (String) -> Unit, label: Int,
 }
 
 @Composable
-private fun DirectLocationPicker(previous: DiscoveryPoint?, onDismiss: () -> Unit, onSelect: (DiscoveryPoint) -> Unit) {
+internal fun DirectLocationPicker(previous: DiscoveryPoint?, onDismiss: () -> Unit, onSelect: (DiscoveryPoint) -> Unit) {
     val start = previous ?: InitialCenter
     var point by remember { mutableStateOf(start) }
     var ready by remember { mutableStateOf(false) }

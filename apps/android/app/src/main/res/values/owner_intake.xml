@@ -48,4 +48,8 @@
     <string name="intake_ready">Ready to analyze documents</string>
     <string name="intake_analyze">Analyze and continue</string>
     <string name="intake_analysis_disclosure">Continuing sends the certificate and ID for private analysis.</string>
+    <string name="intake_reading_details">Details of document analysis</string>
+    <string name="intake_pin_selected">Location pin selected; not a verified parcel boundary.</string>
+    <string name="intake_manual_coordinates">Coordinates (optional)</string>
+    <string name="intake_edit_documents">Edit documents</string>
 </resources>
