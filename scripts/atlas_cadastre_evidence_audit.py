@@ -286,18 +286,22 @@ def write_private_json(output: Path, data: dict) -> None:
     parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     if output.exists() or output.is_symlink():
         raise FileExistsError("Refusing to overwrite existing audit output")
-    os.umask(0o077)
-    fd, staging = tempfile.mkstemp(prefix=".cadastre-", dir=str(parent))
+    old_umask = os.umask(0o077)
+    staging = None
     try:
+        fd, staging = tempfile.mkstemp(prefix=".cadastre-", dir=str(parent))
         with os.fdopen(fd, "w", encoding="utf-8") as target:
             json.dump(data, target, ensure_ascii=False, indent=2, sort_keys=True)
             target.flush()
             os.fsync(target.fileno())
         os.chmod(staging, 0o600)
-        os.replace(staging, output)
+        # Atomic no-overwrite creation: unlike os.replace(), hard-link creation
+        # fails even if a second writer created the destination meanwhile.
+        os.link(staging, output)
     finally:
-        if os.path.exists(staging):
+        if staging is not None and os.path.exists(staging):
             os.unlink(staging)
+        os.umask(old_umask)
 
 
 def main() -> None:
