@@ -353,6 +353,7 @@ CREATE TABLE IF NOT EXISTS pilot_parcel_links(
             SET verification_review_id=?,verification_status=? WHERE submission_id=?''',(review,verification,sid))
 
     def change_direct_listing(self, user, sid, action, data):
+        if self.open_pilot and os.environ.get('MALAK_OPEN_PILOT_TEST_PUBLICATION')!='1':raise WorkflowError(403,'OPEN_PILOT_NO_PUBLICATION')
         if not isinstance(data,dict):
             raise WorkflowError()
         with self.db() as db:
@@ -741,6 +742,7 @@ CREATE TABLE IF NOT EXISTS pilot_parcel_links(
             db.execute('INSERT INTO evidence VALUES(?,?,?,?,?)',(eid,review,'PHOTO','image/jpeg',sealed))
             return eid
     def public_photo(self,eid):
+        if self.open_pilot and os.environ.get('MALAK_OPEN_PILOT_TEST_PUBLICATION')!='1':raise WorkflowError(404,'NOT_FOUND')
         with self.db() as db:
             row=db.execute("SELECT e.* FROM evidence e JOIN submissions s ON s.review_id=e.review_id WHERE e.id=? AND e.kind='PHOTO' AND s.status='PUBLISHED'",(eid,)).fetchone()
             if not row:raise WorkflowError(404,'NOT_FOUND')
@@ -782,8 +784,9 @@ CREATE TABLE IF NOT EXISTS pilot_parcel_links(
         return result
 
     def public_listings(self):
+        if self.open_pilot and os.environ.get('MALAK_OPEN_PILOT_TEST_PUBLICATION')!='1':return []
         with self.db() as db:
-            return [
+            result = [
                 {'id': row['id'], **self._public_listing_fields(
                      json.loads(row['listing']), allow_public_location=bool(row['direct_owner_publish'])),
                  'publishedAt': row['updated'], 'ownershipVerified': False,
@@ -797,3 +800,8 @@ CREATE TABLE IF NOT EXISTS pilot_parcel_links(
                     FROM submissions s WHERE s.status='PUBLISHED' ORDER BY s.updated DESC"""
                 ).fetchall()
             ]
+            if self.open_pilot:
+                for item in result:
+                    item['title']='[TEST] '+item['title']
+                    item['testPublication']=True
+            return result

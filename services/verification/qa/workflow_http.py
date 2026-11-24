@@ -18,10 +18,12 @@ class WorkflowRoutes:
     def __init__(self,store,pair):
         self.store=store;self.pair=pair;self.attempts={}
         self.direct_publishing=os.environ.get('MALAK_DIRECT_PUBLISHING')=='1'
-        if self.direct_publishing and (store.open_pilot or store.enrolled_devices is None):
-            raise ValueError('Connected Pilot publishing requires device enrollment')
+        self.test_publication=store.open_pilot and os.environ.get('MALAK_OPEN_PILOT_TEST_PUBLICATION')=='1'
+        if self.direct_publishing and not (self.test_publication or (not store.open_pilot and store.enrolled_devices is not None)):
+            raise ValueError('Publishing requires enrolled or isolated test mode')
         self.atlas_reader_token=os.environ.get('MALAK_ATLAS_READER_TOKEN','')
-        self.parcel_bridge=PilotParcelBridge.configured() if self.direct_publishing else None
+        self.parcel_bridge=PilotParcelBridge.configured() if self.direct_publishing and not store.open_pilot else None
+        if store.open_pilot:self.atlas_reader_token=''
     def binary(self,h,status,data,mime):
         h.send_response(status)
         h.send_header("X-Request-Id",secrets.token_hex(12))
@@ -135,6 +137,7 @@ class WorkflowRoutes:
             if method=='GET' and path=='/api/public/capabilities':
                 h.result(200,{'ok':True,'directPublishing':self.direct_publishing,
                               'draftDocumentReview':self.direct_publishing,
+                              'testPublication':self.test_publication,
                               'privateReviewAttachments':os.environ.get('MALAK_PRIVATE_REVIEW_ATTACHMENTS')=='1' and self.store.private_review_scope_enabled});return True
             match=re.fullmatch('/api/public/photos/('+ID+')',path)
             if match and method=='GET':

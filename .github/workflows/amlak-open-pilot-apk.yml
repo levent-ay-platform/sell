@@ -30,14 +30,14 @@ jobs:
         run: |
           python3 scripts/check_malak_brand.py
           python3 scripts/check_amlak_ui_contrast.py
-          gradle -p apps/android :app:testDebugUnitTest :app:assembleDebug -PmalakV2Discovery=true -PmalakPrivateBaseUrl=https://malak-pilot.ayasofia.shop -PmalakPublicListingsBaseUrl=https://malak-api.ayasofia.shop -PmalakDirectPublishing=false --no-daemon
+          gradle -p apps/android :app:testDebugUnitTest :app:assembleDebug -PmalakV2Discovery=true -PmalakPrivateBaseUrl=https://malak-pilot.ayasofia.shop -PmalakPublicListingsBaseUrl=https://malak-pilot.ayasofia.shop -PmalakDirectPublishing=true --no-daemon
           mkdir -p qa
-          cp apps/android/app/build/outputs/apk/debug/app-debug.apk qa/Amlak-Open-Pilot.apk
+          cp apps/android/app/build/outputs/apk/debug/app-debug.apk qa/Amlak-Full-Open-Pilot.apk
           test "$(stat -c %s qa/Amlak-Open-Pilot.apk)" -le 60000000
           sha256sum qa/Amlak-Open-Pilot.apk > qa/SHA256SUMS
       - uses: actions/upload-artifact@v4
         with:
-          name: amlak-open-pilot-apk
+          name: amlak-full-open-pilot-apk
           path: qa/
           retention-days: 5
           if-no-files-found: error

@@ -1,7 +1,7 @@
 name: Amlak private review attachment QA
 on:
   push:
-    branches: [qa/amlak-integrated-release-20261124, feat/amlak-open-device-pilot-20261124]
+    branches: [qa/amlak-integrated-release-20261124, feat/amlak-open-device-pilot-20261124, qa/amlak-open-pilot-endpoint-20261124]
   pull_request:
     paths: ['services/verification/qa/**', '.github/workflows/amlak-private-attachments.yml']
 permissions:

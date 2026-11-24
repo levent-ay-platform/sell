@@ -49,6 +49,33 @@ class OpenDevicePilot(unittest.TestCase):
             with self.assertRaises(ValueError):WorkflowRoutes(self.store,None)
         with self.assertRaises(WorkflowError):self.store.decide("admin","id","PUBLISHED",{},"",1)
         self.assertEqual(self.store.public_listings(),[])
+    def test_explicit_test_publication_round_trip(self):
+        user=self.store.authenticate(self.login())['id']
+        other=self.store.authenticate(self.login('B'))['id']
+        fields={'title':'Synthetic land','region':'Nabeul','description':'Test only','area':'120','price':'50000','kind':'LAND','latitude':'36.88','longitude':'11.005','requestKey':'a'*32}
+        with patch.dict(os.environ,{'MALAK_DIRECT_PUBLISHING':'1','MALAK_OPEN_PILOT_TEST_PUBLICATION':'1'}):
+            routes=WorkflowRoutes(self.store,None)
+            self.assertTrue(routes.direct_publishing)
+            self.assertIsNone(routes.parcel_bridge)
+            self.assertEqual(routes.atlas_reader_token,'')
+            draft=self.store.prepare_direct_listing(user,fields)
+            with self.assertRaises(WorkflowError):self.store.change_direct_listing(other,draft['id'],'publish',{})
+            review=self.store.record_review(user,[('IDENTITY','image/png',image('red')),('DOCUMENT','image/png',image('blue'))],{'assessment':'INSUFFICIENT_EVIDENCE'})
+            self.store.add_review_attachment(user,review,'CADASTRAL_PLAN','image/png',image('green'))
+            self.store.save_review_boundary(user,review,[[10.1,36.1],[10.101,36.1],[10.101,36.101]],None)
+            published=self.store.change_direct_listing(user,draft['id'],'publish',{'reviewId':review,'photoIds':[]})
+            self.assertEqual(published['status'],'PUBLISHED')
+            self.assertEqual(published['reviewId'],review)
+            public=self.store.public_listings()[0]
+            self.assertTrue(public['testPublication'])
+            self.assertTrue(public['title'].startswith('[TEST]'))
+            self.assertFalse(public['ownershipVerified'])
+            self.assertNotIn('reviewId',public)
+            self.assertNotIn('phone',public)
+            self.assertEqual(public['photos'],[])
+            self.store.change_direct_listing(user,draft['id'],'pause',{})
+            self.assertEqual(self.store.public_listings(),[])
+        self.assertEqual(self.store.public_listings(),[])
     def test_wrong_code_and_invalid_device(self):
         for code,device in [("1235","A"*43),("1234","short")]:
             with self.assertRaises(WorkflowError):self.store.login("+21623456789",code,device)
