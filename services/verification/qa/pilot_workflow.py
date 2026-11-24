@@ -626,6 +626,67 @@ CREATE TABLE IF NOT EXISTS pilot_parcel_links(
             if not row:raise WorkflowError(404,'NOT_FOUND')
             sealed=row['sealed']
             return row['mime'],self.cipher.decrypt(sealed[:12],sealed[12:],(review+':'+eid).encode())
+    @staticmethod
+    def _boundary_value(vertices):
+        # Private owner drawing only. Never treated as cadastral evidence.
+        if not isinstance(vertices,list) or not 3<=len(vertices)<=64:raise WorkflowError(422,'INVALID_BOUNDARY')
+        ring=[]
+        for point in vertices:
+            if not isinstance(point,list) or len(point)!=2 or any(type(v) not in (float,int) or not math.isfinite(v) for v in point):
+                raise WorkflowError(422,'INVALID_BOUNDARY')
+            lon,lat=point
+            if not 6<=lon<=13 or not 29<=lat<=39:raise WorkflowError(422,'INVALID_BOUNDARY')
+            ring.append((float(lon),float(lat)))
+        if len(set(ring))!=len(ring):raise WorkflowError(422,'INVALID_BOUNDARY')
+        lon0,lat0=ring[0];factor=math.pi/180*6371008.8
+        xy=[((lon-lon0)*factor*math.cos(math.radians(lat0)),(lat-lat0)*factor) for lon,lat in ring]
+        if max(x for x,y in xy)-min(x for x,y in xy)>20000 or max(y for x,y in xy)-min(y for x,y in xy)>20000:raise WorkflowError(422,'INVALID_BOUNDARY')
+        def orientation(a,b,c):
+            v=(b[0]-a[0])*(c[1]-a[1])-(b[1]-a[1])*(c[0]-a[0])
+            return 0 if abs(v)<1e-8 else 1 if v>0 else -1
+        def on(a,b,c):
+            return min(a[0],b[0])-1e-8<=c[0]<=max(a[0],b[0])+1e-8 and min(a[1],b[1])-1e-8<=c[1]<=max(a[1],b[1])+1e-8
+        def cross(a,b,c,d):
+            o,p,q,r=orientation(a,b,c),orientation(a,b,d),orientation(c,d,a),orientation(c,d,b)
+            return (o*p<0 and q*r<0) or (o==0 and on(a,b,c)) or (p==0 and on(a,b,d)) or (q==0 and on(c,d,a)) or (r==0 and on(c,d,b))
+        edges=list(zip(xy,xy[1:]+xy[:1]))
+        lengths=[math.hypot(b[0]-a[0],b[1]-a[1]) for a,b in edges]
+        area=abs(sum(a[0]*b[1]-b[0]*a[1] for a,b in edges))/2
+        if area<1 or min(lengths)<.5:raise WorkflowError(422,'INVALID_BOUNDARY')
+        for i,(a,b) in enumerate(edges):
+            for j in range(i+1,len(edges)):
+                if j==i+1 or (i==0 and j==len(edges)-1):continue
+                if cross(a,b,*edges[j]):raise WorkflowError(422,'INVALID_BOUNDARY')
+        return {'method':'OWNER_TRACED_ESTIMATE','vertices':ring,'areaM2':round(area,2),'lengthsM':[round(v,2) for v in lengths],'official':False}
+    def review_boundary(self,user,review):
+        with self.db() as db:
+            self._attachment_scope(db,user,review)
+            rows=db.execute("SELECT * FROM evidence WHERE review_id=? AND kind='OWNER_DRAWN_BOUNDARY'",(review,)).fetchall()
+            if not rows:return None
+            if len(rows)!=1:raise WorkflowError(409,'BOUNDARY_CONFLICT')
+            row=rows[0];sealed=row['sealed']
+            value=json.loads(self.cipher.decrypt(sealed[:12],sealed[12:],(review+':'+row['id']).encode()))
+            return {'id':row['id'],**value}
+    def save_review_boundary(self,user,review,vertices,replace_id):
+        value=self._boundary_value(vertices) if vertices!=[] else None
+        data=json.dumps(value,separators=(',',':')).encode() if value is not None else None
+        with self.db() as db:
+            db.execute('BEGIN IMMEDIATE')
+            self._attachment_scope(db,user,review,write=True)
+            rows=db.execute("SELECT * FROM evidence WHERE review_id=? AND kind='OWNER_DRAWN_BOUNDARY'",(review,)).fetchall()
+            if len(rows)>1:raise WorkflowError(409,'BOUNDARY_CONFLICT')
+            old=rows[0] if rows else None
+            if old and data is not None:
+                sealed=old['sealed']
+                if self.cipher.decrypt(sealed[:12],sealed[12:],(review+':'+old['id']).encode())==data:return {'id':old['id'],**value}
+            if (old['id'] if old else None)!=replace_id:raise WorkflowError(409,'BOUNDARY_CONFLICT')
+            if old:db.execute('DELETE FROM evidence WHERE id=?',(old['id'],))
+            if value is None:return None
+            eid=ident();nonce=os.urandom(12)
+            sealed=nonce+self.cipher.encrypt(nonce,data,(review+':'+eid).encode())
+            db.execute('INSERT INTO evidence VALUES(?,?,?,?,?)',(eid,review,'OWNER_DRAWN_BOUNDARY','application/json',sealed))
+            db.execute('INSERT INTO audit VALUES(?,?,?,?,?)',(ident(),user,None,'PRIVATE_BOUNDARY_SAVED:'+review,now()))
+            return {'id':eid,**value}
     def add_photo(self,user,review,data):
         import io
         from PIL import Image, ImageOps

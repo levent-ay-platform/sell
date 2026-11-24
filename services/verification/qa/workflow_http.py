@@ -138,6 +138,22 @@ class WorkflowRoutes:
             match=re.fullmatch('/api/public/photos/('+ID+')',path)
             if match and method=='GET':
                 self.binary(h,200,self.store.public_photo(match[1]),'image/jpeg');return True
+            boundary=re.fullmatch('/api/pilot/reviews/('+ID+')/boundary',path)
+            if boundary:
+                if os.environ.get('MALAK_PRIVATE_REVIEW_ATTACHMENTS')!='1' or self.store.enrolled_devices is None:raise WorkflowError(404,'NOT_FOUND')
+                user=self.actor(h)
+                if method=='GET':
+                    h.result(200,{'ok':True,'boundary':self.store.review_boundary(user,boundary[1])});return True
+                if method=='POST':
+                    if h.headers.get('X-Pilot-Ocr-Consent')!='1':raise WorkflowError(400,'CONSENT_REQUIRED')
+                    data=self.body(h,8192)
+                    if not isinstance(data,dict) or set(data)!={'vertices','replaceId'}:raise WorkflowError()
+                    replace=data['replaceId']
+                    if replace is not None and (not isinstance(replace,str) or not re.fullmatch(ID,replace)):raise WorkflowError()
+                    if self.actor(h)!=user:raise WorkflowError(401,'SESSION_REQUIRED')
+                    value=self.store.save_review_boundary(user,boundary[1],data['vertices'],replace)
+                    h.result(200,{'ok':True,'boundary':value,'ownershipVerified':False,'mayPublish':False});return True
+                raise WorkflowError(405,'METHOD_NOT_ALLOWED')
             attachment=re.fullmatch('/api/pilot/reviews/('+ID+')/attachments(?:/('+ID+'))?',path)
             if attachment:
                 if os.environ.get('MALAK_PRIVATE_REVIEW_ATTACHMENTS')!='1' or self.store.enrolled_devices is None:raise WorkflowError(404,'NOT_FOUND')

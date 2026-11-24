@@ -53,3 +53,17 @@ class Attachments(unittest.TestCase):
         with self.assertRaises(WorkflowError):self.store.remove_review_attachment(self.other,self.review,a['id'])
         self.store.remove_review_attachment(self.user,self.review,a['id'])
         self.assertEqual(self.store.review_attachments(self.user,self.review),[])
+
+    def test_boundary_geometry_private_persisted_and_revision_scoped(self):
+        ring=[[10.1,36.1],[10.101,36.1],[10.101,36.101],[10.1,36.101]]
+        result=self.store.save_review_boundary(self.user,self.review,ring,None)
+        self.assertFalse(result['official'])
+        self.assertGreater(result['areaM2'],1)
+        self.assertEqual(len(result['lengthsM']),4)
+        self.assertEqual(self.store.save_review_boundary(self.user,self.review,ring,None)['id'],result['id'])
+        self.assertEqual(self.store.review_boundary(self.user,self.review)['vertices'],ring)
+        with self.assertRaises(WorkflowError):self.store.review_boundary(self.other,self.review)
+        with self.assertRaises(WorkflowError):self.store.save_review_boundary(self.user,self.review,[ring[0],ring[2],ring[1],ring[3]],result['id'])
+        with self.assertRaises(WorkflowError):self.store.save_review_boundary(self.user,self.review,[],None)
+        self.assertIsNone(self.store.save_review_boundary(self.user,self.review,[],result['id']))
+        self.assertIsNone(self.store.review_boundary(self.user,self.review))
