@@ -63,7 +63,7 @@ internal suspend fun readOcrForOwner(
         (pageNumber != null && pageNumber !in 1..8) ||
         evidenceKind !in setOf("OWNERSHIP_CERTIFICATE","SHARED_OWNERSHIP_CERTIFICATE",
             "SALE_DEED","TRANSFER_CARD","POSSESSION_REPORT","FINANCIAL_RECEIPT",
-            "PROPERTY_SERVICE_RECEIPT","OTHER_LEGAL_PROOF","TITLE_EXTRACT"))
+            "PROPERTY_SERVICE_RECEIPT","OTHER_LEGAL_PROOF","TITLE_EXTRACT","CADASTRAL_PLAN"))
         throw PrivateOcrClientException(400)
     val base = runCatching { URI(session.httpsBaseUrl.trim()) }.getOrNull()
         ?: throw PrivateOcrClientException(400)

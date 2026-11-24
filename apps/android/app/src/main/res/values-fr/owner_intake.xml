@@ -11,4 +11,12 @@
     <string name="intake_optional_preview_only">Le plan et le document complémentaire restent dans cette session de prévisualisation et ne sont pas transmis au dossier de vérification.</string>
     <string name="intake_documents_and_photos">Documents et photos du bien</string>
     <string name="intake_document_camera_hint">Photographiez le document entier, bien lisible</string>
+    <string name="intake_supplement_owner_hint">Après analyse, joindre le plan ou le document complémentaire au dossier privé du propriétaire.</string>
+    <string name="intake_supplements_heading">Pièces privées complémentaires</string>
+    <string name="intake_attach_plan">Joindre et analyser le plan</string>
+    <string name="intake_attach_extra">Joindre le document complémentaire</string>
+    <string name="intake_plan_read_ready">Lecture du plan prête pour examen.</string>
+    <string name="intake_plan_stored">Plan conservé en privé. Lecture indisponible ; réessayer ou ouvrir le plan.</string>
+    <string name="intake_extra_stored">Document complémentaire joint en privé.</string>
+    <string name="intake_supplement_failed">Impossible de terminer la demande. Réessayer sans sélectionner le fichier.</string>
 </resources>

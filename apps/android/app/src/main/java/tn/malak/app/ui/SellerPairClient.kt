@@ -179,6 +179,18 @@ private fun upload(context:Context,session:OwnerEvidenceSession,base:String,
         return evidenceId
     }finally{c.disconnect()}
 }
+/** Supplemental evidence never enters the certificate/identity matcher. The
+ * case upload endpoint independently enforces verified owner, consent and scan. */
+internal suspend fun attachOwnerSupplement(context:Context, session:OwnerEvidenceSession,
+    file:PairEvidenceFile):String=withContext(Dispatchers.IO){
+    if(file.evidenceKind !in setOf("CADASTRAL_PLAN","OTHER_LEGAL_PROOF") ||
+        file.expectedBytes !in 20..DOC_LIMIT || file.mime !in MIME ||
+        file.uri.scheme!="content" || !KEY.matches(file.idempotencyKey))
+        throw OwnerPairException(400)
+    upload(context,session,validateSession(session),file,file.evidenceKind,
+        if(file.mime=="application/pdf")null else 1)
+}
+
 private fun nameOf(comparison:JSONObject,key:String):PairNameEvidence? {
     if(comparison.isNull(key))return null
     val obj=comparison.optJSONObject(key)?:throw OwnerPairException(502)

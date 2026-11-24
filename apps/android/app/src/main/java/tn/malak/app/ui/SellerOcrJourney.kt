@@ -452,6 +452,43 @@ internal fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmiss
         PrivateCaptureMemory.length(identityFiles[0].uri)==identityFiles[0].length)
     // Front-only secure comparison requires explicit consent and genuine login.
     val identityReadyForRemote=identitySelected
+    // A pilot OCR session is not a verified owner credential. Optional
+    // evidence may be attached only to an actual existing owner case.
+    val supplementCase=if(!hasPilotReviewSession && pairReport!=null)
+        ownerSession ?: provisionedCase else null
+    var planRequest by remember(supplementCase,planFile?.uploadKey){mutableIntStateOf(0)}
+    var planReading by remember(supplementCase,planFile?.uploadKey){mutableStateOf<ReadOcrResult?>(null)}
+    var planBusy by remember(supplementCase,planFile?.uploadKey){mutableStateOf(false)}
+    var planError by remember(supplementCase,planFile?.uploadKey){mutableStateOf(false)}
+    var extraRequest by remember(supplementCase,extraFile?.uploadKey){mutableIntStateOf(0)}
+    var extraReceipt by remember(supplementCase,extraFile?.uploadKey){mutableStateOf<String?>(null)}
+    var extraBusy by remember(supplementCase,extraFile?.uploadKey){mutableStateOf(false)}
+    var extraError by remember(supplementCase,extraFile?.uploadKey){mutableStateOf(false)}
+    LaunchedEffect(supplementCase,planFile?.uploadKey,planRequest){
+        val active=supplementCase ?: return@LaunchedEffect
+        val file=planFile ?: return@LaunchedEffect
+        if(planRequest==0)return@LaunchedEffect
+        planBusy=true;planError=false
+        try{
+            planReading=readOcrForOwner(context,file.uri,file.length,file.mime,
+                if(file.mime=="application/pdf")null else 1,file.uploadKey,"",
+                QaOcrSession(active.httpsBaseUrl,active.caseId,active.bearer),"CADASTRAL_PLAN")
+        }catch(cancel:CancellationException){throw cancel}
+        catch(_:Exception){planError=true}
+        finally{planBusy=false}
+    }
+    LaunchedEffect(supplementCase,extraFile?.uploadKey,extraRequest){
+        val active=supplementCase ?: return@LaunchedEffect
+        val file=extraFile ?: return@LaunchedEffect
+        if(extraRequest==0)return@LaunchedEffect
+        extraBusy=true;extraError=false
+        try{
+            extraReceipt=attachOwnerSupplement(context,active,
+                PairEvidenceFile(file.uri,file.length,file.mime,file.uploadKey,"OTHER_LEGAL_PROOF"))
+        }catch(cancel:CancellationException){throw cancel}
+        catch(_:Exception){extraError=true}
+        finally{extraBusy=false}
+    }
     // One private matcher for the seven document classes. Mixed document
     // families must be reviewed separately; UNKNOWN continuation pages may
     // accompany ONE recognized document without inventing its type.
@@ -933,12 +970,50 @@ internal fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmiss
                         onCapture={openCamera(OwnerIntakeKind.Extra)},onUpload={pickLocal(OwnerIntakeKind.Extra)},
                         onRemove={extraFile?.let{PrivateCaptureMemory.discard(it.uri)};extraFile=null})
                     if(localIntakeError!=0)Text(s(localIntakeError),color=MaterialTheme.colorScheme.error)
-                    Text(s(R.string.intake_optional_preview_only),style=MaterialTheme.typography.bodySmall,color=Brand.Muted)
+                    Text(s(if(hasOwnerReviewSession&&!hasPilotReviewSession)R.string.intake_supplement_owner_hint
+                        else R.string.intake_optional_preview_only),style=MaterialTheme.typography.bodySmall,color=Brand.Muted)
                     HorizontalDivider()
                     if(!directVerification)ListingPhotoEditor(listingPhotos,directPublishing=intakePhotos!=null,
                         persistAccess=intakePhotos!=null)
                 }
                 2 -> {
+                    if(supplementCase!=null && (planFile!=null||extraFile!=null)){
+                        SectionHeading(s(R.string.intake_supplements_heading),s(R.string.intake_supplement_owner_hint))
+                        planFile?.let{file->
+                            Text(file.displayName,color=Brand.Ink)
+                            OutlinedButton(onClick={planRequest++},enabled=!planBusy&&planReading?.status!="READY",
+                                modifier=Modifier.fillMaxWidth()){
+                                Text(s(if(planRequest==0)R.string.intake_attach_plan else R.string.owner_retry))
+                            }
+                            if(planBusy)LinearProgressIndicator(Modifier.fillMaxWidth())
+                            if(planError)Text(s(R.string.intake_supplement_failed),color=MaterialTheme.colorScheme.error)
+                            planReading?.let{reading->
+                                Text(s(if(reading.status=="READY")R.string.intake_plan_read_ready else R.string.intake_plan_stored),
+                                    color=Brand.Muted)
+                                val total=if(file.mime=="application/pdf")reading.pagesReceived.coerceIn(1,8) else 1
+                                for(page in 1..total){
+                                    OutlinedButton(onClick={
+                                        parcelEditorSource=OwnerParcelEditorSource(file.uri,file.mime,page,page,
+                                            reading.evidenceId,reading.parcelScans.firstOrNull{it.page==page},
+                                            reading.parcelOcrLengths.filter{it.page==page},
+                                            reading.parcelPlanFacts.selectedFact("titleReference",page).orEmpty(),
+                                            reading.parcelPlanFacts.selectedFact("plotReference",page).orEmpty(),
+                                            reading.parcelPlanFacts.selectedFact("printedAreaM2",page))
+                                    },modifier=Modifier.fillMaxWidth()){
+                                        Text(s(R.string.parcel_editor_open,page))
+                                    }
+                                }
+                            }
+                        }
+                        extraFile?.let{file->
+                            Text(file.displayName,color=Brand.Ink)
+                            OutlinedButton(onClick={extraRequest++},enabled=!extraBusy&&extraReceipt==null,
+                                modifier=Modifier.fillMaxWidth()){Text(s(R.string.intake_attach_extra))}
+                            if(extraBusy)LinearProgressIndicator(Modifier.fillMaxWidth())
+                            if(extraReceipt!=null)Text(s(R.string.intake_extra_stored),color=Brand.Muted)
+                            if(extraError)Text(s(R.string.intake_supplement_failed),color=MaterialTheme.colorScheme.error)
+                        }
+                    }
                     if(hasPilotReviewSession){
                         OwnerReadingSummary(pairReport,acceptedRead,pairProgress!=null,pairError,
                             showAnalysisDetails,{showAnalysisDetails=!showAnalysisDetails},
@@ -1607,7 +1682,7 @@ internal fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmiss
                     }
                 }
                 else if(pilotOcrSession==null)saveLocalDraft()
-            }, enabled=!sending&&!submitted&&!identityDateBusy&&!(step==2&&pilotOcrSession!=null&&pairReport==null), modifier=Modifier.fillMaxWidth().heightIn(min=54.dp),
+            }, enabled=!sending&&!submitted&&!identityDateBusy&&!planBusy&&!extraBusy&&!(step==2&&pilotOcrSession!=null&&pairReport==null), modifier=Modifier.fillMaxWidth().heightIn(min=54.dp),
                 shape=RoundedCornerShape(17.dp),colors=ButtonDefaults.buttonColors(
                     containerColor = if (needsCertificate) Brand.NeutralContainer else Brand.Crimson,
                     contentColor = if (needsCertificate) Brand.Ink else Color.White

@@ -11,4 +11,12 @@
     <string name="intake_optional_preview_only">المخطط والوثيقة الإضافية للمعاينة داخل هذه الجلسة فقط، ولا يُرسلان إلى ملف التحقق حالياً.</string>
     <string name="intake_documents_and_photos">الوثائق وصور العقار</string>
     <string name="intake_document_camera_hint">صوّر المستند كاملاً بوضوح</string>
+    <string name="intake_supplement_owner_hint">بعد تحليل الوثائق، يمكنك إرفاق المخطط أو الوثيقة الإضافية بملف المالك الخاص.</string>
+    <string name="intake_supplements_heading">الوثائق الخاصة الإضافية</string>
+    <string name="intake_attach_plan">إرفاق المخطط وتحليله</string>
+    <string name="intake_attach_extra">إرفاق الوثيقة الإضافية</string>
+    <string name="intake_plan_read_ready">قراءة المخطط جاهزة للمراجعة.</string>
+    <string name="intake_plan_stored">حُفظ المخطط بشكل خاص. القراءة غير متاحة؛ أعد المحاولة أو افتح محرر الصفحة.</string>
+    <string name="intake_extra_stored">أُرفقت الوثيقة الإضافية بشكل خاص.</string>
+    <string name="intake_supplement_failed">تعذر إكمال الطلب. أعد المحاولة دون اختيار الملف من جديد.</string>
 </resources>

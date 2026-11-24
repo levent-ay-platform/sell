@@ -11,4 +11,12 @@
     <string name="intake_optional_preview_only">The plan and additional document stay in this preview session and are not sent to the verification case yet.</string>
     <string name="intake_documents_and_photos">Documents and property photos</string>
     <string name="intake_document_camera_hint">Capture the entire document clearly</string>
+    <string name="intake_supplement_owner_hint">After document analysis, attach the selected plan or additional document to your private owner case.</string>
+    <string name="intake_supplements_heading">Additional private evidence</string>
+    <string name="intake_attach_plan">Attach and analyze plan</string>
+    <string name="intake_attach_extra">Attach additional document</string>
+    <string name="intake_plan_read_ready">Plan reading ready for review.</string>
+    <string name="intake_plan_stored">Plan stored privately. Reading unavailable; retry or open the page editor.</string>
+    <string name="intake_extra_stored">Additional document attached privately.</string>
+    <string name="intake_supplement_failed">Unable to complete this request. Retry without selecting the file again.</string>
 </resources>

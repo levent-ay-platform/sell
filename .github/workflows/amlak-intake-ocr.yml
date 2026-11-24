@@ -17,6 +17,6 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - run: python -m pip install numpy opencv-python-headless
+      - run: python -m pip install "numpy==1.26.4" "opencv-python-headless==4.10.0.84" "onnxruntime==1.23.2" "PyYAML==6.0.2"
       - run: python -m unittest test_cin_mac_date test_cin_v5_date -v
         working-directory: services/verification/ocr
