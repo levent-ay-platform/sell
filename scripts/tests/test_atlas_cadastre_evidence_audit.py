@@ -65,11 +65,21 @@ class CadastreEvidenceAuditTest(unittest.TestCase):
         self.assertEqual(report["counts"]["pdf_hashes_with_page_rows"], 2)
         self.assertEqual(report["counts"]["pdf_hashes_with_ocr_text"], 2)
         self.assertEqual(report["counts"]["pdf_hashes_missing_document_index"], 0)
-        self.assertEqual(report["schema_version"], 2)
+        self.assertEqual(report["schema_version"], 3)
         self.assertEqual(report["unresolved_pdf_documents"], [])
         candidate = report["candidates"][0]
         self.assertEqual(candidate["document_sha256"], "shared")
         self.assertEqual(candidate["resource_rows"], 2)
+        self.assertEqual(candidate["resource_ids_private"], ["a", "b"])
+        self.assertEqual(report["unhashed_pdf_resource_ids_private"], ["d"])
+        self.assertEqual(
+            candidate["page_reference_evidence_private"][0]["title_reference_candidates"],
+            ["00001234"],
+        )
+        self.assertEqual(
+            candidate["page_reference_evidence_private"][0]["parcel_reference_candidates"],
+            ["007"],
+        )
         self.assertEqual(candidate["title_reference_candidates"], ["00001234", "0099"])
         self.assertEqual(candidate["parcel_reference_candidates"], ["007"])
         self.assertEqual(candidate["ocr_page_candidates"], [1, 2])
@@ -114,6 +124,7 @@ class CadastreEvidenceAuditTest(unittest.TestCase):
         self.assertEqual(report["unresolved_pdf_documents"], [{
             "document_sha256": "unresolved",
             "resource_rows": 1,
+            "resource_ids_private": ["f"],
             "indexed_document_present": False,
             "page_rows_present": False,
             "ocr_text_present": False,
@@ -187,6 +198,30 @@ class CadastreEvidenceAuditTest(unittest.TestCase):
             report["counts"]["triage_review_documents"]
             + report["counts"]["pdf_documents_untriaged_unknown"],
             report["counts"]["distinct_pdf_sha256"],
+        )
+        self.assertFalse(report["publication_rights_verified"])
+
+    def test_null_page_number_keeps_cadastral_keyword_evidence(self):
+        connection = sqlite3.connect(self.db)
+        connection.executescript(
+            """
+            INSERT INTO resources VALUES
+                ('null-page','Unnamed.pdf','.pdf','null-page-sha');
+            INSERT INTO pages VALUES
+                ('null-page-sha',NULL,'مخطط المسح العقاري، الرسم العقاري عدد 000123');
+            """
+        )
+        connection.commit()
+        connection.close()
+        report = audit_snapshot(self.db, snapshot_kind="mainfile_diagnostic")
+        docs = {item["document_sha256"]: item for item in report["candidates"]}
+        candidate = docs["null-page-sha"]
+        self.assertIn("OCR_TEXT_TERM", candidate["indicators"])
+        self.assertEqual(candidate["ocr_page_candidates"], [])
+        self.assertIsNone(candidate["page_reference_evidence_private"][0]["page"])
+        self.assertEqual(
+            candidate["page_reference_evidence_private"][0]["title_reference_candidates"],
+            ["000123"],
         )
         self.assertFalse(report["publication_rights_verified"])
 
