@@ -381,8 +381,11 @@ def extract_fields(photo,session,letters):
             return dict(OUTPUT_EMPTY)
         a,sc=consensus_name(session,letters,card,centers[0])
         b,gc=consensus_name(session,letters,card,centers[1])
-        if a is None or b is None or min(sc,gc)<.72:
-            return dict(OUTPUT_EMPTY)
+        # A weak name is not evidence that the separately printed number
+        # or birth row is unreadable. Keep strict per-name consensus;
+        # expose missing fields as null, never fabricate a complete identity.
+        a=a if a is not None and sc>=.72 else None
+        b=b if b is not None and gc>=.72 else None
         # Two matching reads, known Tunisian month and a real calendar date.
         # Hidden or ambiguous dates remain None. No automatic identity approval.
         try:
@@ -396,7 +399,7 @@ def extract_fields(photo,session,letters):
                 "cinLast4":full_cin[-4:] if full_cin is not None else None,
                 "cinFull":full_cin,
                 "birthDate":dob,
-                "confidencePercent":max(0,min(100,int(min(sc,gc)*100)))}
+                "confidencePercent":max(0,min(100,int(min(sc,gc)*100))) if a and b else 0}
     finally:
         # This worker stays warm across requests. Clear derived pixel buffers.
         card.fill(0)
