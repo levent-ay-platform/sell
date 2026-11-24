@@ -111,7 +111,7 @@ def _tesseract_lines(path: Path, page: int, *, lang: str = 'ara+fra',
     raw = _cmd(['tesseract',str(path),'stdout','--psm',psm,'-l',lang,'tsv'],timeout=30)
     rows=raw.decode('utf-8','replace').splitlines()
     if len(rows)<2:
-        return []
+        return ([], [], [], False) if with_area_anchors else []
     header=rows[0].split('\t')
     try:
         indexes={k:header.index(k) for k in ('level','page_num','block_num','par_num','line_num','text','conf','left','top','width','height')}

@@ -227,3 +227,8 @@ From the checked-out repository, using the intended interpreter:
     python -m scripts.atlas_environment_preflight --ocr
 
 The second mode requires Pillow, Poppler (pdfinfo, pdftotext, pdftoppm), Tesseract, and installed ara/fra language data. The batch CLI runs the same readiness checks **before opening the snapshot or creating outputs** and exits 2 if prerequisites are missing. Preflight outputs only dependency status and interpreter version; no source paths, PDFs, database data or credentials. This is a readiness check, not proof of real OCR accuracy, archive accessibility or legal cadastral status. Direct library callers must explicitly run the preflight before operational use. macOS CI runs synthetic vector tests only; it is not the user's Mac or a real archive test.
+
+
+## Cumulative batch accounting and image-only PDF acceptance
+
+Schema-2 batch manifests retain earlier terminal outcomes across continuation (including failures), report cumulative attempted hashes, and record the prior manifest SHA-256. The previous manifest must match the snapshot kind, digest, eligible order, OCR mode and exact expected status set. Keep all private batch folders; this is manifest-based cumulative accounting, not a new verification of earlier result files. Schema-1 manifests require a fresh run; interrupted/incomplete batches still require a fresh output directory starting from the last completed checkpoint. Full OCR CI now installs Arabic and French trained data and tests a synthetic image-only PDF through the actual OCR worker, not just a mocked or native-text worker. A blank-page TSV response now retains the expected tuple shape for spatial OCR. No real archive coverage or legal plan verification inferred.

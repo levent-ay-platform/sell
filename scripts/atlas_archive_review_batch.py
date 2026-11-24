@@ -200,18 +200,24 @@ def run_batch(db, kind, roots, output, *, manifest=None, offset=0,
     queue_hash = hashlib.sha256(json.dumps(
         [row["document_sha256_private"].lower() for row in eligible],
         separators=(",", ":")).encode("utf-8")).hexdigest()
+    proof = None
+    previous_digest = None
     if offset:
         if resume_manifest is None:
             raise ValueError("PREVIOUS_COMPLETED_MANIFEST_REQUIRED")
         previous = Path(resume_manifest)
         if previous.is_symlink() or not previous.is_file():
             raise ValueError("PREVIOUS_COMPLETED_MANIFEST_REQUIRED")
-        proof = json.loads(previous.read_text(encoding="utf-8"))
+        previous_bytes = previous.read_bytes()
+        previous_digest = hashlib.sha256(previous_bytes).hexdigest()
+        proof = json.loads(previous_bytes)
         if (proof.get("kind") != "ATLAS_PRIVATE_ARCHIVE_REVIEW_BATCH" or
                 proof.get("snapshot_sha256_private") != snapshot_hash or
                 proof.get("eligible_queue_sha256_private") != queue_hash or
                 proof.get("next_offset") != offset or
-                proof.get("ocr_requested") != ocr):
+                proof.get("ocr_requested") != ocr or
+                proof.get("snapshot_kind") != kind or
+                proof.get("schema_version") != 2):
             raise ValueError("RESUME_QUEUE_CHANGED_REVIEW_REQUIRED")
     elif resume_manifest is not None:
         raise ValueError("RESUME_OFFSET_REQUIRED")
@@ -222,6 +228,22 @@ def run_batch(db, kind, roots, output, *, manifest=None, offset=0,
         key = row["document_sha256_private"].lower()
         status[key] = ("NOT_OBSERVED_WITH_PDF_HEADER" if not locations.get(key)
                        else "DEFERRED_TO_ANOTHER_BATCH")
+
+    # Carry forward actual completed-batch outcomes rather than resetting
+    # every earlier document to DEFERRED. Historical states are claims from
+    # the previous private manifest, not a fresh verification of old outputs.
+    terminal = {"PRIVATE_REVIEW_REQUIRED", "EXTRACTION_FAILED_RETAINED",
+                "BLOB_RECHECK_FAILED"}
+    if proof is not None:
+        old_states = proof.get("all_catalogue_states_private")
+        previous_keys = {row["document_sha256_private"].lower()
+                         for row in eligible[:offset]}
+        if (not isinstance(old_states, dict) or set(old_states) != set(status) or
+                any(old_states[key] not in terminal for key in previous_keys) or
+                any(old_states[key] != status[key] for key in status.keys() - previous_keys)):
+            raise ValueError("RESUME_STATE_ACCOUNTING_MISMATCH")
+        for key in previous_keys:
+            status[key] = old_states[key]
 
     results_dir = output / "documents"
     results_dir.mkdir(mode=0o700)
@@ -288,7 +310,7 @@ def run_batch(db, kind, roots, output, *, manifest=None, offset=0,
     if _digest(db) != snapshot_hash:
         raise ValueError("SNAPSHOT_CHANGED_DURING_BATCH_NO_FINAL_MANIFEST")
     result = {
-        "schema_version": 1,
+        "schema_version": 2,
         "kind": "ATLAS_PRIVATE_ARCHIVE_REVIEW_BATCH",
         "snapshot_kind": kind,
         "snapshot_sha256_private": snapshot_hash,
@@ -299,11 +321,13 @@ def run_batch(db, kind, roots, output, *, manifest=None, offset=0,
             "catalogue_unhashed_rows": backlog["counts"]["pdf_rows_without_sha"],
             "eligible_pdf_hashes_in_selected_roots": len(eligible),
             "batch_selected_hashes": len(chosen),
+            "cumulative_attempted_hashes": offset+len(chosen),
             "states": dict(sorted(Counter(status.values()).items())),
         },
         "eligible_queue_sha256_private": queue_hash,
         "ocr_requested": ocr,
         "batch_offset": offset,
+        "previous_completed_manifest_sha256_private": previous_digest,
         "next_offset": offset+len(chosen) if offset+len(chosen) < len(eligible) else None,
         "all_catalogue_states_private": status,
         "official_plan_count": None,
@@ -312,7 +336,8 @@ def run_batch(db, kind, roots, output, *, manifest=None, offset=0,
         "public_export_permitted": False,
         "limitations": [
             "Stable owner-approved snapshot and archive roots only; no claim of archive-wide coverage.",
-            "Offset continuation requires previous completion manifest, unchanged snapshot and eligible hash sequence.",
+            "Offset continuation requires a schema-2 completed manifest, unchanged snapshot and eligible hash sequence.",
+            "Earlier document states are carried from the previous manifest, not freshly verified; preserve all original batch directories.",
             "OCR service input limits and missing dependencies may leave documents for manual review.",
             "Review issuer, exact title/parcel evidence, rights and independent ground controls separately.",
         ],

@@ -80,6 +80,10 @@ class ArchiveBatchTest(unittest.TestCase):
         second = self.run_one("second", offset=1, max_documents=1,
                               resume_manifest=self.base/"output"/"completed-private-manifest.json")
         self.assertEqual(second["all_catalogue_states_private"][self.b], "PRIVATE_REVIEW_REQUIRED")
+        self.assertEqual(second["all_catalogue_states_private"][self.a], "PRIVATE_REVIEW_REQUIRED")
+        self.assertEqual(second["counts"]["cumulative_attempted_hashes"], 2)
+        self.assertEqual(second["previous_completed_manifest_sha256_private"],
+                         hashlib.sha256((self.base/"output"/"completed-private-manifest.json").read_bytes()).hexdigest())
         self.assertIsNone(second["next_offset"])
         self.assertEqual(self.db.read_bytes(), initial)
         self.assertEqual(hashlib.sha256((self.root/"priority.pdf").read_bytes()).hexdigest(), self.a)
@@ -123,6 +127,53 @@ class ArchiveBatchTest(unittest.TestCase):
         self.assertEqual(entry["page_reference_evidence_private"][0]["title_reference_candidates"], ["00012345"])
         self.assertEqual(entry["page_reference_evidence_private"][0]["parcel_reference_candidates"], ["0021"])
         self.assertNotIn("PRIVATE_OWNER", json.dumps(entry))
+
+    def test_resume_preserves_failure_and_rejects_inconsistent_prior_state(self):
+        with patch("scripts.atlas_archive_review_batch._run_child", return_value=(None,"WORKER_TIMEOUT")):
+            self.run_one(max_documents=1)
+        proof = self.base/"output"/"completed-private-manifest.json"
+        second = self.run_one("second", offset=1, max_documents=1, resume_manifest=proof)
+        self.assertEqual(second["all_catalogue_states_private"][self.a], "EXTRACTION_FAILED_RETAINED")
+        data = json.loads(proof.read_text())
+        data["all_catalogue_states_private"][self.a] = "DEFERRED_TO_ANOTHER_BATCH"
+        proof.write_text(json.dumps(data))
+        with self.assertRaisesRegex(ValueError, "RESUME_STATE_ACCOUNTING_MISMATCH"):
+            self.run_one("bad", offset=1, max_documents=1, resume_manifest=proof)
+
+    @unittest.skipUnless(shutil.which("tesseract") and shutil.which("pdftoppm")
+                         and shutil.which("pdftotext") and shutil.which("pdfinfo"),
+                         "Real raster OCR tools required")
+    def test_image_only_pdf_real_ocr(self):
+        from PIL import Image, ImageDraw, ImageFont
+        font_path = Path("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf")
+        if not font_path.is_file():
+            self.skipTest("Synthetic fixture font required")
+        from scripts.atlas_environment_preflight import readiness
+        if not readiness(ocr=True)["ready"]:
+            self.skipTest("Arabic and French OCR language data required")
+        file = self.root / "priority.pdf"
+        image = Image.new("RGB", (1500, 1000), "white")
+        draw = ImageDraw.Draw(image)
+        font = ImageFont.truetype(str(font_path), 60)
+        draw.text((90, 90), "Document de test", font=font, fill="black")
+        draw.text((90, 200), "Titre foncier 00012345", font=font, fill="black")
+        draw.text((90, 310), "Parcelle 0021", font=font, fill="black")
+        image.save(file, "PDF", resolution=150)
+        sha = hashlib.sha256(file.read_bytes()).hexdigest()
+        with sqlite3.connect(self.db) as c:
+            for table in ("resources", "documents", "pages"):
+                c.execute("UPDATE "+table+" SET sha256=? WHERE sha256=?", (sha,self.a))
+        r = self.run_one(max_documents=1, ocr=True)
+        entry = json.loads((self.base/"output"/"documents"/"000001.json").read_text())
+        self.assertEqual(entry["document_sha256_private"], sha)
+        self.assertEqual(entry["ocr_status"], "COMPLETED")
+        page = entry["page_reference_evidence_private"][0]
+        self.assertEqual(page["method"], "ocr")
+        self.assertTrue(page["text_present"])
+        self.assertIn("00012345", page["title_reference_candidates"])
+        self.assertIn("0021", page["parcel_reference_candidates"])
+        self.assertIsNone(r["official_plan_count"])
+        self.assertFalse(entry["ground_verified"])
 
     def test_requires_transactional_manifest_not_just_label(self):
         with self.assertRaisesRegex(ValueError, "OWNER_BACKUP_MANIFEST_REQUIRED"):
