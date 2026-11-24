@@ -13,6 +13,18 @@ class AtlasAdminIndexTest {
         assertEquals(2,p.locate(DiscoveryPoint(35.7,10.0)))
         assertEquals(0,p.locate(DiscoveryPoint(36.1,10.7)))
     }
+    @Test fun searchCameraUsesAdministrativeBoundsAndNeverParcelZoom(){
+        val g=AdminFeature(AdminName("G","نابل","Nabeul"),null,listOf(AdminPolygon(listOf(square(10.0,35.0,11.0,36.0)))))
+        val d=AdminFeature(AdminName("D","الحمامات","Hammamet"),"G",listOf(AdminPolygon(listOf(square(10.1,35.2,10.4,35.6)))))
+        val index=AtlasAdminIndex(listOf(g),listOf(d))
+        val context=index.resolveNames("نابل","الحمامات",null)!!
+        val camera=index.searchCamera(context)!!
+        assertEquals(10.25,camera.center.longitude,0.0001)
+        assertEquals(35.4,camera.center.latitude,0.0001)
+        assertEquals(10.1,camera.bounds.west,0.0001)
+        assertTrue(camera.zoom<=13.0)
+        assertNull(index.resolveNames("نابل","unknown",null))
+    }
     @Test fun overlappingDelegationsDoNotInventOne(){
         val g=AdminFeature(AdminName("G","ولاية","G"),null,listOf(AdminPolygon(listOf(square(10.0,35.0,11.0,36.0)))))
         val d1=AdminFeature(AdminName("D1","أ","A"),"G",listOf(AdminPolygon(listOf(square(10.0,35.0,10.7,36.0)))))

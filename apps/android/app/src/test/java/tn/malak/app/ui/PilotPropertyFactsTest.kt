@@ -10,6 +10,18 @@ class PilotPropertyFactsTest{
         assertNull(fields[1].fact);assertNull(fields[2].fact)
         assertEquals("soldAreaM2",ownerExtractedValues("SALE_DEED",emptyList())[1].key)
     }
+    @Test fun expandedCertificateReadoutDoesNotConfuseParentTitleOrHistoricalLocality(){
+        val fields=ownerExtractedValues("OWNERSHIP_CERTIFICATE",listOf(
+            PilotPropertyFact("parentRegisterReference","999903",1,"ocr-ar","CANDIDATE"),
+            PilotPropertyFact("registeredParcelCount","1",1,"ocr-ar","CANDIDATE"),
+            PilotPropertyFact("historicalLocality","اسم قديم",1,"ocr-ar","CANDIDATE"),
+            PilotPropertyFact("propertyDelegation","الحمامات",1,"ocr-ar","CANDIDATE")))
+        assertNull(fields.first().fact)
+        assertEquals("999903",fields.single{it.key=="parentRegisterReference"}.fact?.value)
+        assertEquals("1",fields.single{it.key=="registeredParcelCount"}.fact?.value)
+        assertEquals("اسم قديم",fields.single{it.key=="historicalLocality"}.fact?.value)
+        assertFalse(fields.any{it.key=="propertyImada"})
+    }
     @Test fun registeredAreaNeedsExplicitConfirmationAndSharedOrUncertainAreaIsNotOffered(){
         val fact=PilotPropertyFact("registeredAreaM2","9000",1,"ocr-ar","CANDIDATE")
         assertEquals("9000",listingAreaEvidence("OWNERSHIP_CERTIFICATE",listOf(fact))?.value)

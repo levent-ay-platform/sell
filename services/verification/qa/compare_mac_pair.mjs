@@ -33,18 +33,20 @@ try{
 
  const keys=new Set(['registerReference','parentRegisterReference','registeredAreaM2',
   'soldAreaM2','possessedAreaM2','transferredAreaM2','registeredPlotNumber','soldPlotNumber',
-  'possessedPlotNumber','salePriceTnd','transferReference','serviceRequestNumber','serviceRequestDate','rightsDenominator','propertyGovernorate','propertyDelegation','propertyImada',
-  'registeredLocationText','historicalLocality','registeredParcelCount','registeredPropertyName',
+  'possessedPlotNumber','salePriceTnd','transferReference','serviceRequestNumber','serviceRequestDate','rightsDenominator','propertyGovernorate','propertyDelegation','propertyImada']);
+ const extensionKeys=new Set(['registeredLocationText','historicalLocality','registeredParcelCount','registeredPropertyName',
   'registeredPropertyContent','registeredLandCategory','creationNature']);
  const selected=['ROLE_TEXT_MATCH_ONLY','NAME_ONLY_REVIEW'].includes(comparison.assessment)?
   comparison.roles.filter(r=>r.assessment==='PRELIMINARY_TEXT_AGREEMENT'):[];
  const role=selected.length===1?selected[0]:null;
- const propertyFacts=facts.filter(f=>keys.has(f.key)&&
+ const selectFacts=allowed=>facts.filter(f=>allowed.has(f.key)&&
   facts.filter(x=>x.key===f.key).every(x=>x.value===f.value)).filter((f,i,a)=>a.findIndex(x=>x.key===f.key)===i);
+ const propertyFacts=selectFacts(keys);
+ const extendedPropertyFacts=selectFacts(extensionKeys);
  process.stdout.write(JSON.stringify({detectedKind:comparison.detectedKind,
   assessment:comparison.assessment,matchedRole:role?.role??null,
   documentCinStatus:role?.documentCinStatus??null,
-  matchedRightsHolder:role?comparison.matchedRightsHolder:null,propertyFacts,
+  matchedRightsHolder:role?comparison.matchedRightsHolder:null,propertyFacts,extendedPropertyFacts,
   reasons:[...new Set(reasons)],missingPages,
   parcelPlanScans:reading.parcelPlanScans,parcelPlanFacts:reading.parcelPlanFacts,
   parcelEdgeMeasurements:reading.parcelEdgeMeasurements,
