@@ -60,29 +60,29 @@ const commonTitle:Rule={
 };
 const parent:Rule={
  key:'parentRegisterReference',
- pattern:/^(?:الرسم\s+العقاري\s+(?:ال)?ام|الرسم\s+(?:العقاري\s+)?الاصلي|الرسم\s*\(وم\)\s*الاصلي\s*(?:\(ة\))?|parent\s+titre\s+foncier)[\s:#：-]*([0-9]{3,12})(?:\s*[\p{L}][\p{L}\p{Zs}]{0,35})?\s*$/iu,
+ pattern:/^(?:الرسم\s+(?:العقاري\s+)?(?:ال)?ام|الرسم\s+(?:العقاري\s+)?الاصلي|الرسم\s*\(وم\)\s*الاصلي\s*(?:\(ة\))?|parent\s+titre\s+foncier)[\s:#：-]*([0-9]{3,12})(?:\s*[\p{L}][\p{L}\p{Zs}]{0,35})?\s*$/iu,
  shape:'title'
 };
 const totalArea:Rule={
  key:'registeredAreaM2',
- pattern:/^(?:(?:التجزئ[ةه])[\s:#：-]*[0-9]{1,12}(?:[.,][0-9]{1,3})?\s*(?:جزء|اجزاء)\s+)?(?:المساح[ةه]\s*(?:الكلي[ةه])?|superficie(?:\s+totale)?)[\s:#：-]*([0-9]{1,10}(?:[.,][0-9]{1,3})?)\s*(?:م\s*م|م(?:تر)?(?:\s*مربع|²|2)?|m²|m2)?(?=\s*(?:$|التجزئ[ةه]\s*[:：-]))/iu,
+ pattern:/^(?:(?:التجزئ[ةه])[\s:#：-]*[0-9]{1,12}(?:[.,][0-9]{1,3})?\s*(?:جزء|اجزاء)\s+)?(?:(?:ال)?مساح[ةه](?:\s+(?:الكلي[ةه]|الجملي[ةه]|العقار))?|superficie(?:\s+totale)?)[\s:#：-]*([0-9]{1,10}(?:[.,][0-9]{1,3})?)\s*(?:م\s*م|م(?:تر)?(?:\s*مربع|²|2)?|m²|m2)?(?=\s*(?:$|التجزئ[ةه]\s*[:：-]))/iu,
  shape:'area'
 };
 const denominator:Rule={
  key:'rightsDenominator',
- pattern:/^(?:(?:المساح[ةه]\s*(?:الكلي[ةه])?)[\s:#：-]*[0-9]{1,10}(?:[.,][0-9]{1,3})?\s*(?:م\s*م|م(?:تر)?(?:\s*مربع|²|2)?|m²|m2)?\s+)?(?:مجموع\s+(?:اجزاء|الاجزاء)\s+الملكي[ةه]|المجموع|التجزئ[ةه]|total\s+des\s+parts)[\s:#：-]*([0-9]{1,12}(?:[.,][0-9]{1,3})?)\s*(?:جزء|اجزاء)?(?=\s*(?:$|المساح[ةه]\s*[:：-]))/iu,
+ pattern:/^(?:(?:(?:ال)?مساح[ةه](?:\s+(?:الكلي[ةه]|الجملي[ةه]|العقار))?)[\s:#：-]*[0-9]{1,10}(?:[.,][0-9]{1,3})?\s*(?:م\s*م|م(?:تر)?(?:\s*مربع|²|2)?|m²|m2)?\s+)?(?:مجموع\s+(?:اجزاء|الاجزاء)\s+الملكي[ةه]|المجموع|التجزئ[ةه]|total\s+des\s+parts)[\s:#：-]*([0-9]{1,12}(?:[.,][0-9]{1,3})?)\s*(?:جزء|اجزاء)?(?=\s*(?:$|المساح[ةه]\s*[:：-]))/iu,
  shape:'parts'
 };
 const registeredPlot:Rule={
  key:'registeredPlotNumber',
- pattern:/^(?:(?:مجموع\s+القطع|nombre\s+de\s+parcelles)[\s:#：-]*[0-9]{1,4}\s+)?(?:القطع[ةه]?\s+(?:عدد|رقم)|num[eé]ro\s+de\s+parcelle)[\s:#：-]*([0-9]{1,8})(?=\s*(?:$|مجموع\s+القطع\s*[:：-]))/iu,
+ pattern:/^(?:(?:(?:مجموع|جمل[ةه]|عدد)\s+القطع|nombre\s+de\s+parcelles)[\s:#：-]*[0-9]{1,4}\s+)?(?:القطع[ةه]?\s+(?:عدد|رقم)|num[eé]ro\s+de\s+parcelle)[\s:#：-]*([0-9]{1,8})(?=\s*(?:$|(?:مجموع|جمل[ةه]|عدد)\s+القطع\s*[:：-]))/iu,
  shape:'plot'
 };
 const certificateProperty:readonly Rule[]=[
- {key:'registeredParcelCount',pattern:/^(?:(?:القطع[ةه]?\s+(?:عدد|رقم))[\s:#：-]*[0-9]{1,8}\s+)?(?:مجموع\s+القطع|nombre\s+de\s+parcelles)[\s:#：-]*([0-9]{1,4})(?=\s*(?:$|القطع[ةه]?\s+(?:عدد|رقم)\s*[:：-]))/iu,shape:'plot'},
+ {key:'registeredParcelCount',pattern:/^(?:(?:القطع[ةه]?\s+(?:عدد|رقم))[\s:#：-]*[0-9]{1,8}\s+)?(?:(?:مجموع|جمل[ةه]|عدد)\s+القطع|nombre\s+de\s+parcelles)[\s:#：-]*([0-9]{1,4})(?=\s*(?:$|القطع[ةه]?\s+(?:عدد|رقم)\s*[:：-]))/iu,shape:'plot'},
  {key:'registeredPropertyName',pattern:/^(?:اسم\s+العقار|nom\s+du\s+bien)\s*[:：-]\s*(.{2,80})$/iu,shape:'place'},
  {key:'registeredPropertyContent',pattern:/^(?:محتو[يى]\s+العقار|consistance\s+du\s+bien)\s*[:：-]\s*(.{2,80})$/iu,shape:'place'},
- {key:'registeredLandCategory',pattern:/^(?:صبغ[ةه]\s+العقار|nature\s+du\s+terrain)\s*[:：-]\s*(.{2,80})$/iu,shape:'place'},
+ {key:'registeredLandCategory',pattern:/^(?:(?:صبغ[ةه]|صنف|تصنيف|نوع)\s+العقار|nature\s+du\s+terrain)\s*[:：-]\s*(.{2,80})$/iu,shape:'place'},
  {key:'creationNature',pattern:/^(?:طبيع[ةه]\s+الاحداث|nature\s+de\s+creation)\s*[:：-]\s*(.{2,80})$/iu,shape:'place'}
 ];
 const soldPlot:Rule={
@@ -305,8 +305,20 @@ export function extractPrivateLandDocumentFacts(
    };
    const t=digits(normalize(l.text));
    if(t.length>170)continue; // Long contracts need explicit ROI labels.
+   // A damaged first label must not suppress a separate, explicit second
+   // label in a short printed CPF row. Require a numeric first cell with a
+   // delimiter; never extract a value for its unrecognized label.
+   const certificate=classification.kind==='OWNERSHIP_CERTIFICATE'||
+     classification.kind==='SHARED_OWNERSHIP_CERTIFICATE';
+   const tail=certificate?[
+     /^(?:[\p{L}\p{M} ]{1,40})\s*[:：-]\s*[0-9]{1,10}(?:[.,][0-9]{1,3})?\s*(?:م\s*م|م(?:تر)?\s*مربع|م²|m²|m2)\s+(التجزئ[ةه]\s*[:：-]\s*[0-9]{1,12}(?:[.,][0-9]{1,3})?\s*(?:جزء|اجزاء)?)$/iu,
+     /^(?:[\p{L}\p{M} ]{1,40})\s*[:：-]\s*[0-9]{1,4}\s+((?:ال)?قطع[ةه]?\s+(?:عدد|رقم)\s*[:：-]\s*[0-9]{1,8})$/iu
+   ].map(p=>p.exec(t)?.[1]).find(Boolean):undefined;
    for(const rule of rules){
-     const match=rule.pattern.exec(t);
+     const direct=rule.pattern.exec(t);
+     const tailAllowed=rule.key==='rightsDenominator'||rule.key==='registeredPlotNumber';
+     const fallback=!direct&&tail&&tailAllowed?rule.pattern.exec(tail):null;
+     const match=direct||fallback;
      if(!match?.[1])continue;
      // Match canonicalized labels, but keep the actual personal name as
      // written. Normalizing hamzas/alef-maqsura in source names is a data
@@ -316,7 +328,7 @@ export function extractPrivateLandDocumentFacts(
      if(rule.shape==='actor'&&!originalActor)continue;
      const parsed=parseValue(rule.shape==='actor'?originalActor!:match[1],rule.shape);
      if(parsed.value===null&&!parsed.masked)continue;
-     const low=classification.status==='LOW_CONFIDENCE'||
+     const low=Boolean(fallback)||classification.status==='LOW_CONFIDENCE'||
        (l.confidence!==null&&l.confidence<0.90)||parsed.uncertain;
      const status:LandFactStatus=parsed.masked?'MASKED':low?'LOW_CONFIDENCE':'CANDIDATE';
      collections.get(rule.key)!.push({value:parsed.value,status,evidence:source});

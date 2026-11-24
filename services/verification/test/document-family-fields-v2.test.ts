@@ -327,3 +327,35 @@ test('historical locality stays distinct from imada, even when the owner address
  assert.equal(field(missing,'registeredPlotNumber')?.status,'ABSENT');
  assert.equal(field(missing,'propertyGovernorate')?.status,'ABSENT');
 });
+
+test('CPF aliases read explicit alternate printed labels at low OCR confidence',()=>{
+ const r=reading(['شهادة ملكية','مساحة العقار : 41000 م م التجزئة : 42000 جزء',
+   'جملة القطع : 1 القطع عدد : 702','صنف العقار : فلاحية',
+   'الرسم الأم: 999904'],0.5);
+ for(const [key,value] of Object.entries({registeredAreaM2:'41000',rightsDenominator:'42000',
+   registeredParcelCount:'1',registeredPlotNumber:'702',registeredLandCategory:'فلاحية',
+   parentRegisterReference:'999904'})){
+   assert.equal(field(r,key)?.value,value,key);
+   assert.equal(field(r,key)?.status,'LOW_CONFIDENCE',key);
+ }
+});
+test('CPF damaged first label never hides a separately labelled second cell or licenses guessing',()=>{
+ const r=reading(['شهادة ملكية','حقل تالف : 41000 م م التجزئة : 42000 جزء',
+    'وسم تالف : 1 القطع عدد : 702','وسم العقار : فلاحية'],0.5);
+ assert.equal(field(r,'rightsDenominator')?.value,'42000');
+ assert.equal(field(r,'registeredPlotNumber')?.value,'702');
+ assert.equal(field(r,'registeredAreaM2')?.status,'ABSENT');
+ assert.equal(field(r,'registeredParcelCount')?.status,'ABSENT');
+ assert.equal(field(r,'registeredLandCategory')?.status,'ABSENT');
+ const unrelated=reading(['عقد بيع','وسم تالف : 1 القطع عدد : 702']);
+ assert.equal(field(unrelated,'registeredPlotNumber'),undefined);
+});
+test('CPF fallback retains original line evidence and conflicts rather than selecting a value',()=>{
+ const r=reading(['شهادة ملكية','وسم تالف : 1 القطع عدد : 702','القطعة عدد: 703'],0.5);
+ const fieldResult=field(r,'registeredPlotNumber');
+ assert.equal(fieldResult?.status,'CONFLICT');
+ assert.equal(fieldResult?.value,null);
+ assert.equal(fieldResult?.evidence[0]?.lineIndex,1);
+ assert.equal(r.ownershipVerified,false);
+ assert.equal(r.mayPublish,false);
+});
