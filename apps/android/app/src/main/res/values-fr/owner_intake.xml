@@ -63,4 +63,17 @@
     <string name="intake_use_area">Utiliser la surface pour l’annonce</string>
     <string name="intake_add_plan_first">Ajouter le plan aux documents</string>
     <string name="intake_review_boundary">Revoir le tracé</string>
+    <string name="intake_language_code">fr</string>
+    <string name="intake_admin_title">Localisation administrative</string>
+    <string name="intake_governorate">Gouvernorat</string>
+    <string name="intake_delegation">Délégation</string>
+    <string name="intake_imada">Imada</string>
+    <string name="intake_imada_unavailable">Indisponible dans le référentiel local</string>
+    <string name="intake_admin_source">Référence Atlas locale (OSM) : contexte administratif, pas preuve foncière.</string>
+    <string name="intake_admin_use_region">Utiliser la région dans l’annonce</string>
+    <string name="intake_admin_choose_location">Choisissez une position ou tracez les limites.</string>
+    <string name="intake_admin_load_failed">Impossible de charger le référentiel administratif.</string>
+    <string name="intake_admin_unresolved">Zone non déterminée ; vérifier la position.</string>
+    <string name="intake_doc_facts">Données extraites des documents</string>
+    <string name="intake_doc_facts_notice">Valeurs à examiner, sans preuve de propriété ni de localisation des limites.</string>
 </resources>

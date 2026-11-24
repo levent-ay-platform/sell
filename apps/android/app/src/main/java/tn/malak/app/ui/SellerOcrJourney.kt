@@ -48,6 +48,11 @@ import tn.malak.app.BuildConfig
 import tn.malak.app.R
 import tn.malak.app.ui.parcel.OwnerParcelEditor
 import tn.malak.app.ui.explore.DiscoveryPoint
+import tn.malak.app.ui.explore.AtlasAdminIndex
+import tn.malak.app.ui.explore.loadAtlasAdminIndex
+import tn.malak.app.ui.explore.AdminContext
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import tn.malak.app.ui.parcel.OwnerParcelEditorSource
 import tn.malak.app.ui.parcel.OwnerPlanDraft
 import tn.malak.app.ui.parcel.OwnerMapBoundaryEditor
@@ -739,6 +744,31 @@ internal fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmiss
         return
     }
 
+    // The reference is bundled; no private document, point or source URL is sent
+    // to an external service to resolve administrative context.
+    val locationPoint=SmartListingAssist.coordinates(listingLatitude,listingLongitude)?.let{DiscoveryPoint(it.first,it.second)}
+    val adminSamples=remember(locationPoint,mapBoundary){(listOfNotNull(locationPoint)+mapBoundary).distinct()}
+    var adminIndex by remember{mutableStateOf<AtlasAdminIndex?>(null)}
+    var adminLoadFailed by remember{mutableStateOf(false)}
+    LaunchedEffect(adminSamples.isNotEmpty()){
+        if(adminSamples.isEmpty()||adminIndex!=null)return@LaunchedEffect
+        try{adminIndex=withContext(Dispatchers.IO){loadAtlasAdminIndex(context.applicationContext)}}
+        catch(cancel:CancellationException){throw cancel}
+        catch(_:Exception){adminLoadFailed=true}
+    }
+    val adminContext by produceState<AdminContext?>(null,adminIndex,adminSamples){
+        value=null
+        val index=adminIndex
+        if(index!=null&&adminSamples.isNotEmpty())value=withContext(Dispatchers.Default){index.resolveSamples(adminSamples)}
+    }
+    val adminArabic=s(R.string.intake_language_code)=="ar"
+    var lastAutoRegion by remember(draftFile){mutableStateOf<String?>(null)}
+    LaunchedEffect(adminContext,adminArabic){
+        val suggestion=adminContext?.region(adminArabic)?:return@LaunchedEffect
+        if(!directVerification&&!readingForListing&&(region.isBlank()||region==lastAutoRegion)){
+            region=suggestion;lastAutoRegion=suggestion
+        }
+    }
     if(chooseMapBoundary){
         OwnerMapBoundaryEditor(SmartListingAssist.coordinates(listingLatitude,listingLongitude)
             ?.let{DiscoveryPoint(it.first,it.second)},mapBoundary,
@@ -1031,6 +1061,16 @@ internal fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmiss
                         }
                         Text(s(R.string.intake_map_private),fontSize=12.sp,color=Brand.Muted)
                     }
+                    OwnerAdminContextPanel(adminContext,adminSamples.isNotEmpty()&&adminIndex==null&&!adminLoadFailed,
+                        adminSamples.isNotEmpty(),adminLoadFailed,adminArabic,
+                        onApply={adminContext?.let{region=it.region(adminArabic);lastAutoRegion=region}})
+                    val extracted=pairReport?.sourceFacts.orEmpty().filter{it.key in setOf(
+                        "registerReference","parentRegisterReference","registeredPlotNumber","soldPlotNumber",
+                        "possessedPlotNumber","registeredAreaM2","soldAreaM2","possessedAreaM2","transferredAreaM2")&&
+                        it.page>0&&it.value.isNotBlank()&&it.status in setOf("CANDIDATE","LOW_CONFIDENCE","CONFLICT")}
+                    OwnerSourceFactsPanel(extracted,
+                        onArea=if(!directVerification&&!readingForListing){{value->area=value;saveMessage=0}}else null,
+                        areaEvidence=pairReport?.let{listingAreaEvidence(it.detectedKind,it.sourceFacts)})
                     JourneySectionHeading(s(if(readingForListing||directVerification)R.string.direct_analysis else R.string.step_property),Icons.Outlined.EditNote)
                     if(supplementCase!=null && (planFile!=null||extraFile!=null)){
                         SectionHeading(s(R.string.intake_supplements_heading),s(R.string.intake_supplement_owner_hint))
@@ -1597,6 +1637,11 @@ internal fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmiss
                             Text(s(R.string.smart_preview_disclosure),fontSize=12.sp,color=Brand.Muted)
                         }
                     }
+                    adminContext?.let{admin->JourneyPanel{
+                        JourneyStatusLine(s(R.string.intake_governorate),admin.governorate.label(adminArabic),true)
+                        JourneyStatusLine(s(R.string.intake_delegation),admin.delegation?.label(adminArabic)?:s(R.string.intake_admin_unresolved),admin.delegation!=null)
+                        Text(s(R.string.intake_admin_source),fontSize=12.sp,color=Brand.Muted)
+                    }}
                     measureOwnerMap(mapBoundary)?.let{measurement->
                         JourneyPanel{
                             Text(s(R.string.intake_map_boundary),fontWeight=FontWeight.SemiBold)

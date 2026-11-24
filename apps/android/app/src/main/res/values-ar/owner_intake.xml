@@ -63,4 +63,17 @@
     <string name="intake_use_area">استخدام المساحة في الإعلان</string>
     <string name="intake_add_plan_first">إضافة المخطط من الوثائق</string>
     <string name="intake_review_boundary">مراجعة الرسم</string>
+    <string name="intake_language_code">ar</string>
+    <string name="intake_admin_title">التحديد الإداري الذكي</string>
+    <string name="intake_governorate">الولاية</string>
+    <string name="intake_delegation">المعتمدية</string>
+    <string name="intake_imada">العمادة</string>
+    <string name="intake_imada_unavailable">غير متاحة في المرجع المحلي</string>
+    <string name="intake_admin_source">مرجع أطلس الإداري المحلي (OSM)؛ سياق الموقع وليس إثباتاً عقارياً.</string>
+    <string name="intake_admin_use_region">استخدام المنطقة في الإعلان</string>
+    <string name="intake_admin_choose_location">حدد موقع العقار أو ارسم حدوده لتظهر المنطقة.</string>
+    <string name="intake_admin_load_failed">تعذر تحميل المرجع الإداري.</string>
+    <string name="intake_admin_unresolved">تحديد غير محسوم؛ راجع الموقع.</string>
+    <string name="intake_doc_facts">بيانات مستخرجة من الوثائق</string>
+    <string name="intake_doc_facts_notice">قيم من الوثائق للمراجعة؛ لا تثبت الملكية أو موقع الحدود.</string>
 </resources>

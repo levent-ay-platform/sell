@@ -63,4 +63,17 @@
     <string name="intake_use_area">Use area in listing</string>
     <string name="intake_add_plan_first">Add plan in documents</string>
     <string name="intake_review_boundary">Review drawing</string>
+    <string name="intake_language_code">en</string>
+    <string name="intake_admin_title">Administrative context</string>
+    <string name="intake_governorate">Governorate</string>
+    <string name="intake_delegation">Delegation</string>
+    <string name="intake_imada">Imada</string>
+    <string name="intake_imada_unavailable">Unavailable in local reference</string>
+    <string name="intake_admin_source">Local Atlas reference (OSM): administrative context, not cadastral evidence.</string>
+    <string name="intake_admin_use_region">Use region in listing</string>
+    <string name="intake_admin_choose_location">Choose a location or draw the boundary.</string>
+    <string name="intake_admin_load_failed">Could not load the administrative reference.</string>
+    <string name="intake_admin_unresolved">Location unresolved; review the point.</string>
+    <string name="intake_doc_facts">Extracted document facts</string>
+    <string name="intake_doc_facts_notice">Document values for review; not proof of ownership or boundary location.</string>
 </resources>
