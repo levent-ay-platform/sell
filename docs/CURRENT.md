@@ -1,6 +1,10 @@
 # CURRENT — Amlak / Atlas Tunisia
 _Last audited: 2026-11-24 for Atlas Cadastre Engine (Europe/Istanbul); other product sections retain their own dates. This is the navigation and checkpoint index, not a replacement for the authoritative issue records._
 
+## 2026-11-25 unified execution checkpoint
+
+[Unified Amlak + Atlas execution index](AMLAK_ATLAS_UNIFIED_EXECUTION.md) reconciles the approved Atlas #20 and product #21 contracts, CPF/share, official archive, map/editor, Nozha/market and release gates. Latest exact tested CPF head a6860be8 passed CI and isolated Mac tests; clean real pair ran but area conflict and matched owner unresolved, local compatible adapter NameError rasters. No live activation. Use this cross-workstream checklist for next work; retain prior dated measurements below.
+
 ## 2026-11-24 Atlas Cadastre Engine — current private development checkpoint
 
 **Private title lookup and candidate tree:** new property index consumes catalogue audit and ordered completed schema-2 batches, incorporates new SHA-matched OCR observations into existing source-scoped linkage without cross-observation pairs, retains unknowns, supports exact Arabic/French digit references and scope-separated lookup. Offline development only; real Mac archive, official plan, live backend and physical Android acceptance remain open. See [master #20](https://github.com/levent-ay-platform/sell/issues/20).
