@@ -1,0 +1,24 @@
+name: Atlas archive recovery and deep review
+on:
+  push:
+    branches: [feat/atlas-archive-deep-review-20261124]
+  pull_request:
+    paths:
+      - scripts/atlas_archive_deep_review.py
+      - scripts/atlas_pdf_blob_inventory.py
+      - scripts/tests/test_atlas_archive_deep_review.py
+      - .github/workflows/atlas-deep-review.yml
+permissions:
+  contents: read
+jobs:
+  archive-deep-review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: python -m pip install -r scripts/requirements-atlas-review.txt
+      - run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends poppler-utils tesseract-ocr tesseract-ocr-ara tesseract-ocr-fra fonts-dejavu-core
+      - run: python -m unittest discover -s scripts/tests -p 'test_atlas_*.py' -v

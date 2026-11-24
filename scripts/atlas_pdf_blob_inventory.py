@@ -99,8 +99,9 @@ def _hash_file(path: Path, *, maximum: int) -> dict:
 
 def scan_pdf_blobs(backlog: Path, root: Path, *, max_files: int = 20000,
                    max_total_bytes: int = 12 * 1024**3,
-                   max_single_bytes: int = 300 * 1024**2) -> dict:
-    if min(max_files, max_total_bytes, max_single_bytes) <= 0:
+                   max_single_bytes: int = 300 * 1024**2,
+                   probe_other_extensions: bool = False, max_probe_files: int = 100000) -> dict:
+    if min(max_files, max_total_bytes, max_single_bytes, max_probe_files) <= 0:
         raise ValueError("POSITIVE_SCAN_BOUNDS_REQUIRED")
     if root.is_symlink() or not root.is_dir():
         raise ValueError("APPROVED_REAL_ARCHIVE_ROOT_REQUIRED")
@@ -110,6 +111,8 @@ def scan_pdf_blobs(backlog: Path, root: Path, *, max_files: int = 20000,
     unmatched = []
     errors = []
     examined = 0
+    probed = 0
+    header_discoveries = 0
     hashed = 0
     scanned_bytes = 0
     skipped_symlink_files = 0
@@ -130,7 +133,29 @@ def scan_pdf_blobs(backlog: Path, root: Path, *, max_files: int = 20000,
         directories[:] = sorted(keep)
         for name in sorted(filenames):
             if not name.lower().endswith(".pdf"):
-                continue
+                if not probe_other_extensions:
+                    continue
+                file = Path(dirpath) / name
+                if file.is_symlink():
+                    skipped_symlink_files += 1
+                    continue
+                probed += 1
+                if probed > max_probe_files:
+                    raise ValueError("MAX_HEADER_PROBES_EXCEEDED_NO_REPORT_WRITTEN")
+                try:
+                    fd = os.open(file, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+                                 | getattr(os, "O_NONBLOCK", 0))
+                    try:
+                        is_pdf = stat.S_ISREG(os.fstat(fd).st_mode) and b"%PDF-" in os.read(fd, 1024)
+                    finally:
+                        os.close(fd)
+                    if not is_pdf:
+                        continue
+                    header_discoveries += 1
+                except OSError as err:
+                    errors.append({"relative_path_private": str(file.relative_to(root)),
+                                   "status": "HEADER_PROBE_FAILED", "error_type": type(err).__name__})
+                    continue
             examined += 1
             if examined > max_files:
                 raise ValueError("MAX_PDF_FILES_EXCEEDED_NO_REPORT_WRITTEN")
@@ -187,7 +212,11 @@ def scan_pdf_blobs(backlog: Path, root: Path, *, max_files: int = 20000,
             "snapshot_kind": source["snapshot_kind"],
             "catalogue_live_consistent": source.get("live_consistent"),
             "scan_complete_within_selected_root": complete,
-            "archive_scope": "ONLY_APPROVED_ROOT_PDF_EXTENSION_NON_SYMLINK",
+            "archive_scope": ("APPROVED_ROOT_PDF_EXTENSION_OR_HEADER_NON_SYMLINK" if probe_other_extensions
+                              else "ONLY_APPROVED_ROOT_PDF_EXTENSION_NON_SYMLINK"),
+            "header_probe_enabled": probe_other_extensions,
+            "non_pdf_extension_paths_probed": probed,
+            "pdf_header_discoveries_other_extensions": header_discoveries,
             "counts": {
                 "catalogue_distinct_hashed_pdfs_preserved": len(catalogue),
                 "catalogue_pdf_rows_without_sha_preserved": len(source["unhashed_pdf_resource_ids_private"]),
@@ -222,12 +251,15 @@ def main() -> None:
     p.add_argument("--max-files", type=int, default=20000)
     p.add_argument("--max-total-bytes", type=int, default=12 * 1024**3)
     p.add_argument("--max-single-bytes", type=int, default=300 * 1024**2)
+    p.add_argument("--probe-other-extensions", action="store_true")
+    p.add_argument("--max-probe-files", type=int, default=100000)
     a = p.parse_args()
     report = scan_pdf_blobs(a.backlog, a.archive_root, max_files=a.max_files,
-                            max_total_bytes=a.max_total_bytes, max_single_bytes=a.max_single_bytes)
+                            max_total_bytes=a.max_total_bytes, max_single_bytes=a.max_single_bytes,
+                            probe_other_extensions=a.probe_other_extensions, max_probe_files=a.max_probe_files)
     write_private_json(a.output, report)
     print(json.dumps({"report_written": True, "scope_complete": report["scan_complete_within_selected_root"],
-                      "counts": report["counts"], "official_plans_verified": "UNKNOWN"}))
+                      "counts": report["counts"], "header_discoveries_other_extensions": report["pdf_header_discoveries_other_extensions"], "official_plans_verified": "UNKNOWN"}))
 
 
 if __name__ == "__main__":
