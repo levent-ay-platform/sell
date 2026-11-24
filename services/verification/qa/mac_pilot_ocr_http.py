@@ -102,6 +102,7 @@ class MemoryPilot:
         self.recognizer = recognizer
         self.alphabet = alphabet
         self.engine = ocr_module
+        self.vision_worker_ready = False
         self.tokens = {}
         self.store = None
         self.inference_lock = threading.Lock()
@@ -189,6 +190,7 @@ class MemoryPilot:
             if min(h,w) < 175 or max(h,w) > 6000 or h*w > 25_000_000:
                 raise ValueError("invalid dimensions")
             if not self.inference_lock.acquire(blocking=False):raise RuntimeError("OCR busy")
+            vision_status = 'unavailable'
             try:
                 fields = self.engine.extract_fields(photo,self.recognizer,self.alphabet)
                 if isinstance(fields,dict) and set(fields)==set(NULL_FIELDS) and any(
@@ -204,6 +206,11 @@ class MemoryPilot:
                         pass
                     finally:
                         if alternate_image is not None:alternate_image.fill(0)
+                if hasattr(self.engine, 'normalize_card'):
+                    from cin_mac_identity import read_vision, merge_fields
+                    native,vision_status=read_vision(photo,self.engine.normalize_card)
+                    if isinstance(fields,dict) and set(fields)==set(NULL_FIELDS):
+                        fields=merge_fields(fields,native)
             finally:self.inference_lock.release()
             if not isinstance(fields,dict) or set(fields) != set(NULL_FIELDS):
                 raise ValueError("bad OCR response")
@@ -213,7 +220,8 @@ class MemoryPilot:
                 raise ValueError("inconsistent CIN")
             reply={**fields,"ok":True,"pilotOcr":True,"schemaVersion":1,
                     "engine":"arabic-v5",
-                    "birthDateReader":"v5-with-local-mac-consensus" if os.environ.get('MALAK_VISION_BIN') else "v5",
+                    "birthDateReader":"v5-with-local-mac-consensus" if vision_status=='completed' else "v5",
+                     "visionStatus":vision_status,
                     "identityVerified":False,
                     "ownershipVerified":False,"mayPublish":False}
             if cache_key:
@@ -252,7 +260,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if getattr(self.server,"workflow",None) and self.server.workflow.dispatch(self,"GET"):return
         if self.path == "/healthz":
             self.result(200,{"ok":True,"engine":"arabic-v5",
-                             "modelReady":True,"pilotQa":True})
+                             "modelReady":True,"pilotQa":True,
+                              "visionWorkerReady":getattr(self.server.pilot,'vision_worker_ready',False),
+                              "dualReaderRevision":"vision-consensus-v1"})
         else:
             self.result(404,{"ok":False})
 
@@ -335,6 +345,8 @@ def main():
     recognizer, alphabet = v5.recognizer()
     with Server(("127.0.0.1",int(os.environ.get("MALAK_PORT",PORT))),Handler) as server:
         server.pilot = MemoryPilot(recognizer,alphabet,v5)
+        from cin_mac_identity import probe_vision
+        server.pilot.vision_worker_ready=probe_vision()
         if os.environ.get("MALAK_PILOT_DATA"):
             from pilot_workflow import PilotStore
             from workflow_http import WorkflowRoutes
