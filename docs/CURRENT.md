@@ -3,6 +3,9 @@ _Last audited: 2026-11-24 for Atlas Cadastre Engine (Europe/Istanbul); other pro
 
 ## 2026-11-24 Atlas Cadastre Engine — current private development checkpoint
 
+**Latest Mac and OCR checkpoint:** [Issue #20 real-evidence update](https://github.com/levent-ay-platform/sell/issues/20#issuecomment-7118567825). Metadata-only Mac reads found 2,829 distinct hashed PDF resources but only 635 with indexed nonblank text; no official plan count is certified. The live SQLite remains WAL-format without observed sidecars, so a transactionally consistent live backup is unverified. Private `scripts/atlas_ocr_backlog.py` now ranks index/OCR/review work without changing original sources; [CI #45300842882](https://github.com/levent-ay-platform/sell/actions/runs/45300842882) passed 52 synthetic/offline tests plus compile. No live database writes or production release.
+
+
 **Master:** [ATLAS MASTER #20](https://github.com/levent-ay-platform/sell/issues/20). **Stacked unmerged Draft:** [PR #23](https://github.com/levent-ay-platform/sell/pull/23) on Amlak [PR #22](https://github.com/levent-ay-platform/sell/pull/22).
 
 The non-destructive **developer pipeline is implemented** under `scripts/atlas_*.py`: read-only private PDF inventory and high-recall triage, source-scoped same-page document–title/parcel candidate graph, independent GCP-based georeferencing QA (candidate only), safe reviewed public GeoJSON projection with revocation and HMAC IDs, private `ReviewedAtlasParcel` Amlak staging, and an owner-only SQLite Backup API snapshot tool that fails closed for missing WAL sidecars. [Operator runbook](https://github.com/levent-ay-platform/sell/blob/feat/atlas-cadastre-audit-20261124/docs/ATLAS_CADASTRE_EVIDENCE_AUDIT.md).
