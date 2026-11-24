@@ -5,6 +5,8 @@ on:
   pull_request:
     paths:
       - scripts/atlas_archive_deep_review.py
+      - scripts/atlas_source_registry.py
+      - scripts/tests/test_atlas_source_registry.py
       - scripts/atlas_pdf_blob_inventory.py
       - scripts/tests/test_atlas_archive_deep_review.py
       - .github/workflows/atlas-deep-review.yml
