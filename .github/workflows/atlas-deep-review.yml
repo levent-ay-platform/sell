@@ -15,6 +15,9 @@ on:
       - scripts/atlas_spatial_context.py
       - scripts/atlas_geometry_normalize.py
       - scripts/atlas_federated_review.py
+      - scripts/atlas_reviewer_workbench.py
+      - scripts/atlas_reviewer_workbench.html
+      - scripts/tests/test_atlas_reviewer_workbench.py
       - scripts/tests/test_atlas_federated_review.py
       - scripts/tests/test_atlas_geometry_normalize.py
       - scripts/tests/test_atlas_spatial_context.py
