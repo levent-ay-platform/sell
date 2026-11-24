@@ -1,0 +1,15 @@
+name: Amlak release manager self-test
+on:
+  push:
+    branches: [tools/amlak-release-manager-20261124, fix/amlak-cpf-property-location-20261124]
+permissions:
+  contents: read
+jobs:
+  self-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - run: python3 -m unittest -v test_amlak_release_manager
+        working-directory: scripts

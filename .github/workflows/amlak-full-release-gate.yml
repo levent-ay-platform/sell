@@ -1,7 +1,7 @@
 name: Amlak full offline release gate
 on:
   push:
-    branches: [qa/amlak-integrated-release-20261124]
+    branches: [qa/amlak-integrated-release-20261124, fix/amlak-cpf-property-location-20261124]
   pull_request:
     paths: ['.github/workflows/amlak-full-release-gate.yml']
   workflow_dispatch:

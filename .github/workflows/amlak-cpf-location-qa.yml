@@ -1,5 +1,7 @@
 name: Amlak CPF location and Android QA
 on:
+  push:
+    branches: [fix/amlak-cpf-property-location-20261124]
   pull_request:
     paths:
       - 'services/verification/src/**'

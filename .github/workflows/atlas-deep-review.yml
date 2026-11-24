@@ -1,7 +1,7 @@
 name: Atlas archive recovery and deep review
 on:
   push:
-    branches: [feat/atlas-archive-deep-review-20261124]
+    branches: [feat/atlas-archive-deep-review-20261124, fix/amlak-cpf-property-location-20261124]
   pull_request:
     paths:
       - scripts/atlas_archive_deep_review.py

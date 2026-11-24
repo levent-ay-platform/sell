@@ -1,8 +1,7 @@
 name: Amlak intake OCR regression (synthetic only)
 on:
   push:
-    branches: [feat/amlak-unified-intake-20261124]
-    paths: ['services/verification/ocr/**', 'services/verification/qa/**', '.github/workflows/amlak-intake-ocr.yml']
+    branches: [feat/amlak-unified-intake-20261124, fix/amlak-cpf-property-location-20261124]
   pull_request:
     paths: ['services/verification/ocr/**', 'services/verification/qa/**', '.github/workflows/amlak-intake-ocr.yml']
   workflow_dispatch:
