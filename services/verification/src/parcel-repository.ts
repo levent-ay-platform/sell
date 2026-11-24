@@ -165,10 +165,18 @@ coalesce((SELECT jsonb_agg(row_to_json(g)) FROM (
 ) g),'[]'::jsonb) geometries
 FROM (${scopeSql}) scope`;
 
+export interface AtlasCaseReviewQuery {
+  geometryId:string; registryScope:string; localityKey:string;
+}
+export interface AtlasCaseReviewSummary {
+  candidateCount:number; officialSourceCount:number; withGeometryCount:number; truncated:boolean;
+  ownershipVerified:false; mayPublish:false;
+}
 export interface ParcelRepository {
   listing(listingId:string,match?:PilotParcelMatch):Promise<PublicParcelProjection|null>;
   approvedDocument(listingId:string,documentId:string):Promise<ApprovedRendition|null>;
   ownerCase(caseId:string,actor:string,role?:'owner'|'reviewer'):Promise<{parcels:ParcelCard[];evidence:{id:string;kind:string}[];geometries:OwnerGeometry[]}|null>;
+  reviewAtlasCandidates?(caseId:string,actor:string,query:AtlasCaseReviewQuery):Promise<AtlasCaseReviewSummary|null>;
   saveOwnerGeometry(caseId:string,actor:string,candidate:ParcelCandidate):Promise<string|null>;
   recordDecision(caseId:string,actor:string,resourceId:string,decision:ParcelDecision):Promise<boolean>;
 }
@@ -190,6 +198,47 @@ export function createParcelRepository(pool:SqlPool):ParcelRepository {
       const {rows} = await pool.query<{parcels:ParcelCard[];evidence:{id:string;kind:string}[];geometries:OwnerGeometry[]}>(
         privateCaseRead(scopeSql),[caseId,actor]);
       return rows[0] ?? null;
+    },
+    async reviewAtlasCandidates(caseId,actor,query) {
+      // Only the persisted document-linked geometry's references can be searched.
+      // Scope/locality are explicit reviewer context, never proof of registry identity.
+      const {rows:[row]}=await pool.query<{candidateCount:number;officialSourceCount:number;withGeometryCount:number}>(`
+        WITH allowed AS (
+          SELECT g.title_reference,g.plot_reference
+          FROM sell.verification_cases c
+          JOIN sell.property_revisions r ON r.id=c.property_revision_id
+          JOIN sell.parcel_geometry_versions g ON g.case_id=c.id AND g.property_revision_id=r.id
+          WHERE c.id=$1::uuid AND c.assigned_reviewer_user_id=$2::uuid
+            AND c.status IN ('PENDING','NEEDS_INFO') AND c.expires_at>now()
+            AND g.id=$3::uuid AND g.method='DOCUMENT_ONLY'
+            AND g.title_reference IS NOT NULL AND g.plot_reference IS NOT NULL
+            AND (g.registry_scope IS NULL OR g.registry_scope=$4)
+            AND (g.locality_key IS NULL OR g.locality_key=$5)
+            AND NOT EXISTS (SELECT 1 FROM sell.property_revisions newer
+              WHERE newer.property_id=r.property_id AND newer.revision_number>r.revision_number)
+            AND EXISTS (SELECT 1 FROM sell.evidence_upload_receipts e
+              WHERE e.case_id=c.id AND e.evidence_id=g.source_evidence_id
+                AND e.evidence_kind IN ('CADASTRAL_PLAN','TITLE_EXTRACT','OWNERSHIP_CERTIFICATE','SHARED_OWNERSHIP_CERTIFICATE')
+                AND (SELECT event.decision FROM sell.evidence_consent_events event
+                  WHERE event.case_id=c.id AND event.person_user_id=e.uploader_user_id
+                  ORDER BY event.id DESC LIMIT 1)='GRANTED')
+        )
+        SELECT count(m.id)::int "candidateCount",
+          count(m.id) FILTER (WHERE m.classification='OFFICIAL_CADASTRAL')::int "officialSourceCount",
+          count(m.id) FILTER (WHERE m.geometry_4326 IS NOT NULL)::int "withGeometryCount"
+        FROM allowed LEFT JOIN LATERAL (
+          SELECT a.id,a.classification,a.geometry_4326
+          FROM sell.atlas_parcel_source_records a
+          WHERE (a.registry_scope,a.title_reference,a.plot_reference,a.locality_key)=
+            ($4,allowed.title_reference,allowed.plot_reference,$5)
+          ORDER BY a.id LIMIT 51
+        ) m ON true
+        GROUP BY allowed.title_reference,allowed.plot_reference
+      `,[caseId,actor,query.geometryId,query.registryScope,query.localityKey]);
+      if (!row) return null;
+      return {candidateCount:row.candidateCount,officialSourceCount:row.officialSourceCount,
+        withGeometryCount:row.withGeometryCount,truncated:row.candidateCount===51,
+        ownershipVerified:false,mayPublish:false};
     },
     async saveOwnerGeometry(caseId,actor,candidate) {
       const connection = await pool.connect();

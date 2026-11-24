@@ -190,6 +190,7 @@ function projectListing(projection:NonNullable<Awaited<ReturnType<ParcelReposito
 
 const listingRoute=/^\/api\/v1\/listings\/([^/]+)\/(parcel|documents\/([^/]+))$/;
 const candidateRoute=/^\/api\/v1\/(owner|reviewer)\/cases\/([^/]+)\/parcel-geometries$/;
+const atlasCaseRoute=/^\/api\/v1\/reviewer\/cases\/([^/]+)\/atlas-candidates$/;
 const decisionRoute=/^\/api\/v1\/(owner|reviewer)\/cases\/([^/]+)\/(parcel-geometries|parcel-documents)\/([^/]+)\/(consent|review)$/;
 
 export function createParcelHttpHandler(options:ParcelHttpOptions) {
@@ -253,7 +254,8 @@ export function createParcelHttpHandler(options:ParcelHttpOptions) {
     const listing=listingRoute.exec(path);
     const candidateRouteMatch=candidateRoute.exec(path);
     const decision=decisionRoute.exec(path);
-    if (!listing && !candidateRouteMatch && !decision) return false;
+    const atlasCase=atlasCaseRoute.exec(path);
+    if (!listing && !candidateRouteMatch && !decision && !atlasCase) return false;
     const allow=listing || candidateRouteMatch?.[1]==='reviewer' ? ['GET'] : candidateRouteMatch ? ['GET','POST'] : ['POST'];
     const miss={code:'PARCEL_NOT_AVAILABLE'};
 
@@ -311,7 +313,20 @@ export function createParcelHttpHandler(options:ParcelHttpOptions) {
         json(res,401,{code:'AUTHENTICATION_REQUIRED'});
         return true;
       }
-      if (candidateRouteMatch) {
+      if (atlasCase) {
+        const caseId=optionalId(atlasCase[1])!;
+        const data=await readBody(req);
+        exactKeys(data,['geometryId','registryScope','localityKey']);
+        const geometryId=optionalId(data.geometryId);
+        const registryScope=reference(data.registryScope),localityKey=reference(data.localityKey);
+        if (!geometryId || !registryScope || !localityKey) throw new BadRequest();
+        if (!repository.reviewAtlasCandidates) {json(res,404,miss);return true;}
+        const summary=await repository.reviewAtlasCandidates(caseId,actor.userId,{geometryId,registryScope,localityKey});
+        if (!summary) json(res,404,miss);
+        else json(res,200,{candidateCount:summary.candidateCount,officialSourceCount:summary.officialSourceCount,
+          withGeometryCount:summary.withGeometryCount,truncated:summary.truncated,
+          ownershipVerified:false,mayPublish:false});
+      } else if (candidateRouteMatch) {
         const role=candidateRouteMatch[1]==='reviewer'?'reviewer':'owner';
         const caseId=optionalId(candidateRouteMatch[2])!;
         if (req.method==='GET') {

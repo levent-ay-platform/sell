@@ -32,6 +32,10 @@ on:
       - scripts/tests/test_atlas_source_registry.py
       - scripts/atlas_pdf_blob_inventory.py
       - scripts/tests/test_atlas_archive_deep_review.py
+      - services/verification/src/parcel-http.ts
+      - services/verification/src/parcel-repository.ts
+      - services/verification/test/atlas-case-review.test.ts
+      - services/verification/ci/parcel-http-live.integration.ts
       - .github/workflows/atlas-deep-review.yml
 permissions:
   contents: read
@@ -47,3 +51,13 @@ jobs:
       - run: python -m pip install -r scripts/requirements-atlas-review.txt -r scripts/requirements-atlas-spatial.txt
       - run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends poppler-utils tesseract-ocr tesseract-ocr-ara tesseract-ocr-fra fonts-dejavu-core
       - run: python -m unittest discover -s scripts/tests -p 'test_atlas_*.py' -v
+
+  reviewer-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --experimental-strip-types --test services/verification/test/atlas-case-review.test.ts services/verification/test/parcel-public-http.test.ts

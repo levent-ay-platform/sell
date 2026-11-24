@@ -141,6 +141,32 @@ test('assigned review and consent gate local scans, geometry, redacted files and
     const save=await call(geometryPath,ownerToken,localPlan);
     assert.equal(save.status,201);
     const localId=(await save.json()).id;
+    // Private Atlas match is tied to assigned review, exact persisted refs,
+    // explicit scope/locality and current evidence consent.
+    const draftAtlas={namespace:'QA_ATLAS',sourceId:'qa-private',layerId:'candidates',
+      externalId:'draft-01',version:'v1',sha256:'d'.repeat(64),registryScope:'qa-registry',
+      titleReference:'000991',plotReference:'0042',localityKey:'qa-locality',classification:'CANDIDATE' as const,
+      allowBoundaryRedistribution:false,geometry4326:{type:'Polygon' as const,
+        coordinates:[[[10,36],[10.0002,36],[10.0002,36.0002],[10,36.0002],[10,36]]]}};
+    const draftAtlasId=await importReviewedAtlasParcel(db,draftAtlas);
+    const atlasReviewPath=reviewPath+'/atlas-candidates';
+    const atlasQuery={geometryId:localId,registryScope:'qa-registry',localityKey:'qa-locality'};
+    assert.equal((await call(atlasReviewPath,undefined,atlasQuery)).status,401);
+    assert.equal((await call(atlasReviewPath,ownerToken,atlasQuery)).status,404);
+    assert.equal((await call(atlasReviewPath,outsiderToken,atlasQuery)).status,404);
+    assert.equal((await call(atlasReviewPath,reviewerToken,{...atlasQuery,titleReference:'other'})).status,400);
+    const privateMatch=await call(atlasReviewPath,reviewerToken,atlasQuery);
+    assert.equal(privateMatch.status,200);
+    assert.equal(privateMatch.headers.get('cache-control'),'no-store');
+    const privateText=await privateMatch.text();
+    assert.deepEqual(JSON.parse(privateText),{candidateCount:1,officialSourceCount:0,withGeometryCount:1,
+      truncated:false,ownershipVerified:false,mayPublish:false});
+    assert.doesNotMatch(privateText,new RegExp([draftAtlasId,'000991','0042','qa-private','geometry4326','d'.repeat(64)].join('|')));
+    assert.equal((await (await call(atlasReviewPath,reviewerToken,{...atlasQuery,localityKey:'other'})).json()).candidateCount,0);
+    assert.equal((await call(atlasReviewPath,reviewerToken,{...atlasQuery,geometryId:fixture.plan_id})).status,404);
+    await db.query("INSERT INTO sell.evidence_consent_events(case_id,person_user_id,decision,policy_version) VALUES($1,$2,'REVOKED','synthetic-1')",[fixture.case_id,owner]);
+    assert.equal((await call(atlasReviewPath,reviewerToken,atlasQuery)).status,404);
+    await db.query("INSERT INTO sell.evidence_consent_events(case_id,person_user_id,decision,policy_version) VALUES($1,$2,'GRANTED','synthetic-1')",[fixture.case_id,owner]);
     const ownerDetails=await (await call(geometryPath,ownerToken)).json();
     assert.equal(ownerDetails.geometries[0].geometry,null);
     assert.equal(ownerDetails.geometries[0].localOutline.type,'Polygon');
