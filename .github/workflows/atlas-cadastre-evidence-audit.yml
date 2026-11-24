@@ -1,4 +1,4 @@
-name: Atlas cadastre evidence audit (candidate-only)
+name: Atlas cadastre private evidence and publication gates
 
 on:
   push:
@@ -6,19 +6,27 @@ on:
       - feat/atlas-cadastre-audit-20261124
     paths:
       - scripts/atlas_cadastre_evidence_audit.py
+      - scripts/atlas_geometry_evidence.py
+      - scripts/atlas_public_projection.py
       - scripts/tests/test_atlas_cadastre_evidence_audit.py
+      - scripts/tests/test_atlas_geometry_evidence.py
+      - scripts/tests/test_atlas_public_projection.py
       - .github/workflows/atlas-cadastre-evidence-audit.yml
   pull_request:
     paths:
       - scripts/atlas_cadastre_evidence_audit.py
+      - scripts/atlas_geometry_evidence.py
+      - scripts/atlas_public_projection.py
       - scripts/tests/test_atlas_cadastre_evidence_audit.py
+      - scripts/tests/test_atlas_geometry_evidence.py
+      - scripts/tests/test_atlas_public_projection.py
       - .github/workflows/atlas-cadastre-evidence-audit.yml
 
 permissions:
   contents: read
 
 jobs:
-  candidate-only-contract:
+  atlas-evidence-contract:
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
@@ -26,7 +34,10 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - name: Unit tests — source preservation / no official promotion / private reporting
-        run: python -m unittest discover -s scripts/tests -p 'test_atlas_cadastre_evidence_audit.py' -v
-      - name: Compile audit module
-        run: python -m py_compile scripts/atlas_cadastre_evidence_audit.py
+      - name: Evidence inventory / georeferencing / public release gates
+        run: |
+          python -m unittest discover -s scripts/tests -p 'test_atlas_cadastre_evidence_audit.py' -v
+          python -m unittest discover -s scripts/tests -p 'test_atlas_geometry_evidence.py' -v
+          python -m unittest discover -s scripts/tests -p 'test_atlas_public_projection.py' -v
+      - name: Compile Atlas pipeline
+        run: python -m py_compile scripts/atlas_cadastre_evidence_audit.py scripts/atlas_geometry_evidence.py scripts/atlas_public_projection.py
