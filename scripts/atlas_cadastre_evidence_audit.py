@@ -23,13 +23,13 @@ CADASTRAL_WORDS = re.compile(
     re.IGNORECASE,
 )
 TITLE_REF = re.compile(
-    r"(?:\btitre\s+foncier\b|\bT\.?\s*F\.?\b|الرسم\s+العقاري)"
-    r"\s*(?:n[°ºo.]?\s*|num(?:é|e)ro\s*|رقم\s*)?[:#\s-]*([0-9٠-٩۰-۹]{3,12})",
+    r"(?:\btitre\s+foncier\b|\bT\.?\s*F\.?(?=\s|[:#\d٠-٩۰-۹]|$)|الرسم\s+العقاري)"
+    r"\s*(?:n[°ºo.]?\s*|num(?:é|e)ro\s*|(?:رقم|عدد)\s*)?[:#\s-]*([0-9٠-٩۰-۹]{3,12})",
     re.IGNORECASE,
 )
 PARCEL_REF = re.compile(
     r"(?:\bparcelle\b|\blot\b|المقسم|القطعة)"
-    r"\s*(?:n[°ºo.]?\s*|num(?:é|e)ro\s*|رقم\s*)?[:#\s-]*([0-9٠-٩۰-۹]{1,12})",
+    r"\s*(?:n[°ºo.]?\s*|num(?:é|e)ro\s*|(?:رقم|عدد)\s*)?[:#\s-]*([0-9٠-٩۰-۹]{1,12})",
     re.IGNORECASE,
 )
 # High-recall triage hints, NOT proof of official cadastre, ownership, or map coordinates.
