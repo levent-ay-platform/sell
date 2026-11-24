@@ -62,7 +62,9 @@ def listing_fields(data):
 
 class PilotStore:
     def __init__(self,root):
+        self.open_pilot = os.environ.get('MALAK_OPEN_DEVICE_PILOT')=='1'
         enrollment = os.environ.get('MALAK_PILOT_DEVICE_ENROLLMENT')
+        if self.open_pilot and enrollment:raise ValueError('Open Pilot cannot use enrollment')
         self.enrolled_devices = None
         if enrollment:
             devices = json.loads(Path(enrollment).read_text())
@@ -74,6 +76,12 @@ class PilotStore:
             self.enrolled_devices = devices
         self.root=Path(root);self.root.mkdir(mode=0o700,parents=True,exist_ok=True)
         os.chmod(self.root,0o700)
+        self.path=self.root/'pilot.sqlite3'
+        # Never repurpose a legacy database as an open Pilot or vice versa.
+        if self.path.exists():
+            with self.db() as db:
+                scoped=bool(db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='open_pilot_accounts'").fetchone())
+                if scoped!=self.open_pilot:raise ValueError('Pilot storage mode mismatch; use a separate data root')
         keyfile=self.root/'evidence.key'
         try:
             fd=os.open(keyfile,os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o600)
@@ -82,6 +90,9 @@ class PilotStore:
         self.cipher=AESGCM(keyfile.read_bytes())
         self.path=self.root/'pilot.sqlite3'
         with self.db() as db:
+            if self.open_pilot:
+                db.executescript('''CREATE TABLE IF NOT EXISTS accounts(id TEXT PRIMARY KEY,phone TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS open_pilot_accounts(phone TEXT NOT NULL,device_digest TEXT NOT NULL,account_id TEXT NOT NULL UNIQUE REFERENCES accounts(id),PRIMARY KEY(phone,device_digest));''')
             db.executescript('''
 CREATE TABLE IF NOT EXISTS accounts(id TEXT PRIMARY KEY,phone TEXT UNIQUE NOT NULL);
 CREATE TABLE IF NOT EXISTS sessions(digest TEXT PRIMARY KEY,account_id TEXT NOT NULL,expires INTEGER NOT NULL);
@@ -130,8 +141,17 @@ CREATE TABLE IF NOT EXISTS pilot_parcel_links(
         if not self._device_allowed(phone,device_digest):raise WorkflowError(401,'LOGIN_DENIED')
         token=secrets.token_urlsafe(32)
         with self.db() as db:
-            db.execute('INSERT OR IGNORE INTO accounts VALUES(?,?)',(ident(),phone))
-            user=db.execute('SELECT id FROM accounts WHERE phone=?',(phone,)).fetchone()['id']
+            if self.open_pilot:
+                db.execute('BEGIN IMMEDIATE')
+                scoped=db.execute('SELECT account_id FROM open_pilot_accounts WHERE phone=? AND device_digest=?',(phone,device_digest)).fetchone()
+                if scoped:user=scoped['account_id']
+                else:
+                    user=ident()
+                    db.execute('INSERT INTO accounts VALUES(?,?)',(user,phone))
+                    db.execute('INSERT INTO open_pilot_accounts VALUES(?,?,?)',(phone,device_digest,user))
+            else:
+                db.execute('INSERT OR IGNORE INTO accounts VALUES(?,?)',(ident(),phone))
+                user=db.execute('SELECT id FROM accounts WHERE phone=?',(phone,)).fetchone()['id']
             db.execute('DELETE FROM sessions WHERE expires<=?',(now(),))
             db.execute('INSERT INTO sessions(digest,account_id,expires,device_digest) VALUES(?,?,?,?)',
                        (digest(token),user,now()+43200,device_digest))
@@ -144,7 +164,12 @@ CREATE TABLE IF NOT EXISTS pilot_parcel_links(
         if not isinstance(token,str) or not re.fullmatch(r'[A-Za-z0-9_-]{43}',token):return None
         with self.db() as db:
             row=db.execute('SELECT a.*,s.device_digest FROM accounts a JOIN sessions s ON s.account_id=a.id WHERE s.digest=? AND s.expires>?',(digest(token),now())).fetchone()
-            return {'id':row['id'],'phone':row['phone']} if row and self._device_allowed(row['phone'],row['device_digest']) else None
+            if not row:return None
+            if self.open_pilot and not db.execute('SELECT 1 FROM open_pilot_accounts WHERE account_id=? AND phone=? AND device_digest=?',(row['id'],row['phone'],row['device_digest'])).fetchone():return None
+            return {'id':row['id'],'phone':row['phone']} if self._device_allowed(row['phone'],row['device_digest']) else None
+    @property
+    def private_review_scope_enabled(self):
+        return self.open_pilot or self.enrolled_devices is not None
     def cached_analysis(self,user,intent,fingerprint,revision):
         with self.db() as db:
             row=db.execute('SELECT c.*,r.report,r.created FROM analysis_cache c JOIN reviews r ON r.id=c.review_id AND r.account_id=c.account_id WHERE c.account_id=? AND c.intent=? AND c.revision=?',(user,intent,revision)).fetchone()
@@ -546,6 +571,7 @@ CREATE TABLE IF NOT EXISTS pilot_parcel_links(
             sealed=row['sealed']
             return row['mime'],self.cipher.decrypt(sealed[:12],sealed[12:],(row['review_id']+':'+eid).encode())
     def decide(self,admin,sid,status,fields,note,version):
+        if self.open_pilot and status=='PUBLISHED':raise WorkflowError(403,'OPEN_PILOT_NO_PUBLICATION')
         if status not in ('PUBLISHED','REJECTED','CHANGES_REQUESTED','PAUSED') or not isinstance(note,str) or len(note)>1000 or not isinstance(version,int):raise WorkflowError()
         values=listing_fields(fields)
         with self.db() as db:
@@ -565,10 +591,13 @@ CREATE TABLE IF NOT EXISTS pilot_parcel_links(
             db.execute('INSERT INTO audit VALUES(?,?,?,?,?)',(ident(),admin,sid,status,now()))
             return self._submission(db,db.execute('SELECT * FROM submissions WHERE id=?',(sid,)).fetchone(),True)
     def _attachment_scope(self,db,user,review,write=False):
-        # Fixed-code open Pilot login is not sufficient for private supplements.
-        if self.enrolled_devices is None:raise WorkflowError(404,'NOT_FOUND')
-        account=db.execute('SELECT phone FROM accounts WHERE id=?',(user,)).fetchone()
-        if not account or account['phone'] not in self.enrolled_devices:raise WorkflowError(404,'NOT_FOUND')
+        # Open Pilot uses isolated storage and a distinct account per phone/device.
+        if self.open_pilot:
+            if not db.execute('SELECT 1 FROM open_pilot_accounts WHERE account_id=?',(user,)).fetchone():raise WorkflowError(404,'NOT_FOUND')
+        else:
+            if self.enrolled_devices is None:raise WorkflowError(404,'NOT_FOUND')
+            account=db.execute('SELECT phone FROM accounts WHERE id=?',(user,)).fetchone()
+            if not account or account['phone'] not in self.enrolled_devices:raise WorkflowError(404,'NOT_FOUND')
         if not db.execute('SELECT 1 FROM reviews WHERE id=? AND account_id=?',(review,user)).fetchone():raise WorkflowError(404,'NOT_FOUND')
         if write and (db.execute("SELECT 1 FROM submissions WHERE review_id=? AND status<>'DRAFT'",(review,)).fetchone()
                 or db.execute('SELECT 1 FROM direct_listing_review_history WHERE review_id=?',(review,)).fetchone()):

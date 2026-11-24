@@ -18,7 +18,7 @@ class WorkflowRoutes:
     def __init__(self,store,pair):
         self.store=store;self.pair=pair;self.attempts={}
         self.direct_publishing=os.environ.get('MALAK_DIRECT_PUBLISHING')=='1'
-        if self.direct_publishing and store.enrolled_devices is None:
+        if self.direct_publishing and (store.open_pilot or store.enrolled_devices is None):
             raise ValueError('Connected Pilot publishing requires device enrollment')
         self.atlas_reader_token=os.environ.get('MALAK_ATLAS_READER_TOKEN','')
         self.parcel_bridge=PilotParcelBridge.configured() if self.direct_publishing else None
@@ -135,13 +135,13 @@ class WorkflowRoutes:
             if method=='GET' and path=='/api/public/capabilities':
                 h.result(200,{'ok':True,'directPublishing':self.direct_publishing,
                               'draftDocumentReview':self.direct_publishing,
-                              'privateReviewAttachments':os.environ.get('MALAK_PRIVATE_REVIEW_ATTACHMENTS')=='1' and self.store.enrolled_devices is not None});return True
+                              'privateReviewAttachments':os.environ.get('MALAK_PRIVATE_REVIEW_ATTACHMENTS')=='1' and self.store.private_review_scope_enabled});return True
             match=re.fullmatch('/api/public/photos/('+ID+')',path)
             if match and method=='GET':
                 self.binary(h,200,self.store.public_photo(match[1]),'image/jpeg');return True
             boundary=re.fullmatch('/api/pilot/reviews/('+ID+')/boundary',path)
             if boundary:
-                if os.environ.get('MALAK_PRIVATE_REVIEW_ATTACHMENTS')!='1' or self.store.enrolled_devices is None:raise WorkflowError(404,'NOT_FOUND')
+                if os.environ.get('MALAK_PRIVATE_REVIEW_ATTACHMENTS')!='1' or not self.store.private_review_scope_enabled:raise WorkflowError(404,'NOT_FOUND')
                 user=self.actor(h)
                 if method=='GET':
                     h.result(200,{'ok':True,'boundary':self.store.review_boundary(user,boundary[1])});return True
@@ -157,7 +157,7 @@ class WorkflowRoutes:
                 raise WorkflowError(405,'METHOD_NOT_ALLOWED')
             attachment=re.fullmatch('/api/pilot/reviews/('+ID+')/attachments(?:/('+ID+'))?',path)
             if attachment:
-                if os.environ.get('MALAK_PRIVATE_REVIEW_ATTACHMENTS')!='1' or self.store.enrolled_devices is None:raise WorkflowError(404,'NOT_FOUND')
+                if os.environ.get('MALAK_PRIVATE_REVIEW_ATTACHMENTS')!='1' or not self.store.private_review_scope_enabled:raise WorkflowError(404,'NOT_FOUND')
                 user=self.actor(h);review,eid=attachment.groups()
                 if method=='GET' and eid is None:
                     h.result(200,{'ok':True,'attachments':self.store.review_attachments(user,review)});return True
