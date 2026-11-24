@@ -20,7 +20,9 @@ export type LandFactKey=
   'possessionRequester'|'receiptPayer'|
   'buyerCin'|'sellerCin'|'transferorCin'|'transfereeCin'|
   'possessionRequesterCin'|'receiptPayerCin'|'serviceApplicantCin'|
-  'propertyGovernorate'|'propertyDelegation'|'propertyImada';
+  'propertyGovernorate'|'propertyDelegation'|'propertyImada'|
+  'registeredLocationText'|'historicalLocality'|'registeredParcelCount'|
+  'registeredPropertyName'|'registeredPropertyContent'|'registeredLandCategory'|'creationNature';
 export type LandFactStatus='CANDIDATE'|'LOW_CONFIDENCE'|'CONFLICT'|'MASKED'|'ABSENT';
 export interface PrivateLandFactEvidence {
   readonly page:number;
@@ -58,24 +60,31 @@ const commonTitle:Rule={
 };
 const parent:Rule={
  key:'parentRegisterReference',
- pattern:/^(?:الرسم\s+العقاري\s+(?:ال)?ام|الرسم\s+(?:العقاري\s+)?الاصلي|parent\s+titre\s+foncier)[\s:#：-]*([0-9]{3,12})\s*$/iu,
+ pattern:/^(?:الرسم\s+العقاري\s+(?:ال)?ام|الرسم\s+(?:العقاري\s+)?الاصلي|الرسم\s*\(وم\)\s*الاصلي\s*(?:\(ة\))?|parent\s+titre\s+foncier)[\s:#：-]*([0-9]{3,12})(?:\s*[\p{L}][\p{L}\p{Zs}]{0,35})?\s*$/iu,
  shape:'title'
 };
 const totalArea:Rule={
  key:'registeredAreaM2',
- pattern:/^(?:المساح[ةه]\s*(?:الكلي[ةه])?|superficie(?:\s+totale)?)[\s:#：-]*([0-9]{1,10}(?:[.,][0-9]{1,3})?)\s*(?:م(?:تر)?(?:\s*مربع|²|2)?|m²|m2)?\s*$/iu,
+ pattern:/^(?:(?:التجزئ[ةه])[\s:#：-]*[0-9]{1,12}(?:[.,][0-9]{1,3})?\s*(?:جزء|اجزاء)\s+)?(?:المساح[ةه]\s*(?:الكلي[ةه])?|superficie(?:\s+totale)?)[\s:#：-]*([0-9]{1,10}(?:[.,][0-9]{1,3})?)\s*(?:م\s*م|م(?:تر)?(?:\s*مربع|²|2)?|m²|m2)?(?=\s*(?:$|التجزئ[ةه]\s*[:：-]))/iu,
  shape:'area'
 };
 const denominator:Rule={
  key:'rightsDenominator',
- pattern:/^(?:مجموع\s+(?:اجزاء|الاجزاء)\s+الملكي[ةه]|المجموع|التجزئ[ةه]|total\s+des\s+parts)[\s:#：-]*([0-9]{1,12}(?:[.,][0-9]{1,3})?)\s*(?:جزء|اجزاء)?\s*$/iu,
+ pattern:/^(?:(?:المساح[ةه]\s*(?:الكلي[ةه])?)[\s:#：-]*[0-9]{1,10}(?:[.,][0-9]{1,3})?\s*(?:م\s*م|م(?:تر)?(?:\s*مربع|²|2)?|m²|m2)?\s+)?(?:مجموع\s+(?:اجزاء|الاجزاء)\s+الملكي[ةه]|المجموع|التجزئ[ةه]|total\s+des\s+parts)[\s:#：-]*([0-9]{1,12}(?:[.,][0-9]{1,3})?)\s*(?:جزء|اجزاء)?(?=\s*(?:$|المساح[ةه]\s*[:：-]))/iu,
  shape:'parts'
 };
 const registeredPlot:Rule={
  key:'registeredPlotNumber',
- pattern:/^(?:القطع[ةه]\s+(?:عدد|رقم)|num[eé]ro\s+de\s+parcelle)[\s:#：-]*([0-9]{1,8})\s*$/iu,
+ pattern:/^(?:(?:مجموع\s+القطع|nombre\s+de\s+parcelles)[\s:#：-]*[0-9]{1,4}\s+)?(?:القطع[ةه]?\s+(?:عدد|رقم)|num[eé]ro\s+de\s+parcelle)[\s:#：-]*([0-9]{1,8})(?=\s*(?:$|مجموع\s+القطع\s*[:：-]))/iu,
  shape:'plot'
 };
+const certificateProperty:readonly Rule[]=[
+ {key:'registeredParcelCount',pattern:/^(?:(?:القطع[ةه]?\s+(?:عدد|رقم))[\s:#：-]*[0-9]{1,8}\s+)?(?:مجموع\s+القطع|nombre\s+de\s+parcelles)[\s:#：-]*([0-9]{1,4})(?=\s*(?:$|القطع[ةه]?\s+(?:عدد|رقم)\s*[:：-]))/iu,shape:'plot'},
+ {key:'registeredPropertyName',pattern:/^(?:اسم\s+العقار|nom\s+du\s+bien)\s*[:：-]\s*(.{2,80})$/iu,shape:'place'},
+ {key:'registeredPropertyContent',pattern:/^(?:محتو[يى]\s+العقار|consistance\s+du\s+bien)\s*[:：-]\s*(.{2,80})$/iu,shape:'place'},
+ {key:'registeredLandCategory',pattern:/^(?:صبغ[ةه]\s+العقار|nature\s+du\s+terrain)\s*[:：-]\s*(.{2,80})$/iu,shape:'place'},
+ {key:'creationNature',pattern:/^(?:طبيع[ةه]\s+الاحداث|nature\s+de\s+creation)\s*[:：-]\s*(.{2,80})$/iu,shape:'place'}
+];
 const soldPlot:Rule={
  key:'soldPlotNumber',
  pattern:/^(?:القطع[ةه]\s+(?:المبيع[ةه]|موضوع\s+البيع)\s+(?:عدد|رقم)|lot\s+vendu\s*(?:n[°o.]|num[eé]ro)?)[\s:#：-]*([0-9]{1,8})\s*$/iu,
@@ -186,13 +195,16 @@ const serviceReceiptAmount:Rule={
 // Only explicitly property-scoped labels. A party's domicile, registry office,
 // birthplace or a bare governorate heading is not the location of the parcel.
 const propertyLocation:readonly Rule[]=[
- {key:'propertyGovernorate',pattern:/^(?:ولاي[ةه]\s+(?:العقار|القطع[ةه]|الارض)|gouvernorat\s+(?:du\s+bien|de\s+la\s+parcelle|du\s+terrain))\s*[:：-]\s*(.{2,80})$/iu,shape:'place'},
- {key:'propertyDelegation',pattern:/^(?:معتمدي[ةه]\s+(?:العقار|القطع[ةه]|الارض)|d[eé]l[eé]gation\s+(?:du\s+bien|de\s+la\s+parcelle|du\s+terrain))\s*[:：-]\s*(.{2,80})$/iu,shape:'place'},
- {key:'propertyImada',pattern:/^(?:عماد[ةه]\s+(?:العقار|القطع[ةه]|الارض)|(?:imada|secteur)\s+(?:du\s+bien|de\s+la\s+parcelle|du\s+terrain))\s*[:：-]\s*(.{2,80})$/iu,shape:'place'}
+ {key:'registeredLocationText',pattern:/^(?:موقع\s+العقار|localisation\s+du\s+bien)\s*[:：-]\s*(.{2,80})$/iu,shape:'place'},
+ {key:'propertyGovernorate',pattern:/^(?:(?:ولاي[ةه]\s+(?:العقار|القطع[ةه]|الارض)|gouvernorat\s+(?:du\s+bien|de\s+la\s+parcelle|du\s+terrain))\s*[:：-]\s*|موقع\s+العقار\s*[:：-]\s*.*?\sولاي[ةه]\s+)(.{2,80})$/iu,shape:'place'},
+ {key:'propertyDelegation',pattern:/^(?:(?:معتمدي[ةه]\s+(?:العقار|القطع[ةه]|الارض)|d[eé]l[eé]gation\s+(?:du\s+bien|de\s+la\s+parcelle|du\s+terrain))\s*[:：-]\s*|موقع\s+العقار\s*[:：-]\s*.*?معتمدي[ةه]\s+)(.{2,80}?)(?:\s+ولاي[ةه]\s+.+)?$/iu,shape:'place'},
+ {key:'propertyImada',pattern:/^(?:عماد[ةه]\s+(?:العقار|القطع[ةه]|الارض)|(?:imada|secteur)\s+(?:du\s+bien|de\s+la\s+parcelle|du\s+terrain))\s*[:：-]\s*(.{2,80})$/iu,shape:'place'},
+ // A historical sheikhate is not necessarily a modern imada. Keep it separate.
+ {key:'historicalLocality',pattern:/^موقع\s+العقار\s*[:：-]\s*مشيخ[ةه]\s+(.{2,80}?)(?=\s+(?:معتمدي[ةه]|ولاي[ةه])\s+|$)/iu,shape:'place'}
 ];
 const RULES:Readonly<Record<LandPaperKind,readonly Rule[]>>={
- OWNERSHIP_CERTIFICATE:[commonTitle,parent,totalArea,registeredPlot,denominator,...propertyLocation],
- SHARED_OWNERSHIP_CERTIFICATE:[commonTitle,parent,totalArea,registeredPlot,denominator,...propertyLocation],
+ OWNERSHIP_CERTIFICATE:[commonTitle,parent,totalArea,registeredPlot,denominator,...certificateProperty,...propertyLocation],
+ SHARED_OWNERSHIP_CERTIFICATE:[commonTitle,parent,totalArea,registeredPlot,denominator,...certificateProperty,...propertyLocation],
  SALE_DEED:[commonTitle,parent,soldPlot,soldArea,seller,buyer,salePrice,sellerCin,buyerCin,...propertyLocation],
  POSSESSION_REPORT:[commonTitle,parent,possessedPlot,possessedArea,possessionRequester,possessionRequesterCin,...propertyLocation],
  TRANSFER_CARD:[commonTitle,parent,transferredArea,transferor,transferee,transferRef,transferorCin,transfereeCin,...propertyLocation],
