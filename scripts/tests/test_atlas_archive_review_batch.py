@@ -20,7 +20,7 @@ class ArchiveBatchTest(unittest.TestCase):
     def setUp(self):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
-        self.base = Path(tmp.name)
+        self.base = Path(tmp.name).resolve()
         self.root = self.base / "archive"
         self.root.mkdir()
         self.other = self.base / "other"
@@ -145,16 +145,16 @@ class ArchiveBatchTest(unittest.TestCase):
                          "Real raster OCR tools required")
     def test_image_only_pdf_real_ocr(self):
         from PIL import Image, ImageDraw, ImageFont
-        font_path = Path("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf")
-        if not font_path.is_file():
-            self.skipTest("Synthetic fixture font required")
+        fonts = [Path("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"),
+                 Path("/System/Library/Fonts/Supplemental/Arial.ttf")]
+        font_path = next((path for path in fonts if path.is_file()), None)
         from scripts.atlas_environment_preflight import readiness
         if not readiness(ocr=True)["ready"]:
             self.skipTest("Arabic and French OCR language data required")
         file = self.root / "priority.pdf"
         image = Image.new("RGB", (1500, 1000), "white")
         draw = ImageDraw.Draw(image)
-        font = ImageFont.truetype(str(font_path), 60)
+        font = ImageFont.truetype(str(font_path), 60) if font_path else ImageFont.load_default(size=60)
         draw.text((90, 90), "Document de test", font=font, fill="black")
         draw.text((90, 200), "Titre foncier 00012345", font=font, fill="black")
         draw.text((90, 310), "Parcelle 0021", font=font, fill="black")
@@ -197,6 +197,15 @@ class ArchiveBatchTest(unittest.TestCase):
             run_batch(self.db, "mainfile_diagnostic", [self.root,sub], self.base/"other-output")
         with self.assertRaisesRegex(ValueError, "OUTPUT_MUST_BE_OUTSIDE"):
             run_batch(self.db, "mainfile_diagnostic", [self.root], sub/"output")
+
+    def test_output_symlink_ancestor_is_still_rejected(self):
+        real = self.base/"real"
+        real.mkdir()
+        alias = self.base/"alias"
+        alias.symlink_to(real, target_is_directory=True)
+        with self.assertRaisesRegex(ValueError, "SYMLINK_OUTPUT_DIRECTORY"):
+            run_batch(self.db, "mainfile_diagnostic", [self.root], alias/"output")
+        self.assertFalse((real/"output").exists())
 
     def test_failed_worker_retains_document(self):
         with patch("scripts.atlas_archive_review_batch._run_child", return_value=(None,"WORKER_TIMEOUT")):

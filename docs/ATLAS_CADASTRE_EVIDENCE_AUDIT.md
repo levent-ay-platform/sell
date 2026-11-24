@@ -242,3 +242,8 @@ Schema-2 batch manifests retain earlier terminal outcomes across continuation (i
     python -m scripts.atlas_property_index lookup --index /private/property-index.json --query /private/query.json --output /private/title-results.json
 
 Query object fields: title_reference (required), parcel_reference and registry_scope (optional). Use repeated --batch-directory in chronological order. For audit-only diagnostics omit batch directories. Scope values must be independently reviewed, not inferred from name. Current implementation is a bounded private JSON index; no live authenticated service, physical-device or production integration is asserted. Manifest hashes link completed runs but do not authenticate each individual result file; keep directories owner-controlled. Search output does not prove an official plan exists or that the archive is complete.
+
+
+## Physical Intel Mac compatibility checkpoint
+
+Owner-provided LEVENT-MAC execution log (2026-11-24) confirms Python 3.11.18, Poppler, Tesseract ara/fra/eng and full environment preflight ready, at previous HEAD 3a7a446e. The 89-test run had 13 errors, one failure and one skip: temporary directory paths traversed standard macOS /var symlinks; SQLite output comparison mixed resolved and unresolved paths; synthetic OCR fixture assumed a Linux font path. Resolve only trusted synthetic fixture roots; retain production output symlink rejection. Compare both resolved backup paths. Use local macOS Arial or Pillow scalable default for OCR fixture if DejaVu unavailable. Added regressions and expanded macOS CI to the full Atlas test discovery suite (native OCR tests may skip when tools are absent). No real archive run yet; repeat actual Mac tests on this new revision before proceeding.

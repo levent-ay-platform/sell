@@ -15,7 +15,7 @@ class OwnerSnapshotTest(unittest.TestCase):
     def setUp(self):
         self.tmp=tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
-        self.folder=Path(self.tmp.name)
+        self.folder=Path(self.tmp.name).resolve()
         self.original=self.folder/"synthetic.sqlite"
         with sqlite3.connect(self.original) as db:
             db.executescript("""
@@ -64,6 +64,13 @@ class OwnerSnapshotTest(unittest.TestCase):
                 self.folder/"private"/"test.json")
         self.assertFalse((self.folder/"synthetic-wal-header.sqlite-wal").exists())
         self.assertFalse((self.folder/"synthetic-wal-header.sqlite-shm").exists())
+
+    def test_source_alias_must_never_equal_output(self):
+        alias=self.folder/"alias"
+        alias.symlink_to(self.folder, target_is_directory=True)
+        with self.assertRaisesRegex(ValueError,"SOURCE_MUST_NOT_BE_OUTPUT"):
+            backup_owner_authorized(self.original,alias/self.original.name,
+                self.folder/"proof.json")
 
     def test_source_must_never_equal_output(self):
         with self.assertRaisesRegex(ValueError,"SOURCE_MUST_NOT_BE_OUTPUT"):

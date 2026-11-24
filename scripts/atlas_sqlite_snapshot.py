@@ -54,9 +54,9 @@ def _counts(connection):
 
 def backup_owner_authorized(source, target, manifest):
     source, target, manifest = Path(source), Path(target), Path(manifest)
-    if source.resolve() in (target.absolute(),manifest.absolute()):
+    if source.resolve() in (target.resolve(),manifest.resolve()):
         raise ValueError("SOURCE_MUST_NOT_BE_OUTPUT")
-    if target==manifest or target.exists() or target.is_symlink() or manifest.exists() or manifest.is_symlink():
+    if target.resolve()==manifest.resolve() or target.exists() or target.is_symlink() or manifest.exists() or manifest.is_symlink():
         raise FileExistsError("REFUSING_TO_OVERWRITE_BACKUP_OR_MANIFEST")
     for parent in (target.parent,manifest.parent):
         if parent.exists() and parent.is_symlink():

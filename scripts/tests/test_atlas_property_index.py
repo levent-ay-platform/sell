@@ -17,7 +17,7 @@ class IndexTest(unittest.TestCase):
     def setUp(self):
         temp = tempfile.TemporaryDirectory()
         self.addCleanup(temp.cleanup)
-        self.base = Path(temp.name)
+        self.base = Path(temp.name).resolve()
         self.root = self.base/"archive"
         self.root.mkdir()
         self.db = self.base/"snapshot.sqlite"
