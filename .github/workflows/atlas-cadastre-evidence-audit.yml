@@ -12,6 +12,7 @@ on:
       - scripts/atlas_document_linkage.py
       - scripts/atlas_sqlite_snapshot.py
       - scripts/atlas_ocr_backlog.py
+      - scripts/atlas_pdf_blob_inventory.py
       - scripts/tests/test_atlas_cadastre_evidence_audit.py
       - scripts/tests/test_atlas_geometry_evidence.py
       - scripts/tests/test_atlas_public_projection.py
@@ -20,6 +21,7 @@ on:
       - scripts/tests/test_atlas_document_linkage.py
       - scripts/tests/test_atlas_sqlite_snapshot.py
       - scripts/tests/test_atlas_ocr_backlog.py
+      - scripts/tests/test_atlas_pdf_blob_inventory.py
       - .github/workflows/atlas-cadastre-evidence-audit.yml
   pull_request:
     paths:
@@ -30,6 +32,7 @@ on:
       - scripts/atlas_document_linkage.py
       - scripts/atlas_sqlite_snapshot.py
       - scripts/atlas_ocr_backlog.py
+      - scripts/atlas_pdf_blob_inventory.py
       - scripts/tests/test_atlas_cadastre_evidence_audit.py
       - scripts/tests/test_atlas_geometry_evidence.py
       - scripts/tests/test_atlas_public_projection.py
@@ -38,6 +41,7 @@ on:
       - scripts/tests/test_atlas_document_linkage.py
       - scripts/tests/test_atlas_sqlite_snapshot.py
       - scripts/tests/test_atlas_ocr_backlog.py
+      - scripts/tests/test_atlas_pdf_blob_inventory.py
       - .github/workflows/atlas-cadastre-evidence-audit.yml
 
 permissions:
@@ -62,5 +66,6 @@ jobs:
           python -m unittest discover -s scripts/tests -p 'test_atlas_document_linkage.py' -v
           python -m unittest discover -s scripts/tests -p 'test_atlas_sqlite_snapshot.py' -v
           python -m unittest discover -s scripts/tests -p 'test_atlas_ocr_backlog.py' -v
+          python -m unittest discover -s scripts/tests -p 'test_atlas_pdf_blob_inventory.py' -v
       - name: Compile Atlas pipeline
-        run: python -m py_compile scripts/atlas_cadastre_evidence_audit.py scripts/atlas_geometry_evidence.py scripts/atlas_public_projection.py scripts/atlas_amlak_private_bridge.py scripts/atlas_document_linkage.py scripts/atlas_sqlite_snapshot.py scripts/atlas_ocr_backlog.py
+        run: python -m py_compile scripts/atlas_cadastre_evidence_audit.py scripts/atlas_geometry_evidence.py scripts/atlas_public_projection.py scripts/atlas_amlak_private_bridge.py scripts/atlas_document_linkage.py scripts/atlas_sqlite_snapshot.py scripts/atlas_ocr_backlog.py scripts/atlas_pdf_blob_inventory.py scripts/tests/test_atlas_pdf_blob_inventory.py
