@@ -29,3 +29,44 @@ class NextPassTests(unittest.TestCase):
         self.assertGreater(score,400)
         self.assertIn("FIRST_PASS_FAILURE",reasons)
         self.assertIn("CADASTRAL_HINT",reasons)
+
+    def test_completed_run_recovery_and_real_pilot(self):
+        import hashlib
+        import shutil
+        import sqlite3
+        import tempfile
+        from pathlib import Path
+        from pypdf import PdfWriter
+        from scripts.atlas_archive_review_batch import run_batch
+        from scripts.atlas_archive_next_pass import run_pilot
+        if not (shutil.which("pdfinfo") and shutil.which("pdftotext")):
+            self.skipTest("Poppler required")
+        with tempfile.TemporaryDirectory() as t:
+            base=Path(t).resolve()
+            root=base/"archive"; root.mkdir()
+            run=base/"first"; run.mkdir(mode=0o700)
+            db=run/"catalogue.sqlite"
+            def pdf(path,width):
+                w=PdfWriter(); w.add_blank_page(width,150)
+                with path.open("wb") as out: w.write(out)
+                return hashlib.sha256(path.read_bytes()).hexdigest()
+            a=pdf(root/"first.pdf",200)
+            b=pdf(root/"hidden-blob",300)
+            with sqlite3.connect(db) as conn:
+                conn.executescript("CREATE TABLE resources(id TEXT,name TEXT,extension TEXT,sha256 TEXT,url TEXT); CREATE TABLE documents(sha256 TEXT,state TEXT,page_count INTEGER); CREATE TABLE pages(sha256 TEXT,page INTEGER,text TEXT);")
+                conn.executemany("INSERT INTO resources VALUES(?,?,?,?,?)",[
+                    ("a","Map.pdf",".pdf",a,"https://example.invalid/a"),
+                    ("b","Plan cadastral Kelibia.pdf",".pdf",b,"https://otc.nat.tn/b")])
+            before=db.read_bytes()
+            manifest=run_batch(db,"mainfile_diagnostic",[root],run/"batch01")
+            self.assertIsNone(manifest["next_offset"])
+            self.assertEqual(manifest["counts"]["eligible_pdf_hashes_in_selected_roots"],1)
+            output=base/"second"
+            r=run_pilot(run,[root],output,max_documents=1,pages_per_document=1)
+            self.assertEqual(r["counts"]["catalogue_hashes"],2)
+            self.assertEqual(r["counts"]["newly_observed_hashes"],1)
+            self.assertEqual(r["counts"]["pilot_attempted"],1)
+            self.assertEqual(r["outcomes_private"][0]["document_sha256_private"],b)
+            self.assertEqual(r["outcomes_private"][0]["status"],"PAGE_WINDOW_REVIEWED")
+            self.assertEqual(db.read_bytes(),before)
+            self.assertIsNone(r["official_plan_count"])
