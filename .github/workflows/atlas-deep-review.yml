@@ -7,6 +7,8 @@ on:
       - scripts/atlas_archive_deep_review.py
       - scripts/atlas_existing_source_benchmark.py
       - scripts/atlas_focused_page_review.py
+      - scripts/atlas_geometry_triage.py
+      - scripts/tests/test_atlas_geometry_triage.py
       - scripts/tests/test_atlas_focused_page_review.py
       - scripts/tests/test_atlas_existing_source_benchmark.py
       - scripts/atlas_archive_diagnostics.py
