@@ -107,6 +107,10 @@ def audit_snapshot(db: Path, *, snapshot_kind: str) -> dict:
         pdf_count = 0
         no_hash = 0
         resources_per_hash: dict[str, int] = defaultdict(int)
+        # Private-only source row pointers preserve distinct references to the
+        # same document hash, including repeated resource IDs.
+        resource_ids_per_hash: dict[str, list[str | None]] = defaultdict(list)
+        unhashed_pdf_resource_ids: list[str | None] = []
         filename_hits: set[str] = set()
         family_hints: dict[str, set[str]] = defaultdict(set)
         raw_count = 0
@@ -117,9 +121,15 @@ def audit_snapshot(db: Path, *, snapshot_kind: str) -> dict:
             pdf_count += 1
             if not sha:
                 no_hash += 1
+                unhashed_pdf_resource_ids.append(
+                    str(_resource_id) if _resource_id is not None else None
+                )
                 continue
             key = str(sha)
             resources_per_hash[key] += 1
+            resource_ids_per_hash[key].append(
+                str(_resource_id) if _resource_id is not None else None
+            )
             for family, family_pattern in FAMILY_PATTERNS.items():
                 if family_pattern.search(name or ""):
                     family_hints[key].add(family)
@@ -134,6 +144,8 @@ def audit_snapshot(db: Path, *, snapshot_kind: str) -> dict:
             if sha is not None
         }
         page_hits: dict[str, set[int]] = defaultdict(set)
+        ocr_cadastral_hits: set[str] = set()
+        reference_page_evidence: dict[str, list[dict]] = defaultdict(list)
         pdf_hashes_with_pages: set[str] = set()
         pdf_hashes_with_ocr_text: set[str] = set()
         title_refs: dict[str, set[str]] = defaultdict(set)
@@ -150,26 +162,41 @@ def audit_snapshot(db: Path, *, snapshot_kind: str) -> dict:
             if not ocr or not str(ocr).strip():
                 continue
             pdf_hashes_with_ocr_text.add(key)
-            if CADASTRAL_WORDS.search(ocr):
+            cadastral_term = bool(CADASTRAL_WORDS.search(ocr))
+            if cadastral_term:
+                ocr_cadastral_hits.add(key)
                 if page is not None:
                     page_hits[key].add(int(page))
-            for family, family_pattern in FAMILY_PATTERNS.items():
-                if family_pattern.search(ocr):
-                    family_hints[key].add(family)
-            title_refs[key].update(references(TITLE_REF, ocr))
-            parcel_refs[key].update(references(PARCEL_REF, ocr))
+            matched_families = [
+                family for family, family_pattern in FAMILY_PATTERNS.items()
+                if family_pattern.search(ocr)
+            ]
+            family_hints[key].update(matched_families)
+            extracted_titles = references(TITLE_REF, ocr)
+            extracted_parcels = references(PARCEL_REF, ocr)
+            title_refs[key].update(extracted_titles)
+            parcel_refs[key].update(extracted_parcels)
+            if extracted_titles or extracted_parcels or cadastral_term:
+                reference_page_evidence[key].append({
+                    "page": int(page) if page is not None else None,
+                    "title_reference_candidates": sorted(extracted_titles),
+                    "parcel_reference_candidates": sorted(extracted_parcels),
+                    "cadastral_term_present": cadastral_term,
+                })
 
         candidates = []
-        for key in sorted(filename_hits | set(page_hits)):
+        for key in sorted(filename_hits | ocr_cadastral_hits):
             indicators = []
             if key in filename_hits:
                 indicators.append("FILENAME_TERM")
-            if page_hits.get(key):
+            if key in ocr_cadastral_hits:
                 indicators.append("OCR_TEXT_TERM")
             candidates.append(
                 {
                     "document_sha256": key,
                     "resource_rows": resources_per_hash[key],
+                    "resource_ids_private": resource_ids_per_hash[key],
+                    "page_reference_evidence_private": reference_page_evidence.get(key, []),
                     "indicators": indicators,
                     "ocr_page_candidates": sorted(page_hits.get(key, set())),
                     "title_reference_candidates": sorted(title_refs.get(key, set())),
@@ -183,14 +210,16 @@ def audit_snapshot(db: Path, *, snapshot_kind: str) -> dict:
         review_keys = sorted(
             key for key in resources_per_hash
             if family_hints.get(key) or title_refs.get(key) or parcel_refs.get(key)
-            or key in filename_hits or key in page_hits
+            or key in filename_hits or key in ocr_cadastral_hits
         )
         review_queue = [
             {
                 "document_sha256": key,
                 "resource_rows": resources_per_hash[key],
+                "resource_ids_private": resource_ids_per_hash[key],
+                "page_reference_evidence_private": reference_page_evidence.get(key, []),
                 "family_hints": sorted(family_hints.get(key, set())),
-                "cadastral_term_present": key in filename_hits or key in page_hits,
+                "cadastral_term_present": key in filename_hits or key in ocr_cadastral_hits,
                 "has_title_reference_candidate": bool(title_refs.get(key)),
                 "has_parcel_reference_candidate": bool(parcel_refs.get(key)),
                 "indexed_document_present": key in indexed_docs,
@@ -206,6 +235,7 @@ def audit_snapshot(db: Path, *, snapshot_kind: str) -> dict:
             {
                 "document_sha256": key,
                 "resource_rows": resources_per_hash[key],
+                "resource_ids_private": resource_ids_per_hash[key],
                 "indexed_document_present": key in indexed_docs,
                 "page_rows_present": key in pdf_hashes_with_pages,
                 "ocr_text_present": key in pdf_hashes_with_ocr_text,
@@ -221,7 +251,7 @@ def audit_snapshot(db: Path, *, snapshot_kind: str) -> dict:
             raise AssertionError("Every hashed PDF must be accounted for once")
 
         report = {
-            "schema_version": 2,
+            "schema_version": 3,
             "audit_kind": "CADASTRAL_CANDIDATES_ONLY",
             "snapshot_kind": snapshot_kind,
             "live_consistent": False if snapshot_kind == "mainfile_diagnostic" else None,
@@ -258,6 +288,7 @@ def audit_snapshot(db: Path, *, snapshot_kind: str) -> dict:
             },
             "candidates": candidates,
             "review_queue": review_queue,
+            "unhashed_pdf_resource_ids_private": unhashed_pdf_resource_ids,
             "unresolved_pdf_documents": unresolved_pdf_documents,
             "review_queue_semantics": "HINTS_ONLY; unknown remains unknown; no official status implied",
             "verified_official_cadastral_plans": None,
