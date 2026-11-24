@@ -1,5 +1,5 @@
 import unittest
-from scripts.atlas_existing_source_benchmark import exact_ref,compare_ref,identity,add_matches,result_reference
+from scripts.atlas_existing_source_benchmark import exact_ref,compare_ref,identity,add_matches,result_reference,stored_numeric_hits
 from collections import defaultdict
 class ExistingSourceBenchmarkTest(unittest.TestCase):
     def test_reference_exact(self):
@@ -24,3 +24,17 @@ class ExistingSourceBenchmarkTest(unittest.TestCase):
         self.assertEqual(result_reference(dto),("000123",None))
         self.assertEqual(identity(row,dto),"GIS_FEATURE_RETURNED_SOURCE_IDENTITY_UNPROVEN")
         self.assertIsNone(result_reference({**dto,"reference":"123 + 456"}))
+
+    def test_stored_text_occurrences_are_exact_digit_strings(self):
+        import sqlite3,tempfile
+        from pathlib import Path
+        from scripts.atlas_archive_review_batch import _digest
+        with tempfile.TemporaryDirectory() as d:
+            db=Path(d)/"sample.sqlite"
+            with sqlite3.connect(db) as c:
+                c.execute("CREATE TABLE pages(sha256 TEXT,page INTEGER,text TEXT)")
+                c.executemany("INSERT INTO pages VALUES(?,?,?)",[
+                    ("a"*64,1,"٠٠١٢٣ ; 12345"),("a"*64,2,"9001239")])
+            result,counts=stored_numeric_hits(db,_digest(db),{"a"*64:{}},{"00123":{("00123",None)}})
+            self.assertEqual(result["00123"],{("a"*64,1)})
+            self.assertEqual(counts["indexed_text_pages_checked"],2)

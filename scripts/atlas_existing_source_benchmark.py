@@ -4,6 +4,8 @@ No writes to Atlas, no OCR, no new downloads. Read atomic completed windows only
 """
 from __future__ import annotations
 import argparse,csv,json,re,shutil,sqlite3,subprocess,sys,tempfile,unicodedata
+from contextlib import closing
+from scripts.atlas_archive_review_batch import _digest
 from pathlib import Path
 from collections import Counter,defaultdict
 from scripts.atlas_cadastre_evidence_audit import DIGITS,write_private_json
@@ -38,6 +40,26 @@ def result_reference(result):
     value=result.get("reference")
     if type(value) is int and value>=0:value=str(value)
     return exact_ref(value)
+
+def stored_numeric_hits(db,expected,docs,refs):
+    # Search existing text for exact standalone digit sequences, including labels
+    # in tables not recognized by the title parser. Weak evidence only.
+    if db.is_symlink() or not db.is_file() or any(Path(str(db)+s).exists() for s in ("-wal","-shm")):
+        raise ValueError("STANDALONE_SNAPSHOT_REQUIRED")
+    if _digest(db)!=expected:raise ValueError("SNAPSHOT_BINDING_MISMATCH")
+    result=defaultdict(set);counts=Counter()
+    with closing(sqlite3.connect(db.resolve().as_uri()+"?mode=ro&immutable=1",uri=True)) as conn:
+        conn.execute("PRAGMA query_only=ON")
+        for sha,page,txt in conn.execute("SELECT sha256,page,text FROM pages"):
+            if sha not in docs or not isinstance(txt,str) or not txt.strip():continue
+            counts["indexed_text_pages_checked"]+=1
+            if len(txt)>2*1024**2:
+                counts["oversize_indexed_text_pages_skipped"]+=1;continue
+            text=unicodedata.normalize("NFKC",txt).translate(DIGITS)
+            for token in set(re.findall(r"(?<!\d)\d{3,12}(?!\d)",text))&refs.keys():
+                result[token].add((sha,page))
+    if _digest(db)!=expected:raise ValueError("SNAPSHOT_CHANGED")
+    return result,counts
 
 def identity(row,result):
     # Native ID alone can recur across layers. Only compare explicit same-source fields.
@@ -84,6 +106,12 @@ def benchmark(atlas,run,native,output):
             if raw is None:counts["source_reference_compound_or_unparsed"]+=1
             tokens=set()
             if raw:tokens.add(raw)
+            try:
+                normalized=title_lookup.normalize(row["raw_reference"])
+                token=result_reference({"reference":normalized})
+                if token:tokens.add(token)
+            except (ValueError,TypeError):
+                counts["existing_normalization_rejected"]+=1
             records=[]
             try:
                 result=title_lookup.search(dst,row["raw_reference"])
@@ -148,22 +176,28 @@ def benchmark(atlas,run,native,output):
                            [(r["number"],r.get("suffix")) for r in e["title_candidates"]],
                            e["parcel_candidates"],e["cadastral_term_present"])
     counts["native_documents_with_windows"]=len(covered)
+    numeric,numeric_counts=stored_numeric_hits(run/"catalogue.sqlite",last[0]["snapshot_sha256_private"],docs,refs)
+    counts.update(numeric_counts)
     for row,raw,tokens,state,records in retrieved:
         found=set().union(*(hits.get(token,set()) for token in tokens))
         links=sorted(found,key=lambda x:(x[0],x[1] or 0,x[2],x[3]))
         counts["source_rows_with_document_token_candidates"]+=bool(links)
         counts["source_rows_with_same_observation_parcel_hint"]+=any(x[4] for x in links)
         counts["source_rows_with_qualified_token_candidate"]+=any(x[3]=="EXACT_TOKEN_SCOPE_UNVERIFIED" for x in links)
-        details.append({"source_record_private":{"record_set":row["record_set"],"snapshot":row["snapshot"],"native_id":row["native_id"],
+        weak=set().union(*(numeric.get(n,set()) for n,s in tokens))
+        counts["source_rows_with_untyped_numeric_text_occurrences"]+=bool(weak)
+        details.append({"untyped_numeric_occurrences_private":[{"sha256":h,"page":p,
+                        "status":"NUMBER_OCCURRENCE_NOT_TITLE_EVIDENCE"} for h,p in sorted(weak,key=lambda x:(x[0],x[1] or 0))],
+                        "source_record_private":{"record_set":row["record_set"],"snapshot":row["snapshot"],"native_id":row["native_id"],
                         "reference_field":row["reference_field"],"reference":row["raw_reference"]},
                         "identity_status":state,"retrieved_gis_records_private":records,
-                        "query_tokens_private":[{"number":n,"suffix":s,"origin":"RAW_EXACT" if (n,s)==raw else "EXISTING_SEARCH_DTO"}
+                        "query_tokens_private":[{"number":n,"suffix":s,"origin":"RAW_EXACT" if (n,s)==raw else "EXISTING_ENGINE_TOKEN"}
                                                 for n,s in sorted(tokens,key=lambda x:(x[0],x[1] or ""))],
                         "document_token_candidates_private":[
                          {"sha256":x[0],"page":x[1],"origin":x[2],"status":x[3],"parcel_hint":x[4],"cadastral_hint":x[5]} for x in links],
                         "official_plan_verified":None,"ground_verified":False})
     report={"kind":"PRIVATE_ATLAS_EXISTING_SOURCE_BENCHMARK","counts":dict(counts),
-            "limitations":["Search DTO references are retrieval tokens, not proof of original source identity or registry scope.","Only existing extracted title candidates searched; no raw text rescanning."],
+            "limitations":["Search DTO references are retrieval tokens, not proof of original source identity or registry scope.","Stored indexed text also searched for standalone numeric occurrences, which are not title evidence."],
             "result_field_names":dict(shapes),"native_sweep_is_partial":True,
             "official_plans_verified":"UNKNOWN","public_export_permitted":False}
     write_private_json(output,{**report,"rows_private":details})
