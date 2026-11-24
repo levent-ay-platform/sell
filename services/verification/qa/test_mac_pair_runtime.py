@@ -59,4 +59,21 @@ class Frames(unittest.TestCase):
         self.assertEqual(len(property_regions(page,1000,1500)),3)
         self.assertEqual(property_regions({**page,'lines':page['lines'][:1]},1000,1500),[])
         self.assertEqual(property_regions({**page,'lines':[page['lines'][0],row('القطع عدد: 702',1300)]},1000,1500),[])
+    def test_unreadable_printed_count_is_not_a_missing_physical_page(self):
+        import json,shutil,subprocess
+        from pathlib import Path
+        from mac_pair_runtime import identity_document
+        front=identity_document({'surname':'الشمري','givenName':'مروان',
+            'cinFull':None,'confidencePercent':99})
+        doc={'format':'pdf','mayApproveOwnership':False,'pages':[{'page':1,'method':'ocr',
+            'lines':[{'page':1,'text':'شهادة ملكية','confidence':.99,'source':'ocr-ar'},
+                {'page':1,'text':'صفحة 1 من 8','confidence':.5,'source':'ocr-ar'}]}]}
+        report=json.loads(subprocess.run([shutil.which('node'),'--experimental-strip-types',
+            str(Path(__file__).with_name('compare_mac_pair.mjs'))],
+            input=json.dumps({'documents':[doc],'front':front}).encode(),
+            stdout=subprocess.PIPE,stderr=subprocess.PIPE,check=True).stdout)
+        self.assertIn('CERTIFICATE_PAGE_COUNT_UNREADABLE',report['reasons'])
+        self.assertNotIn('CERTIFICATE_PAGES_MISSING',report['reasons'])
+        self.assertEqual(report['missingPages'],[])
+        self.assertFalse(report['ownershipVerified'])
 if __name__=='__main__':unittest.main()

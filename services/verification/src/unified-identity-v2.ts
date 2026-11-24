@@ -16,6 +16,7 @@ import {compareCertificateIdentityCinText,
   compareExactOwnerRowCinToIdentity} from './private-cin-comparison.ts';
 import {locateOwnerTableFromWords} from './owner-table-layout-v2.ts';
 import {analyzeOwnerTable} from './owner-table-v2.ts';
+import {auditPrintedPagination} from './cpf-pagination.ts';
 
 export type LegalPartyRole=
  'REGISTERED_HOLDER'|'SHARED_RIGHTS_HOLDER'|'BUYER'|'SELLER'|
@@ -92,36 +93,6 @@ function candidate(f:PrivateLandFact):CandidateName|null {
     return null;
   return {value:f.value,page:e.page,source:e.source,confidence:e.confidence};
 }
-/** An independently printed "page x of n" footer; without it, no full table. */
-function completePrintedPagination(document:IngestedDocument):number|null {
-  if(document.pages.length<1||document.pages.length>8)return null;
-  let required:number|null=null;
-  const seen=new Set<number>();
-  for(const page of document.pages) {
-    const observations:{page:number;total:number}[]=[];
-    for(const line of page.lines){
-      if(line.text.length>300)continue;
-      const text=line.text.normalize('NFKC')
-        .replace(/[٠-٩]/gu,d=>String(d.charCodeAt(0)-0x660));
-      const a=/(?:صفحة)\s*([0-9]{1,2})\s*من\s*([0-9]{1,2})/u.exec(text);
-      const b=/\bpage\s*([0-9]{1,2})\s*(?:de|of)\s*([0-9]{1,2})\b/iu.exec(text);
-      const found=a??b;
-      if(found)observations.push({page:Number(found[1]),total:Number(found[2])});
-    }
-    if(observations.length===0||observations.some(x=>
-        x.page!==page.page||x.total<1||x.total>8||
-        x.total!==observations[0]!.total||
-        x.total<page.page||required!==null&&required!==x.total))
-      return null;
-    required=observations[0]!.total;
-    seen.add(page.page);
-  }
-  if(required!==document.pages.length||seen.size!==required||
-     Array.from({length:required},(_,i)=>i+1).some(n=>!seen.has(n)))
-    return null;
-  return required;
-}
-
 function initial(kind:LandPaperKind):UnifiedPrivateDocumentIdentityResult {
   return {detectedKind:kind,assessment:'INSUFFICIENT_EVIDENCE',roles:[],matchedRightsHolder:null,
     reasons:['OFFICIAL_REGISTRY_NOT_CHECKED'],
@@ -203,7 +174,7 @@ export function compareUnifiedPrivateDocumentIdentity(
       assessment:'INSUFFICIENT_OR_AMBIGUOUS',
       documentCinStatus:'NOT_PRINTED',documentPage:null
     };
-    const pagesComplete=completePrintedPagination(textDoc)!==null;
+    const pagesComplete=auditPrintedPagination(textDoc.pages).status==='COMPLETE';
     const spatialReady=document.pages.length>0&&document.pages.every(p=>
       p.privateSpatialPage!==undefined&&p.spatialWordsTruncated===false&&
       p.privateSpatialPage.words.length>0);

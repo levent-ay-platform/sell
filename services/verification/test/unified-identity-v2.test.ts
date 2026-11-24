@@ -526,3 +526,15 @@ test('individual certificate with an owner table uses only the matched owner row
  assert.equal(blocked.matchedRightsHolder,null);
  assert.equal(blocked.assessment,'INSUFFICIENT_EVIDENCE');
 });
+
+test('shared CPF page evidence supports French sur and Arabic bidi without relaxing row checks',()=>{
+ const full=sharedAcrossTwoPages();
+ const mixed={...full,pages:full.pages.map((p,i)=>({...p,lines:p.lines.map(l=>({
+   ...l,text:l.text.includes('صفحة')?(i===0?'2 صفحة 1 من':'Page 2 sur 2'):l.text
+ }))}))};
+ assert.equal(compareUnifiedPrivateDocumentIdentity(mixed,arabicFront).matchedRightsHolder?.rightsParts,'100');
+ const low={...mixed,pages:mixed.pages.map((p,i)=>({...p,lines:p.lines.map(l=>({
+   ...l,confidence:i===1&&l.text.includes('Page')?.5:l.confidence
+ }))}))};
+ assert.equal(compareUnifiedPrivateDocumentIdentity(low,arabicFront).matchedRightsHolder,null);
+});

@@ -1,5 +1,6 @@
 // Private stdin/stdout bridge; calls the existing document-family matcher.
 import {parseOcrWorkerOutput,readUntrustedOcrDocument,asTextOnlyOcrDocument} from '../src/reader.ts';
+import {auditPrintedPagination} from '../src/cpf-pagination.ts';
 import {extractPrivateLandDocumentFacts} from '../src/document-family-fields-v2.ts';
 import {moveParcelPlanScanToPage} from '../src/parcel-document-foundation.ts';
 import {compareUnifiedPrivateDocumentIdentity} from '../src/unified-identity-v2.ts';
@@ -23,11 +24,13 @@ try{
  const comparison=compareUnifiedPrivateDocumentIdentity(document,identity);
  // All photographed continuation pages share the first page's document context.
  const reading=readUntrustedOcrDocument(asTextOnlyOcrDocument(document));
- const missingPages=reading.extraction.missingPages.filter(n=>n>=1&&n<=8);
  const reasons=[...comparison.reasons];
- if(reading.extraction.missingPages.length)reasons.push('CERTIFICATE_PAGES_MISSING');
- if(reading.extraction.issues.includes('INCONSISTENT_PAGE_COUNT'))
-  reasons.push('CERTIFICATE_PAGE_NUMBER_INCONSISTENT');
+ const certificate=['OWNERSHIP_CERTIFICATE','SHARED_OWNERSHIP_CERTIFICATE'].includes(reading.documentFamilyCandidate.kind);
+ const pagination=auditPrintedPagination(document.pages);
+ const missingPages=certificate?pagination.missingPages:[];
+ if(certificate&&pagination.status==='MISSING_PAGES')reasons.push('CERTIFICATE_PAGES_MISSING');
+ if(certificate&&pagination.status==='CONFLICT')reasons.push('CERTIFICATE_PAGE_NUMBER_INCONSISTENT');
+ if(certificate&&pagination.status==='UNREADABLE')reasons.push('CERTIFICATE_PAGE_COUNT_UNREADABLE');
  // Alternate OCR is private PROPERTY evidence only. Do not send crop
  // lines into identity comparison, owner-row layout, or parcel geometry.
  if(!Array.isArray(propertyViews)||propertyViews.length>6)throw Error();

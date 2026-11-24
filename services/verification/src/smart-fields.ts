@@ -1,3 +1,4 @@
+import {printedPageNumbers} from './cpf-pagination.ts';
 /**
  * High-integrity, low-latency *post-OCR* field extraction for Tunisia CPF papers.
  * Input OCR text/confidence is UNTRUSTED. Never yields ownership approval.
@@ -81,14 +82,8 @@ function extractLineFields(text:string): Array<[FieldName,string|number]> {
   add('ownershipTotalUnits',/(?:مجموع\s*(?:اجزاء|الاجزاء)\s*الملكي[ةه]|(?:total\s*des\s*parts))\s*[:：-]?\s*(\d{1,12})/iu,'integer');
   add('parcelCount',/(?:مجموع\s*القطع|nombre\s*de\s*parcelles)\s*[:：-]?\s*(\d{1,4})(?!\d)/iu,'integer');
   add('parcelNumber',/(?:القطع[ة]?\s*عدد|num(?:ero|éro)?\s*de\s*parcelle)\s*[:：-]?\s*(\d{1,8})(?!\d)/iu);
-  const pages=text.match(/(?:صفحه|صفحة)\s*[:：-]?\s*(\d{1,3})\s*(?:من|\/)\s*(\d{1,3})(?!\d)/u) ||
-    text.match(/page\s*(\d{1,3})\s*(?:sur|of|\/)\s*(\d{1,3})(?!\d)/iu);
-  if(pages){out.push(['documentPage',Number(pages[1])]);out.push(['documentPageCount',Number(pages[2])]);}
-  else {
-    // Tesseract bidi line order may produce "2 صفحة 1 من" from "صفحة 1 من 2".
-    // Treat as untrusted OCR candidate; still subject to page consistency checks.
-    const rtlBidi=text.match(/^(\d{1,3})\s+(?:صفحة|صفحه)\s+(\d{1,3})\s+من(?:\s|$)/u);
-    if(rtlBidi){out.push(['documentPage',Number(rtlBidi[2])]);out.push(['documentPageCount',Number(rtlBidi[1])]);}
+  for(const printed of printedPageNumbers(text)){
+    out.push(['documentPage',printed.page]);out.push(['documentPageCount',printed.total]);
   }
   add('lastRegistryUpdatedAt',/(?:تاريخ\s*(?:اخر\s*)?تحيين|derni[eè]re\s*mise\s*[aà]\s*jour)\s*[:：-]?\s*(\d{4}[\/-]\d{1,2}[\/-]\d{1,2})/iu,'date');
   add('certificateIssuedAt',/(?:تاريخ\s*(?:اصدار|استخراج)\s*الشهاده|date\s*de\s*d[eé]livrance)\s*[:：-]?\s*(\d{4}[\/-]\d{1,2}[\/-]\d{1,2})/iu,'date');
