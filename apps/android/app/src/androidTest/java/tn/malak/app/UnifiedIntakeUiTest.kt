@@ -48,12 +48,17 @@ class UnifiedIntakeUiTest {
                 }
                 assertTrue("Missing intake section: "+label,device.hasObject(By.text(label)))
             }
-            seek("Ajouter votre certificat de propriété")
-            seek("Carte d’identité")
-            seek("Importer la pièce pour aperçu")
+            seek("Certificat de propriété")
+            val cert=device.findObject(By.text("Certificat de propriété"))
+            val id=device.findObject(By.text("Carte d’identité"))
+            assertTrue("ID must share first row",id!=null&&kotlin.math.abs(cert.visibleBounds.centerY()-id.visibleBounds.centerY())<60)
+            assertTrue("Distinct grid columns",cert.visibleBounds.centerX()!=id.visibleBounds.centerX())
             seek("Plan parcellaire")
             seek("Document complémentaire")
             seek("Photos du terrain")
+            assertTrue("Missing requirements explained",device.hasObject(By.text("Manque : certificat et identité")))
+            val continueButton=device.findObject(By.text("Analyser et continuer"))
+            assertTrue("Sticky action must be visible",continueButton!=null)
         }
     }
 }

@@ -10,6 +10,10 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.border
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.ui.draw.clip
+import androidx.compose.material.icons.outlined.Add
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -117,7 +121,8 @@ internal fun SmartListingMediaStep(
 internal fun ListingPhotoEditor(
     photos: SnapshotStateList<DraftListingPhoto>,
     directPublishing: Boolean,
-    persistAccess: Boolean = false
+    persistAccess: Boolean = false,
+    compact: Boolean = false
 ) {
     val context = LocalContext.current
     var message by remember { mutableIntStateOf(0) }
@@ -153,6 +158,57 @@ internal fun ListingPhotoEditor(
         }
         message=if(refused)R.string.smart_media_rejected else R.string.smart_media_selected
     }
+    if(compact){
+        Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically,
+            horizontalArrangement=Arrangement.SpaceBetween){
+            Text(s(R.string.smart_media_heading),fontSize=17.sp,fontWeight=FontWeight.Bold,color=Brand.Ink)
+            Text("${photos.size}/$MAX_PHOTOS",fontSize=12.sp,color=Brand.Muted)
+        }
+        Text(s(R.string.intake_photos_short),fontSize=12.sp,color=Brand.Muted)
+        val items=if(photos.size<MAX_PHOTOS)photos.size+1 else photos.size
+        val rows=((maxOf(items,4)+3)/4)
+        repeat(rows){row->
+            Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(7.dp)){
+                repeat(4){column->
+                    val index=row*4+column
+                    val shape=RoundedCornerShape(12.dp)
+                    Box(Modifier.weight(1f).aspectRatio(1f).clip(shape).background(Color.White)
+                        .border(1.dp,IntakeLine,shape),contentAlignment=Alignment.Center){
+                        when{
+                            index<photos.size->{
+                                val photo=photos[index]
+                                key(photo.uri){
+                                    DraftPhotoThumbnail(photo.uri,Modifier.fillMaxSize())
+                                }
+                                IconButton(onClick={photos.remove(photo)},modifier=Modifier.align(Alignment.TopEnd).size(40.dp)){
+                                    Surface(shape=RoundedCornerShape(20.dp),color=Color.White){
+                                        Icon(Icons.Outlined.Close,s(R.string.smart_media_remove),tint=Brand.Ink,modifier=Modifier.padding(4.dp).size(16.dp))
+                                    }
+                                }
+                                TextButton(onClick={
+                                    val at=photos.indexOf(photo)
+                                    if(at>0){photos.removeAt(at);photos.add(0,photo)}
+                                },modifier=Modifier.align(Alignment.BottomCenter).fillMaxWidth().background(Color.White.copy(alpha=.92f)),
+                                    contentPadding=PaddingValues(0.dp)){
+                                    Text(s(if(index==0)R.string.intake_cover else R.string.intake_make_cover),fontSize=10.sp)
+                                }
+                            }
+                            index==photos.size&&photos.size<MAX_PHOTOS->{
+                                Column(Modifier.fillMaxSize().clickable{picker.launch(arrayOf("image/jpeg","image/png","image/webp"))},
+                                    verticalArrangement=Arrangement.Center,horizontalAlignment=Alignment.CenterHorizontally){
+                                    Icon(Icons.Outlined.AddPhotoAlternate,s(R.string.smart_media_pick),tint=Brand.Crimson,modifier=Modifier.size(25.dp))
+                                    Text(s(R.string.intake_photo_add),fontSize=11.sp,color=Brand.Crimson)
+                                }
+                            }
+                            else->Icon(Icons.Outlined.AddPhotoAlternate,null,tint=Color(0xFFC7C2C5),modifier=Modifier.size(22.dp))
+                        }
+                    }
+                }
+            }
+        }
+        if(message==R.string.smart_media_rejected)Text(s(message),fontSize=12.sp,color=Brand.Muted)
+        return
+    }
     Text(s(if(directPublishing)R.string.direct_property_photos else R.string.smart_media_heading),fontSize=17.sp,
         fontWeight=FontWeight.Bold,color=Brand.Ink)
     Text(s(R.string.smart_media_hint),fontSize=12.sp,
@@ -185,7 +241,7 @@ internal fun ListingPhotoEditor(
 }
 
 @Composable
-private fun DraftPhotoThumbnail(uri:Uri) {
+private fun DraftPhotoThumbnail(uri:Uri,modifier:Modifier=Modifier.size(72.dp)) {
     val context=LocalContext.current
     val thumbnail by produceState<Bitmap?>(initialValue=null,uri){
         value=withContext(Dispatchers.IO){
@@ -200,8 +256,8 @@ private fun DraftPhotoThumbnail(uri:Uri) {
     }
     if(thumbnail!=null)
         Image(thumbnail!!.asImageBitmap(),contentDescription=null,
-            modifier=Modifier.size(72.dp),contentScale=ContentScale.Crop)
-    else Box(Modifier.size(72.dp).border(1.dp,Color.LightGray,
+            modifier=modifier,contentScale=ContentScale.Crop)
+    else Box(modifier.border(1.dp,Color.LightGray,
         RoundedCornerShape(12.dp)),contentAlignment=Alignment.Center){
         Icon(Icons.Outlined.AddPhotoAlternate,null,tint=Brand.Muted)
     }

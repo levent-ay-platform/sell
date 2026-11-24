@@ -529,6 +529,9 @@ internal fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmiss
     val certificateTarget = remember { BringIntoViewRequester() }
     val intakeStep=step<=1
     val needsCertificate = intakeStep && files.isEmpty() && !restoredReview
+    val certReady=files.isNotEmpty()||restoredReview
+    val requiredCount=(if(certReady)1 else 0)+(if(identitySelected)1 else 0)
+    var intakeDetails by remember(draftFile){mutableStateOf<OwnerIntakeKind?>(null)}
     LaunchedEffect(step) { if(step>3) step=3;stepScroll.scrollTo(0) }
 
     fun startPairComparison(){
@@ -730,15 +733,15 @@ internal fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmiss
     }
 
     Column(Modifier.fillMaxSize()) {
-        Row(Modifier.fillMaxWidth().padding(horizontal=16.dp,vertical=12.dp),
+        Row(Modifier.fillMaxWidth().padding(horizontal=16.dp,vertical=if(intakeStep)6.dp else 12.dp),
             verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(10.dp)) {
             IconButton(onClick={if(step>1){step=OwnerIntakePolicy.previous(step);showInvalid=false}else exitJourney()}, modifier=Modifier.size(48.dp)) {
                 Icon(Icons.AutoMirrored.Filled.ArrowBack,s(R.string.back),tint=Brand.Crimson)
             }
             Column(Modifier.weight(1f)) {
-                Text(s(if(readingForListing)R.string.listing_read_documents else if(directVerification)R.string.direct_verify else R.string.seller_title), Modifier.semantics { heading() },
+                Text(s(if(readingForListing)R.string.listing_read_documents else if(directVerification)R.string.direct_verify else if(intakeStep)R.string.intake_property_title else R.string.seller_title), Modifier.semantics { heading() },
                     style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = Brand.Ink)
-                Text(s(if(directVerification || readingForListing)R.string.direct_docs_private else R.string.draft_label),
+                Text(if(intakeStep)s(R.string.intake_step_count,displayStep+1,stepLabels.size) else s(if(directVerification || readingForListing)R.string.direct_docs_private else R.string.draft_label),
                     style = MaterialTheme.typography.bodySmall, color = Brand.Muted)
             }
         }
@@ -749,119 +752,71 @@ internal fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmiss
                     verticalArrangement=Arrangement.spacedBy(7.dp)) {
                     Box(Modifier.fillMaxWidth().height(5.dp).background(
                         if(i<=displayStep)Brand.Crimson else Brand.Border,CircleShape))
-                    Text(s(label),style=MaterialTheme.typography.labelSmall,
+                    Text(s(if(i==0)R.string.intake_docs_photos else label),style=MaterialTheme.typography.labelSmall,
                         fontWeight=if(i==displayStep)FontWeight.Bold else FontWeight.Medium,
                         color=if(i==displayStep)Brand.Ink else Brand.Muted, textAlign=TextAlign.Center)
                 }
             }
         }
-        Column(Modifier.weight(1f).verticalScroll(stepScroll).padding(horizontal=17.dp,vertical=16.dp),
-            verticalArrangement=Arrangement.spacedBy(15.dp)) {
+        Column(Modifier.weight(1f).verticalScroll(stepScroll).padding(horizontal=16.dp,vertical=if(intakeStep)10.dp else 16.dp),
+            verticalArrangement=Arrangement.spacedBy(if(intakeStep)10.dp else 15.dp)) {
             when(step) {
                 0,1 -> {
-                    SectionHeading(s(R.string.document_section),s(R.string.document_hint))
-                    Surface(modifier = Modifier.bringIntoViewRequester(certificateTarget), color=Color.White,
-                        shape=RoundedCornerShape(21.dp),border=BorderStroke(1.dp,CardBorder)) {
-                        Column(Modifier.fillMaxWidth().padding(20.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
-                            OutlinedButton(onClick={replacingPage=null;pickDocuments.launch(
+                    Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically,
+                        horizontalArrangement=Arrangement.SpaceBetween){
+                        Text(s(R.string.intake_private_heading),fontWeight=FontWeight.Bold,fontSize=17.sp,color=Brand.Ink)
+                        Text(s(R.string.intake_required_count,requiredCount),fontSize=11.sp,color=Brand.Muted)
+                    }
+                    Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(6.dp)){
+                        Icon(Icons.Outlined.Lock,null,tint=IntakeGreen,modifier=Modifier.size(16.dp))
+                        Text(s(R.string.intake_private_short),fontSize=12.sp,color=Brand.Muted)
+                    }
+                    val certificateCanAdd=pairProgress==null&&(files.isEmpty()||
+                        (files.size<8&&files.none{it.mime=="application/pdf"}))
+                    Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(10.dp)){
+                        IntakeGridCard(s(R.string.intake_cert_title),Icons.Outlined.Description,true,
+                            s(if(certReady)R.string.intake_added else R.string.intake_empty),
+                            modifier=Modifier.weight(1f).bringIntoViewRequester(certificateTarget),
+                            ready=certReady,uploadEnabled=certificateCanAdd,captureEnabled=certificateCanAdd,
+                            onUpload={replacingPage=null;pickDocuments.launch(
                                 if(files.isEmpty())arrayOf("application/pdf","image/jpeg","image/png","image/tiff")
                                 else arrayOf("image/jpeg","image/png","image/tiff"))},
-                                enabled=pairProgress==null&&(files.isEmpty()||
-                                    (files.size<8&&files.none{it.mime=="application/pdf"})),
-                                border = if (needsCertificate) null else ButtonDefaults.outlinedButtonBorder(),
-                                colors = ButtonDefaults.outlinedButtonColors(
-                                    containerColor = if (needsCertificate) Brand.Crimson else Color.Transparent,
-                                    contentColor = if (needsCertificate) Color.White else Brand.Ink
-                                ),
-                                modifier=Modifier.fillMaxWidth().heightIn(min=52.dp),shape=RoundedCornerShape(16.dp)) {
-                                Icon(Icons.Outlined.FolderOpen,null,Modifier.size(21.dp))
-                                Spacer(Modifier.width(8.dp))
-                                Text(s(if(files.isEmpty())R.string.pick_document
-                                    else R.string.certificate_add_next_page))
-                            }
-                            OutlinedButton(onClick={openCamera(OwnerIntakeKind.Certificate)},
-                                enabled=pairProgress==null&&files.size<8&&files.none{it.mime=="application/pdf"},
-                                modifier=Modifier.fillMaxWidth()){
-                                Icon(Icons.Outlined.CameraAlt,null);Spacer(Modifier.width(8.dp));Text(s(R.string.intake_take_photo))
-                            }
-                            Text(s(R.string.file_rules),color=Brand.Ink,style=MaterialTheme.typography.labelMedium)
-                            Text(s(R.string.certificate_page_order_hint),color=Brand.Muted,
-                                style=MaterialTheme.typography.bodySmall)
-                            if (pickMessage != 0) {
-                                Text(s(pickMessage), Modifier.semantics { liveRegion = LiveRegionMode.Polite },
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = if (pickMessage == R.string.certificate_required)
-                                        MaterialTheme.colorScheme.error else Brand.Muted)
-                            }
-                        }
+                            onCapture={openCamera(OwnerIntakeKind.Certificate)},
+                            detail=if(files.isNotEmpty())s(R.string.intake_manage_files,files.size) else null,
+                            onDetail={intakeDetails=OwnerIntakeKind.Certificate})
+                        IntakeGridCard(s(R.string.identity_section),Icons.Outlined.Badge,true,
+                            s(when{identitySelected->R.string.intake_added
+                                pendingPhoto!=null->R.string.intake_review_photo
+                                galleryIdentity!=null->R.string.intake_preview_state
+                                else->R.string.intake_empty}),
+                            modifier=Modifier.weight(1f),ready=identitySelected,
+                            warning=!identitySelected&&(pendingPhoto!=null||galleryIdentity!=null),
+                            uploadEnabled=pendingPhoto==null,captureEnabled=pendingPhoto==null,
+                            onUpload={pickLocal(OwnerIntakeKind.Identity)},
+                            onCapture={intakeDetails=OwnerIntakeKind.Identity},
+                            detail=if(galleryIdentity!=null)s(R.string.intake_view_file) else null,
+                            onDetail={intakeDetails=OwnerIntakeKind.Identity})
                     }
-                    if(files.isEmpty()) {
-                        if (restoredReview) PlainNotice(Icons.Outlined.Description, s(R.string.owner_saved_analysis))
-                    } else {
-                        Text(s(R.string.documents_selected),color=Brand.Ink,fontSize=16.sp,fontWeight=FontWeight.SemiBold)
-                        files.toList().forEachIndexed { index,file ->
-                            Surface(shape=RoundedCornerShape(16.dp),color=Color.White,border=BorderStroke(1.dp,CardBorder)) {
-                                Row(Modifier.fillMaxWidth().heightIn(min=56.dp).padding(start=11.dp,end=6.dp),
-                                    verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(10.dp)) {
-                                    Icon(Icons.Outlined.InsertDriveFile,null,tint=Brand.Crimson,modifier=Modifier.size(23.dp))
-                                    Column(Modifier.weight(1f)) {
-                                        Text(if(file.mime=="application/pdf")
-                                            s(R.string.certificate_pdf_label)
-                                            else "${s(R.string.certificate_page_label)} ${index+1}",
-                                            color=Brand.Ink,fontWeight=FontWeight.SemiBold,fontSize=12.sp)
-                                        Text("${file.displayName} · ${file.length/1024} KB",
-                                            color=Brand.Muted,maxLines=1,
-                                            overflow=TextOverflow.Ellipsis,fontSize=12.sp)
-                                    }
-                                    IconButton(onClick={
-                                        if(index<files.size&&files[index].uri==file.uri){
-                                            PrivateCaptureMemory.discard(file.uri)
-                                            val kept=removeDocumentPage(files.toList(),index)
-                                            files.clear();files.addAll(kept);pickMessage=R.string.owner_page_removed
-                                        }
-                                    },enabled=pairProgress==null,modifier=Modifier.size(48.dp)) {
-                                        Icon(Icons.Outlined.DeleteOutline,s(R.string.remove),tint=Brand.Muted)
-                                    }
-                                    IconButton(onClick={replacingPage=index;pickDocuments.launch(arrayOf("application/pdf","image/jpeg","image/png","image/tiff"))},enabled=pairProgress==null){
-                                        Icon(Icons.Outlined.Edit,s(R.string.owner_replace_page),tint=Brand.Muted)
-                                    }
-                                    if(files.size>1){
-                                        IconButton(onClick={val ordered=moveDocumentPage(files.toList(),index,index-1);files.clear();files.addAll(ordered)},enabled=index>0&&pairProgress==null){
-                                            Icon(Icons.Outlined.KeyboardArrowUp,s(R.string.owner_move_page_up))
-                                        }
-                                        IconButton(onClick={val ordered=moveDocumentPage(files.toList(),index,index+1);files.clear();files.addAll(ordered)},enabled=index<files.lastIndex&&pairProgress==null){
-                                            Icon(Icons.Outlined.KeyboardArrowDown,s(R.string.owner_move_page_down))
-                                        }
-                                    }
-                                }
-                            }
-                        }
+                    Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(10.dp)){
+                        IntakeGridCard(s(R.string.intake_plan),Icons.Outlined.Map,false,
+                            s(if(planFile!=null)R.string.intake_added else R.string.intake_empty),
+                            modifier=Modifier.weight(1f),ready=planFile!=null,
+                            iconTint=Color(0xFF466C56),iconBackground=Color(0xFFECF3EE),
+                            onUpload={pickLocal(OwnerIntakeKind.Plan)},onCapture={openCamera(OwnerIntakeKind.Plan)},
+                            detail=planFile?.let{s(R.string.intake_view_file)},
+                            onDetail={intakeDetails=OwnerIntakeKind.Plan})
+                        IntakeGridCard(s(R.string.intake_extra),Icons.Outlined.AttachFile,false,
+                            s(if(extraFile!=null)R.string.intake_added else R.string.intake_empty),
+                            modifier=Modifier.weight(1f),ready=extraFile!=null,
+                            iconTint=Color(0xFF636879),iconBackground=Color(0xFFF0F0F4),
+                            onUpload={pickLocal(OwnerIntakeKind.Extra)},onCapture={openCamera(OwnerIntakeKind.Extra)},
+                            detail=extraFile?.let{s(R.string.intake_view_file)},
+                            onDetail={intakeDetails=OwnerIntakeKind.Extra})
                     }
-                    if(directVerification) PlainNotice(Icons.Outlined.Description,
-                        s(if(resubmission?.optString("kind")=="LAND")R.string.direct_land_documents else R.string.direct_home_documents))
-                    PlainNotice(Icons.Outlined.Lock,s(R.string.file_privacy))
-                    PlainNotice(Icons.Outlined.Info,s(R.string.smart_document_first_hint))
-                    HorizontalDivider()
-                    SectionHeading(s(R.string.identity_section),s(R.string.identity_hint))
-                    if(pendingPhoto==null&&!identitySelected){
-                        Surface(color=Color.White,
-                            shape=RoundedCornerShape(20.dp),
-                            border=BorderStroke(1.dp,CardBorder)){
-                            Column(Modifier.fillMaxWidth().padding(18.dp),
-                                verticalArrangement=Arrangement.spacedBy(13.dp)){
-                                Button(onClick={openCamera(OwnerIntakeKind.Identity)},
-                                    modifier=Modifier.fillMaxWidth().heightIn(min=56.dp),
-                                    shape=RoundedCornerShape(16.dp),
-                                    colors=ButtonDefaults.buttonColors(containerColor=Brand.Crimson)){
-                                    Icon(Icons.Outlined.CameraAlt,null,Modifier.size(22.dp))
-                                    Spacer(Modifier.width(10.dp))
-                                    Text(s(R.string.camera_front_action),fontSize=15.sp)
-                                }
-                                Text(s(R.string.camera_capture_disclosure),
-                                    color=Brand.Muted,fontSize=12.sp,lineHeight=19.sp)
-                            }
-                        }
-                    }
+                    if(pickMessage!=0&&pickMessage!=R.string.file_selected)
+                        Text(s(pickMessage),color=Brand.Muted,fontSize=12.sp,modifier=Modifier.semantics{liveRegion=LiveRegionMode.Polite})
+                    if(identityMessage!=0)Text(s(identityMessage),color=MaterialTheme.colorScheme.error,fontSize=12.sp)
+                    if(localIntakeError!=0)Text(s(localIntakeError),color=MaterialTheme.colorScheme.error,fontSize=12.sp)
                     if(pendingPhoto!=null){
                         val pending=pendingPhoto!!
                         Surface(color=Color.White,shape=RoundedCornerShape(20.dp),
@@ -923,58 +878,85 @@ internal fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmiss
                                 if(frontRead?.issue==LocalDocumentOcr.FrontIssue.SERVICE_UNAVAILABLE&&!frontReadBusy){
                                     OutlinedButton(onClick={frontReadRetry++}){Text(s(R.string.owner_retry))}
                                 }
-                                if(hasPilotReviewSession)Text(s(R.string.owner_analysis_consent),color=Brand.Muted,fontSize=12.sp)
-                            }
-                        }
-                    }else if(identitySelected){
-                        Surface(color=Color(0xFFE9F6F1),
-                            shape=RoundedCornerShape(17.dp)){
-                            Row(Modifier.fillMaxWidth().padding(15.dp),
-                                verticalAlignment=Alignment.CenterVertically,
-                                horizontalArrangement=Arrangement.spacedBy(12.dp)){
-                                Icon(Icons.Outlined.CheckCircle,null,
-                                    tint=Color(0xFF178063))
-                                Text(s(R.string.camera_photo_accepted),
-                                    Modifier.weight(1f),color=Brand.Ink,
-                                    fontWeight=FontWeight.SemiBold)
-                                TextButton(onClick={openCamera(OwnerIntakeKind.Identity)}){
-                                    Text(s(R.string.camera_review_retake))
-                                }
                             }
                         }
                     }
-                    if(identityMessage!=0) PlainNotice(Icons.Outlined.Info,s(identityMessage))
-                    OutlinedButton(onClick={pickLocal(OwnerIntakeKind.Identity)},modifier=Modifier.fillMaxWidth()){
-                        Icon(Icons.Outlined.FolderOpen,null);Spacer(Modifier.width(8.dp));Text(s(R.string.intake_upload_identity))
-                    }
-                    galleryIdentity?.let { imported ->
-                        Text(imported.displayName,style=MaterialTheme.typography.bodySmall,color=Brand.Ink)
-                        IntakeImagePreview(imported.uri)
-                        Text(s(R.string.intake_identity_preview_only),style=MaterialTheme.typography.bodySmall,color=Brand.Muted)
-                        TextButton(onClick={galleryIdentity=null}){Text(s(R.string.remove))}
-                    }
-                    IntakeOptionalDocument(R.string.intake_plan,planFile?.displayName,
-                        onCapture={openCamera(OwnerIntakeKind.Plan)},onUpload={pickLocal(OwnerIntakeKind.Plan)},
-                        onRemove={planFile?.let{PrivateCaptureMemory.discard(it.uri)};planFile=null;planPage=1})
-                    planFile?.let { file ->
-                        if(file.mime=="application/pdf")Row(verticalAlignment=Alignment.CenterVertically){
-                            TextButton(onClick={planPage=(planPage-1).coerceAtLeast(1)},enabled=planPage>1){Text("−")}
-                            Text(s(R.string.intake_plan_page,planPage))
-                            TextButton(onClick={planPage=(planPage+1).coerceAtMost(8)},enabled=planPage<8){Text("+")}
-                        }
-                        OutlinedButton(onClick={
-                            parcelEditorSource=OwnerParcelEditorSource(file.uri,file.mime,planPage,planPage,null,null,emptyList(),"","",null)
-                        },modifier=Modifier.fillMaxWidth()){Text(s(R.string.intake_open_plan))}
-                    }
-                    IntakeOptionalDocument(R.string.intake_extra,extraFile?.displayName,
-                        onCapture={openCamera(OwnerIntakeKind.Extra)},onUpload={pickLocal(OwnerIntakeKind.Extra)},
-                        onRemove={extraFile?.let{PrivateCaptureMemory.discard(it.uri)};extraFile=null})
-                    if(localIntakeError!=0)Text(s(localIntakeError),color=MaterialTheme.colorScheme.error)
-                    Text(s(if(hasOwnerReviewSession&&!hasPilotReviewSession)R.string.intake_supplement_owner_hint
-                        else R.string.intake_optional_preview_only),style=MaterialTheme.typography.bodySmall,color=Brand.Muted)
-                    HorizontalDivider()
+
                     if(!directVerification)ListingPhotoEditor(listingPhotos,directPublishing=intakePhotos!=null,
-                        persistAccess=intakePhotos!=null)
+                        persistAccess=intakePhotos!=null,compact=true)
+                    if(directVerification)Text(s(if(resubmission?.optString("kind")=="LAND")R.string.direct_land_documents else R.string.direct_home_documents),fontSize=12.sp,color=Brand.Muted)
+                    if(planFile!=null||extraFile!=null)Text(s(if(hasOwnerReviewSession&&!hasPilotReviewSession)
+                        R.string.intake_supplement_owner_hint else R.string.intake_optional_preview_only),fontSize=11.sp,color=Brand.Muted)
+                    intakeDetails?.let{kind->
+                        AlertDialog(onDismissRequest={intakeDetails=null},
+                            title={Text(s(when(kind){
+                                OwnerIntakeKind.Certificate->R.string.intake_cert_title
+                                OwnerIntakeKind.Identity->R.string.identity_section
+                                OwnerIntakeKind.Plan->R.string.intake_plan
+                                OwnerIntakeKind.Extra->R.string.intake_extra
+                            }))},
+                            text={
+                                Column(Modifier.heightIn(max=460.dp).verticalScroll(rememberScrollState()),
+                                    verticalArrangement=Arrangement.spacedBy(8.dp)){
+                                    when(kind){
+                                        OwnerIntakeKind.Certificate->{
+                                            Text(s(R.string.file_rules),fontSize=12.sp)
+                                            Text(s(R.string.certificate_page_order_hint),fontSize=12.sp)
+                                            files.toList().forEachIndexed{index,file->
+                                                Text("${index+1}. ${file.displayName}",fontWeight=FontWeight.Medium)
+                                                Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceEvenly){
+                                                    IconButton(onClick={
+                                                        PrivateCaptureMemory.discard(file.uri)
+                                                        val kept=removeDocumentPage(files.toList(),index)
+                                                        files.clear();files.addAll(kept);pickMessage=R.string.owner_page_removed
+                                                    },enabled=pairProgress==null){Icon(Icons.Outlined.DeleteOutline,s(R.string.remove))}
+                                                    IconButton(onClick={
+                                                        intakeDetails=null;replacingPage=index
+                                                        pickDocuments.launch(arrayOf("application/pdf","image/jpeg","image/png","image/tiff"))
+                                                    },enabled=pairProgress==null){Icon(Icons.Outlined.Edit,s(R.string.owner_replace_page))}
+                                                    if(files.size>1){
+                                                        IconButton(onClick={val ordered=moveDocumentPage(files.toList(),index,index-1);files.clear();files.addAll(ordered)},enabled=index>0&&pairProgress==null){Icon(Icons.Outlined.KeyboardArrowUp,s(R.string.owner_move_page_up))}
+                                                        IconButton(onClick={val ordered=moveDocumentPage(files.toList(),index,index+1);files.clear();files.addAll(ordered)},enabled=index<files.lastIndex&&pairProgress==null){Icon(Icons.Outlined.KeyboardArrowDown,s(R.string.owner_move_page_down))}
+                                                    }
+                                                }
+                                                HorizontalDivider()
+                                            }
+                                        }
+                                        OwnerIntakeKind.Identity->{
+                                            Text(s(R.string.camera_capture_disclosure),color=Brand.Muted)
+                                            galleryIdentity?.let{file->
+                                                Text(file.displayName,fontSize=12.sp)
+                                                IntakeImagePreview(file.uri)
+                                                Text(s(R.string.intake_identity_preview_only),fontSize=12.sp,color=Brand.Muted)
+                                                TextButton(onClick={galleryIdentity=null}){Text(s(R.string.remove))}
+                                            }
+                                            if(identitySelected)IdFieldsReadout(acceptedRead,s(R.string.camera_field_missing))
+                                            Button(onClick={intakeDetails=null;openCamera(OwnerIntakeKind.Identity)},modifier=Modifier.fillMaxWidth()){
+                                                Icon(Icons.Outlined.CameraAlt,null);Spacer(Modifier.width(6.dp));Text(s(R.string.intake_take_photo))
+                                            }
+                                        }
+                                        OwnerIntakeKind.Plan->planFile?.let{file->
+                                            Text(file.displayName)
+                                            if(file.mime=="application/pdf")Row(verticalAlignment=Alignment.CenterVertically){
+                                                TextButton(onClick={planPage=(planPage-1).coerceAtLeast(1)},enabled=planPage>1){Text("−")}
+                                                Text(s(R.string.intake_plan_page,planPage))
+                                                TextButton(onClick={planPage=(planPage+1).coerceAtMost(8)},enabled=planPage<8){Text("+")}
+                                            }
+                                            Button(onClick={
+                                                intakeDetails=null
+                                                parcelEditorSource=OwnerParcelEditorSource(file.uri,file.mime,planPage,planPage,null,null,emptyList(),"","",null)
+                                            },modifier=Modifier.fillMaxWidth()){Text(s(R.string.intake_open_plan))}
+                                            TextButton(onClick={PrivateCaptureMemory.discard(file.uri);planFile=null;planPage=1;intakeDetails=null}){Text(s(R.string.remove))}
+                                        }
+                                        OwnerIntakeKind.Extra->extraFile?.let{file->
+                                            Text(file.displayName)
+                                            if(file.mime=="image/jpeg"||file.mime=="image/png")IntakeImagePreview(file.uri)
+                                            TextButton(onClick={PrivateCaptureMemory.discard(file.uri);extraFile=null;intakeDetails=null}){Text(s(R.string.remove))}
+                                        }
+                                    }
+                                }
+                            },confirmButton={TextButton(onClick={intakeDetails=null}){Text(s(R.string.close))}})
+                    }
                 }
                 2 -> {
                     if(supplementCase!=null && (planFile!=null||extraFile!=null)){
@@ -1604,6 +1586,11 @@ internal fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmiss
                     }
                 }
             }else{
+            if(intakeStep)Text(s(when{!certReady&&!identitySelected->R.string.intake_missing_both
+                !certReady->R.string.intake_missing_cert
+                !identitySelected->R.string.intake_missing_id
+                else->R.string.intake_ready}),modifier=Modifier.fillMaxWidth().semantics{liveRegion=LiveRegionMode.Polite},
+                textAlign=TextAlign.Center,fontSize=12.sp,color=if(requiredCount==2)IntakeGreen else Brand.Muted)
             Button(onClick={
                 focusManager.clearFocus();keyboard?.hide()
                 if(needsCertificate){
@@ -1682,7 +1669,7 @@ internal fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmiss
                     }
                 }
                 else if(pilotOcrSession==null)saveLocalDraft()
-            }, enabled=!sending&&!submitted&&!identityDateBusy&&!planBusy&&!extraBusy&&!(step==2&&pilotOcrSession!=null&&pairReport==null), modifier=Modifier.fillMaxWidth().heightIn(min=54.dp),
+            }, enabled=(!intakeStep||requiredCount==2)&&!sending&&!submitted&&!identityDateBusy&&!planBusy&&!extraBusy&&!(step==2&&pilotOcrSession!=null&&pairReport==null), modifier=Modifier.fillMaxWidth().heightIn(min=54.dp),
                 shape=RoundedCornerShape(17.dp),colors=ButtonDefaults.buttonColors(
                     containerColor = if (needsCertificate) Brand.NeutralContainer else Brand.Crimson,
                     contentColor = if (needsCertificate) Brand.Ink else Color.White
@@ -1691,13 +1678,13 @@ internal fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmiss
                     else if(step==3&&pilotOcrSession!=null)
                     if(sending)R.string.submission_sending else if(submitted)R.string.submission_sent
                     else if(directVerification)R.string.direct_submit_docs else R.string.submission_send
-                    else if(step==3)R.string.save_draft else if(intakeStep)R.string.owner_confirm_analyze
+                    else if(step==3)R.string.save_draft else if(intakeStep)R.string.intake_analyze
                     else R.string.continue_label),fontWeight=FontWeight.SemiBold,fontSize=15.sp)
                 Spacer(Modifier.width(9.dp))
                 Icon(if(step==3)Icons.Outlined.Save else Icons.AutoMirrored.Filled.ArrowForward,
                     null,Modifier.size(21.dp))
             }
-            if(step<3) {
+            if(step<3&&!intakeStep) {
                 Text(s(R.string.smart_autosave_hint), style=MaterialTheme.typography.bodySmall, color=Brand.Muted)
             }
             }
