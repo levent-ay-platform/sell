@@ -1,5 +1,15 @@
 # CURRENT — Amlak / Atlas Tunisia
-_Last audited: 2026-11-23 (Europe/Istanbul). This is the navigation and checkpoint index, not a replacement for the authoritative issue records._
+_Last audited: 2026-11-24 for Atlas Cadastre Engine (Europe/Istanbul); other product sections retain their own dates. This is the navigation and checkpoint index, not a replacement for the authoritative issue records._
+
+## 2026-11-24 Atlas Cadastre Engine — current private development checkpoint
+
+**Master:** [ATLAS MASTER #20](https://github.com/levent-ay-platform/sell/issues/20). **Stacked unmerged Draft:** [PR #23](https://github.com/levent-ay-platform/sell/pull/23) on Amlak [PR #22](https://github.com/levent-ay-platform/sell/pull/22).
+
+The non-destructive **developer pipeline is implemented** under `scripts/atlas_*.py`: read-only private PDF inventory and high-recall triage, source-scoped same-page document–title/parcel candidate graph, independent GCP-based georeferencing QA (candidate only), safe reviewed public GeoJSON projection with revocation and HMAC IDs, private `ReviewedAtlasParcel` Amlak staging, and an owner-only SQLite Backup API snapshot tool that fails closed for missing WAL sidecars. [Operator runbook](https://github.com/levent-ay-platform/sell/blob/feat/atlas-cadastre-audit-20261124/docs/ATLAS_CADASTRE_EVIDENCE_AUDIT.md).
+
+**Proof:** [GitHub Actions #45298733326](https://github.com/levent-ay-platform/sell/actions/runs/45298733326) **PASS**, 47 synthetic/offline tests and Python compile. A canonical AI Agent CTR `control.device_health` on LEVENT-MAC returned OK. The prior main-file-only copy had `quick_check=ok`, but direct standard SQLite RO failed; **no current owner-coordinated transactionally consistent live backup, expanded archive-wide run, official cadastral plan count, or ground-verified Nabeul parcel has been proven**. Recent remote arbitrary commands were blocked before dispatch; no data mutation or production operation was performed. The scripts are not wired into a live Amlak service or shipped in an APK.
+
+**Next external acceptance gates** (not proof of implementation failure): authorized current Atlas DB WAL-coherent backup; source-rights/issuer classification of real PDF plans; reviewer-approved scoped links/GCPs and independent geometries; authenticated backend import and runtime withdrawal QA; Android physical-device and Arabic/French acceptance. No merge or production publish while these gates remain open.
 
 ## Source-of-truth ownership (do not create competing master plans)
 
