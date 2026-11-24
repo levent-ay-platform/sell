@@ -27,7 +27,7 @@ class OpenDevicePilot(unittest.TestCase):
         review=self.store.record_review(user,[],{"assessment":"INSUFFICIENT_EVIDENCE"})
         item=self.store.add_review_attachment(user,review,"CADASTRAL_PLAN","image/png",image("red"))
         ring=[[10.1,36.1],[10.101,36.1],[10.101,36.101]]
-        self.store.save_review_boundary(user,review,ring)
+        self.store.save_review_boundary(user,review,ring,None)
         for operation in [lambda:self.store.restore_review(other,review),
                           lambda:self.store.review_attachments(other,review),
                           lambda:self.store.read_review_attachment(other,review,item["id"]),
