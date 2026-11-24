@@ -509,6 +509,7 @@ internal fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmiss
     val pilotAttachmentReview=pairReport?.reviewId.takeIf{hasPilotReviewSession}
     val remoteAttachments=remember(draftFile,pilotAttachmentReview){mutableStateMapOf<String,PilotListingClient.Attachment>()}
     val uploadedAttachmentKeys=remember(draftFile,pilotAttachmentReview){mutableStateMapOf<String,String>()}
+    var attachmentSupported by remember(draftFile,pilotAttachmentReview){mutableStateOf<Boolean?>(null)}
     var attachmentReady by remember(draftFile,pilotAttachmentReview){mutableStateOf(false)}
     var attachmentLoading by remember(draftFile,pilotAttachmentReview){mutableStateOf(false)}
     var attachmentSaving by remember(draftFile,pilotAttachmentReview){mutableStateOf(false)}
@@ -526,6 +527,8 @@ internal fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmiss
         val session=pilotOcrSession?:return@LaunchedEffect
         attachmentLoading=true;attachmentReady=false;attachmentError=false
         try{
+            attachmentSupported=PilotListingClient.call(session,"/api/public/capabilities").optBoolean("privateReviewAttachments",false)
+            if(attachmentSupported==false)return@LaunchedEffect
             val list=PilotListingClient.attachments(session,review)
             remoteAttachments.clear()
             for(item in list){
@@ -556,8 +559,11 @@ internal fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmiss
     suspend fun syncPilotAttachments(){
         val review=pilotAttachmentReview?:return
         val session=pilotOcrSession?:return
-        if(!attachmentPending)return
+        // An older server can accept an ordinary submission only if no optional evidence is pending.
+        // A failed restore on an enabled server is not an empty review.
+        if(attachmentSupported==false&&!attachmentPending)return
         if(!attachmentReady)throw OwnerPairException(503)
+        if(!attachmentPending)return
         for((kind,file) in listOf("CADASTRAL_PLAN" to planFile,"OTHER_LEGAL_PROOF" to extraFile)){
             val saved=remoteAttachments[kind]
             if(file==null){
@@ -1279,13 +1285,13 @@ internal fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmiss
                         onArea=if(!directVerification&&!readingForListing){{value->area=value;saveMessage=0}}else null,
                         areaEvidence=pairReport?.let{listingAreaEvidence(it.detectedKind,it.sourceFacts)})
                     JourneySectionHeading(s(if(readingForListing||directVerification)R.string.direct_analysis else R.string.step_property),Icons.Outlined.EditNote)
-                    if(hasPilotReviewSession&&pilotAttachmentReview!=null&&(planFile!=null||extraFile!=null||remoteAttachments.isNotEmpty()||mapBoundary.isNotEmpty()||remoteBoundary!=null)){
+                    if(hasPilotReviewSession&&pilotAttachmentReview!=null&&(planFile!=null||extraFile!=null||remoteAttachments.isNotEmpty()||mapBoundary.isNotEmpty()||remoteBoundary!=null||attachmentError)){
                         JourneyPanel{
                             Text(s(R.string.intake_supplements_heading),fontWeight=FontWeight.SemiBold)
                             Text(s(if(attachmentReady&&!attachmentPending)R.string.intake_pilot_attachments_saved
                                 else R.string.intake_pilot_attachments_hint),fontSize=12.sp,color=Brand.Muted)
                             if(attachmentLoading||attachmentSaving)LinearProgressIndicator(Modifier.fillMaxWidth())
-                            if(attachmentError){
+                            if(attachmentError||attachmentSupported==false&&attachmentPending){
                                 Text(s(R.string.intake_supplement_failed),color=MaterialTheme.colorScheme.error)
                                 TextButton(onClick={attachmentRetry++},enabled=!attachmentLoading&&!attachmentSaving){Text(s(R.string.owner_retry))}
                             }
@@ -1972,7 +1978,7 @@ internal fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmiss
                 }
                 else if(step==2 && onDocumentRead!=null){
                     pairReport?.takeIf { it.reviewId != null }?.let { report ->
-                        if(hasPilotReviewSession&&attachmentPending){
+                        if(hasPilotReviewSession&&(attachmentPending||(attachmentSupported!=false&&!attachmentReady))){
                             submissionMessage=R.string.intake_pilot_attachments_save
                         }else{
                             feedback(AppCue.Confirm)

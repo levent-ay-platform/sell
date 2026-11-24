@@ -134,7 +134,8 @@ class WorkflowRoutes:
             if method=='GET' and path=='/api/public/listings':h.result(200,{'ok':True,'listings':self.store.public_listings()});return True
             if method=='GET' and path=='/api/public/capabilities':
                 h.result(200,{'ok':True,'directPublishing':self.direct_publishing,
-                              'draftDocumentReview':self.direct_publishing});return True
+                              'draftDocumentReview':self.direct_publishing,
+                              'privateReviewAttachments':os.environ.get('MALAK_PRIVATE_REVIEW_ATTACHMENTS')=='1' and self.store.enrolled_devices is not None});return True
             match=re.fullmatch('/api/public/photos/('+ID+')',path)
             if match and method=='GET':
                 self.binary(h,200,self.store.public_photo(match[1]),'image/jpeg');return True

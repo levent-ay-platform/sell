@@ -362,7 +362,9 @@ class HttpWorkflow(unittest.TestCase):
             return self.request(endpoint+'/attachments',raw,token,h)
         with patch.dict('os.environ',{'MALAK_PRIVATE_REVIEW_ATTACHMENTS':'0'}):
             self.assertEqual(self.request(endpoint+'/attachments',token=owner)[0],404)
+            self.assertFalse(self.request('/api/public/capabilities')[1]['privateReviewAttachments'])
         with patch.dict('os.environ',{'MALAK_PRIVATE_REVIEW_ATTACHMENTS':'1'}):
+            self.assertTrue(self.request('/api/public/capabilities')[1]['privateReviewAttachments'])
             self.assertEqual(self.request(endpoint+'/attachments')[0],401)
             self.assertEqual(upload(owner,False)[0],400)
             self.assertEqual(upload(other)[0],404)
