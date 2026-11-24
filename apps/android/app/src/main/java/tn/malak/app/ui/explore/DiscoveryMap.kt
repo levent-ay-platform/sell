@@ -6,6 +6,19 @@ import android.graphics.Paint
 import android.graphics.RectF
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.border
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.size
+import androidx.compose.material3.Text
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.fillMaxSize
@@ -68,7 +81,6 @@ internal data class CameraJump(val point: DiscoveryPoint, val zoom: Double, val 
 private const val SOURCE = "malak-discovery-source"
 private const val MARKERS = "malak-discovery-markers"
 private const val AfiZones = "afi-zones"
-private const val AfiGovernorates = "afi-governorate-counts"
 internal const val AfiZoneZoom = 7.8f
 private const val AfiLots = "afi-lots"
 private const val AfiLotFill = "afi-lot-fill"
@@ -151,6 +163,8 @@ internal fun DiscoveryMap(
     var worldCamera by remember(mapView) { mutableStateOf(if (openFromGlobe) initial.center to WorldZoom else null) }
     var spinLongitude by remember(mapView) { mutableStateOf<Double?>(null) }
     var radarCamera by remember(mapView) { mutableStateOf<CameraPosition?>(null) }
+    var overviewCamera by remember(mapView) { mutableStateOf<CameraPosition?>(null) }
+    var viewportSize by remember(mapView) { mutableStateOf(IntSize.Zero) }
 
     DisposableEffect(mapView, lifecycle) {
         var active = true
@@ -186,6 +200,7 @@ internal fun DiscoveryMap(
             }
             nativeMap.addOnCameraMoveListener {
                 val camera = nativeMap.cameraPosition
+                overviewCamera = camera
                 if (radarVisible || editingRadar) radarCamera = camera
                 val origin = radarGestureOrigin
                 val target = camera.target
@@ -208,6 +223,7 @@ internal fun DiscoveryMap(
             nativeMap.addOnCameraIdleListener {
                 movingCallback(false)
                 val position = nativeMap.cameraPosition
+                overviewCamera = position
                 if (radarVisible) radarCamera = position
                 val center = position.target ?: return@addOnCameraIdleListener
                 val region = nativeMap.projection.visibleRegion.latLngBounds
@@ -245,12 +261,6 @@ internal fun DiscoveryMap(
                         lotCallback(lot.getStringProperty("zoneId"), lot.getStringProperty("id"))
                         return@addOnMapClickListener true
                     }
-                    val overview = nativeMap.queryRenderedFeatures(hit, AfiGovernorates).firstOrNull()
-                    if (overview != null) {
-                        governorateCallback(DiscoveryPoint(overview.getNumberProperty("focusLat").toDouble(),
-                            overview.getNumberProperty("focusLon").toDouble()))
-                        return@addOnMapClickListener true
-                    }
                     val zone = nativeMap.queryRenderedFeatures(hit, AfiZones).firstOrNull()
                         ?: return@addOnMapClickListener false
                     zoneCallback(zone.getStringProperty("id"))
@@ -282,6 +292,7 @@ internal fun DiscoveryMap(
                     PropertyFactory.symbolSortKey(Expression.get("drawOrder"))
                 ))
                 style = loaded
+                overviewCamera = nativeMap.cameraPosition
                 if (globeEnabled) {
                     val camera = nativeMap.cameraPosition
                     globeCallback(camera.zoom <= 1.5)
@@ -356,10 +367,6 @@ internal fun DiscoveryMap(
         style?.getLayerAs<LineLayer>(AfiSelected)?.setFilter(
             Expression.eq(Expression.get("id"), Expression.literal(industrialLotId.orEmpty()))
         )
-    }
-
-    LaunchedEffect(style, industrialCounts) {
-        style?.let { updateGovernorateCounts(it, industrialCounts) }
     }
 
     LaunchedEffect(style, boundaries) {
@@ -472,12 +479,42 @@ internal fun DiscoveryMap(
             close()
         }
     }
-    Box(modifier.background(Brand.Pearl)) {
+    val badgeDiameter = 36.dp
+    val badgePx = with(LocalDensity.current) { badgeDiameter.toPx() }
+    val badgeCenters = remember(map,style,overviewCamera,viewportSize,industrialCounts,badgePx) {
+        val camera = overviewCamera
+        val native = map
+        if (native == null || style == null || camera == null || camera.zoom < 2.5 ||
+            camera.zoom >= AfiZoneZoom || viewportSize.width <= 0 || viewportSize.height <= 0)
+            emptyList()
+        else buildList<Pair<IndustrialGovernorate,Offset>> {
+            // Prioritize nonzero lot counts; deterministic spacing avoids overlapping tap targets.
+            for (row in industrialCounts.sortedByDescending { it.lots }) {
+                val screen = native.projection.toScreenLocation(row.place.point.latLng())
+                val point = Offset(screen.x,screen.y)
+                val radius = badgePx/2
+                if (point.x < radius || point.y < radius ||
+                    point.x > viewportSize.width-radius || point.y > viewportSize.height-radius) continue
+                if (any { (_,other) -> (point-other).getDistance() < badgePx*.91f }) continue
+                add(row to point)
+            }
+        }
+    }
+    Box(modifier.background(Brand.Pearl).onSizeChanged { viewportSize=it }) {
         if (globeEnabled && (radar == null || worldCamera != null)) GlobeSky(Modifier.matchParentSize())
         AndroidView(factory = { mapView }, modifier = Modifier.fillMaxSize())
         worldCamera?.let { (center, zoom) ->
             WorldGlobe(center, zoom, Modifier.matchParentSize(), spinGlobe,
                 onStopSpin = { globeTapCallback() }, onSpinLongitude = { spinLongitude = it })
+        }
+        if (worldCamera == null) for ((row,point) in badgeCenters) {
+            Box(Modifier.offset { IntOffset((point.x-badgePx/2).roundToInt(),(point.y-badgePx/2).roundToInt()) }
+                .size(badgeDiameter).background(if(row.lots==0)Color(0xFF55616A) else Color(0xFF145D68),CircleShape)
+                .border(2.dp,Color.White,CircleShape)
+                .clickable { governorateCallback(row.focus) },
+                contentAlignment=Alignment.Center) {
+                Text(row.lots.toString(),color=Color.White,fontSize=12.sp,fontWeight=FontWeight.Bold)
+            }
         }
         if (radarPath != null && worldCamera == null) {
             val projectedCenter = radarCamera?.target?.let { map?.projection?.toScreenLocation(it) }
@@ -518,49 +555,6 @@ internal fun GlobeSky(modifier: Modifier, content: @Composable BoxScope.() -> Un
 }
 
 private fun DiscoveryPoint.latLng() = LatLng(latitude, longitude)
-
-private fun updateGovernorateCounts(style: Style, rows: List<IndustrialGovernorate>) {
-    val features = rows.map { (place, count, focus) ->
-        val icon = "afi-count-$count"
-        if (style.getImage(icon) == null) {
-            val size = 58
-            val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
-            val canvas = Canvas(bitmap)
-            val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = android.graphics.Color.WHITE }
-            canvas.drawCircle(29f, 29f, 28f, paint)
-            paint.color = if (count == 0) 0xFF55616A.toInt() else 0xFF145D68.toInt()
-            canvas.drawCircle(29f, 29f, 25f, paint)
-            paint.color = android.graphics.Color.WHITE
-            paint.textAlign = Paint.Align.CENTER
-            paint.typeface = android.graphics.Typeface.DEFAULT_BOLD
-            paint.textSize = 24f
-            canvas.drawText(count.toString(), 29f, 29f - (paint.descent() + paint.ascent()) / 2, paint)
-            style.addImage(icon, bitmap)
-        }
-        Feature.fromGeometry(Point.fromLngLat(place.point.longitude, place.point.latitude)).apply {
-            addStringProperty("badge", icon)
-            addNumberProperty("lots", count)
-            addNumberProperty("focusLat", focus.latitude)
-            addNumberProperty("focusLon", focus.longitude)
-        }
-    }
-    val collection = FeatureCollection.fromFeatures(features)
-    val source = style.getSourceAs<GeoJsonSource>(AfiGovernorates)
-    if (source != null) {
-        source.setGeoJson(collection)
-    } else if (rows.isNotEmpty()) {
-        style.addSource(GeoJsonSource(AfiGovernorates, collection))
-        val layer = SymbolLayer(AfiGovernorates, AfiGovernorates).withProperties(
-            PropertyFactory.iconImage(Expression.get("badge")), PropertyFactory.iconSize(.80f),
-            // The overview counts are intentional foreground markers, not optional base-map labels.
-            PropertyFactory.iconAllowOverlap(true), PropertyFactory.iconIgnorePlacement(true),
-            PropertyFactory.iconPadding(1f), PropertyFactory.symbolSortKey(Expression.get("lots"))
-        )
-        layer.minZoom = 2.5f
-        layer.maxZoom = AfiZoneZoom
-        style.addLayerBelow(layer, MARKERS)
-    }
-}
 
 private fun updateIndustrialLayers(style: Style, zones: FeatureCollection?, lots: FeatureCollection?) {
     val empty = FeatureCollection.fromFeatures(emptyList())
