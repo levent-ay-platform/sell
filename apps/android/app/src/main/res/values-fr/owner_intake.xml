@@ -47,4 +47,5 @@
     <string name="intake_missing_id">Manque : capture et confirmation de la carte</string>
     <string name="intake_ready">Prêt pour l\'analyse</string>
     <string name="intake_analyze">Analyser et continuer</string>
+    <string name="intake_analysis_disclosure">Continuer transmet le certificat et la carte pour une analyse privée.</string>
 </resources>

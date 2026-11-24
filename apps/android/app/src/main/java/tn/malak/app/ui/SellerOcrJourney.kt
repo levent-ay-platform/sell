@@ -765,7 +765,7 @@ internal fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmiss
                     Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically,
                         horizontalArrangement=Arrangement.SpaceBetween){
                         Text(s(R.string.intake_private_heading),fontWeight=FontWeight.Bold,fontSize=17.sp,color=Brand.Ink)
-                        Text(s(R.string.intake_required_count,requiredCount),fontSize=11.sp,color=Brand.Muted)
+                        Text(s(R.string.intake_required_count,requiredCount),fontSize=12.sp,color=Brand.Muted)
                     }
                     Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(6.dp)){
                         Icon(Icons.Outlined.Lock,null,tint=IntakeGreen,modifier=Modifier.size(16.dp))
@@ -886,7 +886,7 @@ internal fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmiss
                         persistAccess=intakePhotos!=null,compact=true)
                     if(directVerification)Text(s(if(resubmission?.optString("kind")=="LAND")R.string.direct_land_documents else R.string.direct_home_documents),fontSize=12.sp,color=Brand.Muted)
                     if(planFile!=null||extraFile!=null)Text(s(if(hasOwnerReviewSession&&!hasPilotReviewSession)
-                        R.string.intake_supplement_owner_hint else R.string.intake_optional_preview_only),fontSize=11.sp,color=Brand.Muted)
+                        R.string.intake_supplement_owner_hint else R.string.intake_optional_preview_only),fontSize=12.sp,color=Brand.Muted)
                     intakeDetails?.let{kind->
                         AlertDialog(onDismissRequest={intakeDetails=null},
                             title={Text(s(when(kind){
@@ -1591,6 +1591,9 @@ internal fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmiss
                 !identitySelected->R.string.intake_missing_id
                 else->R.string.intake_ready}),modifier=Modifier.fillMaxWidth().semantics{liveRegion=LiveRegionMode.Polite},
                 textAlign=TextAlign.Center,fontSize=12.sp,color=if(requiredCount==2)IntakeGreen else Brand.Muted)
+            if(intakeStep&&requiredCount==2&&canRunPrivateMatching)
+                Text(s(R.string.intake_analysis_disclosure),fontSize=12.sp,color=Brand.Muted,
+                    modifier=Modifier.fillMaxWidth(),textAlign=TextAlign.Center)
             Button(onClick={
                 focusManager.clearFocus();keyboard?.hide()
                 if(needsCertificate){

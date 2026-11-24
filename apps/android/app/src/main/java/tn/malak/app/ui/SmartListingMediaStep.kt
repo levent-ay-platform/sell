@@ -190,14 +190,14 @@ internal fun ListingPhotoEditor(
                                     if(at>0){photos.removeAt(at);photos.add(0,photo)}
                                 },modifier=Modifier.align(Alignment.BottomCenter).fillMaxWidth().background(Color.White.copy(alpha=.92f)),
                                     contentPadding=PaddingValues(0.dp)){
-                                    Text(s(if(index==0)R.string.intake_cover else R.string.intake_make_cover),fontSize=10.sp)
+                                    Text(s(if(index==0)R.string.intake_cover else R.string.intake_make_cover),fontSize=12.sp)
                                 }
                             }
                             index==photos.size&&photos.size<MAX_PHOTOS->{
                                 Column(Modifier.fillMaxSize().clickable{picker.launch(arrayOf("image/jpeg","image/png","image/webp"))},
                                     verticalArrangement=Arrangement.Center,horizontalAlignment=Alignment.CenterHorizontally){
                                     Icon(Icons.Outlined.AddPhotoAlternate,s(R.string.smart_media_pick),tint=Brand.Crimson,modifier=Modifier.size(25.dp))
-                                    Text(s(R.string.intake_photo_add),fontSize=11.sp,color=Brand.Crimson)
+                                    Text(s(R.string.intake_photo_add),fontSize=12.sp,color=Brand.Crimson)
                                 }
                             }
                             else->Icon(Icons.Outlined.AddPhotoAlternate,null,tint=Color(0xFFC7C2C5),modifier=Modifier.size(22.dp))

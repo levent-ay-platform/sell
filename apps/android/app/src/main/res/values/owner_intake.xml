@@ -47,4 +47,5 @@
     <string name="intake_missing_id">Missing: capture and confirm ID</string>
     <string name="intake_ready">Ready to analyze documents</string>
     <string name="intake_analyze">Analyze and continue</string>
+    <string name="intake_analysis_disclosure">Continuing sends the certificate and ID for private analysis.</string>
 </resources>

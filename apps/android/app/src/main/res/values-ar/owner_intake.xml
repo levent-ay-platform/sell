@@ -47,4 +47,5 @@
     <string name="intake_missing_id">الناقص: تصوير الهوية وتأكيدها</string>
     <string name="intake_ready">جاهز لتحليل الوثائق</string>
     <string name="intake_analyze">تحليل الوثائق والمتابعة</string>
+    <string name="intake_analysis_disclosure">المتابعة ترسل الشهادة والهوية للتحليل الخاص.</string>
 </resources>

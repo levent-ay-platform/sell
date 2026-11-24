@@ -47,10 +47,10 @@ internal fun IntakeGridCard(
             }
             Text(title,color=Brand.Ink,fontSize=14.sp,fontWeight=FontWeight.Bold,
                 lineHeight=19.sp,maxLines=2,overflow=TextOverflow.Ellipsis,
-                modifier=Modifier.heightIn(min=22.dp))
+                modifier=Modifier.heightIn(min=38.dp))
             Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(5.dp)){
                 Box(Modifier.size(6.dp).background(stateColor,CircleShape))
-                Text(state,color=stateColor,fontSize=11.sp,lineHeight=16.sp,maxLines=2,
+                Text(state,color=stateColor,fontSize=12.sp,lineHeight=16.sp,maxLines=2,
                     overflow=TextOverflow.Ellipsis,modifier=Modifier.weight(1f))
             }
             Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(4.dp)){
@@ -60,7 +60,7 @@ internal fun IntakeGridCard(
             if(detail!=null&&onDetail!=null){
                 TextButton(onClick=onDetail,modifier=Modifier.fillMaxWidth().heightIn(min=40.dp),
                     contentPadding=PaddingValues(2.dp)){
-                    Text(detail,fontSize=11.sp,lineHeight=15.sp,maxLines=2,overflow=TextOverflow.Ellipsis)
+                    Text(detail,fontSize=12.sp,lineHeight=15.sp,maxLines=2,overflow=TextOverflow.Ellipsis)
                 }
             }
         }
@@ -78,7 +78,7 @@ private fun IntakeAction(label:String,icon:ImageVector,primary:Boolean,enabled:B
         // Vertical layout avoids clipped translations on narrow handsets.
         Column(horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.spacedBy(1.dp)){
             Icon(icon,null,Modifier.size(16.dp))
-            Text(label,fontSize=11.sp,fontWeight=FontWeight.SemiBold,maxLines=1)
+            Text(label,fontSize=12.sp,fontWeight=FontWeight.SemiBold,maxLines=1)
         }
     }
 }
