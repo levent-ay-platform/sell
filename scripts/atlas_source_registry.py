@@ -224,10 +224,16 @@ def export_registry(path, config, *, include_geometries=False):
                         except ValueError:
                             value=None
                     geometry=None
+                    normalization=None
+                    reason=None
                     state="GEOMETRY_NOT_MAPPED" if geometry_rule is None else "MISSING_OR_UNSUPPORTED_GEOMETRY"
-                    if isinstance(value,dict) and value.get("type") in ("Polygon","MultiPolygon") and isinstance(value.get("coordinates"),list):
-                        geometry={"type":value["type"],"coordinates":value["coordinates"]}
-                        state="WGS84_POLYGON_DECLARED_NOT_VALIDATED"
+                    if isinstance(value,dict) and geometry_mapping is not None:
+                        try:
+                            geometry,normalization=normalize_geometry(value,geometry_mapping["format"],geometry_mapping["crs"])
+                            state="WGS84_NORMALIZED_CANDIDATE"
+                        except ValueError as exc:
+                            state="GEOMETRY_CONVERSION_REVIEW_REQUIRED"
+                            reason=str(exc)
                     geometries.append({"table_private":table,"scan_ordinal_private":actual,
                         "source_scoped_key":[record[f] for f in KEY],
                         "geometry_kind":geometry_mapping["kind"] if geometry_mapping else "UNKNOWN",
