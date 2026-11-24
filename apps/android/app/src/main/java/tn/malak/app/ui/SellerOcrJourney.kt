@@ -48,6 +48,11 @@ import tn.malak.app.BuildConfig
 import tn.malak.app.R
 import tn.malak.app.ui.parcel.OwnerParcelEditor
 import tn.malak.app.ui.explore.DiscoveryPoint
+import tn.malak.app.ui.explore.DiscoveryMap
+import tn.malak.app.ui.explore.DiscoveryCamera
+import tn.malak.app.ui.explore.DiscoveryMarkers
+import tn.malak.app.ui.explore.DiscoveryStyleUrl
+import tn.malak.app.ui.explore.InitialBounds
 import tn.malak.app.ui.explore.AtlasAdminIndex
 import tn.malak.app.ui.explore.loadAtlasAdminIndex
 import tn.malak.app.ui.explore.AdminContext
@@ -347,7 +352,7 @@ internal fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmiss
                 // upload or verification is implied.
                 frontReadBusy=true
                 try{
-                    if(pilotOcrSession!=null){
+                    if(hasPilotReviewSession&&pilotOcrSession!=null){
                         val result=LocalDocumentOcr.inspectPilotFront(
                             context,pending.uri,pending.length,pending.mime,pilotOcrSession)
                         if(pendingPhoto?.uploadKey==pending.uploadKey)frontRead=result
@@ -816,6 +821,9 @@ internal fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmiss
     }
     val keepMapDrawing:(List<DiscoveryPoint>)->Unit={points->
         mapBoundary=points;chooseMapBoundary=false;georefDraft=null
+        if(!directVerification&&!readingForListing&&area.isBlank()){
+            measureOwnerMap(points)?.let{area=String.format(Locale.ROOT,"%.2f",it.areaM2)}
+        }
         boundaryStore?.let{store->
             boundaryLocalBusy=true
             scope.launch{
@@ -1079,6 +1087,24 @@ internal fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmiss
                         val draft=file?.let{parcelPreviews[it.uri to planPage]}
                         val planFacts=planReading
                         val measured=measureOwnerMap(mapBoundary)
+                        OutlinedButton(onClick={chooseListingPoint=true},modifier=Modifier.fillMaxWidth()){
+                            Icon(Icons.Outlined.LocationOn,null,Modifier.size(19.dp));Spacer(Modifier.width(6.dp))
+                            Text(s(if(locationPoint==null)R.string.direct_choose_location else R.string.direct_change_location))
+                        }
+                        if(locationPoint!=null)Text(s(R.string.intake_pin_selected),fontSize=12.sp,color=IntakeGreen)
+                        val previewCenter=mapBoundary.firstOrNull()?:locationPoint
+                        if(previewCenter!=null){
+                            key(previewCenter,mapBoundary){
+                                var previewFailed by remember{mutableStateOf(false)}
+                                if(!previewFailed)DiscoveryMap(styleUrl=DiscoveryStyleUrl,
+                                    initial=DiscoveryCamera(previewCenter,17.0,InitialBounds),
+                                    jump=null,markers=DiscoveryMarkers(emptyList()),selectedId=null,priceLabel={""},
+                                    modifier=Modifier.fillMaxWidth().height(210.dp),
+                                    draftBoundary=mapBoundary,onCameraIdle={_,_->},
+                                    onListing={},onCluster={},onReady={},onFailure={previewFailed=true})
+                                else Text(s(R.string.v2_tiles_error),fontSize=12.sp,color=Brand.Muted)
+                            }
+                        }
                         if(file!=null){
                             Text(s(R.string.intake_plan),fontWeight=FontWeight.SemiBold,color=Brand.Ink)
                             Text(file.displayName,fontSize=12.sp,color=Brand.Muted,maxLines=1,overflow=TextOverflow.Ellipsis)
@@ -1491,13 +1517,6 @@ internal fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmiss
                         label={Text(s(R.string.property_region))},modifier=Modifier.fillMaxWidth(),singleLine=true,
                         isError=showInvalid&&region.trim().length<2,
                         supportingText=if(showInvalid&&region.trim().length<2){{Text(s(R.string.field_required))}}else null)
-                    val chosenPoint=SmartListingAssist.coordinates(listingLatitude,listingLongitude)
-                    OutlinedButton(onClick={chooseListingPoint=true},modifier=Modifier.fillMaxWidth(),
-                        shape=RoundedCornerShape(12.dp)){
-                        Icon(Icons.Outlined.LocationOn,null,Modifier.size(19.dp));Spacer(Modifier.width(6.dp))
-                        Text(s(if(chosenPoint==null)R.string.direct_choose_location else R.string.direct_change_location))
-                    }
-                    if(chosenPoint!=null)Text(s(R.string.intake_pin_selected),fontSize=12.sp,color=IntakeGreen)
                     val areaFocus = remember { FocusRequester() }
                     pairReport?.let { report ->
                         listingAreaEvidence(report.detectedKind, report.sourceFacts)?.let { fact ->
