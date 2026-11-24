@@ -6,6 +6,7 @@ on:
       - 'services/verification/qa/**'
       - 'services/verification/test/document-family-fields-v2.test.ts'
       - 'apps/android/**'
+      - 'scripts/build-mac-cpf-bundle.py'
       - '.github/workflows/amlak-cpf-location-qa.yml'
   workflow_dispatch:
 permissions:
@@ -22,6 +23,24 @@ jobs:
         with:
           node-version: '22'
       - run: node --experimental-strip-types --test services/verification/test/*.test.ts
+  isolated-cpf-bundle:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: python3 scripts/build-mac-cpf-bundle.py --output qa/cpf-bundle
+      - uses: actions/upload-artifact@v4
+        with:
+          name: amlak-cpf-isolated-source
+          path: qa/cpf-bundle/
+          retention-days: 5
+          if-no-files-found: error
   private-http-contract:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
