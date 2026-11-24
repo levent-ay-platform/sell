@@ -26,6 +26,22 @@ class MacDateTests(unittest.TestCase):
             [{'2000-12-05'},{'2000-12-05'}]),'2000-12-05')
         doc['pages'][0]['ocrWords'][0]['bbox']['top']=100
         self.assertEqual(guided_year_votes(doc,card,455,'2000-12-05',reader),[])
+    def test_guided_day_recovery_still_requires_numeric_agreement(self):
+        import numpy as np
+        from cin_mac_date import guided_day_votes,corroborated_birth_date,native_birth_dates
+        card=np.full((760,1200,3),230,dtype=np.uint8)
+        doc=document('ولد في 5 ديسمبر 2000')
+        self.assertEqual(native_birth_dates(doc,1200,760,455),{'2000-12-05'})
+        doc['pages'][0]['ocrWords']=[{'text':'٥','bbox':{'left':870,'top':550,'right':925,'bottom':630}}]
+        views=[{'2000-12-05'},{'2000-12-05'}]
+        prior=[([], [('0002',.99)]*2)]
+        good=guided_day_votes(doc,card,455,'2000-12-05',lambda _: [('50',.99)]*2)
+        bad=guided_day_votes(doc,card,455,'2000-12-05',lambda _: [('60',.99)]*2)
+        self.assertEqual(corroborated_birth_date(prior+good,views),'2000-12-05')
+        self.assertIsNone(corroborated_birth_date(prior+bad,views))
+        self.assertIsNone(corroborated_birth_date(prior+good+bad,views))
+        doc['pages'][0]['ocrWords'][0]['bbox']['left']=500
+        self.assertEqual(guided_day_votes(doc,card,455,'2000-12-05',lambda _: [('50',.99)]*2),[])
     def test_exact_month_in_birth_row_and_real_calendar_only(self):
         from cin_mac_date import native_birth_dates
         self.assertEqual(native_birth_dates(document(),1200,760,455),{'2000-12-05'})

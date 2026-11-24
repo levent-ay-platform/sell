@@ -40,7 +40,7 @@ def native_birth_dates(document,width,height,given_name_row):
         tokens=re.findall(r'[\u0621-\u064a]+',normalized)
         months=[_MONTHS[token] for token in tokens if token in _MONTHS]
         groups=re.findall(r'[0-9]+',normalized)
-        days=[g for g in groups if len(g)==2];years=[g for g in groups if len(g)==4]
+        days=[g for g in groups if len(g) in (1,2)];years=[g for g in groups if len(g)==4]
         if len(months)!=1 or len(groups)!=2 or len(days)!=1 or len(years)!=1:continue
         try:
             birth=date(int(years[0]),months[0],int(days[0]))
@@ -72,25 +72,49 @@ def corroborated_birth_date(numeric_votes,native_views,*,today=None):
     return value if day_agrees and year_agrees and days=={birth.day} and years=={birth.year} else None
 
 
-def guided_year_votes(document,card,given_name_row,candidate,numeric_reader):
-    """Use native geometry only; v5 still independently decodes the pixels."""
+def guided_component_votes(document,card,given_name_row,candidate,numeric_reader,*,component):
+    """Use native word geometry only; v5 independently reads the same pixels.
+
+    A unique matching word in the expected birth-row field is mandatory.
+    Native text does not substitute for numeric votes.
+    """
     h,w=card.shape[:2]
-    year=str(date.fromisoformat(candidate).year)
+    value=date.fromisoformat(candidate)
+    if component=='year':
+        accepted={str(value.year)}
+        x0,x1=.25,.65
+        min_width,max_width=.035,.35
+    elif component=='day':
+        accepted={f'{value.day:02d}',str(value.day)}
+        x0,x1=.66,.93
+        min_width,max_width=.012,.20
+    else:raise ValueError('UNSUPPORTED_BIRTH_COMPONENT')
     pages=document.get('pages',[])
     if len(pages)!=1:return []
     boxes=[]
     for word in pages[0].get('ocrWords',[]):
-        if word.get('text')!=year:continue
+        if not isinstance(word,dict):continue
+        text=word.get('text')
+        if not isinstance(text,str):continue
+        text=text.translate(str.maketrans('٠١٢٣٤٥٦٧٨٩۰۱۲۳۴۵۶۷۸۹','01234567890123456789'))
+        if text not in accepted:continue
         box=word.get('bbox',{})
-        if not all(type(box.get(k)) is int for k in ('left','top','right','bottom')):continue
+        if not isinstance(box,dict) or not all(type(box.get(k)) is int for k in ('left','top','right','bottom')):continue
         l,t,r,b=(box[k] for k in ('left','top','right','bottom'))
-        if not (.25*w<=l<r<=.65*w and .035*w<=r-l<=.35*w and
+        if not (x0*w<=l<r<=x1*w and min_width*w<=r-l<=max_width*w and
                 .67*h<=t<b<=.94*h and 12<=b-t<=.22*h and
                 .10*h<=(t+b)/2-given_name_row<=.27*h):continue
         boxes.append((max(0,l-8),max(0,t-7),min(w,r+8),min(h,b+7)))
     if len(boxes)!=1:return []
     l,t,r,b=boxes[0]
-    return [([],numeric_reader(card[t:b,l:r]))]
+    votes=numeric_reader(card[t:b,l:r])
+    return [(votes,[])] if component=='day' else [([],votes)]
+
+def guided_year_votes(document,card,given_name_row,candidate,numeric_reader):
+    return guided_component_votes(document,card,given_name_row,candidate,numeric_reader,component='year')
+
+def guided_day_votes(document,card,given_name_row,candidate,numeric_reader):
+    return guided_component_votes(document,card,given_name_row,candidate,numeric_reader,component='day')
 
 
 def read_mac_birth_date(card,given_name_row,numeric_votes,*,numeric_reader=None):
@@ -120,6 +144,7 @@ def read_mac_birth_date(card,given_name_row,numeric_votes,*,numeric_reader=None)
         extra=[]
         for document in documents:
             extra.extend(guided_year_votes(document,card,given_name_row,candidate,numeric_reader))
+            extra.extend(guided_day_votes(document,card,given_name_row,candidate,numeric_reader))
         return corroborated_birth_date(numeric_votes+extra,views)
     except (OSError,ValueError,TypeError,KeyError,subprocess.SubprocessError):return None
     finally:gray.fill(0)
