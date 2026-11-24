@@ -9,7 +9,7 @@ on:
       - 'scripts/check_malak_brand.py'
       - 'scripts/check_amlak_ui_contrast.py'
   push:
-    branches: [main]
+    branches: [main, feat/amlak-unified-intake-20261124]
     paths:
       - 'apps/android/**'
       - '.github/workflows/android.yml'
@@ -74,10 +74,10 @@ jobs:
           retention-days: 3
           if-no-files-found: error
       - name: Build map-first QA APK
-        if: ${{ github.head_ref == 'codex/malak-v2-map-parcel-foundation' }}
+        if: ${{ (github.head_ref == 'codex/malak-v2-map-parcel-foundation' || github.ref_name == 'feat/amlak-unified-intake-20261124') }}
         run: gradle -p apps/android :app:assembleDebug -PmalakV2Discovery=true --no-daemon
       - name: Upload map-first QA APK
-        if: ${{ github.head_ref == 'codex/malak-v2-map-parcel-foundation' }}
+        if: ${{ (github.head_ref == 'codex/malak-v2-map-parcel-foundation' || github.ref_name == 'feat/amlak-unified-intake-20261124') }}
         uses: actions/upload-artifact@v4
         with:
           name: malak-v2-map-demo-${{ github.sha }}
@@ -87,7 +87,7 @@ jobs:
       # Bounded read-only QA for the already deployed public listing feed.
       # Does NOT enable direct publishing, private OCR, shared PIN or production rollout.
       - name: Build map-first public-feed read-only QA APK
-        if: ${{ github.event_name == 'pull_request' && github.head_ref == 'codex/malak-v2-map-parcel-foundation' }}
+        if: ${{ github.event_name == 'pull_request' && (github.head_ref == 'codex/malak-v2-map-parcel-foundation' || github.ref_name == 'feat/amlak-unified-intake-20261124') }}
         run: |
           set -euo pipefail
           gradle -p apps/android :app:assembleDebug -PmalakV2Discovery=true -PmalakPublicListingsBaseUrl=https://malak-api.ayasofia.shop --no-daemon
@@ -100,7 +100,7 @@ jobs:
             exit 1
           }
       - name: Upload map-first public-feed read-only QA APK
-        if: ${{ github.event_name == 'pull_request' && github.head_ref == 'codex/malak-v2-map-parcel-foundation' }}
+        if: ${{ github.event_name == 'pull_request' && (github.head_ref == 'codex/malak-v2-map-parcel-foundation' || github.ref_name == 'feat/amlak-unified-intake-20261124') }}
         uses: actions/upload-artifact@v4
         with:
           name: amlak-map-public-feed-readonly-${{ github.sha }}

@@ -158,6 +158,7 @@ internal fun DirectOwnerListing(
         }
         SellerOcrJourney(
             draftScope = "$account/$intake",
+            intakePhotos = photos,
             onBack = { prefs.edit().remove("documentIntake").apply(); readingDocuments = false },
             onDocumentRead = { report ->
                 report.reviewId?.let { id ->
@@ -208,9 +209,16 @@ internal fun DirectOwnerListing(
                 DirectListingStage.Preview -> R.string.direct_preview
             }), color = Brand.Ink, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
             when (stage) {
-                DirectListingStage.Kind -> FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    PropertyKinds.forEach { (value, label) ->
-                        if (value != null) FilterChip(kind == value, { kind = value; error = 0 }, { Text(s(label)) })
+                DirectListingStage.Kind -> {
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        PropertyKinds.forEach { (value, label) ->
+                            if (value != null) FilterChip(kind == value, { kind = value; error = 0 }, { Text(s(label)) })
+                        }
+                    }
+                    if(!editing&&canAttachDocuments){
+                        OutlinedButton(onClick={focus.clearFocus();readingDocuments=true},modifier=Modifier.fillMaxWidth()){
+                            Text(s(R.string.intake_documents_and_photos))
+                        }
                     }
                 }
                 DirectListingStage.Location -> {

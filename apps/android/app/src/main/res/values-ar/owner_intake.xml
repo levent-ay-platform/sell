@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="intake_take_photo">تصوير</string>
+    <string name="intake_upload">رفع</string>
+    <string name="intake_upload_identity">رفع صورة الهوية للمعاينة</string>
+    <string name="intake_identity_preview_only">الصورة المرفوعة محلية للمعاينة فقط. التحقق من الهوية يحتاج تصويراً مباشراً.</string>
+    <string name="intake_plan">المخطط العقاري</string>
+    <string name="intake_extra">وثيقة إضافية</string>
+    <string name="intake_plan_page">صفحة المخطط %1$d</string>
+    <string name="intake_open_plan">معاينة وتحرير حدود المخطط</string>
+    <string name="intake_optional_preview_only">المخطط والوثيقة الإضافية للمعاينة داخل هذه الجلسة فقط، ولا يُرسلان إلى ملف التحقق حالياً.</string>
+    <string name="intake_documents_and_photos">الوثائق وصور العقار</string>
+    <string name="intake_document_camera_hint">صوّر المستند كاملاً بوضوح</string>
+</resources>

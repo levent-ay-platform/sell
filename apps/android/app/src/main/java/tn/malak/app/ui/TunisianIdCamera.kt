@@ -156,7 +156,8 @@ private fun rotateAndEncode(image:ImageProxy):ByteArray {
 @Composable
 internal fun TunisianIdCamera(
     onClose:()->Unit,
-    onPhoto:(android.net.Uri,Long)->Unit
+    onPhoto:(android.net.Uri,Long)->Unit,
+    documentMode:Boolean=false
 ){
     val context=LocalContext.current
     val lifecycleOwner=LocalLifecycleOwner.current
@@ -234,7 +235,7 @@ internal fun TunisianIdCamera(
                             provider?.unbindAll()
                             val group=UseCaseGroup.Builder()
                                 .addUseCase(preview).addUseCase(capture)
-                                .addUseCase(analyzer)
+                                .apply { if(!documentMode) addUseCase(analyzer) }
                             previewView.viewPort?.let{group.setViewPort(it)}
                             provider?.bindToLifecycle(lifecycleOwner,
                                 CameraSelector.DEFAULT_BACK_CAMERA,group.build())
@@ -254,7 +255,7 @@ internal fun TunisianIdCamera(
     BackHandler{onClose()}
     // Lighting warnings remain useful, but contour/texture estimates must
     // not repeatedly tell a user to move an already legible CIN.
-    val hint=when(pictureQuality.hint){
+    val hint=if(documentMode)R.string.intake_document_camera_hint else when(pictureQuality.hint){
         CaptureHint.DARK->R.string.camera_more_light
         CaptureHint.GLARE->R.string.camera_reduce_glare
         else->R.string.camera_shutter_anytime_hint
@@ -269,14 +270,14 @@ internal fun TunisianIdCamera(
                     IconButton(onClick=onClose){
                         Icon(Icons.Outlined.Close,s(R.string.back),tint=Color.White)
                     }
-                    Text(s(R.string.camera_scan_front),
+                    Text(s(if(documentMode)R.string.intake_take_photo else R.string.camera_scan_front),
                         color=Color.White,fontSize=19.sp)
                 }
                 // One centered physical card frame, never mirrored by
                 // Arabic RTL direction. No virtual CIN/name/date boxes:
                 // those overlapped the wrong printed fields on-device.
                 Box(Modifier.align(Alignment.Center)
-                    .fillMaxWidth(.84f).aspectRatio(1.585f)
+                    .fillMaxWidth(.84f).aspectRatio(if(documentMode) .78f else 1.585f)
                     .border(BorderStroke(2.5.dp,when(pictureQuality.hint){
                         CaptureHint.GOOD->Color(0xFF4DE1A1)
                         CaptureHint.CIN_UNCLEAR->Color(0xFFFFC85A)
@@ -286,7 +287,7 @@ internal fun TunisianIdCamera(
                     .background(Color.Black.copy(alpha=.76f))
                     .padding(20.dp),horizontalAlignment=Alignment.CenterHorizontally){
                     Text(s(hint),color=Color.White,fontSize=15.sp)
-                    Text(s(R.string.camera_preview_quality_only),
+                    if(!documentMode)Text(s(R.string.camera_preview_quality_only),
                         color=Color.White.copy(alpha=.94f),fontSize=13.sp)
                     Spacer(Modifier.height(17.dp))
                     if(capturing)CircularProgressIndicator(color=Color.White)

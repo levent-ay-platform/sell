@@ -23,7 +23,8 @@ internal object PrivateCaptureMemory {
     fun addJpeg(encoded:ByteArray):Uri {
         require(encoded.size in 20..MAX_BYTES)
         synchronized(held) {
-            if(held.size>=4)throw IllegalStateException("CAPTURE_CAPACITY")
+            if(held.size>=12 || held.values.sumOf { it.size.toLong() } + encoded.size > 32L*1024*1024)
+                throw IllegalStateException("CAPTURE_CAPACITY")
             val id=UUID.randomUUID().toString()
             held[id]=encoded
             return Uri.Builder().scheme("content").authority(AUTHORITY)

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="intake_take_photo">Photo</string>
+    <string name="intake_upload">Importer</string>
+    <string name="intake_upload_identity">Importer la pièce pour aperçu</string>
+    <string name="intake_identity_preview_only">Image locale pour aperçu uniquement. La vérification nécessite une capture directe.</string>
+    <string name="intake_plan">Plan parcellaire</string>
+    <string name="intake_extra">Document complémentaire</string>
+    <string name="intake_plan_page">Page du plan %1$d</string>
+    <string name="intake_open_plan">Aperçu et édition des limites</string>
+    <string name="intake_optional_preview_only">Le plan et le document complémentaire restent dans cette session de prévisualisation et ne sont pas transmis au dossier de vérification.</string>
+    <string name="intake_documents_and_photos">Documents et photos du bien</string>
+    <string name="intake_document_camera_hint">Photographiez le document entier, bien lisible</string>
+</resources>

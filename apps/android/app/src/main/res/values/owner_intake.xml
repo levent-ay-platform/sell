@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="intake_take_photo">Capture</string>
+    <string name="intake_upload">Upload</string>
+    <string name="intake_upload_identity">Import ID image for preview</string>
+    <string name="intake_identity_preview_only">Local preview only. Identity verification requires a live capture.</string>
+    <string name="intake_plan">Parcel plan</string>
+    <string name="intake_extra">Additional document</string>
+    <string name="intake_plan_page">Plan page %1$d</string>
+    <string name="intake_open_plan">Preview and edit plan boundaries</string>
+    <string name="intake_optional_preview_only">The plan and additional document stay in this preview session and are not sent to the verification case yet.</string>
+    <string name="intake_documents_and_photos">Documents and property photos</string>
+    <string name="intake_document_camera_hint">Capture the entire document clearly</string>
+</resources>

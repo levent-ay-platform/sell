@@ -22,6 +22,7 @@ import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -106,6 +107,7 @@ private val Capacities = listOf(
 @Composable
 internal fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmission:org.json.JSONObject?=null,
                      onDocumentRead: ((CertificateIdentityReview) -> Unit)? = null,
+                     intakePhotos:SnapshotStateList<DraftListingPhoto>?=null,
                      onSubmitted:(String)->Unit={onBack()}) {
     val context=LocalContext.current
     val feedback=LocalFeedback.current
@@ -213,14 +215,15 @@ internal fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmiss
     // unknown server response followed by app restart cannot create a new case.
     var showInvalid by rememberSaveable(draftFile) {mutableStateOf(false)}
     BackHandler(enabled = !submitted) {
-        if (step > 0) { step--; showInvalid = false } else exitJourney()
+        if (step > 1) { step=OwnerIntakePolicy.previous(step); showInvalid = false } else exitJourney()
     }
     var saveMessage by remember(draftFile) {mutableIntStateOf(0)}
     var pickMessage by remember(draftFile) {mutableIntStateOf(0)}
     val files=remember(draftFile) {mutableStateListOf<ChosenDocument>()}
     var replacingPage by remember(draftFile){mutableStateOf<Int?>(null)}
     // Future listing media is preview-only, never private owner title evidence.
-    val listingPhotos=remember(draftFile){mutableStateListOf<DraftListingPhoto>()}
+    val localListingPhotos=remember(draftFile){mutableStateListOf<DraftListingPhoto>()}
+    val listingPhotos=intakePhotos?:localListingPhotos
     var listingLatitude by rememberSaveable(draftFile){mutableStateOf(resubmission?.optString("latitude")?:prefs.getString("latitude","").orEmpty())}
     var listingLongitude by rememberSaveable(draftFile){mutableStateOf(resubmission?.optString("longitude")?:prefs.getString("longitude","").orEmpty())}
     var listingDescription by rememberSaveable(draftFile){mutableStateOf(resubmission?.optString("description")?:prefs.getString("description","").orEmpty())}
@@ -258,6 +261,13 @@ internal fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmiss
     var identityMessage by remember(draftFile) {mutableIntStateOf(0)}
     // Private in-memory picture gets scanned on this step before acceptance.
     var cameraVisible by remember(draftFile){mutableStateOf(false)}
+    var captureTarget by remember(draftFile){mutableStateOf(OwnerIntakeKind.Identity)}
+    var planFile by remember(draftFile){mutableStateOf<ChosenDocument?>(null)}
+    var extraFile by remember(draftFile){mutableStateOf<ChosenDocument?>(null)}
+    var galleryIdentity by remember(draftFile){mutableStateOf<ChosenDocument?>(null)}
+    var localIntakeError by remember(draftFile){mutableIntStateOf(0)}
+    var planPage by remember(draftFile){mutableIntStateOf(1)}
+    fun openCamera(target:OwnerIntakeKind){captureTarget=target;cameraVisible=true}
     val keyboard=androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
     val focusManager=androidx.compose.ui.platform.LocalFocusManager.current
 
@@ -346,6 +356,9 @@ internal fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmiss
             familyReadJob?.cancel()
             pendingPhoto?.let{PrivateCaptureMemory.discard(it.uri)}
             identityFiles.forEach{PrivateCaptureMemory.discard(it.uri)}
+            files.forEach{PrivateCaptureMemory.discard(it.uri)}
+            planFile?.let{PrivateCaptureMemory.discard(it.uri)}
+            extraFile?.let{PrivateCaptureMemory.discard(it.uri)}
         }
     }
 
@@ -379,12 +392,50 @@ internal fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmiss
                     refused=true
                 } else {
                     val page=ChosenDocument(uri,label.ifBlank{uri.lastPathSegment?.take(50)?:"Document"},length,mime)
-                    if(replacement!=null&&replacement in files.indices)files[replacement]=page else files.add(page)
+                    if(replacement!=null&&replacement in files.indices){
+                        PrivateCaptureMemory.discard(files[replacement].uri)
+                        files[replacement]=page
+                    }else files.add(page)
                 }
             }catch(_:Exception){refused=true}
             pickMessage=if(refused)R.string.file_rejected
                 else R.string.file_selected
         }
+    }
+
+    var localPickerTarget by remember(draftFile){mutableStateOf(OwnerIntakeKind.Plan)}
+    val localPicker=rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()){uri->
+        if(uri!=null){
+            val target=localPickerTarget
+            val accepted=runCatching{
+                val mime=context.contentResolver.getType(uri)
+                require(uri.scheme=="content" && mime!=null && mime in
+                    (if(target==OwnerIntakeKind.Identity) setOf("image/jpeg","image/png") else
+                    setOf("application/pdf","image/jpeg","image/png","image/tiff")))
+                var size=0L;var label=""
+                context.contentResolver.query(uri,arrayOf(OpenableColumns.DISPLAY_NAME,OpenableColumns.SIZE),null,null,null)?.use{c->
+                    if(c.moveToFirst()){
+                        val ni=c.getColumnIndex(OpenableColumns.DISPLAY_NAME);val si=c.getColumnIndex(OpenableColumns.SIZE)
+                        if(ni>=0&&!c.isNull(ni))label=c.getString(ni).take(90)
+                        if(si>=0&&!c.isNull(si))size=c.getLong(si)
+                    }
+                }
+                require(size in 20..MAX_DOC_BYTES)
+                ChosenDocument(uri,label.ifBlank{"Document"},size,checkNotNull(mime))
+            }.getOrNull()
+            localIntakeError=if(accepted==null)R.string.file_rejected else 0
+            if(accepted!=null)when(target){
+                OwnerIntakeKind.Identity -> galleryIdentity=accepted
+                OwnerIntakeKind.Plan -> {planFile?.let{PrivateCaptureMemory.discard(it.uri)};planFile=accepted;planPage=1}
+                OwnerIntakeKind.Extra -> {extraFile?.let{PrivateCaptureMemory.discard(it.uri)};extraFile=accepted}
+                OwnerIntakeKind.Certificate -> Unit
+            }
+        }
+    }
+    fun pickLocal(target:OwnerIntakeKind){
+        localPickerTarget=target
+        localPicker.launch(if(target==OwnerIntakeKind.Identity)arrayOf("image/jpeg","image/png")
+            else arrayOf("application/pdf","image/jpeg","image/png","image/tiff"))
     }
 
     if(sending){
@@ -432,13 +483,15 @@ internal fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmiss
             if(committed)R.string.draft_saved else R.string.draft_error
         }catch (_:Exception){R.string.draft_error}
     }
-    val stepLabels=listOf(R.string.smart_step_documents,R.string.step_identity,
+    val stepLabels=listOf(R.string.smart_step_documents,
         if(directVerification || readingForListing)R.string.direct_analysis else R.string.step_property,R.string.step_summary
-    ).take(if (readingForListing) 3 else 4)
+    ).take(if (readingForListing) 2 else 3)
+    val displayStep=OwnerIntakePolicy.displayStep(step)
     val stepScroll=rememberScrollState()
     val missingFieldsTarget=remember{BringIntoViewRequester()}
     val certificateTarget = remember { BringIntoViewRequester() }
-    val needsCertificate = step == 0 && files.isEmpty() && !restoredReview
+    val intakeStep=step<=1
+    val needsCertificate = intakeStep && files.isEmpty() && !restoredReview
     LaunchedEffect(step) { if(step>3) step=3;stepScroll.scrollTo(0) }
 
     fun startPairComparison(){
@@ -616,12 +669,22 @@ internal fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmiss
         TunisianIdCamera(onClose={cameraVisible=false},
             onPhoto={uri,length->
                 if(cameraVisible){
-                    pendingPhoto?.let{PrivateCaptureMemory.discard(it.uri)}
-                    pendingPhoto=ChosenDocument(uri,"CIN-camera.jpg",length,"image/jpeg")
+                    val doc=ChosenDocument(uri,if(captureTarget==OwnerIntakeKind.Identity)"CIN-camera.jpg" else "document.jpg",length,"image/jpeg")
+                    when(captureTarget){
+                        OwnerIntakeKind.Identity -> {
+                            pendingPhoto?.let{PrivateCaptureMemory.discard(it.uri)}
+                            pendingPhoto=doc;identityMessage=0
+                        }
+                        OwnerIntakeKind.Certificate -> {
+                            if(files.size<8&&files.none{it.mime=="application/pdf"}){files.add(doc);pickMessage=R.string.file_selected}
+                            else {PrivateCaptureMemory.discard(uri);pickMessage=R.string.file_rejected}
+                        }
+                        OwnerIntakeKind.Plan -> {planFile?.let{PrivateCaptureMemory.discard(it.uri)};planFile=doc;planPage=1}
+                        OwnerIntakeKind.Extra -> {extraFile?.let{PrivateCaptureMemory.discard(it.uri)};extraFile=doc}
+                    }
                     cameraVisible=false
-                    identityMessage=0
                 }else PrivateCaptureMemory.discard(uri)
-            })
+            },documentMode=captureTarget!=OwnerIntakeKind.Identity)
         return
     }
     if(submitted&&submittedReference!=null){
@@ -632,7 +695,7 @@ internal fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmiss
     Column(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth().padding(horizontal=16.dp,vertical=12.dp),
             verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(10.dp)) {
-            IconButton(onClick={if(step>0){step--;showInvalid=false}else exitJourney()}, modifier=Modifier.size(48.dp)) {
+            IconButton(onClick={if(step>1){step=OwnerIntakePolicy.previous(step);showInvalid=false}else exitJourney()}, modifier=Modifier.size(48.dp)) {
                 Icon(Icons.AutoMirrored.Filled.ArrowBack,s(R.string.back),tint=Brand.Crimson)
             }
             Column(Modifier.weight(1f)) {
@@ -644,21 +707,21 @@ internal fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmiss
         }
         Row(Modifier.fillMaxWidth().padding(horizontal=17.dp,vertical=8.dp),horizontalArrangement=Arrangement.spacedBy(5.dp)) {
             stepLabels.forEachIndexed { i,label ->
-                Column(Modifier.weight(1f).semantics(mergeDescendants = true) { selected = i == step },
+                Column(Modifier.weight(1f).semantics(mergeDescendants = true) { selected = i == displayStep },
                     horizontalAlignment=Alignment.CenterHorizontally,
                     verticalArrangement=Arrangement.spacedBy(7.dp)) {
                     Box(Modifier.fillMaxWidth().height(5.dp).background(
-                        if(i<=step)Brand.Crimson else Brand.Border,CircleShape))
+                        if(i<=displayStep)Brand.Crimson else Brand.Border,CircleShape))
                     Text(s(label),style=MaterialTheme.typography.labelSmall,
-                        fontWeight=if(i==step)FontWeight.Bold else FontWeight.Medium,
-                        color=if(i==step)Brand.Ink else Brand.Muted, textAlign=TextAlign.Center)
+                        fontWeight=if(i==displayStep)FontWeight.Bold else FontWeight.Medium,
+                        color=if(i==displayStep)Brand.Ink else Brand.Muted, textAlign=TextAlign.Center)
                 }
             }
         }
         Column(Modifier.weight(1f).verticalScroll(stepScroll).padding(horizontal=17.dp,vertical=16.dp),
             verticalArrangement=Arrangement.spacedBy(15.dp)) {
             when(step) {
-                0 -> {
+                0,1 -> {
                     SectionHeading(s(R.string.document_section),s(R.string.document_hint))
                     Surface(modifier = Modifier.bringIntoViewRequester(certificateTarget), color=Color.White,
                         shape=RoundedCornerShape(21.dp),border=BorderStroke(1.dp,CardBorder)) {
@@ -678,6 +741,11 @@ internal fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmiss
                                 Spacer(Modifier.width(8.dp))
                                 Text(s(if(files.isEmpty())R.string.pick_document
                                     else R.string.certificate_add_next_page))
+                            }
+                            OutlinedButton(onClick={openCamera(OwnerIntakeKind.Certificate)},
+                                enabled=pairProgress==null&&files.size<8&&files.none{it.mime=="application/pdf"},
+                                modifier=Modifier.fillMaxWidth()){
+                                Icon(Icons.Outlined.CameraAlt,null);Spacer(Modifier.width(8.dp));Text(s(R.string.intake_take_photo))
                             }
                             Text(s(R.string.file_rules),color=Brand.Ink,style=MaterialTheme.typography.labelMedium)
                             Text(s(R.string.certificate_page_order_hint),color=Brand.Muted,
@@ -710,6 +778,7 @@ internal fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmiss
                                     }
                                     IconButton(onClick={
                                         if(index<files.size&&files[index].uri==file.uri){
+                                            PrivateCaptureMemory.discard(file.uri)
                                             val kept=removeDocumentPage(files.toList(),index)
                                             files.clear();files.addAll(kept);pickMessage=R.string.owner_page_removed
                                         }
@@ -735,8 +804,7 @@ internal fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmiss
                         s(if(resubmission?.optString("kind")=="LAND")R.string.direct_land_documents else R.string.direct_home_documents))
                     PlainNotice(Icons.Outlined.Lock,s(R.string.file_privacy))
                     PlainNotice(Icons.Outlined.Info,s(R.string.smart_document_first_hint))
-                }
-                1 -> {
+                    HorizontalDivider()
                     SectionHeading(s(R.string.identity_section),s(R.string.identity_hint))
                     if(pendingPhoto==null&&!identitySelected){
                         Surface(color=Color.White,
@@ -744,7 +812,7 @@ internal fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmiss
                             border=BorderStroke(1.dp,CardBorder)){
                             Column(Modifier.fillMaxWidth().padding(18.dp),
                                 verticalArrangement=Arrangement.spacedBy(13.dp)){
-                                Button(onClick={cameraVisible=true},
+                                Button(onClick={openCamera(OwnerIntakeKind.Identity)},
                                     modifier=Modifier.fillMaxWidth().heightIn(min=56.dp),
                                     shape=RoundedCornerShape(16.dp),
                                     colors=ButtonDefaults.buttonColors(containerColor=Brand.Crimson)){
@@ -832,13 +900,43 @@ internal fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmiss
                                 Text(s(R.string.camera_photo_accepted),
                                     Modifier.weight(1f),color=Brand.Ink,
                                     fontWeight=FontWeight.SemiBold)
-                                TextButton(onClick={cameraVisible=true}){
+                                TextButton(onClick={openCamera(OwnerIntakeKind.Identity)}){
                                     Text(s(R.string.camera_review_retake))
                                 }
                             }
                         }
                     }
                     if(identityMessage!=0) PlainNotice(Icons.Outlined.Info,s(identityMessage))
+                    OutlinedButton(onClick={pickLocal(OwnerIntakeKind.Identity)},modifier=Modifier.fillMaxWidth()){
+                        Icon(Icons.Outlined.FolderOpen,null);Spacer(Modifier.width(8.dp));Text(s(R.string.intake_upload_identity))
+                    }
+                    galleryIdentity?.let { imported ->
+                        Text(imported.displayName,style=MaterialTheme.typography.bodySmall,color=Brand.Ink)
+                        IntakeImagePreview(imported.uri)
+                        Text(s(R.string.intake_identity_preview_only),style=MaterialTheme.typography.bodySmall,color=Brand.Muted)
+                        TextButton(onClick={galleryIdentity=null}){Text(s(R.string.remove))}
+                    }
+                    IntakeOptionalDocument(R.string.intake_plan,planFile?.displayName,
+                        onCapture={openCamera(OwnerIntakeKind.Plan)},onUpload={pickLocal(OwnerIntakeKind.Plan)},
+                        onRemove={planFile?.let{PrivateCaptureMemory.discard(it.uri)};planFile=null;planPage=1})
+                    planFile?.let { file ->
+                        if(file.mime=="application/pdf")Row(verticalAlignment=Alignment.CenterVertically){
+                            TextButton(onClick={planPage=(planPage-1).coerceAtLeast(1)},enabled=planPage>1){Text("−")}
+                            Text(s(R.string.intake_plan_page,planPage))
+                            TextButton(onClick={planPage=(planPage+1).coerceAtMost(8)},enabled=planPage<8){Text("+")}
+                        }
+                        OutlinedButton(onClick={
+                            parcelEditorSource=OwnerParcelEditorSource(file.uri,file.mime,planPage,planPage,null,null,emptyList(),"","",null)
+                        },modifier=Modifier.fillMaxWidth()){Text(s(R.string.intake_open_plan))}
+                    }
+                    IntakeOptionalDocument(R.string.intake_extra,extraFile?.displayName,
+                        onCapture={openCamera(OwnerIntakeKind.Extra)},onUpload={pickLocal(OwnerIntakeKind.Extra)},
+                        onRemove={extraFile?.let{PrivateCaptureMemory.discard(it.uri)};extraFile=null})
+                    if(localIntakeError!=0)Text(s(localIntakeError),color=MaterialTheme.colorScheme.error)
+                    Text(s(R.string.intake_optional_preview_only),style=MaterialTheme.typography.bodySmall,color=Brand.Muted)
+                    HorizontalDivider()
+                    if(!directVerification)ListingPhotoEditor(listingPhotos,directPublishing=intakePhotos!=null,
+                        persistAccess=intakePhotos!=null)
                 }
                 2 -> {
                     if(hasPilotReviewSession){
@@ -1398,14 +1496,14 @@ internal fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmiss
         key(step){
         Column(Modifier.fillMaxWidth().padding(horizontal=17.dp,vertical=12.dp),verticalArrangement=Arrangement.spacedBy(7.dp)) {
             // Never show "Continue" under a failed scan: keep retake in reach.
-            if(step==1&&pendingPhoto!=null){
+            if(intakeStep&&pendingPhoto!=null){
                 Row(Modifier.fillMaxWidth(),
                     horizontalArrangement=Arrangement.spacedBy(10.dp)){
                     OutlinedButton(onClick={
                         pendingPhoto?.let{PrivateCaptureMemory.discard(it.uri)}
                         pendingPhoto=null
                         frontRead=null
-                        cameraVisible=true
+                        openCamera(OwnerIntakeKind.Identity)
                     },modifier=Modifier.weight(1f).heightIn(min=54.dp)){
                         Text(s(R.string.camera_review_retake))
                     }
@@ -1420,14 +1518,14 @@ internal fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmiss
                             pendingPhoto=null
                             frontRead=null
                             identityMessage=0
-                            if(hasPilotReviewSession)step=2
+                            // Stay on intake; explicit Analyze follows.
                         } else {
                             identityMessage=R.string.camera_review_required_fields
                         }
                     },enabled=!frontReadBusy&&
                         frontRead?.readyForCameraAcceptance==true,
                         modifier=Modifier.weight(1f).heightIn(min=54.dp)){
-                        Text(s(if(hasPilotReviewSession)R.string.owner_confirm_analyze else R.string.camera_review_accept))
+                        Text(s(R.string.camera_review_accept))
                     }
                 }
             }else{
@@ -1441,7 +1539,7 @@ internal fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmiss
                     showInvalid=true
                     scope.launch{withFrameNanos{};missingFieldsTarget.bringIntoView()}
                 }
-                else if(step==1&&(!identitySelected||pendingPhoto!=null)){
+                else if(intakeStep&&(!identitySelected||pendingPhoto!=null)){
                     identityMessage=R.string.identity_required
                 }
                 else if(step==2&&pilotOcrSession!=null&&pairReport?.reviewId==null){
@@ -1455,7 +1553,7 @@ internal fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmiss
                         prefs.edit().clear().apply()
                     }
                 }
-                else if(step<3){feedback(AppCue.Action);step++;showInvalid=false;saveMessage=0}
+                else if(step<3){feedback(AppCue.Action);step=OwnerIntakePolicy.next(step);showInvalid=false;saveMessage=0}
                 else if(directVerification&&pilotOcrSession!=null&&!sending){
                     val review=pairReport?.reviewId
                     val listingId=resubmission?.optString("id").orEmpty()
@@ -1518,7 +1616,7 @@ internal fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmiss
                     else if(step==3&&pilotOcrSession!=null)
                     if(sending)R.string.submission_sending else if(submitted)R.string.submission_sent
                     else if(directVerification)R.string.direct_submit_docs else R.string.submission_send
-                    else if(step==3)R.string.save_draft else if(step==1&&hasPilotReviewSession)R.string.owner_confirm_analyze
+                    else if(step==3)R.string.save_draft else if(intakeStep)R.string.owner_confirm_analyze
                     else R.string.continue_label),fontWeight=FontWeight.SemiBold,fontSize=15.sp)
                 Spacer(Modifier.width(9.dp))
                 Icon(if(step==3)Icons.Outlined.Save else Icons.AutoMirrored.Filled.ArrowForward,
