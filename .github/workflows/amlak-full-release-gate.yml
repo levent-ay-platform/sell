@@ -79,7 +79,7 @@ jobs:
           profile: pixel_4
           disable-animations: true
           emulator-options: '-no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot'
-          script: gradle -p apps/android :app:connectedDebugAndroidTest -PmalakV2Discovery=true -Pandroid.testInstrumentationRunnerArguments.class=tn.malak.app.AtlasAdminAssetTest,tn.malak.app.BuyerDiscoveryTest,tn.malak.app.DocumentAreaJourneyTest,tn.malak.app.IndustrialMapTest,tn.malak.app.LightThemeContrastTest,tn.malak.app.MapCatalogFeedbackTest,tn.malak.app.MapHomeTest,tn.malak.app.NozhaPublicCardContractTest,tn.malak.app.OwnerBoundaryDraftStoreTest,tn.malak.app.PublicFeedAreaOnlyUiTest,tn.malak.app.StartupThemeTest,tn.malak.app.UnifiedIntakeUiTest --no-daemon
+          script: gradle -p apps/android :app:connectedDebugAndroidTest -PmalakV2Discovery=true -Pandroid.testInstrumentationRunnerArguments.class=tn.malak.app.AtlasAdminAssetTest,tn.malak.app.BuyerDiscoveryTest,tn.malak.app.DocumentAreaJourneyTest,tn.malak.app.IndustrialMapTest,tn.malak.app.LightThemeContrastTest,tn.malak.app.MapCatalogFeedbackTest,tn.malak.app.MapHomeTest,tn.malak.app.NozhaPublicCardContractTest,tn.malak.app.OwnerBoundaryDraftStoreTest,tn.malak.app.PublicFeedAreaOnlyUiTest,tn.malak.app.StartupThemeTest,tn.malak.app.UnifiedIntakeUiTest,tn.malak.app.PrivatePlanRestoreTest --no-daemon
       - uses: actions/upload-artifact@v4
         if: always()
         with:

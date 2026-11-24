@@ -7,6 +7,12 @@ import android.database.Cursor
 import android.database.MatrixCursor
 import android.net.Uri
 import android.os.ParcelFileDescriptor
+import android.os.Handler
+import android.os.HandlerThread
+import android.os.ProxyFileDescriptorCallback
+import android.os.storage.StorageManager
+import android.system.ErrnoException
+import android.system.OsConstants
 import android.provider.OpenableColumns
 import java.io.FileNotFoundException
 import java.util.UUID
@@ -36,11 +42,21 @@ internal object PrivateCaptureMemory {
         }
     }
     fun length(uri:Uri):Long?=synchronized(held) {
-        held[uri.lastPathSegment]?.size?.toLong()
+        if(uri.authority!=AUTHORITY)null else held[uri.lastPathSegment]?.size?.toLong()
     }
     fun get(uri:Uri):ByteArray?=synchronized(held) {
         if(uri.authority!=AUTHORITY)return@synchronized null
         held[uri.lastPathSegment]
+    }
+    fun readAt(uri:Uri,offset:Long,size:Int,target:ByteArray):Int=synchronized(held){
+        val bytes=if(uri.authority==AUTHORITY)held[uri.lastPathSegment] else null
+        if(bytes==null)throw ErrnoException("read",OsConstants.EBADF)
+        if(offset<0||size<0||size>target.size)throw ErrnoException("read",OsConstants.EINVAL)
+        if(offset>=bytes.size)return@synchronized 0
+        val start=offset.toInt()
+        val count=minOf(size,bytes.size-start)
+        bytes.copyInto(target,0,start,start+count)
+        count
     }
     fun mime(uri:Uri):String?=synchronized(held){if(uri.authority==AUTHORITY)media[uri.lastPathSegment] else null}
     fun discard(uri:Uri){
@@ -51,6 +67,7 @@ internal object PrivateCaptureMemory {
 }
 
 class PrivateCaptureProvider:ContentProvider() {
+    private val proxyHandler by lazy { Handler(HandlerThread("amlak-private-file").apply{start()}.looper) }
     override fun onCreate():Boolean=true
     private fun data(uri:Uri)=PrivateCaptureMemory.get(uri)
         ?:throw FileNotFoundException("Capture no longer available")
@@ -63,7 +80,12 @@ class PrivateCaptureProvider:ContentProvider() {
         return MatrixCursor(columns).also { cursor->
             cursor.addRow(columns.map {
                 when(it){
-                    OpenableColumns.DISPLAY_NAME->"cin-camera.jpg"
+                    OpenableColumns.DISPLAY_NAME->when(PrivateCaptureMemory.mime(uri)){
+                        "application/pdf"->"private-plan.pdf"
+                        "image/png"->"private-document.png"
+                        "image/tiff"->"private-document.tiff"
+                        else->"private-document.jpg"
+                    }
                     OpenableColumns.SIZE->bytes.size
                     else->null
                 }
@@ -73,6 +95,19 @@ class PrivateCaptureProvider:ContentProvider() {
     override fun openFile(uri:Uri,mode:String):ParcelFileDescriptor {
         if(mode!="r")throw FileNotFoundException("Read-only private capture")
         val bytes=data(uri)
+        if(PrivateCaptureMemory.mime(uri)=="application/pdf"){
+            // PdfRenderer needs seekable reads. No plaintext temporary file.
+            val storage=checkNotNull(context).getSystemService(StorageManager::class.java)
+                ?:throw FileNotFoundException("Private PDF unavailable")
+            return storage.openProxyFileDescriptor(ParcelFileDescriptor.MODE_READ_ONLY,
+                object:ProxyFileDescriptorCallback(){
+                    override fun onGetSize():Long=PrivateCaptureMemory.length(uri)
+                        ?:throw ErrnoException("size",OsConstants.EBADF)
+                    override fun onRead(offset:Long,size:Int,data:ByteArray):Int=
+                        PrivateCaptureMemory.readAt(uri,offset,size,data)
+                    override fun onRelease(){}
+                },proxyHandler)
+        }
         val pipe=ParcelFileDescriptor.createPipe()
         Thread({
             try {
