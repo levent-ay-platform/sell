@@ -146,3 +146,28 @@ If the only available artifact is the historical mainfile-only copy, the explici
 6. Connect the accepted projection to the Amlak Smart Listing editor and map, and test on Android (AR/FR, offline, physical phone and backend revocation).
 
 No automatic merge, production deployment, legacy worktree cleanup or original database modification is implied by this checkpoint.
+
+## Private PDF on-disk SHA-256 gate — 2026-11-24
+
+The new `scripts/atlas_pdf_blob_inventory.py` compares actual local `.pdf` bytes under an owner-approved archive root with every SHA-256 in the previously generated **private** OCR backlog. It does not open the operational Atlas SQLite database, fetch anything, run OCR or modify source PDFs.
+
+Run only on an authorized Mac archive and write a new protected output:
+
+```sh
+python3 -m scripts.atlas_pdf_blob_inventory \
+  --backlog /private/atlas-reports/ocr-backlog-private.json \
+  --archive-root /private/owner-approved/read-only-pdfs \
+  --output /private/atlas-reports/pdf-blob-inventory-private.json
+python3 -m unittest discover -s scripts/tests -p 'test_atlas_pdf_blob_inventory.py' -v
+```
+
+These directories are **placeholders**, not confirmed live Mac paths. Confirm the real operator-approved roots first. Several distinct roots require separate private scan reports and careful many-to-many reconciliation; counts must not be naïvely summed. Default limits: 20,000 PDF names, 12 GiB of hashed bytes, and 300 MiB per file.
+
+The PRIVATE_DERIVED report retains every catalogue hash, all duplicate resource source pointers, unhashed resource identifiers, matched file locations, unmatched local PDFs, unreadable files, symlink skips, and the original snapshot-kind caveat. No filename, source URL, private hash, identifier, OCR text or source archive is sent to CI, public GitHub comments, the APK, or a public Atlas projection. The tool prints counts only; the protected JSON writer uses 0600 permissions and refuses overwriting existing reports.
+
+- `HASH_AND_PDF_HEADER_OBSERVED`: expected SHA matches a local file and `%PDF-` occurs in the initial 1 KiB. This is **not** full PDF validation, official cadastral issuer evidence, ownership, geolocation or publication rights.
+- `HASH_OBSERVED_NOT_PDF_HEADER`: hash match but PDF signature hint missing; investigate privately.
+- `NOT_OBSERVED_IN_THIS_SCAN`: file not seen **in the selected directory only**, not proof it is missing from the entire archive.
+- All unmatched, unresolved and unreadable files are retained. Exceeded scan limits fail without emitting partial output.
+
+**Blocking gates remain:** owner-authorized WAL-consistent transactional SQLite backup, provenance/issuer and rights review, verified document↔title↔parcel links, independent georeferencing/GCP, approval and runtime revocation testing. Software CI is synthetic; real Mac archive coverage and official-plan counts are still UNKNOWN.
