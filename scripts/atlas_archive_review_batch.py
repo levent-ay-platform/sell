@@ -23,6 +23,7 @@ from scripts.atlas_cadastre_evidence_audit import (
     audit_snapshot, references, write_private_json,
 )
 from scripts.atlas_ocr_backlog import build_backlog
+from scripts.atlas_environment_preflight import readiness
 from scripts.atlas_pdf_blob_inventory import scan_pdf_blobs
 from scripts.atlas_pdf_vector_candidates import MAX_PDF_BYTES
 
@@ -333,6 +334,10 @@ def main():
     p.add_argument("--ocr", action="store_true")
     p.add_argument("--timeout-seconds", type=int, default=180)
     a = p.parse_args()
+    environment = readiness(ocr=a.ocr)
+    if not environment['ready']:
+        print(json.dumps({'environment_not_ready': environment}), file=sys.stderr)
+        raise SystemExit(2)
     report = run_batch(a.db, a.snapshot_kind, a.archive_root, a.output_directory,
                        manifest=a.backup_manifest, offset=a.offset,
                        max_documents=a.max_documents, ocr=a.ocr,

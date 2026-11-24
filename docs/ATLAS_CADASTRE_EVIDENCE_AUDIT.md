@@ -215,3 +215,15 @@ Each run uses a new mode-0700 output directory. Audit/backlog, separate root inv
 Resume only with the previous completed manifest and the exact next offset it supplies. Repeat the same snapshot, roots and OCR choice, use a new output directory, and add `--offset N --resume-manifest /private/atlas-reports/run-001/completed-private-manifest.json`. A changed snapshot or eligible hash sequence fails closed. Previously processed documents are not selected in the next window; the new run does recheck the directory inventory and snapshot. An interrupted/failed run without a completed manifest is not a completed batch.
 
 Worker process groups are time-bounded; the operator must also enforce OS isolation and memory limits. No live DB, archive, network deployment or APK is modified. The existing reviewed link/GCP/publication/withdrawal contracts remain separate gates. Synthetic PDF text/vector integration and failure/resume tests exercise the batch; this is not acceptance on real Nabeul/Kélibia documents.
+
+
+## Runtime readiness gate — 2026-11-24
+
+The real owner-context Mac test used Apple CLT Python 3.9 and failed to import pypdf. Use an owner-approved isolated Python **3.11 or newer** environment (3.11 is the CI baseline). The reviewed dependency manifest is `scripts/requirements-atlas-review.txt`; an administrator must approve and perform any installation through the normal local process. No installation is performed by this repository or preflight.
+
+From the checked-out repository, using the intended interpreter:
+
+    python -m scripts.atlas_environment_preflight
+    python -m scripts.atlas_environment_preflight --ocr
+
+The second mode requires Pillow, Poppler (pdfinfo, pdftotext, pdftoppm), Tesseract, and installed ara/fra language data. The batch CLI runs the same readiness checks **before opening the snapshot or creating outputs** and exits 2 if prerequisites are missing. Preflight outputs only dependency status and interpreter version; no source paths, PDFs, database data or credentials. This is a readiness check, not proof of real OCR accuracy, archive accessibility or legal cadastral status. Direct library callers must explicitly run the preflight before operational use. macOS CI runs synthetic vector tests only; it is not the user's Mac or a real archive test.
