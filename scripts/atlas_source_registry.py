@@ -16,6 +16,7 @@ import re
 import sqlite3
 from scripts.atlas_cadastre_evidence_audit import DIGITS, write_private_json
 from scripts.atlas_public_projection import _safe_file
+from scripts.atlas_geometry_normalize import normalize_geometry, crs_code
 
 FIELDS = ("namespace", "service_id", "layer_id", "object_id", "version",
           "registry_scope", "title_reference", "parcel_reference")
@@ -178,9 +179,12 @@ def export_registry(path, config, *, include_geometries=False):
             geometry_mapping=mapping.get("geometry") if include_geometries else None
             geometry_rule=None
             if geometry_mapping is not None:
-                if (not isinstance(geometry_mapping,dict) or geometry_mapping.get("crs")!="EPSG:4326"
-                        or geometry_mapping.get("format")!="GeoJSON"
+                if (not isinstance(geometry_mapping,dict)
+                        or geometry_mapping.get("format") not in ("GeoJSON","ProjectedGeoJSON","ArcGIS")
                         or geometry_mapping.get("kind") not in ("CADASTRE_SOURCE","PLANNING_SOURCE","OTHER_SOURCE")):
+                    raise ValueError("EXPLICIT_GEOMETRY_MAPPING_REQUIRED")
+                code=crs_code(geometry_mapping.get("crs"))
+                if geometry_mapping["format"]=="GeoJSON" and code!="EPSG:4326":
                     raise ValueError("EXPLICIT_WGS84_GEOJSON_MAPPING_REQUIRED")
                 geometry_rule=geometry_mapping.get("rule")
                 if not isinstance(geometry_rule,dict) or "column" not in geometry_rule or "literal" in geometry_rule:
@@ -227,7 +231,8 @@ def export_registry(path, config, *, include_geometries=False):
                     geometries.append({"table_private":table,"scan_ordinal_private":actual,
                         "source_scoped_key":[record[f] for f in KEY],
                         "geometry_kind":geometry_mapping["kind"] if geometry_mapping else "UNKNOWN",
-                        "geometry_input_state":state,"geometry":geometry})
+                        "geometry_input_state":state,"geometry":geometry,
+                        "normalization_private":normalization,"conversion_reason":reason})
                 records.append({"table_private":table,"scan_ordinal_private":actual,
                                 "observed_fields_private":{f:scalar(raw[f]) for f in FIELDS},
                                 "source_record_private":record,"reasons":reasons})

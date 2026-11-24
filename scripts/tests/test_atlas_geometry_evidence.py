@@ -62,6 +62,12 @@ class AtlasGeometryQaTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,"INDEPENDENT"):
             assess_georeferencing(input)
 
+    def test_reused_fit_point_not_independent_holdout(self):
+        input=fixture()
+        input["control_points"][3]={**input["control_points"][0],"role":"CHECK"}
+        with self.assertRaisesRegex(ValueError,"REUSED_CONTROL"):
+            assess_georeferencing(input)
+
     def test_self_intersection_rejected(self):
         input=fixture()
         input["page_ring"]=[[0,0],[10,10],[10,0],[0,10],[0,0]]

@@ -138,6 +138,8 @@ def assess_georeferencing(spec):
         (fit if row["role"]=="FIT" else check).append(pair)
     if len(fit) < 3 or not check:
         raise ValueError("THREE_FIT_ONE_INDEPENDENT_CHECK_REQUIRED")
+    if len({p[0] for p in fit+check})!=len(fit)+len(check) or len({p[1] for p in fit+check})!=len(fit)+len(check):
+        raise ValueError("DUPLICATE_OR_REUSED_CONTROL_POINT")
     tolerance = spec.get("maximum_holdout_error_m")
     if (type(tolerance) not in (int,float) or not math.isfinite(tolerance)
             or not 0.1 <= tolerance <= 20):
@@ -158,7 +160,7 @@ def assess_georeferencing(spec):
         raise ValueError("INVALID_PRINTED_AREA")
     area_difference = abs(area-printed)/printed if printed is not None else None
     # Fitting well is not enough: independent holdouts and area may still disagree.
-    passed = worst <= tolerance and (area_difference is None or area_difference <= 0.15)
+    passed = rms <= tolerance and worst <= tolerance and (area_difference is None or area_difference <= 0.15)
     return {
         "schema_version":1,
         "geometry_status":"GEOREFERENCED_CANDIDATE" if passed else "GEOREFERENCE_REVIEW_REQUIRED",

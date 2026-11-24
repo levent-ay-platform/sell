@@ -74,9 +74,21 @@ class RegistryTest(unittest.TestCase):
         self.assertEqual(len(projection["records_private"]),5)
         first=projection["records_private"][0]
         self.assertEqual(first["source_scoped_key"],["ATLAS","CAD","LOTS","1","snapshot-v1"])
-        self.assertEqual(first["geometry_input_state"],"WGS84_POLYGON_DECLARED_NOT_VALIDATED")
+        self.assertEqual(first["geometry_input_state"],"WGS84_NORMALIZED_CANDIDATE")
         self.assertEqual(projection["records_private"][1]["geometry_input_state"],"MISSING_OR_UNSUPPORTED_GEOMETRY")
         self.assertNotIn("PRIVATE_OWNER",json.dumps(projection))
         self.mapping["mappings"][0]["geometry"]["crs"]="EPSG:3857"
         with self.assertRaisesRegex(ValueError,"EXPLICIT_WGS84"):
             export_registry(self.db,self.mapping,include_geometries=True)
+
+    def test_arcgis_same_row_projection(self):
+        with sqlite3.connect(self.db) as c:
+            c.execute("ALTER TABLE gis_records ADD COLUMN geom TEXT")
+            c.execute("UPDATE gis_records SET geom=? WHERE oid=1",(json.dumps({"rings":[[[10,35],[10.1,35],[10.1,35.1],[10,35]]],"spatialReference":{"wkid":4326}}),))
+        self.mapping["snapshot_sha256_private"]=digest(self.db)
+        self.mapping["mappings"][0]["geometry"]={"crs":"EPSG:4326","format":"ArcGIS","kind":"CADASTRE_SOURCE","rule":{"column":"geom"}}
+        report=export_registry(self.db,self.mapping,include_geometries=True)
+        row=report["geometry_projection_private"]["records_private"][0]
+        self.assertEqual(row["geometry_input_state"],"WGS84_NORMALIZED_CANDIDATE")
+        self.assertEqual(row["geometry"]["type"],"Polygon")
+        self.assertEqual(row["normalization_private"]["source_crs"],"EPSG:4326")

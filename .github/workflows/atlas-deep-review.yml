@@ -13,6 +13,8 @@ on:
       - scripts/tests/test_atlas_archive_next_pass.py
       - scripts/atlas_source_registry.py
       - scripts/atlas_spatial_context.py
+      - scripts/atlas_geometry_normalize.py
+      - scripts/tests/test_atlas_geometry_normalize.py
       - scripts/tests/test_atlas_spatial_context.py
       - scripts/requirements-atlas-spatial.txt
       - scripts/tests/test_atlas_source_registry.py
