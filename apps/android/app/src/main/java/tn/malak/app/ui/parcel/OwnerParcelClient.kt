@@ -5,6 +5,7 @@ import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 import tn.malak.app.ui.OwnerEvidenceSession
+import tn.malak.app.ui.explore.DiscoveryPoint
 import tn.malak.app.ui.readPilotBytes
 import java.net.URI
 import javax.net.ssl.HttpsURLConnection
@@ -128,6 +129,16 @@ internal suspend fun saveOwnerParcelReview(
     if (draft.titleReference.isNotBlank()) payload.put("titleReference", draft.titleReference.trim())
     if (draft.plotReference.isNotBlank()) payload.put("plotReference", draft.plotReference.trim())
     val id = ownerParcelCall(session, payload).optString("id")
+    check(ParcelUuid.matches(id))
+    return id
+}
+
+/** Owner trace is not a georeferenced document or verified boundary. */
+internal suspend fun saveOwnerMapBoundary(session:OwnerEvidenceSession,points:List<DiscoveryPoint>):String {
+    require(measureOwnerMap(points)!=null)
+    val payload=JSONObject().put("method","OWNER_TRACED_ESTIMATE")
+        .put("vertices",JSONArray(points.map{JSONArray(listOf(it.longitude,it.latitude))}))
+    val id=ownerParcelCall(session,payload).optString("id")
     check(ParcelUuid.matches(id))
     return id
 }

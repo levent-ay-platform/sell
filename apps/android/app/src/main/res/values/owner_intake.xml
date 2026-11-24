@@ -59,7 +59,7 @@
     <string name="intake_clear_boundary">Clear</string>
     <string name="intake_zoom_boundary">Zoom in to add corners.</string>
     <string name="intake_keep_boundary">Keep boundary for review</string>
-    <string name="intake_map_private">Owner-drawn boundary for this session only; not official or published.</string>
+    <string name="intake_map_private">Private draft drawing, not an official boundary.</string>
     <string name="intake_use_area">Use area in listing</string>
     <string name="intake_add_plan_first">Add plan in documents</string>
     <string name="intake_review_boundary">Review drawing</string>
@@ -80,4 +80,13 @@
     <string name="intake_location_conflict">Document location differs from selected map location. Review both.</string>
     <string name="intake_parent_title">Parent title reference</string>
     <string name="intake_plot_number">Parcel number</string>
+    <string name="intake_boundary_saved_local">Encrypted drawing saved on this device.</string>
+    <string name="intake_boundary_storage_error">Could not save or read the local drawing. Nothing published.</string>
+    <string name="intake_boundary_case_save">Send drawing to private review case</string>
+    <string name="intake_boundary_case_consent">Sends your drawn boundary to the private case for review, not publication.</string>
+    <string name="intake_boundary_case_saved">Drawing saved in private review case.</string>
+    <string name="intake_boundary_case_error">Server save not confirmed; check the case before sending again.</string>
+    <string name="intake_boundary_remove_local">Remove local drawing</string>
+    <string name="intake_boundary_pilot_not_sent">Pilot drawing will not be submitted with this listing. Chosen area stays in the details.</string>
+    <string name="intake_boundary_draft_notice">Private draft drawing, not an official boundary.</string>
 </resources>

@@ -59,7 +59,7 @@
     <string name="intake_clear_boundary">Effacer</string>
     <string name="intake_zoom_boundary">Zoomez pour ajouter les sommets.</string>
     <string name="intake_keep_boundary">Garder les limites pour examen</string>
-    <string name="intake_map_private">Tracé du propriétaire pour cette session uniquement ; ni limite officielle ni publication.</string>
+    <string name="intake_map_private">Tracé privé, pas une limite officielle.</string>
     <string name="intake_use_area">Utiliser la surface pour l’annonce</string>
     <string name="intake_add_plan_first">Ajouter le plan aux documents</string>
     <string name="intake_review_boundary">Revoir le tracé</string>
@@ -80,4 +80,13 @@
     <string name="intake_location_conflict">La localisation du document diffère du point choisi sur la carte. Vérifiez les deux.</string>
     <string name="intake_parent_title">Titre foncier parent</string>
     <string name="intake_plot_number">Numéro de parcelle</string>
+    <string name="intake_boundary_saved_local">Tracé chiffré enregistré sur cet appareil.</string>
+    <string name="intake_boundary_storage_error">Impossible de lire ou garder le tracé local. Aucune publication.</string>
+    <string name="intake_boundary_case_save">Envoyer le tracé au dossier privé</string>
+    <string name="intake_boundary_case_consent">Envoie les limites dessinées au dossier privé pour examen, sans publication.</string>
+    <string name="intake_boundary_case_saved">Tracé conservé dans le dossier privé.</string>
+    <string name="intake_boundary_case_error">Enregistrement serveur non confirmé ; vérifier le dossier avant de renvoyer.</string>
+    <string name="intake_boundary_remove_local">Supprimer le tracé local</string>
+    <string name="intake_boundary_pilot_not_sent">Le tracé pilote ne sera pas envoyé avec cette annonce. La surface choisie reste dans les détails.</string>
+    <string name="intake_boundary_draft_notice">Tracé privé, pas une limite officielle.</string>
 </resources>

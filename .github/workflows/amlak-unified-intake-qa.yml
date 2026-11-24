@@ -78,7 +78,7 @@ jobs:
           profile: pixel_4
           disable-animations: true
           emulator-options: '-no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot'
-          script: gradle -p apps/android :app:connectedDebugAndroidTest -PmalakV2Discovery=true -Pandroid.testInstrumentationRunnerArguments.class=tn.malak.app.UnifiedIntakeUiTest,tn.malak.app.AtlasAdminAssetTest --no-daemon
+          script: gradle -p apps/android :app:connectedDebugAndroidTest -PmalakV2Discovery=true -Pandroid.testInstrumentationRunnerArguments.class=tn.malak.app.UnifiedIntakeUiTest,tn.malak.app.AtlasAdminAssetTest,tn.malak.app.OwnerBoundaryDraftStoreTest --no-daemon
       - uses: actions/upload-artifact@v4
         if: always()
         with:

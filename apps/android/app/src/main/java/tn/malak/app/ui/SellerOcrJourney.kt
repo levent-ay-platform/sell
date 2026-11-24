@@ -57,6 +57,8 @@ import tn.malak.app.ui.parcel.OwnerParcelEditorSource
 import tn.malak.app.ui.parcel.OwnerPlanDraft
 import tn.malak.app.ui.parcel.OwnerMapBoundaryEditor
 import tn.malak.app.ui.parcel.measureOwnerMap
+import tn.malak.app.ui.parcel.OwnerBoundaryDraftStore
+import tn.malak.app.ui.parcel.saveOwnerMapBoundary
 import tn.malak.app.ui.parcel.selectedFact
 import java.util.Locale
 import java.util.UUID
@@ -179,7 +181,35 @@ internal fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmiss
     var showListingExtras by rememberSaveable(draftFile){mutableStateOf(false)}
     var chooseListingPoint by rememberSaveable(draftFile){mutableStateOf(false)}
     var chooseMapBoundary by remember(draftFile){mutableStateOf(false)}
-    var mapBoundary by remember(draftFile){mutableStateOf(emptyList<DiscoveryPoint>())}
+    val boundaryStore=remember(draftFile,readingForListing,resubmission?.optString("id")){
+        if(draftScope.isNullOrBlank()||readingForListing)null
+        else OwnerBoundaryDraftStore(context.applicationContext,draftFile+":"+(resubmission?.optString("id")?:"new"))
+    }
+    var mapBoundary by remember(boundaryStore){mutableStateOf(emptyList<DiscoveryPoint>())}
+    var boundaryLocalReady by remember(boundaryStore){mutableStateOf(boundaryStore==null)}
+    var boundaryLocalStatus by remember(boundaryStore){mutableIntStateOf(0)}
+    var boundaryLocalBusy by remember(boundaryStore){mutableStateOf(false)}
+    var boundarySent by remember(mapBoundary,ownerSession,provisionedCase){mutableStateOf(false)}
+    var boundarySendBusy by remember{mutableStateOf(false)}
+    var boundarySendError by remember(mapBoundary,ownerSession,provisionedCase){mutableStateOf(false)}
+    LaunchedEffect(boundaryStore){
+        val store=boundaryStore
+        if(store!=null){
+            try{mapBoundary=withContext(Dispatchers.IO){store.read()}
+                if(mapBoundary.isNotEmpty())boundaryLocalStatus=R.string.intake_boundary_saved_local
+            }catch(cancel:CancellationException){throw cancel}
+            catch(_:Exception){boundaryLocalStatus=R.string.intake_boundary_storage_error}
+            finally{boundaryLocalReady=true}
+        }
+    }
+    LaunchedEffect(submitted,boundaryStore){
+        if(submitted&&boundaryStore!=null){
+            // Do not carry the previous property's geometry into a new listing.
+            try{withContext(Dispatchers.IO){boundaryStore.clear()}}
+            catch(cancel:CancellationException){throw cancel}
+            catch(_:Exception){boundaryLocalStatus=R.string.intake_boundary_storage_error}
+        }
+    }
     var showPrivateReading by rememberSaveable(draftFile){mutableStateOf(false)}
     var editCustomerName by remember(draftFile){mutableStateOf(false)}
     var submissionMessage by remember(draftFile){mutableIntStateOf(0)}
@@ -784,7 +814,20 @@ internal fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmiss
     if(chooseMapBoundary){
         OwnerMapBoundaryEditor(SmartListingAssist.coordinates(listingLatitude,listingLongitude)
             ?.let{DiscoveryPoint(it.first,it.second)},mapBoundary,
-            onDismiss={chooseMapBoundary=false},onSave={points->mapBoundary=points;chooseMapBoundary=false})
+            onDismiss={chooseMapBoundary=false},onSave={points->
+                mapBoundary=points;chooseMapBoundary=false
+                boundaryStore?.let{store->
+                    boundaryLocalBusy=true
+                    scope.launch{
+                        try{
+                            withContext(Dispatchers.IO){store.save(points)}
+                            boundaryLocalStatus=R.string.intake_boundary_saved_local
+                        }catch(cancel:CancellationException){throw cancel}
+                        catch(_:Exception){boundaryLocalStatus=R.string.intake_boundary_storage_error}
+                        finally{boundaryLocalBusy=false}
+                    }
+                }
+            })
     }
     if(chooseListingPoint){
         DirectLocationPicker(
@@ -1062,7 +1105,7 @@ internal fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmiss
                             }
                         }
                         HorizontalDivider(color=IntakeLine)
-                        OutlinedButton(onClick={chooseMapBoundary=true},modifier=Modifier.fillMaxWidth()){
+                        OutlinedButton(onClick={chooseMapBoundary=true},enabled=boundaryLocalReady&&!boundaryLocalBusy&&!boundarySendBusy,modifier=Modifier.fillMaxWidth()){
                             Icon(Icons.Outlined.Map,null,Modifier.size(19.dp));Spacer(Modifier.width(6.dp))
                             Text(s(R.string.intake_map_boundary))
                         }
@@ -1071,7 +1114,44 @@ internal fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmiss
                             Text(measured.lengthsM.mapIndexed{i,v->"${i+1}: ${String.format(Locale.ROOT,"%.1f",v)} m"}.joinToString(" · "),fontSize=12.sp,color=Brand.Muted)
                             if(!directVerification&&!readingForListing)TextButton(onClick={area=String.format(Locale.ROOT,"%.2f",measured.areaM2)}){Text(s(R.string.intake_use_area))}
                         }
-                        Text(s(R.string.intake_map_private),fontSize=12.sp,color=Brand.Muted)
+                        if(boundaryLocalBusy||boundarySendBusy)LinearProgressIndicator(Modifier.fillMaxWidth())
+                        if(boundaryLocalStatus!=0)Text(s(boundaryLocalStatus),fontSize=12.sp,
+                            color=if(boundaryLocalStatus==R.string.intake_boundary_storage_error)Brand.Crimson else IntakeGreen)
+                        if(measured!=null){
+                            val ownerCase=(ownerSession?:provisionedCase).takeIf{hasOwnerReviewSession&&!hasPilotReviewSession&&pairReport!=null}
+                            if(ownerCase!=null){
+                                Text(s(R.string.intake_boundary_case_consent),fontSize=12.sp,color=Brand.Muted)
+                                OutlinedButton(onClick={
+                                    val points=mapBoundary.toList()
+                                    boundarySendBusy=true;boundarySendError=false
+                                    scope.launch{
+                                        try{saveOwnerMapBoundary(ownerCase,points);boundarySent=true}
+                                        catch(cancel:CancellationException){throw cancel}
+                                        catch(_:Exception){boundarySendError=true}
+                                        finally{boundarySendBusy=false}
+                                    }
+                                },enabled=!boundarySent&&!boundarySendBusy&&!boundaryLocalBusy,modifier=Modifier.fillMaxWidth()){
+                                    Text(s(if(boundarySent)R.string.intake_boundary_case_saved else R.string.intake_boundary_case_save))
+                                }
+                                if(boundarySendError)Text(s(R.string.intake_boundary_case_error),fontSize=12.sp,color=Brand.Crimson)
+                            }
+                            TextButton(onClick={
+                                val store=boundaryStore
+                                if(store==null){mapBoundary=emptyList();boundaryLocalStatus=0}
+                                else{
+                                    boundaryLocalBusy=true
+                                    scope.launch{
+                                        try{
+                                            withContext(Dispatchers.IO){store.clear()}
+                                            mapBoundary=emptyList();boundaryLocalStatus=0
+                                        }catch(cancel:CancellationException){throw cancel}
+                                        catch(_:Exception){boundaryLocalStatus=R.string.intake_boundary_storage_error}
+                                        finally{boundaryLocalBusy=false}
+                                    }
+                                }
+                            },enabled=!boundaryLocalBusy&&!boundarySendBusy){Text(s(R.string.intake_boundary_remove_local))}
+                        }
+                        Text(s(if(boundarySent)R.string.intake_boundary_case_saved else R.string.intake_map_private),fontSize=12.sp,color=Brand.Muted)
                     }
                     OwnerAdminContextPanel(adminContext,adminSamples.isNotEmpty()&&adminIndex==null&&!adminLoadFailed,
                         adminSamples.isNotEmpty(),adminLoadFailed,adminArabic,
@@ -1672,8 +1752,9 @@ internal fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmiss
                         JourneyPanel{
                             Text(s(R.string.intake_map_boundary),fontWeight=FontWeight.SemiBold)
                             Text(s(R.string.parcel_editor_calculated_area,measurement.areaM2))
-                            Text(s(R.string.intake_map_private),fontSize=12.sp,color=Brand.Muted)
-                            TextButton(onClick={step=2;chooseMapBoundary=true}){Text(s(R.string.intake_review_boundary))}
+                            Text(s(if(boundarySent)R.string.intake_boundary_case_saved else if(hasPilotReviewSession)
+                                R.string.intake_boundary_pilot_not_sent else R.string.intake_map_private),fontSize=12.sp,color=Brand.Muted)
+                            TextButton(onClick={step=2;chooseMapBoundary=true},enabled=boundaryLocalReady&&!boundaryLocalBusy&&!boundarySendBusy){Text(s(R.string.intake_review_boundary))}
                         }
                     }
                     JourneySectionHeading(s(R.string.intake_private_heading),Icons.Outlined.Lock)
@@ -1832,7 +1913,7 @@ internal fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmiss
                     }
                 }
                 else if(pilotOcrSession==null)saveLocalDraft()
-            }, enabled=(!intakeStep||requiredCount==2)&&!sending&&!submitted&&!identityDateBusy&&!planBusy&&!extraBusy&&!(step==2&&pilotOcrSession!=null&&pairReport==null), modifier=Modifier.fillMaxWidth().heightIn(min=54.dp),
+            }, enabled=(!intakeStep||requiredCount==2)&&!boundaryLocalBusy&&!boundarySendBusy&&!sending&&!submitted&&!identityDateBusy&&!planBusy&&!extraBusy&&!(step==2&&pilotOcrSession!=null&&pairReport==null), modifier=Modifier.fillMaxWidth().heightIn(min=54.dp),
                 shape=RoundedCornerShape(17.dp),colors=ButtonDefaults.buttonColors(
                     containerColor = if (needsCertificate) Brand.NeutralContainer else Brand.Crimson,
                     contentColor = if (needsCertificate) Brand.Ink else Color.White

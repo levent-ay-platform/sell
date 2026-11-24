@@ -59,7 +59,7 @@
     <string name="intake_clear_boundary">مسح</string>
     <string name="intake_zoom_boundary">كبّر الخريطة لإضافة الزوايا.</string>
     <string name="intake_keep_boundary">حفظ الحدود للمراجعة</string>
-    <string name="intake_map_private">رسم المالك للمراجعة في هذه الجلسة فقط؛ لا يثبت الحدود الرسمية ولا يُنشر.</string>
+    <string name="intake_map_private">الرسم مسودة خاصة وليس حدوداً رسمية.</string>
     <string name="intake_use_area">استخدام المساحة في الإعلان</string>
     <string name="intake_add_plan_first">إضافة المخطط من الوثائق</string>
     <string name="intake_review_boundary">مراجعة الرسم</string>
@@ -80,4 +80,13 @@
     <string name="intake_location_conflict">موقع الوثيقة لا يتفق مع الموقع المحدد على الخريطة. راجع الاثنين.</string>
     <string name="intake_parent_title">الرسم العقاري الأم</string>
     <string name="intake_plot_number">رقم المقسم</string>
+    <string name="intake_boundary_saved_local">تم حفظ الرسم مشفّراً على الجهاز.</string>
+    <string name="intake_boundary_storage_error">تعذر حفظ أو قراءة الرسم المحلي. لم يُنشر شيء.</string>
+    <string name="intake_boundary_case_save">إرسال الرسم إلى ملف المراجعة الخاص</string>
+    <string name="intake_boundary_case_consent">سيتم إرسال الحدود التي رسمتها إلى ملف العقار الخاص للمراجعة، وليس للنشر.</string>
+    <string name="intake_boundary_case_saved">حُفظ الرسم في ملف المراجعة الخاص.</string>
+    <string name="intake_boundary_case_error">لم يتأكد حفظ الرسم على الخادم؛ راجع ملف العقار قبل إعادة الإرسال.</string>
+    <string name="intake_boundary_remove_local">حذف الرسم المحلي</string>
+    <string name="intake_boundary_pilot_not_sent">الرسم التجريبي لن يُرسل مع هذا الإعلان. تبقى المساحة المختارة ضمن التفاصيل.</string>
+    <string name="intake_boundary_draft_notice">الرسم مسودة خاصة وليس حدوداً رسمية.</string>
 </resources>

@@ -63,7 +63,7 @@ internal fun OwnerMapBoundaryEditor(start:DiscoveryPoint?,existing:List<Discover
                     Button(onClick={onSave(points)},enabled=measurement!=null,modifier=Modifier.fillMaxWidth()){
                         Text(s(R.string.intake_keep_boundary))
                     }
-                    Text(s(R.string.intake_map_private),color=Brand.Muted,style=MaterialTheme.typography.bodySmall)
+                    Text(s(R.string.intake_boundary_draft_notice),color=Brand.Muted,style=MaterialTheme.typography.bodySmall)
                 }
             }
         }
