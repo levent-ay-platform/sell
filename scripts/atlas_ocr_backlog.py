@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 from collections import Counter, defaultdict
+from contextlib import closing
 import json
 from pathlib import Path
 import re
@@ -47,7 +48,7 @@ def build_backlog(db: Path, snapshot_kind: str):
     if not db.is_file() or db.is_symlink():
         raise ValueError("STABLE_PRIVATE_SNAPSHOT_REQUIRED")
     initial = db.stat()
-    with sqlite3.connect(db.resolve().as_uri()+"?mode=ro&immutable=1", uri=True) as conn:
+    with closing(sqlite3.connect(db.resolve().as_uri()+"?mode=ro&immutable=1", uri=True)) as conn:
         conn.execute("PRAGMA query_only=ON")
         if conn.execute("PRAGMA quick_check(1)").fetchone()[0] != "ok":
             raise ValueError("SNAPSHOT_QUICK_CHECK_FAILED")
