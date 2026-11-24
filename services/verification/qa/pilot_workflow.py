@@ -564,6 +564,60 @@ CREATE TABLE IF NOT EXISTS pilot_parcel_links(
                 db.execute('UPDATE direct_listing_metadata SET owner_paused=0 WHERE submission_id=?',(sid,))
             db.execute('INSERT INTO audit VALUES(?,?,?,?,?)',(ident(),admin,sid,status,now()))
             return self._submission(db,db.execute('SELECT * FROM submissions WHERE id=?',(sid,)).fetchone(),True)
+    def _attachment_scope(self,db,user,review,write=False):
+        # Fixed-code open Pilot login is not sufficient for private supplements.
+        if self.enrolled_devices is None:raise WorkflowError(404,'NOT_FOUND')
+        account=db.execute('SELECT phone FROM accounts WHERE id=?',(user,)).fetchone()
+        if not account or account['phone'] not in self.enrolled_devices:raise WorkflowError(404,'NOT_FOUND')
+        if not db.execute('SELECT 1 FROM reviews WHERE id=? AND account_id=?',(review,user)).fetchone():raise WorkflowError(404,'NOT_FOUND')
+        if write and (db.execute("SELECT 1 FROM submissions WHERE review_id=? AND status<>'DRAFT'",(review,)).fetchone()
+                or db.execute('SELECT 1 FROM direct_listing_review_history WHERE review_id=?',(review,)).fetchone()):
+            raise WorkflowError(409,'REVIEW_CLOSED')
+    def review_attachments(self,user,review):
+        with self.db() as db:
+            self._attachment_scope(db,user,review)
+            return [dict(r) for r in db.execute("SELECT id,kind,mime FROM evidence WHERE review_id=? AND kind IN ('CADASTRAL_PLAN','OTHER_LEGAL_PROOF') ORDER BY kind",(review,))]
+    def add_review_attachment(self,user,review,kind,mime,data,replace_id=None):
+        import io
+        from PIL import Image
+        from mac_pair_runtime import sniff
+        if kind not in ('CADASTRAL_PLAN','OTHER_LEGAL_PROOF'):raise WorkflowError()
+        if not 20<=len(data)<=6*1024*1024:raise WorkflowError(413,'ATTACHMENT_TOO_LARGE')
+        if mime not in ('application/pdf','image/png','image/jpeg','image/tiff') or sniff(data)!=mime:raise WorkflowError(422,'FILE_OR_DATA_REJECTED')
+        if mime=='application/pdf':
+            # Format envelope only. This is unverified private evidence, not
+            # a sanitized rendition or a valid cadastre/ownership assertion.
+            if not data.rstrip().endswith(b'%%EOF'):raise WorkflowError(422,'FILE_OR_DATA_REJECTED')
+        else:
+            try:
+                with Image.open(io.BytesIO(data)) as image:
+                    if min(image.size)<100 or image.width*image.height>25_000_000 or getattr(image,'n_frames',1)!=1:raise ValueError()
+                    image.verify()
+            except Exception:raise WorkflowError(422,'FILE_OR_DATA_REJECTED')
+        with self.db() as db:
+            db.execute('BEGIN IMMEDIATE')
+            self._attachment_scope(db,user,review,write=True)
+            rows=db.execute('SELECT * FROM evidence WHERE review_id=? AND kind=?',(review,kind)).fetchall()
+            if len(rows)>1:raise WorkflowError(409,'ATTACHMENT_CONFLICT')
+            old=rows[0] if rows else None
+            if old:
+                sealed=old['sealed']
+                if old['mime']==mime and self.cipher.decrypt(sealed[:12],sealed[12:],(review+':'+old['id']).encode())==bytes(data):
+                    return {'id':old['id'],'kind':kind,'mime':mime}
+            if (old['id'] if old else None)!=replace_id:raise WorkflowError(409,'ATTACHMENT_CONFLICT')
+            eid=ident();nonce=os.urandom(12)
+            sealed=nonce+self.cipher.encrypt(nonce,bytes(data),(review+':'+eid).encode())
+            if old:db.execute('DELETE FROM evidence WHERE id=?',(old['id'],))
+            db.execute('INSERT INTO evidence VALUES(?,?,?,?,?)',(eid,review,kind,mime,sealed))
+            db.execute('INSERT INTO audit VALUES(?,?,?,?,?)',(ident(),user,None,'PRIVATE_ATTACHMENT_SAVED:'+review,now()))
+            return {'id':eid,'kind':kind,'mime':mime}
+    def read_review_attachment(self,user,review,eid):
+        with self.db() as db:
+            self._attachment_scope(db,user,review)
+            row=db.execute("SELECT * FROM evidence WHERE id=? AND review_id=? AND kind IN ('CADASTRAL_PLAN','OTHER_LEGAL_PROOF')",(eid,review)).fetchone()
+            if not row:raise WorkflowError(404,'NOT_FOUND')
+            sealed=row['sealed']
+            return row['mime'],self.cipher.decrypt(sealed[:12],sealed[12:],(review+':'+eid).encode())
     def add_photo(self,user,review,data):
         import io
         from PIL import Image, ImageOps

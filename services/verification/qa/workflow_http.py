@@ -138,6 +138,24 @@ class WorkflowRoutes:
             match=re.fullmatch('/api/public/photos/('+ID+')',path)
             if match and method=='GET':
                 self.binary(h,200,self.store.public_photo(match[1]),'image/jpeg');return True
+            attachment=re.fullmatch('/api/pilot/reviews/('+ID+')/attachments(?:/('+ID+'))?',path)
+            if attachment:
+                if os.environ.get('MALAK_PRIVATE_REVIEW_ATTACHMENTS')!='1' or self.store.enrolled_devices is None:raise WorkflowError(404,'NOT_FOUND')
+                user=self.actor(h);review,eid=attachment.groups()
+                if method=='GET' and eid is None:
+                    h.result(200,{'ok':True,'attachments':self.store.review_attachments(user,review)});return True
+                if method=='GET' and eid is not None:
+                    _,raw=self.store.read_review_attachment(user,review,eid)
+                    self.binary(h,200,raw,'application/octet-stream');return True
+                if method=='POST' and eid is None:
+                    if h.headers.get('X-Pilot-Ocr-Consent')!='1':raise WorkflowError(400,'CONSENT_REQUIRED')
+                    replace=h.headers.get('X-Replace-Attachment')
+                    if replace is not None and not re.fullmatch(ID,replace):raise WorkflowError(422,'INVALID_REQUEST')
+                    raw=self.body(h,6*1024*1024,True)
+                    if self.actor(h)!=user:raise WorkflowError(401,'SESSION_REQUIRED')
+                    item=self.store.add_review_attachment(user,review,h.headers.get('X-Attachment-Kind'),h.headers.get('X-Claimed-Mime'),raw,replace)
+                    h.result(200,{'ok':True,'attachment':item,'ownershipVerified':False,'mayPublish':False});return True
+                raise WorkflowError(405,'METHOD_NOT_ALLOWED')
             match=re.fullmatch('/api/pilot/reviews/('+ID+')/photos',path)
             if match and method=='POST':
                 user=self.actor(h);eid=self.store.add_photo(user,match[1],self.body(h,6*1024*1024,True))
