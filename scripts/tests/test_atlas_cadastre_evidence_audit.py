@@ -112,6 +112,31 @@ class CadastreEvidenceAuditTest(unittest.TestCase):
         self.assertNotIn("Untitled private evidence", str(report))
         self.assertNotIn("Titre Foncier n°", str(report))
 
+    def test_tunisian_arabic_count_label_and_dotted_tf(self):
+        connection = sqlite3.connect(self.db)
+        connection.executescript(
+            """
+            INSERT INTO resources VALUES
+                ('arabic','مخطط المسح العقاري.pdf','.pdf','arabic'),
+                ('french','Document complémentaire.pdf','.pdf','french');
+            INSERT INTO pages VALUES
+                ('arabic',1,'الرسم العقاري عدد ٠٠٠١٢٣٤، المقسم عدد ٠٠٧'),
+                ('french',1,'T.F. n° 000085, Parcelle N° 0012');
+            """
+        )
+        connection.commit()
+        connection.close()
+        report = audit_snapshot(self.db, snapshot_kind="mainfile_diagnostic")
+        record = {item["document_sha256"]: item for item in report["candidates"]}
+        self.assertIn("arabic", record)
+        self.assertEqual(record["arabic"]["title_reference_candidates"], ["0001234"])
+        self.assertEqual(record["arabic"]["parcel_reference_candidates"], ["007"])
+        self.assertNotIn("french", record)
+        triaged = {item["document_sha256"]: item for item in report["review_queue"]}
+        self.assertTrue(triaged["french"]["has_title_reference_candidate"])
+        self.assertTrue(triaged["french"]["has_parcel_reference_candidate"])
+        self.assertIsNone(report["verified_official_cadastral_plans"])
+
     def test_private_output_and_no_overwrite(self):
         output = self.root / "private" / "report.json"
         write_private_json(output, {"result": "candidate_only"})
