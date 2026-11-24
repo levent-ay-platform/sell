@@ -8,6 +8,7 @@ import sys
 import tempfile
 import threading
 import time
+from cpf_property_views import recover_property_views
 
 ROOT=Path(__file__).resolve().parents[3]
 MAX_TOTAL=12*1024*1024
@@ -75,7 +76,7 @@ class MacPairRuntime:
             if n<=0:raise RuntimeError('timeout')
             return n
         try:
-            docs=[]
+            docs=[];property_views=[]
             with tempfile.TemporaryDirectory(prefix='malak-ocr-') as directory:
                 os.chmod(directory,0o700)
                 for index,(_,mime,content) in enumerate(files[:-1]):
@@ -90,9 +91,12 @@ class MacPairRuntime:
                     if len(doc.get('pages',[]))+sum(len(x['pages']) for x in docs)>8:raise ValueError('too many pages')
                     attach_vision_plan_scans(doc,rasters)
                     docs.append(doc)
+                    if index==0:
+                        property_views=recover_property_views(doc,path,mime,rasters,self.vision,
+                            max(0,remaining()-60))
                 fields=self.pilot.read(files[-1][2],files[-1][1],cache_scope=cache_scope)
                 front=identity_document(fields)
-                payload=json.dumps({'documents':docs,'front':front},ensure_ascii=False).encode()
+                payload=json.dumps({'documents':docs,'front':front,'propertyViews':property_views},ensure_ascii=False).encode()
                 result=subprocess.run([self.node,'--experimental-strip-types',str(ROOT/'services/verification/qa/compare_mac_pair.mjs')],input=payload,stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,timeout=remaining(),check=True)
                 if len(result.stdout)>64000:raise ValueError('result size')
                 report=json.loads(result.stdout)

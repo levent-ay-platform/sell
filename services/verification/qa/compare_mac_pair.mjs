@@ -1,10 +1,11 @@
 // Private stdin/stdout bridge; calls the existing document-family matcher.
 import {parseOcrWorkerOutput,readUntrustedOcrDocument,asTextOnlyOcrDocument} from '../src/reader.ts';
+import {extractPrivateLandDocumentFacts} from '../src/document-family-fields-v2.ts';
 import {moveParcelPlanScanToPage} from '../src/parcel-document-foundation.ts';
 import {compareUnifiedPrivateDocumentIdentity} from '../src/unified-identity-v2.ts';
 let input='';for await(const chunk of process.stdin){input+=chunk;if(input.length>8_000_000)process.exit(1);}
 try{
- const {documents,front}=JSON.parse(input);
+ const {documents,front,propertyViews=[]}=JSON.parse(input);
  if(!Array.isArray(documents)||documents.length<1||documents.length>8)throw Error();
  const docs=documents.map(parseOcrWorkerOutput);
  const identity=parseOcrWorkerOutput(front);
@@ -27,7 +28,26 @@ try{
  if(reading.extraction.missingPages.length)reasons.push('CERTIFICATE_PAGES_MISSING');
  if(reading.extraction.issues.includes('INCONSISTENT_PAGE_COUNT'))
   reasons.push('CERTIFICATE_PAGE_NUMBER_INCONSISTENT');
- const facts=reading.privateFamilyFields.facts
+ // Alternate OCR is private PROPERTY evidence only. Do not send crop
+ // lines into identity comparison, owner-row layout, or parcel geometry.
+ if(!Array.isArray(propertyViews)||propertyViews.length>6)throw Error();
+ const recoverKeys=new Set(['registeredAreaM2','rightsDenominator','registeredPlotNumber',
+   'registeredParcelCount','registeredLandCategory','parentRegisterReference',
+   'registeredPropertyName','registeredPropertyContent']);
+ let familyFacts=reading.privateFamilyFields.facts;
+ if(propertyViews.length&&['OWNERSHIP_CERTIFICATE','SHARED_OWNERSHIP_CERTIFICATE'].includes(reading.documentFamilyCandidate.kind)){
+   const extra=propertyViews.flatMap(v=>{
+     const parsed=parseOcrWorkerOutput(v);
+     if(parsed.format!=='image'||parsed.pages.length!==1||parsed.pages[0].lines.length>60)throw Error();
+     return parsed.pages[0].lines.map(l=>({text:l.text,page:1,source:'ocr-ar',confidence:Math.min(.5,l.confidence??.5)}));
+   });
+   const recovered=extractPrivateLandDocumentFacts(
+     [...asTextOnlyOcrDocument(document).pages.flatMap(p=>p.lines),...extra],reading.documentFamilyCandidate);
+   familyFacts=familyFacts.map(f=>recoverKeys.has(f.key)?recovered.facts.find(x=>x.key===f.key)??f:f);
+ }
+ if(familyFacts.some(f=>recoverKeys.has(f.key)&&f.status==='CONFLICT'))reasons.push('CPF_PROPERTY_FIELDS_CONFLICT');
+ if(familyFacts.some(f=>f.key==='registeredAreaM2'&&f.status==='CONFLICT'))reasons.push('CPF_PROPERTY_AREA_CONFLICT');
+ const facts=familyFacts
    .filter(f=>['CANDIDATE','LOW_CONFIDENCE'].includes(f.status)&&f.value!==null&&f.evidence.length>0)
    .map(f=>({key:f.key,value:f.value,page:f.evidence[0].page,status:f.status,source:f.evidence[0].source,confidence:f.evidence[0].confidence,bbox:f.evidence[0].bbox}));
 
