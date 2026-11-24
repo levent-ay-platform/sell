@@ -53,6 +53,20 @@ internal fun OwnerDocumentReadout(report:CertificateIdentityReview,onDateRefresh
         }else if("CPF_PROPERTY_FIELDS_CONFLICT" in report.reasons){
             Text(s(R.string.owner_estate_fields_conflict),fontSize=12.sp,color=MaterialTheme.colorScheme.error)
         }
+        report.propertyConflicts.forEach{conflict->
+            HorizontalDivider()
+            Text(s(familyFactLabel(conflict.key))+" — "+s(R.string.owner_conflicting_readings),
+                fontWeight=FontWeight.SemiBold,fontSize=13.sp)
+            conflict.alternatives.distinctBy{Triple(it.value,it.page,it.view)}.take(6).forEach{reading->
+                Row(Modifier.fillMaxWidth()){
+                    Text(s(R.string.smart_read_page)+" "+reading.page+" · "+
+                        s(if(reading.view=="PROPERTY_CROP")R.string.owner_crop_reading else R.string.owner_original_reading),
+                        Modifier.weight(1f),fontSize=12.sp,color=Brand.Muted)
+                    Text(reading.value,fontSize=13.sp,fontWeight=FontWeight.SemiBold)
+                }
+            }
+            Text(s(R.string.owner_conflict_review_only),fontSize=12.sp,color=Brand.Muted)
+        }
         ownerExtractedValues(report.detectedKind,report.sourceFacts).forEach{field->
             HorizontalDivider()
             Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(10.dp)){

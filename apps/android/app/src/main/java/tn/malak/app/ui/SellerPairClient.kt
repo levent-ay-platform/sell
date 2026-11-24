@@ -59,7 +59,8 @@ internal data class CertificateIdentityReview(
     val identityScan:LocalDocumentOcr.FrontScan?=null,
     val parcelScans:List<ParcelScan> = emptyList(),
     val parcelOcrLengths:List<ParcelOcrLength> = emptyList(),
-    val parcelPlanFacts:List<ParcelPlanFact> = emptyList())
+    val parcelPlanFacts:List<ParcelPlanFact> = emptyList(),
+    val propertyConflicts:List<PilotPropertyConflict> = emptyList())
 internal class OwnerPairException(val statusCode:Int):Exception("PRIVATE_PAIR_UNAVAILABLE")
 
 private const val DOC_LIMIT=12L*1024L*1024L
@@ -484,6 +485,21 @@ internal fun parsePilotComparison(envelope:JSONObject):CertificateIdentityReview
             factStatuses[key]=factStatus
             values[key]=value
         }
+        val conflicts=try {
+            val raw=data.optJSONArray("propertyConflicts")
+            require(!data.has("propertyConflicts")||raw!=null)
+            require((raw?.length()?:0)<=4)
+            (0 until (raw?.length()?:0)).map{i->
+                val c=raw!!.getJSONObject(i)
+                require(c.getString("status")=="CONFLICT")
+                val alternatives=c.getJSONArray("alternatives")
+                require(alternatives.length()<=12)
+                PilotPropertyConflict(c.getString("key"),(0 until alternatives.length()).map{j->
+                    val v=alternatives.getJSONObject(j)
+                    PilotConflictReading(v.getString("value"),v.getInt("page"),v.getString("view"))
+                },c.getBoolean("truncated"))
+            }.also{require(validPropertyConflicts(it,pages,values.keys))}
+        }catch(_:Exception){throw OwnerPairException(502)}
         val area=when(kind){
             "SALE_DEED"->values["soldAreaM2"]
             "POSSESSION_REPORT"->values["possessedAreaM2"]
@@ -501,6 +517,6 @@ internal fun parsePilotComparison(envelope:JSONObject):CertificateIdentityReview
             propertyFacts=values.toMap(),propertyFactStatuses=factStatuses.toMap(),sourceFacts=sourceFacts.toList(),
             identityScan=data.optJSONObject("identityFields")?.let{LocalDocumentOcr.fromPilotReport(it)},
             parcelScans=parseParcelScans(data),parcelOcrLengths=parseParcelOcrLengths(data),
-            parcelPlanFacts=parseParcelPlanFacts(data)
+            parcelPlanFacts=parseParcelPlanFacts(data),propertyConflicts=conflicts
         )
 }

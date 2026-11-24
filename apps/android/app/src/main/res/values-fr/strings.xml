@@ -471,4 +471,8 @@
     <string name="owner_estate_area_conflict">Les lectures de la superficie divergent. Vérifier le certificat ; aucune superficie retenue.</string>
     <string name="owner_estate_fields_conflict">Certaines lectures foncières divergent. Vérifier le certificat.</string>
     <string name="owner_page_count_unreadable">La pagination imprimée est illisible ou incertaine. Vérifier les pages du document.</string>
+    <string name="owner_conflicting_readings">Lectures contradictoires</string>
+    <string name="owner_crop_reading">Zone améliorée</string>
+    <string name="owner_original_reading">Page originale</string>
+    <string name="owner_conflict_review_only">Comparer au certificat. Aucune valeur retenue.</string>
 </resources>

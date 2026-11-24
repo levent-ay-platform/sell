@@ -480,4 +480,8 @@
     <string name="owner_estate_area_conflict">قراءات مساحة الرسم متعارضة. راجع الشهادة؛ لم تُعتمد أي مساحة.</string>
     <string name="owner_estate_fields_conflict">توجد قراءات عقارية متعارضة. راجع الشهادة.</string>
     <string name="owner_page_count_unreadable">تعذّر تأكيد ترقيم صفحات الشهادة. راجع الصفحات المرفوعة.</string>
+    <string name="owner_conflicting_readings">قراءات متعارضة</string>
+    <string name="owner_crop_reading">منطقة محسّنة</string>
+    <string name="owner_original_reading">الصفحة الأصلية</string>
+    <string name="owner_conflict_review_only">قارن بالشهادة الأصلية. لم تُعتمد أي قيمة.</string>
 </resources>

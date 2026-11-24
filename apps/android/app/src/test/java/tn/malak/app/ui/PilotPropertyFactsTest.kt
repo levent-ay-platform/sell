@@ -71,4 +71,17 @@ class PilotPropertyFactsTest{
         assertNull(ownerSharePercentage("10000",listOf(denominator,denominator.copy(value="30000"))))
         assertNull(ownerSharePercentage("10000",listOf(denominator.copy(key="registeredAreaM2"))))
     }
+
+    @Test fun conflictAlternativesArePrivateReviewOnlyAndCannotOverrideAcceptedFacts(){
+        val row=PilotConflictReading("1200",1,"ORIGINAL_PAGE")
+        val conflict=PilotPropertyConflict("registeredAreaM2",listOf(row,row.copy(value="1208",view="PROPERTY_CROP")),false)
+        assertTrue(validPropertyConflicts(listOf(conflict),1,emptySet()))
+        assertFalse(validPropertyConflicts(listOf(conflict),1,setOf("registeredAreaM2")))
+        assertFalse(validPropertyConflicts(listOf(conflict,conflict),1,emptySet()))
+        assertFalse(validPropertyConflicts(listOf(conflict.copy(key="cinFull")),1,emptySet()))
+        assertFalse(validPropertyConflicts(listOf(conflict.copy(alternatives=listOf(row.copy(value="name")))),1,emptySet()))
+        assertFalse(validPropertyConflicts(listOf(conflict.copy(alternatives=listOf(row.copy(page=2)))),1,emptySet()))
+        assertFalse(validPropertyConflicts(listOf(conflict.copy(alternatives=listOf(row.copy(view="UNKNOWN")))),1,emptySet()))
+        assertNull(listingAreaEvidence("OWNERSHIP_CERTIFICATE",emptyList()))
+    }
 }

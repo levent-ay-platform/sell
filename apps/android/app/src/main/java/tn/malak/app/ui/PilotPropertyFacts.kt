@@ -50,3 +50,15 @@ internal fun ownerSharePercentage(parts:String?,facts:List<PilotPropertyFact>):S
     return n.multiply(java.math.BigDecimal("100")).divide(d,4,java.math.RoundingMode.HALF_UP)
         .stripTrailingZeros().toPlainString()
 }
+
+/** Conflicting OCR observations are review-only, never eligible for autofill. */
+internal data class PilotConflictReading(val value:String,val page:Int,val view:String)
+internal data class PilotPropertyConflict(val key:String,val alternatives:List<PilotConflictReading>,val truncated:Boolean)
+internal fun validPropertyConflicts(conflicts:List<PilotPropertyConflict>,pages:Int,acceptedKeys:Set<String>):Boolean {
+    val keys=setOf("registeredAreaM2","rightsDenominator","registeredPlotNumber","registeredParcelCount")
+    val numeric=Regex("""[0-9]{1,12}(?:\.[0-9]{1,3})?""")
+    return pages in 1..8&&conflicts.size<=4&&conflicts.map{it.key}.distinct().size==conflicts.size&&
+        conflicts.all{c->c.key in keys&&c.key !in acceptedKeys&&c.alternatives.size<=12&&
+            c.alternatives.all{a->numeric.matches(a.value)&&a.page in 1..pages&&
+                a.view in setOf("ORIGINAL_PAGE","PROPERTY_CROP")}}
+}
