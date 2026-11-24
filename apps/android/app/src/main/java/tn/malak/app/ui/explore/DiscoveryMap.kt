@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.absoluteOffset
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Text
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.AbsoluteAlignment
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
@@ -507,15 +508,6 @@ internal fun DiscoveryMap(
             WorldGlobe(center, zoom, Modifier.matchParentSize(), spinGlobe,
                 onStopSpin = { globeTapCallback() }, onSpinLongitude = { spinLongitude = it })
         }
-        if (worldCamera == null) for ((row,point) in badgeCenters) {
-            Box(Modifier.absoluteOffset { IntOffset((point.x-badgePx/2).roundToInt(),(point.y-badgePx/2).roundToInt()) }
-                .size(badgeDiameter).background(if(row.lots==0)Color(0xFF55616A) else Color(0xFF145D68),CircleShape)
-                .border(2.dp,Color.White,CircleShape)
-                .clickable { governorateCallback(row.focus) },
-                contentAlignment=Alignment.Center) {
-                Text(row.lots.toString(),color=Color.White,fontSize=12.sp,fontWeight=FontWeight.Bold)
-            }
-        }
         if (radarPath != null && worldCamera == null) {
             val projectedCenter = radarCamera?.target?.let { map?.projection?.toScreenLocation(it) }
             Canvas(Modifier.matchParentSize().clipToBounds()) {
@@ -529,6 +521,15 @@ internal fun DiscoveryMap(
                     width = 2.5.dp.toPx(),
                     pathEffect = PathEffect.dashPathEffect(floatArrayOf(9.dp.toPx(), 5.dp.toPx()))
                 ))
+            }
+        }
+        if (worldCamera == null) for ((row,point) in badgeCenters) {
+            Box(Modifier.align(AbsoluteAlignment.TopLeft).absoluteOffset { IntOffset((point.x-badgePx/2).roundToInt(),(point.y-badgePx/2).roundToInt()) }
+                .size(badgeDiameter).background(if(row.lots==0)Color(0xFF55616A) else Color(0xFF145D68),CircleShape)
+                .border(2.dp,Color.White,CircleShape)
+                .clickable { governorateCallback(row.focus) },
+                contentAlignment=Alignment.Center) {
+                Text(row.lots.toString(),color=Color.White,fontSize=12.sp,fontWeight=FontWeight.Bold)
             }
         }
     }
