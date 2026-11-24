@@ -7,6 +7,8 @@ on:
       - scripts/atlas_archive_deep_review.py
       - scripts/atlas_archive_next_pass.py
       - scripts/atlas_archive_full_review.py
+      - scripts/atlas_property_dossier.py
+      - scripts/tests/test_atlas_property_dossier.py
       - scripts/tests/test_atlas_archive_full_review.py
       - scripts/tests/test_atlas_archive_next_pass.py
       - scripts/atlas_source_registry.py
