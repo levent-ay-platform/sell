@@ -532,7 +532,7 @@ internal fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmiss
                     val bytes=PilotListingClient.downloadAttachment(session,review,item)
                     val uri=try{PrivateCaptureMemory.addDocument(bytes,item.mime)}
                         catch(e:Exception){bytes.fill(0);throw e}
-                    val doc=ChosenDocument(uri,s(if(item.kind=="CADASTRAL_PLAN")R.string.intake_plan else R.string.intake_extra),
+                    val doc=ChosenDocument(uri,context.getString(if(item.kind=="CADASTRAL_PLAN")R.string.intake_plan else R.string.intake_extra),
                         bytes.size.toLong(),item.mime)
                     if(item.kind=="CADASTRAL_PLAN")planFile=doc else extraFile=doc
                     uploadedAttachmentKeys[item.kind]=doc.uploadKey
@@ -1268,7 +1268,7 @@ internal fun SellerOcrJourney(onBack:()->Unit, draftScope:String?=null,resubmiss
                         onArea=if(!directVerification&&!readingForListing){{value->area=value;saveMessage=0}}else null,
                         areaEvidence=pairReport?.let{listingAreaEvidence(it.detectedKind,it.sourceFacts)})
                     JourneySectionHeading(s(if(readingForListing||directVerification)R.string.direct_analysis else R.string.step_property),Icons.Outlined.EditNote)
-                    if(hasPilotReviewSession&&pilotAttachmentReview!=null&&(planFile!=null||extraFile!=null||remoteAttachments.isNotEmpty()||attachmentError)){
+                    if(hasPilotReviewSession&&pilotAttachmentReview!=null&&(planFile!=null||extraFile!=null||remoteAttachments.isNotEmpty())){
                         JourneyPanel{
                             Text(s(R.string.intake_supplements_heading),fontWeight=FontWeight.SemiBold)
                             Text(s(if(attachmentReady&&!attachmentPending)R.string.intake_pilot_attachments_saved
