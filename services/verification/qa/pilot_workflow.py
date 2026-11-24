@@ -611,6 +611,14 @@ CREATE TABLE IF NOT EXISTS pilot_parcel_links(
             db.execute('INSERT INTO evidence VALUES(?,?,?,?,?)',(eid,review,kind,mime,sealed))
             db.execute('INSERT INTO audit VALUES(?,?,?,?,?)',(ident(),user,None,'PRIVATE_ATTACHMENT_SAVED:'+review,now()))
             return {'id':eid,'kind':kind,'mime':mime}
+    def remove_review_attachment(self,user,review,eid):
+        with self.db() as db:
+            db.execute('BEGIN IMMEDIATE')
+            self._attachment_scope(db,user,review,write=True)
+            row=db.execute("SELECT id FROM evidence WHERE id=? AND review_id=? AND kind IN ('CADASTRAL_PLAN','OTHER_LEGAL_PROOF')",(eid,review)).fetchone()
+            if not row:raise WorkflowError(404,'NOT_FOUND')
+            db.execute('DELETE FROM evidence WHERE id=?',(eid,))
+            db.execute('INSERT INTO audit VALUES(?,?,?,?,?)',(ident(),user,None,'PRIVATE_ATTACHMENT_REMOVED:'+review,now()))
     def read_review_attachment(self,user,review,eid):
         with self.db() as db:
             self._attachment_scope(db,user,review)

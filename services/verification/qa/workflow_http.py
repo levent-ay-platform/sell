@@ -147,6 +147,11 @@ class WorkflowRoutes:
                 if method=='GET' and eid is not None:
                     _,raw=self.store.read_review_attachment(user,review,eid)
                     self.binary(h,200,raw,'application/octet-stream');return True
+                if method=='POST' and eid is not None:
+                    if h.headers.get('X-Pilot-Ocr-Consent')!='1' or self.body(h)!={}:raise WorkflowError(400,'CONSENT_REQUIRED')
+                    if self.actor(h)!=user:raise WorkflowError(401,'SESSION_REQUIRED')
+                    self.store.remove_review_attachment(user,review,eid)
+                    h.result(200,{'ok':True});return True
                 if method=='POST' and eid is None:
                     if h.headers.get('X-Pilot-Ocr-Consent')!='1':raise WorkflowError(400,'CONSENT_REQUIRED')
                     replace=h.headers.get('X-Replace-Attachment')

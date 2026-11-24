@@ -47,3 +47,9 @@ class Attachments(unittest.TestCase):
             self.store.add_review_attachment(self.user,self.review,'PHOTO','image/png',image('red'))
         self.store.enrolled_devices=None
         with self.assertRaises(WorkflowError):self.save(image('red'))
+
+    def test_remove_requires_owner_and_draft(self):
+        a=self.save(image('red'))
+        with self.assertRaises(WorkflowError):self.store.remove_review_attachment(self.other,self.review,a['id'])
+        self.store.remove_review_attachment(self.user,self.review,a['id'])
+        self.assertEqual(self.store.review_attachments(self.user,self.review),[])
