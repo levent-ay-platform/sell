@@ -9,7 +9,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.border
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.absoluteOffset
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Text
 import androidx.compose.ui.Alignment
@@ -508,7 +508,7 @@ internal fun DiscoveryMap(
                 onStopSpin = { globeTapCallback() }, onSpinLongitude = { spinLongitude = it })
         }
         if (worldCamera == null) for ((row,point) in badgeCenters) {
-            Box(Modifier.offset { IntOffset((point.x-badgePx/2).roundToInt(),(point.y-badgePx/2).roundToInt()) }
+            Box(Modifier.absoluteOffset { IntOffset((point.x-badgePx/2).roundToInt(),(point.y-badgePx/2).roundToInt()) }
                 .size(badgeDiameter).background(if(row.lots==0)Color(0xFF55616A) else Color(0xFF145D68),CircleShape)
                 .border(2.dp,Color.White,CircleShape)
                 .clickable { governorateCallback(row.focus) },
