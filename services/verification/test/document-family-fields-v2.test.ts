@@ -290,3 +290,40 @@ test('property location uses explicit parcel labels, not owner residence or regi
  const unrelated=reading(['شهادة ملكية','معرف الرسم العقاري: 999901','ولاية: تونس','عنوان المالك: سوسة']);
  assert.equal(field(unrelated,'propertyGovernorate')?.status,'ABSENT');
 });
+
+test('CPF compound printed labels retain distinct area, parts and parcel count',()=>{
+ for(const rows of [
+  ['المساحة: 37000 م م التجزئة: 56000 جزء','مجموع القطع: 1 القطع عدد: 312'],
+  ['التجزئة: 56000 جزء المساحة: 37000 م م','القطع عدد: 312 مجموع القطع: 1']
+ ]){
+  const r=reading(['شهادة ملكية',...rows,'الرسم(وم) الأصلي(ة): 999903تونس',
+   'اسم العقار: ملك المثال','محتوى العقار: أرض فلاحية','صبغة العقار: فلاحية',
+   'طبيعة الإحداث: استخراج',
+   'موقع العقار: مشيخة المثال وفرع معتمدية الحمامات ولاية نابل']);
+  const expected={registeredAreaM2:'37000',rightsDenominator:'56000',
+   registeredParcelCount:'1',registeredPlotNumber:'312',parentRegisterReference:'999903',
+   registeredPropertyName:'ملك المثال',registeredPropertyContent:'ارض فلاحية',
+   registeredLandCategory:'فلاحية',creationNature:'استخراج',
+   propertyGovernorate:'نابل',propertyDelegation:'الحمامات',historicalLocality:'المثال وفرع',
+   registeredLocationText:'مشيخة المثال وفرع معتمدية الحمامات ولاية نابل'};
+  for(const [key,value] of Object.entries(expected)){
+   assert.equal(field(r,key)?.value,value,key);
+   assert.equal(field(r,key)?.evidence[0]?.page,1,key);
+  }
+  assert.equal(field(r,'propertyImada')?.status,'ABSENT');
+  assert.equal(r.ownershipVerified,false);
+  assert.equal(r.mayPublish,false);
+ }
+});
+test('historical locality stays distinct from imada, even when the owner address differs',()=>{
+ const r=reading(['شهادة ملكية','موقع العقار: مشيخة المثال معتمدية الحمامات ولاية نابل',
+   'عنوان المالك: معتمدية المثال ولاية تونس','عمادة العقار: اسم حديث']);
+ assert.equal(field(r,'propertyGovernorate')?.value,'نابل');
+ assert.equal(field(r,'propertyDelegation')?.value,'الحمامات');
+ assert.equal(field(r,'historicalLocality')?.value,'المثال');
+ assert.equal(field(r,'propertyImada')?.value,'اسم حديث');
+ const missing=reading(['شهادة ملكية','مجموع القطع: 3','عنوان المالك: معتمدية المثال ولاية تونس']);
+ assert.equal(field(missing,'registeredParcelCount')?.value,'3');
+ assert.equal(field(missing,'registeredPlotNumber')?.status,'ABSENT');
+ assert.equal(field(missing,'propertyGovernorate')?.status,'ABSENT');
+});
