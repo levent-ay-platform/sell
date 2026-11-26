@@ -27,6 +27,11 @@ PINNED = {
     "governorates.geojson": ("146ddd3be8be14f401f718afb40c1a87394b6426ed5b15d048953ef19c47de1b",24),
     "delegations.geojson": ("947ae6be5a0e4f493c6a7e0fb2be6140621d79f82ee1d4d31ee98c34391ca078",279),
 }
+# Optional, independently versioned upstream ODbL context, not an INS crosswalk.
+EXTENDED_PINNED = {
+    "sector": ("bd698d6232a4478cc6d9300c64b1e0fa093515886e9a67c3c12de5e725249b5b",2083,2845889),
+    "district": ("ff81f41f123f270a94703575bdb3e68d8e00a14f7318e66458236365ad6fd44d",5,178968),
+}
 FIELDS = ("namespace","service_id","layer_id","object_id","version")
 MAX_RECORDS = 100000
 MAX_VERTICES = 250000
@@ -90,12 +95,12 @@ class AdminLayer:
         for ordinal,f in enumerate(features,1):
             p=f.get("properties",{}) if isinstance(f,dict) else {}
             code=p.get("id") if isinstance(p,dict) else None
-            parent=p.get("governorate") if level=="delegation" and isinstance(p,dict) else None
+            parent=p.get("governorate" if level=="delegation" else "delegation") if level in ("delegation","sector") and isinstance(p,dict) else None
             if not isinstance(code,str) or not code or code in seen:
                 raise ValueError("ADMIN_REFERENCE_ID_MISSING_OR_DUPLICATE")
             seen.add(code)
             try:
-                if level=="delegation" and not isinstance(parent,str):
+                if level in ("delegation","sector") and not isinstance(parent,str):
                     raise ValueError("ADMIN_PARENT_MISSING")
                 g,pg=polygon(f.get("geometry"))
                 self.rows.append((code,parent,g,pg))
@@ -116,9 +121,12 @@ class AdminLayer:
             if area<=0:
                 touches.append(code)
             else:
-                hits.append({"admin_id":code,"parent_governorate_id":parent,
-                             "intersection_area_m2":round(area,3),
-                             "source_area_fraction":round(area/pg.area,9)})
+                hit={"admin_id":code,"parent_governorate_id":parent if self.level!="sector" else None,
+                     "intersection_area_m2":round(area,3),
+                     "source_area_fraction":round(area/pg.area,9)}
+                if self.level=="sector":
+                    hit["parent_delegation_id"]=parent
+                hits.append(hit)
         return sorted(hits,key=lambda r:r["admin_id"]),sorted(touches)
 
 
@@ -135,7 +143,31 @@ def load_reference():
     return tuple(layers)
 
 
-def build_context(source,registry,graph,gov,deleg):
+def load_extended_reference(path,level,gov,deleg):
+    """Require the exact previously audited medium-resolution public bytes."""
+    sha,count,size=EXTENDED_PINNED[level]
+    path=Path(path)
+    if not path.is_file() or path.stat().st_size!=size:
+        raise ValueError("EXTENDED_REFERENCE_SIZE_MISMATCH")
+    raw=path.read_bytes()
+    if len(raw)!=size or digest_bytes(raw)!=sha:
+        raise ValueError("EXTENDED_REFERENCE_SHA_MISMATCH")
+    data=json.loads(raw)
+    if data.get("type")!="FeatureCollection" or len(data["features"])!=count:
+        raise ValueError("EXTENDED_REFERENCE_COUNT_MISMATCH")
+    layer=AdminLayer(data["features"],level)
+    if layer.invalid:
+        raise ValueError("EXTENDED_REFERENCE_INVALID_GEOMETRY")
+    if level=="sector":
+        parents={r[0]:r[1] for r in deleg.rows}
+        for f in data["features"]:
+            p=f["properties"]
+            if p.get("delegation") not in parents or p.get("governorate")!=parents[p["delegation"]] or p["governorate"] not in gov.codes:
+                raise ValueError("SECTOR_REFERENCE_PARENT_MISMATCH")
+    return layer
+
+
+def build_context(source,registry,graph,gov,deleg,sector=None,district=None):
     if (source.get("kind")!="PRIVATE_ATLAS_SOURCE_GEOMETRIES" or source.get("crs")!="EPSG:4326"
             or source.get("public_export_permitted") is not False):
         raise ValueError("EXPLICIT_PRIVATE_WGS84_SOURCE_REQUIRED")
@@ -165,6 +197,8 @@ def build_context(source,registry,graph,gov,deleg):
     records=[]
     governorate_counts=Counter()
     delegation_counts=Counter()
+    extra_layers={k:v for k,v in (("sector",sector),("district",district)) if v is not None}
+    extra_counts={k:Counter() for k in extra_layers}
     for ordinal,item in enumerate(items,1):
         item=item if isinstance(item,dict) else {}
         k=key(item.get("source_scoped_key"))
@@ -174,6 +208,11 @@ def build_context(source,registry,graph,gov,deleg):
                 ("CADASTRE_SOURCE","PLANNING_SOURCE","OTHER_SOURCE") else "UNKNOWN",
                 "governorate_intersections":[],"delegation_intersections":[],
                 "candidate_document_hashes_private":[],"legal_boundary_verified":False}
+        for level in extra_layers:
+            record[level+"_intersections"]=[]
+            record[level+"_boundary_contacts"]=[]
+        if sector is not None:
+            record["sector_parent_conflicts"]=[]
         try:
             g,pg=polygon(item.get("geometry"))
             record["source_area_m2"]=round(pg.area,3)
@@ -184,6 +223,17 @@ def build_context(source,registry,graph,gov,deleg):
             gp={r["admin_id"] for r in gs}
             record["admin_parent_conflicts"]=[r["admin_id"] for r in ds if r["parent_governorate_id"] not in gp]
             record["status"]="SPATIAL_CONTEXT_CANDIDATE" if gs or ds else "NO_POSITIVE_AREA_INTERSECTION_OBSERVED"
+            # These are upstream spatial candidates, not official current INS identities.
+            extra_results={level:layer.intersections(g,pg) for level,layer in extra_layers.items()}
+            for level,(hits,touches) in extra_results.items():
+                record[level+"_intersections"]=hits
+                record[level+"_boundary_contacts"]=touches
+            if sector is not None:
+                dp={r["admin_id"] for r in ds}
+                record["sector_parent_conflicts"]=[r["admin_id"] for r in record["sector_intersections"]
+                                                   if r["parent_delegation_id"] not in dp]
+            for level,(hits,_) in extra_results.items():
+                extra_counts[level].update(r["admin_id"] for r in hits)
             governorate_counts.update(gp)
             delegation_counts.update(r["admin_id"] for r in ds)
             if k is None:
@@ -199,7 +249,7 @@ def build_context(source,registry,graph,gov,deleg):
             record.update(status="GEOMETRY_REVIEW_REQUIRED",reason=str(exc) if isinstance(exc,ValueError) else "GEOS_OPERATION_FAILED",
                           link_state="NOT_EVALUATED")
         records.append(record)
-    return {"kind":"PRIVATE_ATLAS_SPATIAL_CONTEXT","schema_version":1,
+    result={"kind":"PRIVATE_ATLAS_SPATIAL_CONTEXT","schema_version":1,
             "source_snapshot_sha256_private":source["snapshot_sha256_private"],
             "reference_quality":{"governorate_units":len(gov.codes),"delegation_units":len(deleg.codes),
                 "invalid_governorates":gov.invalid,"invalid_delegations":deleg.invalid,
@@ -214,6 +264,17 @@ def build_context(source,registry,graph,gov,deleg):
                     "official_plan_coverage":None} for c in sorted(deleg.codes)],
             "rows_private":records,"official_plan_count":None,"ground_verified":False,
             "public_export_permitted":False}
+    if extra_layers:
+        result["extended_reference_status"]="UPSTREAM_SPATIAL_CONTEXT_ONLY_NOT_INS_CROSSWALK"
+        result["reference_quality"]["extended_layers"]={
+            level:{"units":len(layer.codes),"invalid":layer.invalid}
+            for level,layer in extra_layers.items()}
+        result["reference_quality"]["complete_valid_geometry"] &= all(not layer.invalid for layer in extra_layers.values())
+        for level,layer in extra_layers.items():
+            result[level+"_context_counts_private"]=[
+                {"admin_id":code,"intersecting_source_rows":extra_counts[level][code],
+                 "official_plan_coverage":None} for code in sorted(layer.codes)]
+    return result
 
 
 def main():
@@ -222,14 +283,23 @@ def main():
     p.add_argument("--registry",type=Path,required=True)
     p.add_argument("--graph",type=Path,required=True)
     p.add_argument("--output",type=Path,required=True)
+    p.add_argument("--sectors",type=Path,help="Exact pinned public medium sector GeoJSON; optional")
+    p.add_argument("--districts",type=Path,help="Exact pinned public medium district GeoJSON; optional")
     a=p.parse_args()
     source,sh=private_json(a.geometries)
     registry,rh=private_json(a.registry)
     graph,gh=private_json(a.graph)
     gov,deleg=load_reference()
-    result=build_context(source,registry,graph,gov,deleg)
+    sector=load_extended_reference(a.sectors,"sector",gov,deleg) if a.sectors else None
+    district=load_extended_reference(a.districts,"district",gov,deleg) if a.districts else None
+    result=build_context(source,registry,graph,gov,deleg,sector,district)
     result["input_sha256_private"]={"geometries":sh,"registry":rh,"graph":gh}
     result["reference_sha256"]=dict((n,v[0]) for n,v in PINNED.items())
+    for level,path in (("sector",a.sectors),("district",a.districts)):
+        if path:
+            result["reference_sha256"][level]=EXTENDED_PINNED[level][0]
+    if a.sectors or a.districts:
+        result["extended_reference_attribution"]="© OpenStreetMap contributors · Map Tunisia by Alaa Taieb (ODbL 1.0)"
     write_private_json(a.output,result)
     print(json.dumps({"private_spatial_context_written":True,"counts":result["counts"],
                       "official_plan_coverage":"UNKNOWN","public_export_permitted":False}))
