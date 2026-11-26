@@ -1,4 +1,5 @@
 import json
+import hashlib
 from pathlib import Path
 import tempfile
 import unittest
@@ -54,3 +55,31 @@ class WorkbenchTests(unittest.TestCase):
     def test_verified_input_rejected(self):
         i=index();i["documents_private"][0]["ground_verified"]=True
         with self.assertRaisesRegex(ValueError,"PROMOTED"):build_queue(i)
+
+    def test_extended_context_display_and_conflicts(self):
+        i=index()
+        k=["atlas","cad","lots","1","v1"]
+        i["candidate_graph_private"]["edges"]=[{"document_sha256":A,"source_scoped_key":k,
+            "legally_verified":False,"status":"CANDIDATE"}]
+        fp=hashlib.sha256(json.dumps(i["candidate_graph_private"],sort_keys=True,
+            ensure_ascii=False,separators=(",",":"),allow_nan=False).encode("utf-8")).hexdigest()
+        i["federated_graph_sha256_private"]=fp
+        spatial={"kind":"PRIVATE_ATLAS_SPATIAL_CONTEXT","public_export_permitted":False,
+            "federated_graph_sha256_private":fp,"rows_private":[{
+            "source_scoped_key":k,"legal_boundary_verified":False,"link_state":"SCOPED_DOCUMENT_CANDIDATES",
+            "candidate_document_hashes_private":[A],
+            "governorate_intersections":[{"admin_id":"TN-15"}],
+            "delegation_intersections":[{"admin_id":"delegation-1551"}],
+            "sector_intersections":[{"admin_id":"sector-155151"},{"admin_id":"<invalid>"}],
+            "district_intersections":[{"admin_id":"district-2"}],
+            "sector_parent_conflicts":["sector-155151"]}]}
+        q=build_queue(i,spatial)
+        r=q["rows"][0]
+        self.assertEqual(r["admin_context"],["TN-15","delegation-1551","district-2","sector-155151"])
+        self.assertEqual(r["admin_parent_conflicts"],["sector-155151"])
+        self.assertIn("REVIEW_ADMIN_PARENT_CONFLICT",r["tasks"])
+        self.assertEqual(q["counts"]["with_admin_conflicts"],1)
+        self.assertIsNone(r["official_plan_verified"])
+        spatial["rows_private"][0]["source_scoped_key"]=["atlas","cad","lots","2","v1"]
+        with self.assertRaisesRegex(ValueError,"SCOPED_EDGE"):
+            build_queue(i,spatial)

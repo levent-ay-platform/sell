@@ -20,7 +20,7 @@ from scripts.atlas_property_index import _sha
 from scripts.atlas_property_dossier import refs, number, suffix
 from scripts.atlas_archive_full_review import first_chain
 from scripts.atlas_geometry_evidence import _ring
-from scripts.atlas_spatial_context import private_json
+from scripts.atlas_spatial_context import private_json, key
 
 MAX_DOCS=100000
 MAX_PREVIEWS=24
@@ -69,11 +69,17 @@ def build_queue(index,spatial=None):
     if graph.get("kind")!="PRIVATE_CANDIDATE_GRAPH" or graph.get("public_export_permitted") is not False:
         raise ValueError("PRIVATE_GRAPH_REQUIRED")
     edge_counts=Counter()
+    edge_keys=defaultdict(set)
     for e in graph["edges"]:
         if e.get("legally_verified") is not False or e.get("status") not in ("CANDIDATE","AMBIGUOUS_CANDIDATE"):
             raise ValueError("CANDIDATE_EDGE_REQUIRED")
-        edge_counts[_sha(e["document_sha256"])]+=1
+        sha=_sha(e["document_sha256"])
+        scoped=key(e.get("source_scoped_key"))
+        if scoped is None:raise ValueError("CANDIDATE_SOURCE_KEY_REQUIRED")
+        edge_counts[sha]+=1
+        edge_keys[sha].add(scoped)
     places=defaultdict(set)
+    conflicts=defaultdict(set)
     if spatial is not None:
         fingerprint=hashlib.sha256(json.dumps(graph,sort_keys=True,ensure_ascii=False,separators=(",",":"),
                                                allow_nan=False).encode("utf-8")).hexdigest()
@@ -86,11 +92,22 @@ def build_queue(index,spatial=None):
                 raise ValueError("CANDIDATE_SPATIAL_ROW_REQUIRED")
             if row.get("link_state")!="SCOPED_DOCUMENT_CANDIDATES":continue
             for sha in row.get("candidate_document_hashes_private",[]):
-                if not edge_counts[_sha(sha)]:raise ValueError("SPATIAL_DOCUMENT_WITHOUT_EDGE")
-                for g in row.get("governorate_intersections",[])+row.get("delegation_intersections",[]):
-                    aid=g.get("admin_id")
-                    if isinstance(aid,str) and re.fullmatch(r"(?:TN-[0-9]{2}|delegation-[0-9]{4})",aid):
-                        places[sha].add(aid)
+                sha=_sha(sha)
+                if key(row.get("source_scoped_key")) not in edge_keys[sha]:
+                    raise ValueError("SPATIAL_DOCUMENT_WITHOUT_SCOPED_EDGE")
+                # Display only safe upstream administrative identifiers, never
+                # infer a registry scope or promote a location to legal proof.
+                for level,pattern in (("governorate",r"TN-[0-9]{2}"),("delegation",r"delegation-[0-9]{4}"),
+                                      ("sector",r"sector-[A-Za-z0-9-]{1,48}"),("district",r"district-[1-5]")):
+                    for g in row.get(level+"_intersections",[]):
+                        aid=g.get("admin_id")
+                        if isinstance(aid,str) and re.fullmatch(pattern,aid):
+                            places[sha].add(aid)
+                for field,pattern in (("admin_parent_conflicts",r"delegation-[0-9]{4}"),
+                                      ("sector_parent_conflicts",r"sector-[A-Za-z0-9-]{1,48}")):
+                    for aid in row.get(field,[]):
+                        if isinstance(aid,str) and re.fullmatch(pattern,aid):
+                            conflicts[sha].add(aid)
     rows=[]
     seen=set()
     for row in docs:
@@ -118,11 +135,13 @@ def build_queue(index,spatial=None):
             tasks.append("EXTRACTION_REVIEW_REQUIRED")
         if outlines:tasks.append("INSPECT_PAGE_OUTLINES")
         if edge_counts[sha]>1:tasks.append("RESOLVE_MULTIPLE_SOURCE_CANDIDATES")
+        if conflicts[sha]:tasks.append("REVIEW_ADMIN_PARENT_CONFLICT")
         score=100*bool(edge_counts[sha])+70*any(o["cadastral_hint"] for o in useful)+40*has_pair+20*bool(title_count)+10*bool(outlines)
         rows.append({"sha":sha,"title_observations":title_count,"parcel_observations":plot_count,
                      "same_observation_pair":has_pair,"outlines":outlines,"batch":batch,"deep":deep,
                      "scope_reviewed":scope_known,"candidate_links":edge_counts[sha],
-                     "admin_context":sorted(places[sha]),"observations":useful,"tasks":tasks,"priority":score,
+                     "admin_context":sorted(places[sha]),"admin_parent_conflicts":sorted(conflicts[sha]),
+                     "observations":useful,"tasks":tasks,"priority":score,
                      "official_plan_verified":None,"ground_verified":False})
     if len(seen)!=index["counts"]["document_hashes"] or set(edge_counts)-seen:
         raise ValueError("REVIEW_QUEUE_ACCOUNTING_MISMATCH")
@@ -133,6 +152,7 @@ def build_queue(index,spatial=None):
                       "with_outlines":sum(bool(r["outlines"]) for r in rows),
                       "with_candidate_links":sum(bool(r["candidate_links"]) for r in rows),
                       "with_admin_context":sum(bool(r["admin_context"]) for r in rows),
+                      "with_admin_conflicts":sum(bool(r["admin_parent_conflicts"]) for r in rows),
                       "without_scope":sum(not r["scope_reviewed"] for r in rows),
                       "unhashed_resource_rows":index["counts"].get("unhashed_resource_rows"),
                       "deep_states":dict(Counter(r["deep"] for r in rows))},
