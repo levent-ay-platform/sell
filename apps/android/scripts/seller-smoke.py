@@ -56,7 +56,7 @@ def main():
     tap(["Code d’accès","رمز الدخول","Access code"])
     adb("shell","input","text","0000")
     adb("shell","input","keyevent","KEYCODE_BACK")
-    tap(["Accéder à Malak","الدخول إلى ملاك","Continue to Malak"])
+    tap(["Accéder à Amlak","الدخول إلى Amlak","Continue to Amlak"])
     time.sleep(1)
     incorrect=shown()
     if not any(x in incorrect for x in [
@@ -68,7 +68,7 @@ def main():
         adb("shell","input","keyevent","KEYCODE_DEL")
     adb("shell","input","text","1234")
     adb("shell","input","keyevent","KEYCODE_BACK")
-    tap(["Accéder à Malak","الدخول إلى ملاك","Continue to Malak"])
+    tap(["Accéder à Amlak","الدخول إلى Amlak","Continue to Amlak"])
     time.sleep(3)
     visible=shown()
     if not any(x in visible for x in [
