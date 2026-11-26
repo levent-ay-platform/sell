@@ -113,12 +113,17 @@ def lookup(index,query,spatial=None):
                 contexts=[]
                 for loc in locations[tuple(k)]:
                     if sha not in loc.get("candidate_document_hashes_private",[]):continue
-                    contexts.append({"geometry_kind":loc["geometry_kind"],
+                    context={"geometry_kind":loc["geometry_kind"],
                         "source_area_m2":loc.get("source_area_m2"),
                         "governorate_intersections":loc["governorate_intersections"],
                         "delegation_intersections":loc["delegation_intersections"],
                         "admin_parent_conflicts":loc.get("admin_parent_conflicts",[]),
-                        "legal_boundary_verified":False})
+                        "legal_boundary_verified":False}
+                    for field in ("sector_intersections","sector_boundary_contacts","sector_parent_conflicts",
+                                  "district_intersections","district_boundary_contacts"):
+                        if field in loc:
+                            context[field]=loc[field]
+                    contexts.append(context)
                 links.append({"source_scoped_key_private":k,"status":edge["status"],
                               "page_evidence_private":page_evidence,
                               "spatial_context_candidates_private":contexts,"legally_verified":False})

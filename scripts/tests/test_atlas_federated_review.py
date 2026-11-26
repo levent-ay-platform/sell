@@ -49,3 +49,27 @@ class FederationTests(unittest.TestCase):
         idx,reg,geo,report=federate(self.index,{},[pair()],self.gov,self.deleg)
         self.assertEqual(report["counts"]["candidate_edges"],0)
         self.assertEqual(geo["counts"]["states"],{"SPATIAL_CONTEXT_CANDIDATE":1})
+
+    def test_extended_context_reaches_federated_dossier(self):
+        sector=AdminLayer([{"properties":{"id":"S","delegation":"D"},
+                            "geometry":rect(10,35,1,1)}],"sector")
+        district=AdminLayer([{"properties":{"id":"R"},"geometry":rect(10,35,1,1)}],"district")
+        idx,reg,geo,report=federate(self.index,{SHA:"N"},[pair(),pair("2","c"*64)],
+                                    self.gov,self.deleg,sector,district)
+        self.assertEqual(geo["sector_context_counts_private"][0]["intersecting_source_rows"],2)
+        self.assertEqual(geo["district_context_counts_private"][0]["intersecting_source_rows"],2)
+        dossier=lookup(idx,{"title_reference":"00123","parcel_reference":"02","registry_scope":"N"},geo)
+        ctx=dossier["matches_private"][0]["candidate_links_private"][0]["spatial_context_candidates_private"][0]
+        self.assertEqual(ctx["sector_intersections"][0]["admin_id"],"S")
+        self.assertEqual(ctx["district_intersections"][0]["admin_id"],"R")
+        self.assertFalse(ctx["legal_boundary_verified"])
+        self.assertIsNone(report["official_plan_count"])
+
+    def test_extended_context_cannot_restore_quarantined_links(self):
+        sector=AdminLayer([{"properties":{"id":"S","delegation":"D"},
+                            "geometry":rect(10,35,1,1)}],"sector")
+        idx,reg,geo,report=federate(self.index,{SHA:"N"},[pair(),pair("1","c"*64)],
+                                    self.gov,self.deleg,sector)
+        self.assertEqual(geo["sector_context_counts_private"][0]["intersecting_source_rows"],2)
+        self.assertEqual(report["counts"]["candidate_edges"],0)
+        self.assertEqual(geo["counts"]["rows_with_candidate_documents"],0)

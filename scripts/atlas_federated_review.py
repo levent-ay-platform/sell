@@ -16,14 +16,14 @@ from scripts.atlas_cadastre_evidence_audit import write_private_json
 from scripts.atlas_source_registry import export_registry
 from scripts.atlas_document_linkage import build_candidate_graph
 from scripts.atlas_property_index import _sha
-from scripts.atlas_spatial_context import private_json, key, load_reference, build_context, PINNED
+from scripts.atlas_spatial_context import private_json, key, load_reference, build_context, PINNED, EXTENDED_PINNED, load_extended_reference
 from scripts.atlas_property_dossier import lookup
 
 def fingerprint(obj):
     return hashlib.sha256(json.dumps(obj,sort_keys=True,ensure_ascii=False,separators=(",",":"),
                                     allow_nan=False).encode("utf-8")).hexdigest()
 
-def federate(index, scopes, source_pairs, gov, deleg):
+def federate(index, scopes, source_pairs, gov, deleg, sector=None, district=None):
     if (index.get("kind")!="PRIVATE_ATLAS_PROPERTY_INDEX" or index.get("public_export_permitted") is not False
             or index.get("official_plan_count") is not None):
         raise ValueError("PRIVATE_CANDIDATE_INDEX_REQUIRED")
@@ -56,6 +56,7 @@ def federate(index, scopes, source_pairs, gov, deleg):
            "counts":{"distinct_pdf_sha256":len(seen)}}
     graph=build_candidate_graph(audit,scopes,candidates)
     graph_sha=fingerprint(graph)
+    extended={k:v for k,v in (("sector",sector),("district",district)) if v is not None}
     contexts=[]
     ledger=[]
     source_stats=[]
@@ -63,7 +64,7 @@ def federate(index, scopes, source_pairs, gov, deleg):
         allowed=[r for r in registry["candidate_source_records_private"] if key(r) not in conflicts]
         local_keys={key(r) for r in allowed}
         local_graph={**graph,"edges":[e for e in graph["edges"] if key(e["source_scoped_key"]) in local_keys]}
-        context=build_context(geo,{**registry,"candidate_source_records_private":allowed},local_graph,gov,deleg)
+        context=build_context(geo,{**registry,"candidate_source_records_private":allowed},local_graph,gov,deleg,sector,district)
         for row,spatial in zip(registry["rows_private"],context["rows_private"]):
             k=key(row["source_record_private"])
             reasons=list(row["reasons"])
@@ -101,6 +102,17 @@ def federate(index, scopes, source_pairs, gov, deleg):
         "delegation_context_counts_private":[{"admin_id":c,"intersecting_source_rows":del_counts[c],
                                              "official_plan_coverage":None} for c in sorted(deleg.codes)],
         "official_plan_count":None,"ground_verified":False,"public_export_permitted":False}
+    if extended:
+        spatial["extended_reference_status"]="UPSTREAM_SPATIAL_CONTEXT_ONLY_NOT_INS_CROSSWALK"
+        spatial["reference_quality"]["extended_layers"]={
+            level:{"units":len(layer.codes),"invalid":layer.invalid}
+            for level,layer in extended.items()}
+        spatial["reference_quality"]["complete_valid_geometry"]=not gov.invalid and not deleg.invalid and all(not x.invalid for x in extended.values())
+        for level,layer in extended.items():
+            counts=Counter(hit["admin_id"] for row in contexts for hit in row.get(level+"_intersections",[]))
+            spatial[level+"_context_counts_private"]=[
+                {"admin_id":code,"intersecting_source_rows":counts[code],
+                 "official_plan_coverage":None} for code in sorted(layer.codes)]
     registry={"kind":"PRIVATE_ATLAS_FEDERATED_REGISTRY","schema_version":1,
               "rows_private":ledger,"candidate_source_records_private":candidates,
               "counts":{"mapped_rows":len(ledger),"eligible_source_rows":len(candidates),
@@ -117,7 +129,7 @@ def federate(index, scopes, source_pairs, gov, deleg):
         "sources_private":source_stats,"official_plan_count":None,"public_export_permitted":False}
     return merged,registry,spatial,report
 
-def run(index_path,manifest_path,scopes_path,output,query_path=None):
+def run(index_path,manifest_path,scopes_path,output,query_path=None,sectors_path=None,districts_path=None):
     index,ih=private_json(index_path)
     scopes,sh=private_json(scopes_path)
     manifest,mh=private_json(manifest_path)
@@ -146,7 +158,16 @@ def run(index_path,manifest_path,scopes_path,output,query_path=None):
         pairs.append((registry,geo))
         proofs.append({"snapshot_sha256_private":registry["snapshot_sha256_private"],"mapping_sha256_private":ph})
     gov,deleg=load_reference()
-    merged,registry,spatial,report=federate(index,scopes,pairs,gov,deleg)
+    sector=load_extended_reference(sectors_path,"sector",gov,deleg) if sectors_path else None
+    district=load_extended_reference(districts_path,"district",gov,deleg) if districts_path else None
+    merged,registry,spatial,report=federate(index,scopes,pairs,gov,deleg,sector,district)
+    for level,path in (("sector",sectors_path),("district",districts_path)):
+        if path:
+            spatial["reference_sha256"][level]=EXTENDED_PINNED[level][0]
+    if sector is not None or district is not None:
+        spatial["extended_reference_attribution"]="© OpenStreetMap contributors · Map Tunisia by Alaa Taieb (ODbL 1.0)"
+        report["extended_reference_quality"]=spatial["reference_quality"]["extended_layers"]
+        report["reference_sha256"]=spatial["reference_sha256"]
     report["inputs_private"]={"index_sha256":ih,"scopes_sha256":sh,"manifest_sha256":mh,"source_proofs":proofs}
     dossier=None
     if query_path is not None:
@@ -169,8 +190,10 @@ def main():
     p.add_argument("--scopes",type=Path,required=True)
     p.add_argument("--output-directory",type=Path,required=True)
     p.add_argument("--query",type=Path)
+    p.add_argument("--sectors",type=Path)
+    p.add_argument("--districts",type=Path)
     a=p.parse_args()
-    r=run(a.index,a.sources_manifest,a.scopes,a.output_directory,a.query)
+    r=run(a.index,a.sources_manifest,a.scopes,a.output_directory,a.query,a.sectors,a.districts)
     print(json.dumps({"private_federated_report_written":True,"counts":r["counts"],
                       "official_plans_verified":"UNKNOWN"}))
 
