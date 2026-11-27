@@ -121,6 +121,50 @@ class GenerationReviewTest(unittest.TestCase):
         self.assertEqual(result["state"],"PRIVATE_DELTA_REVIEW_REQUIRED")
         self.assertEqual(result["unhashed_pdf_resource_ids_private"],["missing"])
 
+    def test_resource_identity_loss_with_equal_page_counts_is_held(self):
+        self.db.execute("DELETE FROM resources")
+        self.db.execute("INSERT INTO resources VALUES('replacement','sample.pdf','.pdf','a','')")
+        self.db.commit()
+        result = self.review(self.export("replaced"))
+        self.assertEqual(result["state"],"HOLD_BASELINE_REGRESSION")
+        self.assertEqual(result["counts"]["missing_baseline_resource_id_rows"],1)
+        self.assertEqual(result["counts"]["missing_baseline_resource_hash_associations"],1)
+        self.assertEqual(result["counts"]["removed_or_changed_baseline_rows"],0)
+
+    def test_existing_resource_hash_change_requires_reconciliation(self):
+        self.db.execute("UPDATE resources SET sha256='new'")
+        self.db.commit()
+        result = self.review(self.export("changedlink"))
+        self.assertEqual(result["state"],"HOLD_BASELINE_REGRESSION")
+        self.assertEqual(result["counts"]["missing_baseline_resource_id_rows"],0)
+        self.assertEqual(result["counts"]["missing_baseline_resource_hash_associations"],1)
+
+    def test_previously_unhashed_resource_can_gain_hash(self):
+        self.db.execute("INSERT INTO resources VALUES('pending','sample.pdf','.pdf',NULL,'')")
+        self.db.commit()
+        self.baseline = self.export("pending")
+        self.db.execute("UPDATE resources SET sha256='a' WHERE id='pending'")
+        self.db.commit()
+        result = self.review(self.export("hashed"))
+        self.assertEqual(result["state"],"PRIVATE_DELTA_REVIEW_REQUIRED")
+        self.assertEqual(result["counts"]["missing_baseline_resource_hash_associations"],0)
+
+    def test_document_identity_loss_is_held_even_if_pages_survive(self):
+        self.db.execute("DELETE FROM documents")
+        self.db.commit()
+        result = self.review(self.export("missingdoc"))
+        self.assertEqual(result["state"],"HOLD_BASELINE_REGRESSION")
+        self.assertEqual(result["counts"]["missing_baseline_document_identity_rows"],1)
+        self.assertEqual(result["counts"]["page_document_identities_without_document_row"],1)
+
+    def test_orphan_page_identity_is_not_a_complete_generation(self):
+        self.db.executemany("INSERT INTO pages VALUES('a',?,'text')",[(2,),(3,),(4,)])
+        self.db.execute("INSERT INTO pages VALUES('orphan',1,'text')")
+        self.db.commit()
+        result = self.review(self.export("orphan"))
+        self.assertEqual(result["state"],"PRIVATE_DELTA_REVIEW_REQUIRED")
+        self.assertEqual(result["counts"]["page_document_identities_without_document_row"],1)
+
     def test_public_mode_or_sidecar_is_rejected(self):
         current = self.export("current")
         current[1].chmod(0o644)

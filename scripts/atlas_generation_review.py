@@ -89,6 +89,24 @@ def page_rows(db):
     return rows
 
 
+def catalogue_identities(db):
+    """Retain resource identities, existing hash associations and document IDs.
+
+    A previously unhashed resource can gain a hash without a regression.
+    An existing association that disappears is held for reconciliation, not
+    automatically restored or assumed corrupt. No URL or text is reported.
+    """
+    with closing(open_snapshot(db)) as conn:
+        conn.execute("PRAGMA query_only=ON")
+        resources = list(conn.execute("SELECT id,sha256 FROM resources"))
+        documents = Counter(row[0] for row in conn.execute("SELECT sha256 FROM documents"))
+        page_documents = {row[0] for row in conn.execute("SELECT DISTINCT sha256 FROM pages")}
+    resource_ids = Counter(row[0] for row in resources)
+    known_associations = Counter((identifier,sha) for identifier,sha in resources if sha)
+    orphan_page_documents = page_documents - documents.keys()
+    return resource_ids, known_associations, documents, len(orphan_page_documents)
+
+
 def delta_ledger(backlog):
     ledger = []
     for row in backlog["backlog_private"]:
@@ -132,6 +150,16 @@ def build_generation(baseline_db, baseline_proof, current_db, current_proof,
         raise ValueError("PAGE_ROW_ACCOUNTING_MISMATCH")
     removed = sum((previous - present).values())
     added = sum((present - previous).values())
+    old_ids, old_links, old_docs, _ = catalogue_identities(baseline[0])
+    new_ids, new_links, new_docs, orphan_page_documents = catalogue_identities(current[0])
+    if (sum(old_ids.values()) != baseline[4]["resources"]
+            or sum(new_ids.values()) != current[4]["resources"]
+            or sum(old_docs.values()) != baseline[4]["documents"]
+            or sum(new_docs.values()) != current[4]["documents"]):
+        raise ValueError("CATALOGUE_IDENTITY_ACCOUNTING_MISMATCH")
+    missing_resources = sum((old_ids - new_ids).values())
+    missing_associations = sum((old_links - new_links).values())
+    missing_documents = sum((old_docs - new_docs).values())
     backlog = build_backlog(current[0], "transactional_backup")
     ledger = delta_ledger(backlog)
     if len(ledger) != backlog["counts"]["backlog_documents"]:
@@ -144,8 +172,8 @@ def build_generation(baseline_db, baseline_proof, current_db, current_proof,
     if _hash_file(inventory) != inventory_sha256:
         raise ValueError("GENERATION_INPUT_CHANGED")
     # A disappearing or changed historical row requires explicit reconciliation.
-    state = ("HOLD_BASELINE_REGRESSION" if removed else
-             "PRIVATE_DELTA_REVIEW_REQUIRED" if ledger or backlog["counts"]["pdf_rows_without_sha"]
+    state = ("HOLD_BASELINE_REGRESSION" if any((removed,missing_resources,missing_associations,missing_documents)) else
+             "PRIVATE_DELTA_REVIEW_REQUIRED" if ledger or backlog["counts"]["pdf_rows_without_sha"] or orphan_page_documents
              else "PRIVATE_TEXT_COVERAGE_ACCOUNTED")
     bindings = {"baseline_backup_sha256":baseline[2], "baseline_proof_sha256":baseline[3],
                 "current_backup_sha256":current[2], "current_proof_sha256":current[3],
@@ -159,6 +187,12 @@ def build_generation(baseline_db, baseline_proof, current_db, current_proof,
         "counts":{"baseline_page_rows":baseline[4]["pages"],"current_page_rows":current[4]["pages"],
                   "removed_or_changed_baseline_rows":removed,"added_or_changed_rows":added,
                   "retained_baseline_rows":baseline[4]["pages"]-removed,
+                  "baseline_resource_rows":baseline[4]["resources"],
+                  "current_resource_rows":current[4]["resources"],
+                  "missing_baseline_resource_id_rows":missing_resources,
+                  "missing_baseline_resource_hash_associations":missing_associations,
+                  "missing_baseline_document_identity_rows":missing_documents,
+                  "page_document_identities_without_document_row":orphan_page_documents,
                   "documents_requiring_review":len(ledger),
                   "unhashed_pdf_resource_rows":backlog["counts"]["pdf_rows_without_sha"],
                   "delta_states":dict(Counter(row["state"] for row in ledger)),
