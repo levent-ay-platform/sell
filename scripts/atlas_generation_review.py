@@ -132,6 +132,120 @@ def delta_ledger(backlog):
     return ledger
 
 
+def reconcile_inventory(backlog, inventory):
+    """Compare the existing scanner report with the current catalogue.
+
+    Verify report accounting, not file bytes a second time. Paths and source
+    identities remain private; missing means not observed in this scan.
+    Legacy or unrelated artifacts cannot pass archive reconciliation.
+    """
+    result = {"state":"HOLD_UNRECOGNIZED_INVENTORY", "catalogue_identity_matched":False,
+              "report_accounting_verified":False, "file_bytes_rechecked":False,
+              "global_archive_completeness_verified":False,
+              "counts":{}}
+    if (not isinstance(inventory,dict) or inventory.get("kind") != "ATLAS_PRIVATE_PDF_BLOB_INVENTORY_ONLY"
+            or inventory.get("schema_version") != 1):
+        return result
+
+    def require(condition):
+        if not condition:
+            raise ValueError("INVENTORY_ACCOUNTING_MISMATCH")
+
+    def normalized(sha):
+        require(isinstance(sha,str) and re.fullmatch(r"[a-fA-F0-9]{64}",sha) is not None)
+        return sha.lower()
+
+    def identifiers(rows):
+        require(isinstance(rows,list) and all(v is None or isinstance(v,str) for v in rows))
+        return Counter(rows)
+
+    expected = {}
+    for row in backlog["backlog_private"] + backlog["text_ready_private"]:
+        sha = normalized(row["document_sha256_private"])
+        require(sha not in expected)
+        expected[sha] = identifiers(row["resource_ids_private"])
+
+    observed = {}
+    missing = no_header = files = bytes_hashed = matched = with_header = 0
+    paths = set()
+    def check_file(item):
+        require(isinstance(item,dict))
+        path = item.get("relative_path_private")
+        require(isinstance(path,str) and path and not Path(path).is_absolute()
+                and ".." not in Path(path).parts and path not in paths)
+        require(type(item.get("bytes")) is int and item["bytes"] >= 0
+                and type(item.get("pdf_header_hint")) is bool)
+        paths.add(path)
+        return item["bytes"]
+
+    rows = inventory.get("catalogue_private")
+    require(isinstance(rows,list))
+    for row in rows:
+        require(isinstance(row,dict))
+        sha = normalized(row.get("document_sha256_private"))
+        require(sha not in observed)
+        refs = identifiers(row.get("resource_ids_private"))
+        require(type(row.get("resource_rows")) is int and row["resource_rows"] == sum(refs.values()) > 0)
+        observed[sha] = refs
+        locations = row.get("matching_files")
+        require(isinstance(locations,list))
+        for item in locations:
+            bytes_hashed += check_file(item)
+        headers = sum(item["pdf_header_hint"] for item in locations)
+        require(row.get("sha256_matching_file_count") == len(locations)
+                and row.get("matching_pdf_header_hint_count") == headers)
+        status = ("HASH_AND_PDF_HEADER_OBSERVED" if headers else
+                  "HASH_OBSERVED_NOT_PDF_HEADER" if locations else "NOT_OBSERVED_IN_THIS_SCAN")
+        require(row.get("blob_status") == status)
+        missing += not locations
+        no_header += bool(locations) and not headers
+        matched += bool(locations)
+        with_header += bool(headers)
+        files += len(locations)
+
+    unmatched = inventory.get("unmatched_local_pdf_files_private")
+    errors = inventory.get("scan_errors_private")
+    require(isinstance(unmatched,list) and isinstance(errors,list))
+    for item in unmatched:
+        bytes_hashed += check_file(item)
+        require(normalized(item.get("sha256_private")) not in observed)
+    files += len(unmatched)
+    unknown = identifiers(inventory.get("unhashed_pdf_resource_ids_private"))
+    counts = inventory.get("counts")
+    require(isinstance(counts,dict))
+    recomputed = {
+        "catalogue_distinct_hashed_pdfs_preserved":len(observed),
+        "catalogue_pdf_rows_without_sha_preserved":sum(unknown.values()),
+        "catalogue_resource_references_preserved":sum(sum(ids.values()) for ids in observed.values()),
+        "catalogue_hashes_with_matching_bytes":matched,
+        "catalogue_hashes_with_pdf_header_hint":with_header,
+        "local_pdf_files_hashed":files,
+        "local_pdf_bytes_hashed":bytes_hashed,
+        "local_pdf_files_unmatched_to_catalogue":len(unmatched),
+        "local_pdf_files_skipped_or_unreadable":len(errors),
+    }
+    require(all(type(counts.get(key)) is int and counts[key]==value for key,value in recomputed.items()))
+    skips = [counts.get(k) for k in ("symlink_dirs_skipped","symlink_files_skipped")]
+    require(all(type(v) is int and v>=0 for v in skips))
+    scan_complete = not errors and not any(skips)
+    require(inventory.get("scan_complete_within_selected_root") is scan_complete)
+    identity_matched = (expected == observed and unknown == identifiers(backlog["unhashed_pdf_resource_ids_private"]))
+    result.update({
+        "catalogue_identity_matched":identity_matched,"report_accounting_verified":True,
+        "selected_root_scan_reported_complete":scan_complete,
+        "counts":{**recomputed,"hashes_not_observed":missing,
+                  "matching_hashes_without_pdf_header":no_header,
+                  "catalogue_hashes_missing_from_inventory":len(expected.keys()-observed.keys()),
+                  "inventory_hashes_not_in_catalogue":len(observed.keys()-expected.keys()),
+                  "hashes_with_changed_source_associations":sum(expected[k]!=observed[k] for k in expected.keys() & observed.keys())},
+    })
+    result["state"] = ("HOLD_INVENTORY_CATALOGUE_MISMATCH" if not identity_matched else
+                       "HOLD_INVENTORY_SCOPE_INCOMPLETE" if not scan_complete else
+                       "PRIVATE_ARCHIVE_RECONCILIATION_REQUIRED" if missing or no_header or unmatched or unknown else
+                       "PRIVATE_SELECTED_ROOT_PDF_REPORT_ACCOUNTED")
+    return result
+
+
 def build_generation(baseline_db, baseline_proof, current_db, current_proof,
                      inventory, *, inventory_sha256, extractor_revision, minimum_baseline_pages):
     if (not isinstance(extractor_revision, str) or not re.fullmatch(r"[A-Za-z0-9._-]{1,128}", extractor_revision)
@@ -162,6 +276,15 @@ def build_generation(baseline_db, baseline_proof, current_db, current_proof,
     missing_documents = sum((old_docs - new_docs).values())
     backlog = build_backlog(current[0], "transactional_backup")
     ledger = delta_ledger(backlog)
+    try:
+        with inventory.open(encoding="utf-8") as stream:
+            archive_report = reconcile_inventory(backlog,json.load(stream))
+    except (ValueError, TypeError, KeyError) as exc:
+        # Preserve the baseline comparison even if inventory evidence is invalid.
+        archive_report = {"state":"HOLD_INVALID_INVENTORY_REPORT",
+                          "catalogue_identity_matched":False,"report_accounting_verified":False,
+                          "file_bytes_rechecked":False,"global_archive_completeness_verified":False,
+                          "counts":{}}
     if len(ledger) != backlog["counts"]["backlog_documents"]:
         raise ValueError("DELTA_LEDGER_ACCOUNTING_MISMATCH")
     # Recheck every artifact after all reads; a proof is not a lock.
@@ -199,7 +322,11 @@ def build_generation(baseline_db, baseline_proof, current_db, current_proof,
                   "document_coverage_states":backlog["counts"]["page_coverage_states"]},
         "delta_ledger_private":ledger,
         "unhashed_pdf_resource_ids_private":backlog["unhashed_pdf_resource_ids_private"],
-        "archive_inventory_semantics_verified":False,
+        "archive_inventory_semantics_verified":archive_report["report_accounting_verified"] and archive_report["catalogue_identity_matched"],
+        "archive_reconciliation_private":archive_report,
+        "combined_review_state":("HOLD_BASELINE_REGRESSION" if state == "HOLD_BASELINE_REGRESSION" else
+                                 "PRIVATE_TEXT_AND_SELECTED_ROOT_PDF_ACCOUNTED" if state == "PRIVATE_TEXT_COVERAGE_ACCOUNTED" and archive_report["state"] == "PRIVATE_SELECTED_ROOT_PDF_REPORT_ACCOUNTED"
+                                 else "PRIVATE_REVIEW_REQUIRED"),
         "extractor_revision_declared_not_attested":True,
         "same_catalogue_identity_operator_responsibility":True,
         "live_service_acceptance":False,"official_plan_verification":None,
@@ -219,7 +346,9 @@ def main():
         inventory_sha256=a.inventory_sha256,extractor_revision=a.extractor_revision,
         minimum_baseline_pages=a.minimum_baseline_pages)
     write_private_json(a.output,report)
-    print(json.dumps({"state":report["state"],"counts":report["counts"],"production_changed":False}))
+    print(json.dumps({"state":report["state"],"combined_review_state":report["combined_review_state"],
+                      "archive_state":report["archive_reconciliation_private"]["state"],
+                      "counts":report["counts"],"production_changed":False}))
     return 2 if report["state"] == "HOLD_BASELINE_REGRESSION" else 0
 
 

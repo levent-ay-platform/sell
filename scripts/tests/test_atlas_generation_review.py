@@ -6,7 +6,11 @@ import sqlite3
 import tempfile
 import unittest
 
-from scripts.atlas_generation_review import build_generation
+from scripts.atlas_generation_review import build_generation, reconcile_inventory
+from scripts.atlas_ocr_backlog import build_backlog
+from scripts.atlas_pdf_blob_inventory import scan_pdf_blobs
+from scripts.atlas_cadastre_evidence_audit import write_private_json
+import json
 from scripts.atlas_sqlite_snapshot import backup_from_producer_connection
 
 
@@ -164,6 +168,76 @@ class GenerationReviewTest(unittest.TestCase):
         result = self.review(self.export("orphan"))
         self.assertEqual(result["state"],"PRIVATE_DELTA_REVIEW_REQUIRED")
         self.assertEqual(result["counts"]["page_document_identities_without_document_row"],1)
+
+    def real_inventory(self):
+        payload=b"%PDF-1.4\\nSynthetic bytes, not a valid legal plan"
+        sha=hashlib.sha256(payload).hexdigest()
+        self.db.execute("UPDATE resources SET sha256=?",(sha,))
+        self.db.execute("UPDATE documents SET sha256=?",(sha,))
+        self.db.execute("UPDATE pages SET sha256=?",(sha,))
+        self.db.executemany("INSERT INTO pages VALUES(?,?,'text')",[(sha,p) for p in (2,3,4)])
+        self.db.commit()
+        self.baseline=self.export("realbaseline")
+        current=self.export("realcurrent")
+        backlog=build_backlog(current[0],"transactional_backup")
+        path=self.root/"backlog.json"
+        write_private_json(path,backlog)
+        folder=self.root/"blobs"
+        folder.mkdir()
+        (folder/"sample.pdf").write_bytes(payload)
+        inventory=scan_pdf_blobs(path,folder)
+        return current,backlog,inventory,folder,path
+
+    def test_real_scanner_report_matches_catalogue(self):
+        current,backlog,inventory,_,_=self.real_inventory()
+        self.inventory.write_text(json.dumps(inventory))
+        result=self.review(current,inventory_sha256=hashlib.sha256(self.inventory.read_bytes()).hexdigest())
+        self.assertTrue(result["archive_inventory_semantics_verified"])
+        self.assertEqual(result["combined_review_state"],"PRIVATE_TEXT_AND_SELECTED_ROOT_PDF_ACCOUNTED")
+        self.assertFalse(result["archive_reconciliation_private"]["file_bytes_rechecked"])
+        self.assertFalse(result["public_export_permitted"])
+        self.assertNotIn("sample.pdf",str(result))
+
+    def test_equal_counts_do_not_hide_inventory_source_mismatch(self):
+        _,backlog,inventory,_,_=self.real_inventory()
+        inventory["catalogue_private"][0]["resource_ids_private"]=["wrong"]
+        report=reconcile_inventory(backlog,inventory)
+        self.assertEqual(report["state"],"HOLD_INVENTORY_CATALOGUE_MISMATCH")
+        self.assertEqual(report["counts"]["hashes_with_changed_source_associations"],1)
+
+    def test_missing_pdf_report_is_not_archive_complete(self):
+        _,backlog,_,folder,path=self.real_inventory()
+        (folder/"sample.pdf").unlink()
+        report=reconcile_inventory(backlog,scan_pdf_blobs(path,folder))
+        self.assertEqual(report["state"],"PRIVATE_ARCHIVE_RECONCILIATION_REQUIRED")
+        self.assertEqual(report["counts"]["hashes_not_observed"],1)
+
+    def test_unmatched_file_is_held(self):
+        _,backlog,_,folder,path=self.real_inventory()
+        (folder/"extra.pdf").write_bytes(b"%PDF-1.4 extra")
+        report=reconcile_inventory(backlog,scan_pdf_blobs(path,folder))
+        self.assertEqual(report["state"],"PRIVATE_ARCHIVE_RECONCILIATION_REQUIRED")
+        self.assertEqual(report["counts"]["local_pdf_files_unmatched_to_catalogue"],1)
+
+    def test_inventory_report_tampered_counts_rejected(self):
+        _,backlog,inventory,_,_=self.real_inventory()
+        inventory["counts"]["local_pdf_bytes_hashed"]+=1
+        with self.assertRaisesRegex(ValueError,"INVENTORY_ACCOUNTING"):
+            reconcile_inventory(backlog,inventory)
+
+    def test_incomplete_scan_is_held(self):
+        _,backlog,_,folder,path=self.real_inventory()
+        (folder/"linked.pdf").symlink_to(folder/"sample.pdf")
+        report=reconcile_inventory(backlog,scan_pdf_blobs(path,folder))
+        self.assertEqual(report["state"],"HOLD_INVENTORY_SCOPE_INCOMPLETE")
+
+    def test_unrecognized_inventory_never_passes_combined_review(self):
+        self.db.executemany("INSERT INTO pages VALUES('a',?,'text')",[(2,),(3,),(4,)])
+        self.db.commit()
+        result=self.review(self.export("completelegacy"))
+        self.assertEqual(result["state"],"PRIVATE_TEXT_COVERAGE_ACCOUNTED")
+        self.assertEqual(result["combined_review_state"],"PRIVATE_REVIEW_REQUIRED")
+        self.assertFalse(result["archive_inventory_semantics_verified"])
 
     def test_public_mode_or_sidecar_is_rejected(self):
         current = self.export("current")
