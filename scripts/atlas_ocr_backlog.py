@@ -55,15 +55,28 @@ def build_backlog(db: Path, snapshot_kind: str):
         tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
         if not {"resources", "documents", "pages"}.issubset(tables):
             raise ValueError("ATLAS_TABLES_REQUIRED")
-        documents = {str(s):state for s,state in conn.execute("SELECT sha256,state FROM documents")}
-        page_status = {
-            str(s):(int(total),int(with_text))
-            for s,total,with_text in conn.execute(
-                "SELECT sha256,COUNT(*),"
-                "SUM(CASE WHEN text IS NOT NULL AND length(trim(text))>0 THEN 1 ELSE 0 END)"
-                " FROM pages GROUP BY sha256"
-            )
-        }
+        # Never infer document coverage from the existence of one text row.
+        doc_columns = {row[1] for row in conn.execute("PRAGMA table_info(documents)")}
+        count_expr = "page_count" if "page_count" in doc_columns else "NULL"
+        documents = {}
+        for sha, state, expected in conn.execute(
+                "SELECT sha256,state," + count_expr + " FROM documents"):
+            key = str(sha)
+            if key in documents:
+                raise ValueError("DUPLICATE_DOCUMENT_IDENTITY")
+            documents[key] = (state, expected if type(expected) is int and expected > 0 else None)
+        page_status = defaultdict(dict)
+        invalid_page_ids = Counter()
+        for sha, page, has_text in conn.execute(
+                "SELECT sha256,page,CASE WHEN text IS NOT NULL AND length(trim(text))>0 "
+                "THEN 1 ELSE 0 END FROM pages"):
+            key = str(sha)
+            if type(page) is not int or page < 1:
+                invalid_page_ids[key] += 1
+                continue
+            # Preserve distinct identities. Conflicting duplicate rows are
+            # deliberately held for review rather than silently selecting one.
+            page_status[key].setdefault(page, set()).add(bool(has_text))
         records = defaultdict(lambda: {
             "resource_rows":0,"resource_ids_private":[],
             "origins":set(),"locality_hint":False,"cadastre_hint":False,
@@ -92,14 +105,38 @@ def build_backlog(db: Path, snapshot_kind: str):
         queue, already_text = [], []
         source_breakdown = Counter()
         for sha,entry in records.items():
-            state = documents.get(sha)
-            total_pages, text_pages = page_status.get(sha,(0,0))
+            state, expected_pages = documents.get(sha, (None, None))
+            observed = page_status.get(sha, {})
+            total_pages = len(observed)
+            text_ids = sorted(page for page, values in observed.items() if values == {True})
+            no_text_ids = sorted(page for page, values in observed.items() if values == {False})
+            conflicting_ids = sorted(page for page, values in observed.items() if len(values) > 1)
+            out_of_range = sorted(page for page in observed
+                                  if expected_pages is not None and page > expected_pages)
+            in_range = sum(1 for page in observed
+                           if expected_pages is not None and page <= expected_pages)
+            missing_pages = None if expected_pages is None else expected_pages - in_range
+            text_pages = len(text_ids)
+            if invalid_page_ids[sha] or conflicting_ids or out_of_range:
+                coverage = "CONFLICT_REVIEW"
+            elif expected_pages is None:
+                coverage = "EXPECTED_PAGE_COUNT_UNKNOWN"
+            elif missing_pages:
+                coverage = "PARTIAL_PAGE_COVERAGE"
+            elif no_text_ids:
+                coverage = "PAGES_PRESENT_TEXT_INCOMPLETE"
+            else:
+                coverage = "ALL_DECLARED_PAGES_HAVE_TEXT"
             if state is None:
                 action="VERIFY_BLOB_AND_INDEX"
             elif state=="processing_failed":
                 action="REVIEW_INDEX_FAILURE"
+            elif coverage == "CONFLICT_REVIEW":
+                action="REVIEW_PAGE_IDENTITY_CONFLICT"
             elif state in ("ocr_pending","mixed_ocr_pending") or text_pages==0:
                 action="OCR_REQUIRED_AFTER_BLOB_CHECK"
+            elif coverage != "ALL_DECLARED_PAGES_HAVE_TEXT":
+                action="REVIEW_PARTIAL_OR_UNKNOWN_COVERAGE"
             else:
                 action="TEXT_AVAILABLE_REVIEW"
             origins = sorted(entry["origins"])
@@ -127,6 +164,14 @@ def build_backlog(db: Path, snapshot_kind: str):
                 "indexed_state":state,
                 "indexed_pages":total_pages,
                 "text_pages":text_pages,
+                "expected_pages":expected_pages,
+                "coverage_state":coverage,
+                "observed_text_page_ids":text_ids,
+                "observed_no_text_page_ids":no_text_ids,
+                "conflicting_page_ids":conflicting_ids,
+                "invalid_page_identity_rows":invalid_page_ids[sha],
+                "out_of_range_page_ids":out_of_range,
+                "missing_page_count":missing_pages,
                 "required_action":action,
                 "priority_score":score,
                 "blob_signature_verified":False,
@@ -142,6 +187,7 @@ def build_backlog(db: Path, snapshot_kind: str):
             "backlog_documents":len(queue),
             "text_ready_documents":len(already_text),
             "actions":dict(sorted(Counter(row["required_action"] for row in queue+already_text).items())),
+            "page_coverage_states":dict(sorted(Counter(row["coverage_state"] for row in queue+already_text).items())),
             "source_associations": {
                 key:{label:source_breakdown.get((key,label),0)
                      for label in ("distinct_source_association","without_document_index","ocr_pending")}
@@ -164,6 +210,8 @@ def build_backlog(db: Path, snapshot_kind: str):
         "unhashed_pdf_resource_ids_private":unhashable,
         "limitations":[
             "No PDF bytes or signatures were verified by this metadata-only report.",
+            "Coverage uses declared document page_count and distinct stored page identities, not proof of extraction quality or current live completeness.",
+            "A blank or missing page requires review; it is not by itself proof that OCR is necessary.",
             "Names and URL origins are triage hints, not official plan certification.",
             "OCR work must use owner-approved local copies, not mutate source archives.",
         ],
