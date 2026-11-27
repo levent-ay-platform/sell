@@ -8,7 +8,7 @@ import sqlite3
 import tempfile
 import unittest
 
-from scripts.atlas_sqlite_snapshot import backup_owner_authorized
+from scripts.atlas_sqlite_snapshot import backup_owner_authorized, backup_from_producer_connection
 
 
 class OwnerSnapshotTest(unittest.TestCase):
@@ -76,6 +76,55 @@ class OwnerSnapshotTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,"SOURCE_MUST_NOT_BE_OUTPUT"):
             backup_owner_authorized(self.original,self.original,
                 self.folder/"private"/"proof.json")
+
+
+    def test_producer_exports_committed_wal_as_standalone_snapshot(self):
+        from contextlib import closing
+        output=self.folder/"private"/"producer.sqlite"
+        manifest=self.folder/"private"/"producer.json"
+        with closing(sqlite3.connect(self.original)) as db:
+            self.assertEqual(db.execute("PRAGMA journal_mode=WAL").fetchone()[0],"wal")
+            db.execute("PRAGMA wal_autocheckpoint=0")
+            db.execute("INSERT INTO pages VALUES(4)")
+            db.commit()
+            self.assertTrue(Path(str(self.original)+"-wal").exists())
+            result=backup_from_producer_connection(db,output,manifest)
+            self.assertFalse(db.in_transaction)
+            self.assertEqual(db.execute("PRAGMA journal_mode").fetchone()[0],"wal")
+            self.assertEqual(result["source_connection_mode"],"existing_producer")
+            self.assertEqual(result["verified_table_counts"]["pages"],4)
+            self.assertTrue(result["source_snapshot_counts_pinned"])
+            self.assertEqual(output.stat().st_mode & 0o777,0o600)
+            self.assertEqual(manifest.stat().st_mode & 0o777,0o600)
+            self.assertFalse(Path(str(output)+"-wal").exists())
+            with closing(sqlite3.connect(output.as_uri()+"?mode=ro",uri=True)) as copy:
+                self.assertEqual(copy.execute("SELECT COUNT(*) FROM pages").fetchone()[0],4)
+                self.assertEqual(copy.execute("PRAGMA journal_mode").fetchone()[0],"delete")
+            db.execute("INSERT INTO pages VALUES(5)")
+            db.commit()
+            self.assertEqual(db.execute("SELECT COUNT(*) FROM pages").fetchone()[0],5)
+
+    def test_active_producer_transaction_is_never_committed_or_rolled_back(self):
+        from contextlib import closing
+        output=self.folder/"private"/"producer.sqlite"
+        manifest=self.folder/"private"/"producer.json"
+        with closing(sqlite3.connect(self.original)) as db:
+            db.execute("INSERT INTO pages VALUES(4)")
+            with self.assertRaisesRegex(RuntimeError,"SOURCE_TRANSACTION_ALREADY_ACTIVE"):
+                backup_from_producer_connection(db,output,manifest)
+            self.assertTrue(db.in_transaction)
+            self.assertEqual(db.execute("SELECT COUNT(*) FROM pages").fetchone()[0],4)
+            db.rollback()
+            self.assertEqual(db.execute("SELECT COUNT(*) FROM pages").fetchone()[0],3)
+        self.assertFalse(output.exists())
+        self.assertFalse(manifest.exists())
+
+    def test_producer_cannot_overwrite_source(self):
+        from contextlib import closing
+        with closing(sqlite3.connect(self.original)) as db:
+            with self.assertRaisesRegex(ValueError,"SOURCE_MUST_NOT_BE_OUTPUT"):
+                backup_from_producer_connection(db,self.original,self.folder/"proof.json")
+            self.assertFalse(db.in_transaction)
 
 
 if __name__=="__main__":
