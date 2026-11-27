@@ -194,15 +194,22 @@ internal fun PropertyDocumentViewer(
     val context = LocalContext.current
     val feedback = LocalFeedback.current
     val isPdf = document.mime == "application/pdf"
-    var zoom by rememberSaveable(document.id) { mutableFloatStateOf(1f) }
-    var page by rememberSaveable(document.id) { mutableIntStateOf(document.startPage) }
-    var preview by remember(document.location, page) { mutableStateOf<DocumentPage?>(null) }
-    var failed by remember(document.location, page) { mutableStateOf(false) }
+    var zoom by rememberSaveable(document.id, document.location) { mutableFloatStateOf(1f) }
+    var page by rememberSaveable(document.id, document.location, document.startPage) { mutableIntStateOf(document.startPage) }
+    // One bounded in-memory copy per open document, never shared between viewers
+    // or persisted. A page change must not fetch a possibly different PDF.
+    var sessionBytes by remember(document) { mutableStateOf<ByteArray?>(null) }
+    var attempt by remember(document, page) { mutableIntStateOf(0) }
+    var preview by remember(document, page, attempt) { mutableStateOf<DocumentPage?>(null) }
+    var failed by remember(document, page, attempt) { mutableStateOf(false) }
 
-    LaunchedEffect(document, page) {
+    LaunchedEffect(document, page, attempt) {
         try {
+            val bytes = sessionBytes ?: withContext(Dispatchers.IO) {
+                readBytes(document).also { require(it.size in 1..(16 * 1024 * 1024)) }
+            }.also { sessionBytes = it }
             preview = withContext(Dispatchers.IO) {
-                readDocumentPage(context, document, readBytes(document), page)
+                readDocumentPage(context, document, bytes, page)
             }
         } catch (cancelled: CancellationException) {
             throw cancelled
@@ -226,7 +233,7 @@ internal fun PropertyDocumentViewer(
                 }
                 val shown = preview
                 when {
-                    failed -> ResultMessage(s(R.string.parcel_preview_error))
+                    failed -> ResultMessage(s(R.string.parcel_preview_error), retry = { attempt++ })
                     shown == null -> LinearProgressIndicator(Modifier.fillMaxWidth())
                     else -> {
                         BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
@@ -240,13 +247,24 @@ internal fun PropertyDocumentViewer(
                             }
                         }
                         if (isPdf && shown.count > 1) {
+                            val renderedPage = page
                             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.SpaceBetween) {
-                                IconButton(onClick = { feedback(AppCue.Step); page-- }, enabled = page > 0) {
+                                IconButton(onClick = {
+                                    if (page == renderedPage && renderedPage > 0) {
+                                        page = renderedPage - 1
+                                        feedback(AppCue.Step)
+                                    }
+                                }, enabled = renderedPage > 0) {
                                     Icon(Icons.AutoMirrored.Outlined.ArrowBack, s(R.string.parcel_previous))
                                 }
-                                Text(s(R.string.parcel_page, page + 1, shown.count))
-                                IconButton(onClick = { feedback(AppCue.Step); page++ }, enabled = page + 1 < shown.count) {
+                                Text(s(R.string.parcel_page, renderedPage + 1, shown.count))
+                                IconButton(onClick = {
+                                    if (page == renderedPage && renderedPage + 1 < shown.count) {
+                                        page = renderedPage + 1
+                                        feedback(AppCue.Step)
+                                    }
+                                }, enabled = renderedPage + 1 < shown.count) {
                                     Icon(Icons.AutoMirrored.Outlined.ArrowForward, s(R.string.parcel_next))
                                 }
                             }

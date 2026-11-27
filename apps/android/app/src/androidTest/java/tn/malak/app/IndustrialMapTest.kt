@@ -1,6 +1,19 @@
 package tn.malak.app
 
 import android.content.Intent
+import android.content.res.Configuration
+import android.graphics.pdf.PdfDocument
+import androidx.activity.compose.setContent
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.test.core.app.ActivityScenario
+import java.io.ByteArrayOutputStream
+import java.util.Locale
+import java.util.concurrent.atomic.AtomicInteger
+import org.junit.Assert.assertEquals
+import tn.malak.app.ui.LocalMalakStringsContext
+import tn.malak.app.ui.explore.PropertyDocumentViewer
+import tn.malak.app.ui.explore.PublicPropertyDocument
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
@@ -58,6 +71,48 @@ class IndustrialMapTest {
         device.await(plan)
         device.await(By.text("Lot 1"))
         assertTrue(device.takeScreenshot(File(context.cacheDir, "afi-lot.png")))
+    }
+
+    // Synthetic document only: the first source read succeeds and every later
+    // network read would fail. All three page renders must use that one snapshot.
+    @Test
+    fun viewerTurnsPagesWithoutDownloadingAgain() {
+        val bytes = ByteArrayOutputStream().use { output ->
+            PdfDocument().use { pdf ->
+                repeat(3) { index ->
+                    val page = pdf.startPage(PdfDocument.PageInfo.Builder(180, 260, index + 1).create())
+                    page.canvas.drawColor(if (index == 0) android.graphics.Color.WHITE else android.graphics.Color.LTGRAY)
+                    pdf.finishPage(page)
+                }
+                pdf.writeTo(output)
+            }
+            output.toByteArray()
+        }
+        val calls = AtomicInteger()
+        val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
+        val document = PublicPropertyDocument("synthetic-pdf", "AFI_PLAN", "application/pdf", "fixture")
+        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            scenario.onActivity { activity ->
+                val french = activity.createConfigurationContext(
+                    Configuration(activity.resources.configuration).apply { setLocale(Locale.FRENCH) })
+                activity.setContent {
+                    MaterialTheme {
+                        CompositionLocalProvider(LocalMalakStringsContext provides french) {
+                            PropertyDocumentViewer(document, "Synthetic PDF", {}, readBytes = {
+                                check(calls.incrementAndGet() == 1) { "unexpected repeat download" }
+                                bytes
+                            })
+                        }
+                    }
+                }
+            }
+            device.await(By.text("Page 1 sur 3"), 25_000)
+            device.await(By.desc("Page suivante")).click()
+            device.await(By.text("Page 2 sur 3"), 25_000)
+            device.await(By.desc("Page suivante")).click()
+            device.await(By.text("Page 3 sur 3"), 25_000)
+            assertEquals(1, calls.get())
+        }
     }
 
     private fun UiDevice.await(selector: BySelector, timeout: Long = 9_000) =
