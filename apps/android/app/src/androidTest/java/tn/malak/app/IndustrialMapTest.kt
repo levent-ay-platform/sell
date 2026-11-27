@@ -78,13 +78,19 @@ class IndustrialMapTest {
     @Test
     fun viewerTurnsPagesWithoutDownloadingAgain() {
         val bytes = ByteArrayOutputStream().use { output ->
-            PdfDocument().use { pdf ->
+            val pdf = PdfDocument()
+            try {
                 repeat(3) { index ->
                     val page = pdf.startPage(PdfDocument.PageInfo.Builder(180, 260, index + 1).create())
-                    page.canvas.drawColor(if (index == 0) android.graphics.Color.WHITE else android.graphics.Color.LTGRAY)
-                    pdf.finishPage(page)
+                    try {
+                        page.canvas.drawColor(if (index == 0) android.graphics.Color.WHITE else android.graphics.Color.LTGRAY)
+                    } finally {
+                        pdf.finishPage(page)
+                    }
                 }
                 pdf.writeTo(output)
+            } finally {
+                pdf.close()
             }
             output.toByteArray()
         }
