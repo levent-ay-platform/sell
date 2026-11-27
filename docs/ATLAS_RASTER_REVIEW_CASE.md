@@ -1,0 +1,10 @@
+# Raster plan review, private
+Reuse the existing Amlak ink-contour detector on a SHA-checked PDF page rendered by Poppler. Explicit page selection supports later pages beyond the owner upload worker's eight-page limit. Optional crop is full rendered pixel coordinates; restores full page frame. Ambiguous/no outline remains unresolved. The output page.png and case.json are private 0600 files outside served directories. Current 64 MiB staging cap remains. The detector identifies a candidate interior ink contour, not exact survey lines.
+
+    python -m scripts.atlas_raster_review_case prepare --index PRIVATE_INDEX --pdf APPROVED_PDF --sha256 DOC_SHA --page PAGE --output-directory NEW_CASE
+
+Optional --crop LEFT TOP RIGHT BOTTOM in the deterministic 2200-pixel longest-side cropbox render. For manual trace, an operator creates private JSON kind PRIVATE_ATLAS_MANUAL_PIXEL_TRACE, case_sha256 (case.json byte hash), document_sha256, page, render_sha256, pixel_ring (closed simple ring in the exact rendered pixel frame).
+
+    python -m scripts.atlas_raster_review_case trace --case CASE/case.json --annotation PRIVATE_ANNOTATION --output-directory NEW_TRACE_CASE
+
+No original data modified. Assess the output case using existing atlas_georeference_case assess, with control page coordinates in PIXEL rather than PAGE_POINT. Require independent documented fit/check controls; never derive location from title or a guessed centroid. Manual trace and ink contour remain candidate-only and require review. No automatic public export, Android UI change, or official title proof. The generated private trace.html is an offline Arabic pixel tracing workbench: overlays existing candidates, supports click/tap points, undo, reset, closing the polygon, and saving the bound annotation JSON. Browser download permissions must be set to 0600 before trace import. The page does not validate topology; the Python import rejects invalid rings. Do not serve or share it. Browser interaction still needs manual acceptance.

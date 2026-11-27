@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="parcel_editor_title">حدود القطعة</string>
+    <string name="parcel_editor_open">راجع حدود القطعة · صفحة %1$d</string>
+    <string name="parcel_editor_local">الإحداثيات داخل الوثيقة فقط. هذا المخطط غير محدد على الخريطة.</string>
+    <string name="parcel_editor_candidate">حدود مقترحة · راجع كل رأس على الوثيقة</string>
+    <string name="parcel_editor_manual">اضغط على الوثيقة لإضافة رأس واسحبه لتصحيح موقعه.</string>
+    <string name="parcel_editor_source">المصدر · صفحة %1$d</string>
+    <string name="parcel_editor_preview_error">تعذر فتح الصفحة. اختر الوثيقة الأصلية مجدداً.</string>
+    <string name="parcel_editor_plot">رقم القطعة</string>
+    <string name="parcel_editor_title_reference">رقم الرسم العقاري</string>
+    <string name="parcel_editor_remove">احذف الرأس %1$d</string>
+    <string name="parcel_editor_undo">احذف الرأس الأخير</string>
+    <string name="parcel_editor_edges">قياسات الأضلاع</string>
+    <string name="parcel_editor_edge_label">تسمية الضلع</string>
+    <string name="parcel_editor_edge_length">الطول (م)</string>
+    <string name="parcel_editor_edge_name">P%1$d ← P%2$d</string>
+    <string name="parcel_editor_printed">القياسات المقروءة من الوثيقة</string>
+    <string name="parcel_editor_measure_hint">أدخل الطول فقط إذا كان مذكوراً في الوثيقة. يظل الرسم بإحداثيات الوثيقة.</string>
+    <string name="parcel_editor_crossing">أضف ثلاثة رؤوس على الأقل وتحقق من عدم تقاطع الأضلاع.</string>
+    <string name="parcel_editor_invalid_measure">تحقق من الطول واستخدم تسمية مثل A–B.</string>
+    <string name="parcel_editor_submit">أرسل الحدود للمراجعة</string>
+    <string name="parcel_editor_sending">جارٍ إرسال الحدود…</string>
+    <string name="parcel_editor_saved">حُفظت الحدود في ملف المالك للمراجعة.</string>
+    <string name="parcel_editor_failed">تعذر إرسال الحدود. تعديلاتك ما زالت موجودة هنا.</string>
+    <string name="parcel_editor_load_failed">تعذر تحميل الحدود المحفوظة. يمكنك تعديل هذه الصفحة.</string>
+    <string name="parcel_editor_canvas">صفحة المصدر وحدود قابلة للتعديل</string>
+    <string name="parcel_editor_preview_only">معاينة خاصة خلال هذه الجلسة. يتطلب الإرسال دخول المالك الموثّق.</string>
+    <string name="parcel_editor_keep_preview">احتفظ بالمعاينة في هذه الجلسة</string>
+    <string name="parcel_editor_area">المساحة المقروءة · %1$s م²</string>
+    <string name="parcel_editor_x">الموضع س</string>
+    <string name="parcel_editor_y">الموضع ص</string>
+    <string name="parcel_editor_move">حرّك الرأس</string>
+    <string name="parcel_editor_vertices">%1$d رؤوس</string>
+    <string name="parcel_editor_stated_area">المساحة المدونة (م²)</string>
+    <string name="parcel_editor_scale_title">قياسات المخطط</string>
+    <string name="parcel_editor_scale_hint">أدخل طول ضلع معروف أدناه واستخدمه لضبط المقياس.</string>
+    <string name="parcel_editor_calculated_area">مساحة محسوبة من مقياس المخطط · %1$.1f م²</string>
+    <string name="parcel_editor_calculated_perimeter">محيط محسوب من مقياس المخطط · %1$.1f م</string>
+    <string name="parcel_editor_scale_caution">القياسات محسوبة من الضلع المرجعي داخل المخطط؛ تثبيت الموقع على الخريطة مسار مستقل.</string>
+    <string name="parcel_editor_calculated_length">محسوب: %1$.1f م</string>
+    <string name="parcel_editor_use_reference">استخدامه لضبط المقياس</string>
+    <string name="parcel_editor_reference_selected">الضلع المرجعي محدد</string>
+    <string name="parcel_editor_pick_reading">اختيار قياس من المخطط</string>
+</resources>

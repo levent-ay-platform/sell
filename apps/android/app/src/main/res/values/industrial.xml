@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="afi_layer">Industrial zones · AFI</string>
+    <string name="afi_layer_hint">Industrial zones and published subdivision plans.</string>
+    <string name="afi_browse">Browse AFI zones</string>
+    <string name="afi_search">Zone or governorate</string>
+    <string name="afi_plans">Plans and lots</string>
+    <string name="afi_indicative">AFI plan · Lot boundaries from the planning layer</string>
+    <string name="afi_snapshot_date">AFI snapshot of %1$s</string>
+    <string name="afi_documents">AFI documents</string>
+    <string name="afi_original">Open the source page</string>
+    <string name="afi_no_documents">No agency document is linked to this zone.</string>
+    <string name="afi_lot_count">%1$d mapped lots</string>
+    <string name="afi_lot_number">Lot %1$s</string>
+    <string name="afi_unnumbered_lot">Lot without a published number</string>
+    <string name="afi_listed_only">Listed</string>
+    <string name="afi_offer_date">AFI list as of %1$s</string>
+    <string name="afi_available_date">Marked available by AFI on %1$s</string>
+    <string name="afi_no_lots">No lots are shown in this view.</string>
+    <string name="afi_source">Official AFI map</string>
+    <string name="afi_load_failed">The industrial plan could not be loaded.</string>
+    <string name="afi_estimated_area">Area calculated from the AFI plan · %1$s m²</string>
+    <string name="afi_no_shape">No outline published for this lot.</string>
+    <string name="afi_lot_price">Listed lot price · %1$s TND/m²</string>
+    <string name="afi_zone_price">AFI zone rate · %1$s TND/m²</string>
+</resources>

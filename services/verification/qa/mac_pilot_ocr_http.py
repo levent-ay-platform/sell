@@ -1,0 +1,364 @@
+#!/usr/bin/env python3
+"""Malak QA-only MAC OCR ingress, listening on 127.0.0.1 behind Tailscale Serve.
+
+Development purpose: exercise a genuine in-memory, time-limited server session
+from the debug +216 phone / 1234, through the REAL pinned Arabic v5 ONNX
+recognizer. NOT legal ID verification, not public signup, not a production API.
+Preview images remain transient. Completed comparisons retain encrypted private
+review evidence for administrator submission. No image/text debug output, client
+file paths, public TCP bind, or OCR/database secrets in the Android APK.
+"""
+import hashlib
+import http.server
+import json
+import os
+import re
+import secrets
+import socket
+import sys
+import time
+import threading
+from collections import defaultdict, deque
+from pathlib import Path
+from analysis_revision import document_engine_revision
+
+# Suppress Python tracebacks containing request details.
+sys.tracebacklimit = 0
+
+PHONE = re.compile(r"^\+216[2-9][0-9]{7}$")
+DEVICE = re.compile(r"^[A-Za-z0-9_-]{43}$")
+BEARER = DEVICE
+LOGIN_PATH = "/internal/v1/pilot/login"
+OCR_PATH = "/internal/v1/pilot/preview-cin"
+MAX_IMAGE_BYTES = 6 * 1024 * 1024
+SESSION_SECONDS = 12 * 60 * 60
+PORT = 18443
+NULL_FIELDS = {
+    "surname": None, "givenName": None, "cinLast4": None, "cinFull": None,
+    "birthDate": None, "confidencePercent": 0
+}
+
+
+def card_retry_image(photo):
+    """Find one plausible card quadrilateral, without assuming it is an ID."""
+    import cv2
+    import numpy as np
+    h,w=photo.shape[:2]
+    scale=min(1.0,1200/max(h,w))
+    small=cv2.resize(photo,None,fx=scale,fy=scale) if scale<1 else photo
+    gray=cv2.cvtColor(small,cv2.COLOR_BGR2GRAY)
+    edges=cv2.Canny(cv2.GaussianBlur(gray,(5,5),0),45,135)
+    edges=cv2.morphologyEx(edges,cv2.MORPH_CLOSE,np.ones((5,5),np.uint8))
+    contours,_=cv2.findContours(edges,cv2.RETR_LIST,cv2.CHAIN_APPROX_SIMPLE)
+    candidates=[]
+    for contour in sorted(contours,key=cv2.contourArea,reverse=True)[:40]:
+        fraction=cv2.contourArea(contour)/(small.shape[0]*small.shape[1])
+        if not 0.07<=fraction<=0.94:continue
+        quad=cv2.approxPolyDP(contour,0.025*cv2.arcLength(contour,True),True)
+        if len(quad)!=4 or not cv2.isContourConvex(quad):continue
+        pts=quad.reshape(4,2).astype(np.float32)
+        center=pts.mean(axis=0)
+        pts=pts[np.argsort(np.arctan2(pts[:,1]-center[1],pts[:,0]-center[0]))]
+        lengths=np.linalg.norm(np.roll(pts,-1,axis=0)-pts,axis=1)
+        a=float((lengths[0]+lengths[2])/2)
+        b=float((lengths[1]+lengths[3])/2)
+        if min(a,b)<90:continue
+        ratio=max(a,b)/min(a,b)
+        if not 1.30<=ratio<=2.0:continue
+        if a<b:pts=np.roll(pts,-1,axis=0)
+        # Maintain reading orientation for ordinary landscape captures.
+        if pts[0,1]+pts[1,1]>pts[2,1]+pts[3,1]:
+            pts=np.roll(pts,-2,axis=0)
+        candidates.append((abs(ratio-1.59)+0.12*(1-fraction),pts))
+    if not candidates:return None
+    _,pts=min(candidates,key=lambda candidate:candidate[0])
+    pts=pts/scale
+    # Add a small margin to avoid losing text on the printed card edges.
+    pts=pts.mean(axis=0)+(pts-pts.mean(axis=0))*1.035
+    target=np.array([[0,0],[1599,0],[1599,1005],[0,1005]],dtype=np.float32)
+    matrix=cv2.getPerspectiveTransform(pts.astype(np.float32),target)
+    return cv2.warpPerspective(photo,matrix,(1600,1006),
+                               borderMode=cv2.BORDER_REPLICATE)
+
+
+def prefer_card_read(original, alternate):
+    """Select a complete candidate; never splice conflicting ID fields."""
+    keys=("surname","givenName","cinFull","birthDate")
+    if not isinstance(alternate,dict) or set(alternate)!=set(NULL_FIELDS):
+        return original
+    if any(original.get(k) and alternate.get(k) and
+           original[k]!=alternate[k] for k in (*keys,"cinLast4")):
+        return original
+    if any(original.get(k) and not alternate.get(k) for k in keys):
+        return original
+    if sum(bool(alternate.get(k)) for k in keys)<=sum(bool(original.get(k)) for k in keys):
+        return original
+    if alternate.get("confidencePercent",0)<65:
+        return original
+    return alternate
+
+
+class MemoryPilot:
+    def __init__(self, recognizer, alphabet, ocr_module):
+        self.recognizer = recognizer
+        self.alphabet = alphabet
+        self.engine = ocr_module
+        self.vision_worker_ready = False
+        self.tokens = {}
+        self.store = None
+        self.inference_lock = threading.Lock()
+        self.identity_cache = {}
+        self.cache_lock = threading.Lock()
+        self.failures = defaultdict(deque)
+
+    def login(self, body, ip):
+        if not isinstance(body, dict) or set(body) != {"phone","code","deviceKey"}:
+            return None
+        phone, code, device = (body.get("phone"),body.get("code"),body.get("deviceKey"))
+        if not isinstance(phone, str) or not PHONE.fullmatch(phone) or not isinstance(
+                code, str) or not re.fullmatch(r"[0-9]{4}", code) or not isinstance(
+                    device, str) or not DEVICE.fullmatch(device):
+            return None
+        now = time.monotonic()
+        key = hashlib.sha256((ip+":"+phone+":"+device).encode()).digest()
+        recent = self.failures[key]
+        while recent and now-recent[0] >= 900:
+            recent.popleft()
+        if len(recent) >= 5:
+            return None
+        if not secrets.compare_digest(code, "1234"):
+            recent.append(now)
+            return None
+        if len(self.tokens) >= 128:
+            self.tokens = {k:v for k,v in self.tokens.items() if v[0] > now}
+        if len(self.tokens) >= 128:
+            return None
+        if self.store is not None:
+            from pilot_workflow import WorkflowError
+            try:
+                return self.store.login(phone,code,device)
+            except WorkflowError as rejected:
+                if rejected.status != 401:
+                    raise
+                recent.append(now)
+                return None
+        token = secrets.token_urlsafe(32)
+        self.tokens[hashlib.sha256(token.encode()).digest()] = [now+SESSION_SECONDS, 0]
+        return {
+            "ok": True, "pilotConfirmed": True, "identityVerified": False,
+            "ownershipVerified": False, "mayPublish": False,
+            "expiresInSeconds": SESSION_SECONDS, "bearer": token
+        }
+
+    def authorized(self, value):
+        if not isinstance(value, str) or not value.startswith("Bearer "):
+            return None
+        token = value[7:]
+        if not BEARER.fullmatch(token):
+            return None
+        if self.store is not None:
+            return [time.monotonic()+60,0] if self.store.authenticate(token) else None
+        digest = hashlib.sha256(token.encode()).digest()
+        session = self.tokens.get(digest)
+        if not session or session[0] <= time.monotonic():
+            self.tokens.pop(digest, None)
+            return None
+        if session[1] >= 120:
+            return None
+        return session
+
+    def read(self, payload, mime, cache_scope=None):
+        import numpy as np
+        import cv2
+        if mime == "image/jpeg":
+            if payload[:3] != b"\xff\xd8\xff":
+                raise ValueError("bad JPEG")
+        elif mime == "image/png":
+            if payload[:8] != b"\x89PNG\r\n\x1a\n":
+                raise ValueError("bad PNG")
+        else:
+            raise ValueError("unsupported image type")
+        cache_key=(cache_scope,mime,hashlib.sha256(payload).digest()) if cache_scope else None
+        with self.cache_lock:
+            self.identity_cache={k:v for k,v in self.identity_cache.items() if v[0]>time.monotonic()}
+            cached=self.identity_cache.get(cache_key)
+            if cached is not None:return dict(cached[1])
+        photo = cv2.imdecode(np.frombuffer(payload,dtype=np.uint8),cv2.IMREAD_COLOR)
+        if photo is None:
+            raise ValueError("invalid image")
+        try:
+            h,w = photo.shape[:2]
+            if min(h,w) < 175 or max(h,w) > 6000 or h*w > 25_000_000:
+                raise ValueError("invalid dimensions")
+            if not self.inference_lock.acquire(blocking=False):raise RuntimeError("OCR busy")
+            vision_status = 'unavailable'
+            try:
+                fields = self.engine.extract_fields(photo,self.recognizer,self.alphabet)
+                if isinstance(fields,dict) and set(fields)==set(NULL_FIELDS) and any(
+                        not fields.get(k) for k in ("surname","givenName","cinFull","birthDate")):
+                    alternate_image=None
+                    try:
+                        alternate_image=card_retry_image(photo)
+                        if alternate_image is not None:
+                            alternate=self.engine.extract_fields(alternate_image,self.recognizer,self.alphabet)
+                            fields=prefer_card_read(fields,alternate)
+                    except Exception:
+                        # Preserve the original result if the optional retry fails.
+                        pass
+                    finally:
+                        if alternate_image is not None:alternate_image.fill(0)
+                if hasattr(self.engine, 'normalize_card'):
+                    from cin_mac_identity import read_vision, merge_fields
+                    native,vision_status=read_vision(photo,self.engine.normalize_card)
+                    if isinstance(fields,dict) and set(fields)==set(NULL_FIELDS):
+                        fields=merge_fields(fields,native)
+            finally:self.inference_lock.release()
+            if not isinstance(fields,dict) or set(fields) != set(NULL_FIELDS):
+                raise ValueError("bad OCR response")
+            full=fields.get("cinFull")
+            if full is not None and (not isinstance(full,str) or
+                    not re.fullmatch(r"[0-9]{8}",full) or fields.get("cinLast4")!=full[-4:]):
+                raise ValueError("inconsistent CIN")
+            reply={**fields,"ok":True,"pilotOcr":True,"schemaVersion":1,
+                    "engine":"arabic-v5",
+                    "birthDateReader":"v5-with-local-mac-consensus" if vision_status=='completed' else "v5",
+                     "visionStatus":vision_status,
+                    "identityVerified":False,
+                    "ownershipVerified":False,"mayPublish":False}
+            if cache_key:
+                with self.cache_lock:
+                    while len(self.identity_cache)>=16:self.identity_cache.pop(next(iter(self.identity_cache)))
+                    self.identity_cache[cache_key]=(time.monotonic()+900,dict(reply))
+            return reply
+        finally:
+            photo.fill(0)
+
+
+class Handler(http.server.BaseHTTPRequestHandler):
+    protocol_version = "HTTP/1.1"
+    server_version = "MalakQAPilot"
+    sys_version = ""
+
+    def log_message(self, *_args):
+        # Avoid logging phone, bearer, path, payload or other private data.
+        pass
+
+    def result(self, status, payload):
+        raw = json.dumps(payload,ensure_ascii=False,separators=(",",":")).encode()
+        self.send_response(status)
+        self.send_header("X-Request-Id",secrets.token_hex(12))
+        self.send_header("X-Malak-Source-Revision",os.environ.get("MALAK_SOURCE_SHA","development"))
+        if self.path == "/healthz":
+            self.send_header("X-Malak-Vision-Ready","1" if getattr(self.server.pilot,"vision_worker_ready",False) else "0")
+            self.send_header("X-Malak-Dual-Reader","vision-consensus-v1")
+            self.send_header("X-Malak-Document-Revision",document_engine_revision())
+        self.send_header("Content-Type","application/json; charset=utf-8")
+        self.send_header("Content-Length",str(len(raw)))
+        self.send_header("Cache-Control","no-store, max-age=0")
+        self.send_header("X-Content-Type-Options","nosniff")
+        self.send_header("Connection","close")
+        self.end_headers()
+        self.wfile.write(raw)
+        self.close_connection = True
+
+    def do_GET(self):
+        if getattr(self.server,"workflow",None) and self.server.workflow.dispatch(self,"GET"):return
+        if self.path == "/healthz":
+            self.result(200,{"ok":True,"engine":"arabic-v5",
+                             "modelReady":True,"pilotQa":True})
+        else:
+            self.result(404,{"ok":False})
+
+    def do_POST(self):
+        if getattr(self.server,"workflow",None) and self.server.workflow.dispatch(self,"POST"):return
+        if self.path not in (LOGIN_PATH,OCR_PATH):
+            self.result(404,{"ok":False})
+            return
+        content_type = self.headers.get("Content-Type")
+        try:
+            if self.headers.get("Transfer-Encoding") or len(self.headers.get_all(
+                    "Content-Length",[])) != 1:
+                raise ValueError("bad framing")
+            size = int(self.headers["Content-Length"])
+            limit = 2048 if self.path == LOGIN_PATH else MAX_IMAGE_BYTES
+            if size < 20 or size > limit:
+                self.result(413,{"ok":False})
+                return
+            self.connection.settimeout(30)
+            if self.path == LOGIN_PATH:
+                if content_type != "application/json":
+                    raise ValueError("login JSON required")
+                body = self.rfile.read(size)
+                if len(body) != size:
+                    raise ValueError("truncated")
+                decoded = json.loads(body.decode("utf-8"))
+                reply = self.server.pilot.login(decoded,self.client_address[0])
+                self.result(200,reply) if reply else self.result(401,{"ok":False})
+                return
+            auth = self.server.pilot.authorized(self.headers.get("Authorization"))
+            if auth is None:
+                self.result(401,{"ok":False})
+                return
+            if content_type != "application/octet-stream" or self.headers.get(
+                    "X-Pilot-Ocr-Consent") != "1":
+                raise ValueError("consent required")
+            mime = self.headers.get("X-Claimed-Mime")
+            if mime not in ("image/jpeg","image/png"):
+                raise ValueError("unrecognized media")
+            data = bytearray(self.rfile.read(size))
+            if len(data) != size:
+                raise ValueError("truncated")
+            try:
+                account=self.server.pilot.store.authenticate(self.headers['Authorization'][7:]) if self.server.pilot.store else None
+                if self.server.pilot.store and not account:
+                    self.result(401,{"ok":False});return
+                fields = self.server.pilot.read(data,mime,cache_scope=account['id'] if account else None)
+                auth[1] += 1
+                self.result(200,fields)
+            finally:
+                data[:] = b"\x00"*len(data)
+        except (ValueError,UnicodeError,TypeError,OverflowError,
+                json.JSONDecodeError,socket.timeout):
+            self.result(400,{"ok":False})
+        except Exception:
+            # Inference errors MUST NOT leak any OCR text.
+            self.result(503,{"ok":False})
+
+    def do_PUT(self): self.result(405,{"ok":False})
+    def do_DELETE(self): self.result(405,{"ok":False})
+    def do_PATCH(self): self.result(405,{"ok":False})
+
+
+class Server(http.server.ThreadingHTTPServer):
+    allow_reuse_address = True
+    daemon_threads = True
+
+def main():
+    config_path=Path(__file__).with_name("runtime.json")
+    if config_path.exists():
+        config=json.loads(config_path.read_text())
+        for key,value in config.items():
+            if key.startswith("MALAK_") and isinstance(value,str):os.environ.setdefault(key,value)
+    document_engine_revision()  # reject invalid deployment metadata at startup
+    if os.environ.get("MALAK_PYTHON_DEPS"):sys.path.insert(0,os.environ["MALAK_PYTHON_DEPS"])
+    if len(sys.argv)<3 or sys.argv[1]!="--model-root":
+        raise SystemExit("usage: mac_pilot_ocr_http.py --model-root /private/ocr/model")
+    # Resolve code from public repository with no private samples in the cwd.
+    import cin_v5 as v5
+    v5.MODEL_ROOT = Path(sys.argv[2])
+    recognizer, alphabet = v5.recognizer()
+    with Server(("127.0.0.1",int(os.environ.get("MALAK_PORT",PORT))),Handler) as server:
+        server.pilot = MemoryPilot(recognizer,alphabet,v5)
+        from cin_mac_identity import probe_vision
+        server.pilot.vision_worker_ready=probe_vision()
+        if os.environ.get("MALAK_PILOT_DATA"):
+            from pilot_workflow import PilotStore
+            from workflow_http import WorkflowRoutes
+            from mac_pair_runtime import MacPairRuntime
+            server.pilot.store=PilotStore(os.environ["MALAK_PILOT_DATA"])
+            server.workflow=WorkflowRoutes(server.pilot.store,MacPairRuntime(server.pilot,
+                os.environ["MALAK_VISION_BIN"],os.environ["MALAK_NODE_BIN"]))
+        server.serve_forever(poll_interval=.5)
+
+if __name__=="__main__":
+    main()

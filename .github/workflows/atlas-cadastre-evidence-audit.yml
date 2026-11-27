@@ -1,0 +1,95 @@
+name: Atlas cadastre private evidence and publication gates
+
+on:
+  push:
+    branches: [feat/atlas-cadastre-audit-20261124, fix/amlak-cpf-property-location-20261124]
+  pull_request:
+    paths:
+      - scripts/atlas_cadastre_evidence_audit.py
+      - scripts/atlas_geometry_evidence.py
+      - scripts/atlas_public_projection.py
+      - scripts/atlas_amlak_private_bridge.py
+      - scripts/atlas_document_linkage.py
+      - scripts/atlas_sqlite_snapshot.py
+      - scripts/atlas_ocr_backlog.py
+      - scripts/atlas_generation_review.py
+      - scripts/tests/test_atlas_generation_review.py
+      - scripts/atlas_pdf_blob_inventory.py
+      - scripts/atlas_pdf_vector_candidates.py
+      - scripts/atlas_archive_review_batch.py
+      - scripts/atlas_property_index.py
+      - scripts/tests/test_atlas_property_index.py
+      - scripts/atlas_environment_preflight.py
+      - scripts/requirements-atlas-review.txt
+      - scripts/tests/test_atlas_environment_preflight.py
+      - services/verification/ocr/ingest.py
+      - services/verification/ocr/parcel_scan.py
+      - services/verification/ocr/quality.py
+      - scripts/tests/test_atlas_cadastre_evidence_audit.py
+      - scripts/tests/test_atlas_geometry_evidence.py
+      - scripts/tests/test_atlas_public_projection.py
+      - scripts/tests/test_atlas_amlak_private_bridge.py
+      - scripts/tests/test_atlas_pipeline_e2e.py
+      - scripts/tests/test_atlas_document_linkage.py
+      - scripts/tests/test_atlas_sqlite_snapshot.py
+      - scripts/tests/test_atlas_ocr_backlog.py
+      - scripts/tests/test_atlas_pdf_blob_inventory.py
+      - scripts/tests/test_atlas_pdf_vector_candidates.py
+      - scripts/tests/test_atlas_archive_review_batch.py
+      - .github/workflows/atlas-cadastre-evidence-audit.yml
+
+permissions:
+  contents: read
+
+jobs:
+  atlas-evidence-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install synthetic PDF and native text worker dependencies
+        run: |
+          python -m pip install -r scripts/requirements-atlas-review.txt -r scripts/requirements-atlas-spatial.txt
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends poppler-utils tesseract-ocr tesseract-ocr-ara tesseract-ocr-fra fonts-dejavu-core
+          command -v pdftotext
+          command -v pdfinfo
+      - name: Vector environment preflight and contracts
+        run: |
+          python -m scripts.atlas_environment_preflight --ocr
+          python -m unittest discover -s scripts/tests -p 'test_atlas_environment_preflight.py' -v
+      - name: Evidence inventory / georeferencing / public release gates
+        run: |
+          python -m unittest discover -s scripts/tests -p 'test_atlas_cadastre_evidence_audit.py' -v
+          python -m unittest discover -s scripts/tests -p 'test_atlas_geometry_evidence.py' -v
+          python -m unittest discover -s scripts/tests -p 'test_atlas_public_projection.py' -v
+          python -m unittest discover -s scripts/tests -p 'test_atlas_amlak_private_bridge.py' -v
+          python -m unittest discover -s scripts/tests -p 'test_atlas_pipeline_e2e.py' -v
+          python -m unittest discover -s scripts/tests -p 'test_atlas_document_linkage.py' -v
+          python -m unittest discover -s scripts/tests -p 'test_atlas_sqlite_snapshot.py' -v
+          python -m unittest discover -s scripts/tests -p 'test_atlas_ocr_backlog.py' -v
+          python -m unittest discover -s scripts/tests -p 'test_atlas_generation_review.py' -v
+          python -m unittest discover -s scripts/tests -p 'test_atlas_pdf_blob_inventory.py' -v
+          python -m unittest discover -s scripts/tests -p 'test_atlas_pdf_vector_candidates.py' -v
+          python -m unittest discover -s scripts/tests -p 'test_atlas_archive_review_batch.py' -v
+          python -m unittest discover -s scripts/tests -p 'test_atlas_property_index.py' -v
+          test -f /usr/share/fonts/truetype/dejavu/DejaVuSans.ttf
+          PYTHONPATH=scripts/tests:. python -m unittest test_atlas_archive_review_batch.ArchiveBatchTest.test_image_only_pdf_real_ocr -v
+      - name: Compile Atlas pipeline
+        run: python -m py_compile scripts/atlas_cadastre_evidence_audit.py scripts/atlas_geometry_evidence.py scripts/atlas_public_projection.py scripts/atlas_amlak_private_bridge.py scripts/atlas_document_linkage.py scripts/atlas_sqlite_snapshot.py scripts/atlas_ocr_backlog.py scripts/atlas_pdf_blob_inventory.py scripts/atlas_pdf_vector_candidates.py scripts/atlas_archive_review_batch.py scripts/tests/test_atlas_pdf_blob_inventory.py scripts/tests/test_atlas_pdf_vector_candidates.py scripts/tests/test_atlas_archive_review_batch.py
+
+  atlas-portable-vector-contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: python -m pip install -r scripts/requirements-atlas-review.txt -r scripts/requirements-atlas-spatial.txt
+      - run: python -m scripts.atlas_environment_preflight
+      - run: python -m unittest discover -s scripts/tests -p 'test_atlas_environment_preflight.py' -v
+      - run: python -m unittest discover -s scripts/tests -p 'test_atlas_*.py' -v

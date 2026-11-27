@@ -1,0 +1,71 @@
+name: Atlas archive recovery and deep review
+on:
+  push:
+    branches: [feat/atlas-archive-deep-review-20261124, fix/amlak-cpf-property-location-20261124]
+  pull_request:
+    paths:
+      - scripts/atlas_archive_deep_review.py
+      - scripts/atlas_existing_source_benchmark.py
+      - scripts/atlas_focused_page_review.py
+      - scripts/atlas_geometry_triage.py
+      - scripts/tests/test_atlas_geometry_triage.py
+      - scripts/tests/test_atlas_focused_page_review.py
+      - scripts/tests/test_atlas_existing_source_benchmark.py
+      - scripts/atlas_archive_diagnostics.py
+      - scripts/tests/test_atlas_archive_diagnostics.py
+      - scripts/atlas_archive_next_pass.py
+      - scripts/atlas_archive_full_review.py
+      - scripts/atlas_property_dossier.py
+      - scripts/tests/test_atlas_property_dossier.py
+      - scripts/tests/test_atlas_archive_full_review.py
+      - scripts/tests/test_atlas_archive_next_pass.py
+      - scripts/atlas_source_registry.py
+      - scripts/atlas_spatial_context.py
+      - scripts/atlas_geometry_normalize.py
+      - scripts/atlas_federated_review.py
+      - scripts/atlas_reviewer_workbench.py
+      - scripts/atlas_georeference_case.py
+      - scripts/atlas_raster_review_case.py
+      - scripts/atlas_amlak_candidate_handoff.py
+      - scripts/tests/test_atlas_amlak_candidate_handoff.py
+      - scripts/atlas_raster_trace.html
+      - scripts/tests/test_atlas_raster_review_case.py
+      - scripts/tests/test_atlas_georeference_case.py
+      - scripts/atlas_reviewer_workbench.html
+      - scripts/tests/test_atlas_reviewer_workbench.py
+      - scripts/tests/test_atlas_federated_review.py
+      - scripts/tests/test_atlas_geometry_normalize.py
+      - scripts/tests/test_atlas_spatial_context.py
+      - scripts/requirements-atlas-spatial.txt
+      - scripts/tests/test_atlas_source_registry.py
+      - scripts/atlas_pdf_blob_inventory.py
+      - scripts/tests/test_atlas_archive_deep_review.py
+      - services/verification/src/parcel-http.ts
+      - services/verification/src/parcel-repository.ts
+      - services/verification/test/atlas-case-review.test.ts
+      - services/verification/ci/parcel-http-live.integration.ts
+      - .github/workflows/atlas-deep-review.yml
+permissions:
+  contents: read
+jobs:
+  archive-deep-review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: python -m pip install -r scripts/requirements-atlas-review.txt -r scripts/requirements-atlas-spatial.txt
+      - run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends poppler-utils tesseract-ocr tesseract-ocr-ara tesseract-ocr-fra fonts-dejavu-core
+      - run: python -m unittest discover -s scripts/tests -p 'test_atlas_*.py' -v
+
+  reviewer-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --experimental-strip-types --test services/verification/test/atlas-case-review.test.ts services/verification/test/parcel-public-http.test.ts

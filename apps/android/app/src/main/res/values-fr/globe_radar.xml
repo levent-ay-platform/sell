@@ -1,0 +1,7 @@
+<resources>
+    <string name="action_sounds">Sons des actions</string>
+    <string name="action_haptics">Vibrations tactiles</string>
+    <string name="afi_lots_layer">Lots industriels cartographiés</string>
+    <string name="afi_lots_hint">Tracés des lots AFI au zoom rapproché.</string>
+    <string name="afi_count_legend">Lots cartographiés par gouvernorat · AFI</string>
+</resources>

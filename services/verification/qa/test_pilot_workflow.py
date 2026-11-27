@@ -1,0 +1,220 @@
+import hashlib
+import tempfile
+import unittest
+import json
+from pathlib import Path
+from unittest.mock import patch
+from pilot_workflow import PilotStore, WorkflowError, admin_password_digest, digest
+
+class AdminPasswordCompatibility(unittest.TestCase):
+    def test_native_and_missing_hashlib_scrypt_produce_same_persisted_hash(self):
+        # Independently computed reference using native hashlib.scrypt with 64-byte output.
+        salt = bytes(range(16))
+        expected = ('810556edcc4d580e434443d8e0bae79908e1b0cdb0ae2107'
+                    'bcb44ad65d2f9f3aece026862fea417ee874c92376b8e6daa96a3e6'
+                    'e4706d365118e47f2866f9177')
+        self.assertEqual(admin_password_digest('a-long-test-password', salt), expected)
+        with patch('pilot_workflow.hashlib.scrypt', None, create=True):
+            self.assertEqual(admin_password_digest('a-long-test-password', salt), expected)
+
+    def test_persisted_admin_can_switch_providers_and_failed_logins_create_no_sessions(self):
+        with tempfile.TemporaryDirectory() as folder:
+            store = PilotStore(Path(folder))
+            password = 'test-only-كلمة-مرور'
+            email = 'fixture@example.test'
+            store.bootstrap_admin(email, password)
+            with patch.object(hashlib, 'scrypt', None, create=True):
+                first = store.admin_login(email, password)
+                self.assertEqual(store.admin_authenticate(first['bearer']), first['id'])
+                store.bootstrap_admin('second@example.test', password)
+                for name, secret in [(email, 'wrong'), ('missing@example.test', password)]:
+                    with self.assertRaises(WorkflowError) as denied:
+                        store.admin_login(name, secret)
+                    self.assertEqual(denied.exception.status, 401)
+            self.assertIn('bearer', store.admin_login('second@example.test', password))
+            with store.db() as db:
+                self.assertEqual(db.execute('SELECT COUNT(*) FROM admin_sessions').fetchone()[0], 2)
+
+    def test_bootstrap_rejects_passwords_that_the_login_form_cannot_accept(self):
+        with tempfile.TemporaryDirectory() as folder:
+            store = PilotStore(Path(folder))
+            with self.assertRaises(WorkflowError):
+                store.bootstrap_admin('fixture@example.test', 'x' * 201)
+            store.bootstrap_admin('fixture@example.test', 'x' * 200)
+            self.assertIn('bearer', store.admin_login('fixture@example.test', 'x' * 200))
+
+class Workflow(unittest.TestCase):
+    def test_enrolled_device_is_required_for_login_and_existing_bearers(self):
+        phone = '+21623456789'
+        legacy = self.store.login(phone, '1234', 'A' * 43)['bearer']
+        enrollment = self.root/'pilot-enrollment.json'
+        enrollment.write_text(json.dumps({phone:digest('B' * 43)}))
+        with patch.dict('os.environ', {'MALAK_PILOT_DEVICE_ENROLLMENT':str(enrollment)}):
+            enrolled = PilotStore(self.root)
+            self.assertIsNone(enrolled.authenticate(legacy))
+            with self.assertRaises(WorkflowError):
+                enrolled.login(phone, '1234', 'A' * 43)
+            with self.assertRaises(WorkflowError):
+                enrolled.login('+21623456782', '1234', 'B' * 43)
+            session = enrolled.login(phone, '1234', 'B' * 43)
+            self.assertEqual(enrolled.authenticate(session['bearer'])['phone'], phone)
+
+    def test_owner_date_refinement_is_audited_and_cannot_change_identity_or_closed_review(self):
+        user=self.store.authenticate(self.store.login('+21623456789','1234','A'*43)['bearer'])['id']
+        fields={'surname':'TEST','givenName':'PERSON','cinFull':'00001122','birthDate':None,'confidencePercent':90}
+        rid=self.store.record_review(user,[('IDENTITY','image/jpeg',b'synthetic')],{'identityFields':fields,'assessment':'INSUFFICIENT_EVIDENCE'})
+        data={'reviewId':rid,'requestKey':'date-test-request-20261114','customerName':'Test Person','title':'Test land','region':'Tunis','area':'100','price':'50000','description':''}
+        sub=self.store.submit(user,data)
+        changed=self.store.refine_identity_date(user,rid,{**fields,'birthDate':'2000-12-05'})
+        self.assertEqual(changed['comparison']['identityFields']['birthDate'],'2000-12-05')
+        self.assertTrue(changed['identityDateUpdated'])
+        self.assertEqual(self.store.own_submissions(user)[0]['version'],2)
+        self.assertFalse(self.store.refine_identity_date(user,rid,{**fields,'birthDate':'2000-12-05'})['identityDateUpdated'])
+        with self.assertRaises(WorkflowError):self.store.refine_identity_date(user,rid,{**fields,'birthDate':'2000-12-06'})
+        with self.assertRaises(WorkflowError):self.store.refine_identity_date(user,rid,{**fields,'surname':'OTHER','birthDate':'2000-12-05'})
+        with self.assertRaises(WorkflowError):self.store.refine_identity_date('other-account',rid,{**fields,'birthDate':'2000-12-05'})
+        with self.store.db() as db:
+            self.assertEqual(db.execute("SELECT count(*) FROM audit WHERE action LIKE 'OCR_BIRTH_DATE_REFINED:%'").fetchone()[0],1)
+            db.execute("UPDATE submissions SET status='PUBLISHED' WHERE id=?",(sub['id'],))
+        with self.assertRaises(WorkflowError):self.store.refine_identity_date(user,rid,{**fields,'birthDate':'2000-12-05'})
+    def setUp(self):
+        self.tmp=tempfile.TemporaryDirectory()
+        self.root=Path(self.tmp.name)
+        self.store=PilotStore(self.root)
+    def tearDown(self): self.tmp.cleanup()
+    def test_parallel_analysis_intent_records_exactly_one_review(self):
+        from concurrent.futures import ThreadPoolExecutor
+        import threading
+        barrier=threading.Barrier(2)
+        def record(_):
+            barrier.wait()
+            return self.store.record_review('account-a',[('DOCUMENT','image/png',b'synthetic')],
+                {'assessment':'INSUFFICIENT_EVIDENCE'},('a'*64,'b'*64,'version-one'))
+        with ThreadPoolExecutor(max_workers=2) as pool:ids=list(pool.map(record,range(2)))
+        self.assertEqual(ids[0],ids[1])
+        with self.store.db() as db:self.assertEqual(db.execute('SELECT count(*) FROM reviews').fetchone()[0],1)
+    def test_cloning_analysis_does_not_renew_original_inference_age(self):
+        from unittest.mock import patch
+        files=[('DOCUMENT','image/png',b'synthetic')];report={'assessment':'INSUFFICIENT_EVIDENCE'}
+        with patch('pilot_workflow.now',return_value=1000):
+            self.store.record_review('account-a',files,report,('a'*64,'b'*64,'version-one',1000))
+        with patch('pilot_workflow.now',return_value=44000):
+            hit=self.store.cached_analysis('account-a','c'*64,'b'*64,'version-one')
+            self.assertIsNotNone(hit)
+            self.store.record_review('account-a',files,report,('c'*64,'b'*64,'version-one',hit[3]))
+        with patch('pilot_workflow.now',return_value=45000):
+            self.assertIsNone(self.store.cached_analysis('account-a','c'*64,'b'*64,'version-one'))
+    def test_phone_is_account_key_across_devices_and_restart(self):
+        a=self.store.login('+21623456789','1234','A'*43)
+        b=self.store.login('+21623456789','1234','B'*43)
+        c=self.store.login('+21698765432','1234','A'*43)
+        self.assertEqual(self.store.authenticate(a['bearer'])['id'],self.store.authenticate(b['bearer'])['id'])
+        self.assertNotEqual(self.store.authenticate(a['bearer'])['id'],self.store.authenticate(c['bearer'])['id'])
+        self.assertEqual(PilotStore(self.root).authenticate(a['bearer'])['phone'],'+21623456789')
+        with self.assertRaises(WorkflowError): self.store.login('+21623456789','9999','A'*43)
+    def test_submission_durable_isolated_and_idempotent(self):
+        a=self.store.login('+21623456789','1234','A'*43)
+        user=self.store.authenticate(a['bearer'])
+        report={'assessment':'INSUFFICIENT_EVIDENCE','detectedKind':'UNKNOWN','propertyFacts':[]}
+        review=self.store.record_review(user['id'],[('DOCUMENT','image/png',b'original-document'),('IDENTITY','image/jpeg',b'original-identity')],report)
+        data={'reviewId':review,'requestKey':'a'*32,'customerName':'Test Person',
+          'title':'Test land','region':'Tunis','area':'100','price':'50000','description':'A plot','latitude':'','longitude':''}
+        one=self.store.submit(user['id'],data)
+        two=self.store.submit(user['id'],data)
+        self.assertEqual(one['id'],two['id'])
+        self.assertEqual(len(PilotStore(self.root).own_submissions(user['id'])),1)
+        other=self.store.authenticate(self.store.login('+21698765432','1234','C'*43)['bearer'])
+        self.assertEqual(self.store.own_submissions(other['id']),[])
+        with self.assertRaises(WorkflowError): self.store.submit(other['id'],data)
+        self.assertEqual(self.store.public_listings(),[])
+        # Raw evidence must never be stored in plaintext.
+        self.assertNotIn(b'original-identity',b''.join(p.read_bytes() for p in self.root.rglob('*') if p.is_file()))
+    def test_admin_may_publish_conflict_without_legal_verification(self):
+        user=self.store.authenticate(self.store.login('+21623456789','1234','A'*43)['bearer'])
+        rid=self.store.record_review(user['id'],[('DOCUMENT','image/png',b'doc'),('IDENTITY','image/jpeg',b'id')],{'assessment':'CONFLICT_REVIEW','detectedKind':'SALE_DEED'})
+        data={'reviewId':rid,'requestKey':'b'*32,'customerName':'Test Person','title':'Test land','region':'Tunis','area':'100','price':'50000','description':'Plot','latitude':'','longitude':''}
+        sub=self.store.submit(user['id'],data)
+        self.store.bootstrap_admin('admin@example.test','a-long-test-password')
+        admin=self.store.admin_login('admin@example.test','a-long-test-password')
+        with self.assertRaises(WorkflowError): self.store.decide(user['id'],sub['id'],'PUBLISHED',data,'Reviewed conflict',1)
+        published=self.store.decide(admin['id'],sub['id'],'PUBLISHED',data,'Reviewed conflict',1)
+        self.assertEqual(published['status'],'PUBLISHED')
+        cards=self.store.public_listings()
+        self.assertEqual(len(cards),1)
+        for key in ['phone','customerName','evidence','report','reviewId']:
+            self.assertNotIn(key,cards[0])
+        self.assertFalse(cards[0]['ownershipVerified'])
+        self.assertEqual(cards[0]['kind'], 'UNKNOWN')
+        self.assertEqual(cards[0]['locationAccuracy'], 'AREA_ONLY')
+        self.assertIsNone(cards[0]['latitude'])
+        self.assertIsNone(cards[0]['longitude'])
+        with self.assertRaises(WorkflowError): self.store.decide(admin['id'],sub['id'],'REJECTED',data,'Stale',1)
+        self.store.decide(admin['id'],sub['id'],'PAUSED',data,'Paused',2)
+        self.assertEqual(self.store.public_listings(),[])
+
+
+class PhotoProtection(unittest.TestCase):
+    def test_only_sanitized_property_photos_become_public(self):
+        import io
+        from PIL import Image
+        with tempfile.TemporaryDirectory() as folder:
+            store=PilotStore(Path(folder));user=store.authenticate(store.login('+21623456789','1234','A'*43)['bearer'])
+            rid=store.record_review(user['id'],[('DOCUMENT','application/pdf',b'private doc'),('IDENTITY','image/jpeg',b'private id')],{'assessment':'CONFLICT_REVIEW'})
+            im=Image.new('RGB',(300,200),'blue');out=io.BytesIO();im.save(out,format='JPEG');photo=out.getvalue()
+            eid=store.add_photo(user['id'],rid,photo)
+            self.assertEqual(store.add_photo(user['id'],rid,photo),eid)
+            with self.assertRaises(WorkflowError):store.public_photo(eid)
+            data={'reviewId':rid,'requestKey':'photo-test-request-20261114','customerName':'Test Person','title':'Test land','region':'Tunis','area':'100','price':'50000','description':''}
+            sub=store.submit(user['id'],data)
+            self.assertEqual(store.add_photo(user['id'],rid,photo),eid)
+            store.bootstrap_admin('admin@example.test','a-long-test-password')
+            admin=store.admin_login('admin@example.test','a-long-test-password')['id']
+            store.decide(admin,sub['id'],'PUBLISHED',data,'Reviewed conflict',1)
+            self.assertEqual(store.public_listings()[0]['photos'],[eid])
+            self.assertTrue(store.public_photo(eid).startswith(b'\xff\xd8'))
+            with store.db() as db:identity=db.execute("SELECT id FROM evidence WHERE kind='IDENTITY'").fetchone()['id']
+            with self.assertRaises(WorkflowError):store.public_photo(identity)
+            store.decide(admin,sub['id'],'PAUSED',data,'Paused',2)
+            with self.assertRaises(WorkflowError):store.public_photo(eid)
+
+class ReplacementEvidence(unittest.TestCase):
+    def test_customer_can_replace_documents_only_on_own_changes_request(self):
+        with tempfile.TemporaryDirectory() as folder:
+            s=PilotStore(Path(folder));u=s.authenticate(s.login('+21623456789','1234','A'*43)['bearer'])
+            rid=s.record_review(u['id'],[('DOCUMENT','image/png',b'first document')],{'assessment':'INSUFFICIENT_EVIDENCE'})
+            data={'reviewId':rid,'requestKey':'first-request-20261114','customerName':'Test Person','title':'Test land','region':'Tunis','area':'100','price':'50000','description':''}
+            first=s.submit(u['id'],data)
+            s.bootstrap_admin('admin@example.test','a-long-test-password');admin=s.admin_login('admin@example.test','a-long-test-password')['id']
+            s.decide(admin,first['id'],'CHANGES_REQUESTED',data,'Upload another page',1)
+            new=s.record_review(u['id'],[('DOCUMENT','image/png',b'replacement')],{'assessment':'NAME_ONLY_REVIEW'})
+            update={**data,'submissionId':first['id'],'reviewId':new,'requestKey':'replacement-request-20261114'}
+            result=s.submit(u['id'],update)
+            self.assertEqual(result['id'],first['id']);self.assertEqual(result['reviewId'],new)
+            self.assertEqual(result['status'],'PENDING_REVIEW')
+            self.assertEqual(len(s.own_submissions(u['id'])),1)
+            with self.assertRaises(WorkflowError):s.decide(admin,first['id'],'PUBLISHED',data,'Reviewed',2)
+
+class PreserveListingMedia(unittest.TestCase):
+    def test_document_only_correction_keeps_property_photos_and_coordinates(self):
+        import io
+        from PIL import Image
+        with tempfile.TemporaryDirectory() as folder:
+            s=PilotStore(Path(folder));u=s.authenticate(s.login('+21623456789','1234','A'*43)['bearer'])
+            rid=s.record_review(u['id'],[('DOCUMENT','image/png',b'first doc')],{'assessment':'INSUFFICIENT_EVIDENCE'})
+            out=io.BytesIO();Image.new('RGB',(300,200),'green').save(out,format='JPEG');s.add_photo(u['id'],rid,out.getvalue())
+            data={'reviewId':rid,'requestKey':'media-first-request-20261114','customerName':'Test Person','title':'Test land','region':'Tunis','area':'100','price':'50000','description':'','latitude':'36.8','longitude':'10.2'}
+            first=s.submit(u['id'],data)
+            s.bootstrap_admin('admin@example.test','a-long-test-password');admin=s.admin_login('admin@example.test','a-long-test-password')['id']
+            s.decide(admin,first['id'],'CHANGES_REQUESTED',data,'Replace document',1)
+            new=s.record_review(u['id'],[('DOCUMENT','image/png',b'new doc')],{'assessment':'INSUFFICIENT_EVIDENCE'})
+            update={**data,'reviewId':new,'submissionId':first['id'],'requestKey':'media-replacement-request-20261114','latitude':'','longitude':''}
+            changed=s.submit(u['id'],update)
+            self.assertEqual(changed['latitude'],'36.8');self.assertEqual(changed['longitude'],'10.2')
+            reviewed=s.admin_submissions(admin)[0]
+            photos=[x for x in reviewed['evidence'] if x['kind']=='PHOTO']
+            self.assertEqual(len(photos),1)
+            self.assertEqual(s.evidence(admin,photos[0]['id'])[1][:2],b'\xff\xd8')
+            s.decide(admin,first['id'],'PUBLISHED',changed,'Reviewed incomplete data',3)
+            self.assertEqual(len(s.public_listings()[0]['photos']),1)
+
+if __name__=='__main__':unittest.main()

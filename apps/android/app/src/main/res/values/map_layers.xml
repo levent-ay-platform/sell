@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="v2_villa">Villas</string>
+    <string name="v2_factory">Factories</string>
+    <string name="layer_sales">Properties for sale</string>
+    <string name="layer_sales_hint">Show sale listings and asking prices on the map.</string>
+    <string name="layer_types">Property type</string>
+    <string name="layer_atlas">Atlas parcel boundaries</string>
+    <string name="layer_atlas_hint">Show approved boundaries when you select a property.</string>
+    <string name="layer_purchase">Purchase requests</string>
+    <string name="layer_purchase_pending">Purchase requests are currently unavailable.</string>
+    <string name="layer_atlas_admin">Atlas administrative boundaries</string>
+    <string name="layer_atlas_admin_hint">24 governorates and 279 delegations. Reference boundaries.</string>
+    <string name="layer_atlas_parcels_unavailable">Parcel data is unavailable in this version.</string>
+    <string name="layer_atlas_credit" translatable="false">© OpenStreetMap · Map Tunisia</string>
+    <string name="v2_globe_view">Globe view</string>
+    <string name="v2_recenter_tunisia">Recenter on Tunisia</string>
+    <string name="v2_map_data_unavailable">Listings are unavailable. You can still search for a place on the map.</string>
+</resources>

@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'none'; img-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<title>أطلس تونس — مراجعة عقارية داخلية</title>
+<style>
+:root{color-scheme:light;--ink:#17262d;--muted:#52646d;--line:#d9e1e4;--paper:#fff;--bg:#f4f6f7;--accent:#922f48}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px system-ui,sans-serif;line-height:1.6}
+header{padding:18px 24px;background:var(--paper);border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}h1,h2,h3,p{margin:0}h1{font-size:21px}h2{font-size:17px}h3{font-size:15px;margin-bottom:8px}.muted{color:var(--muted);font-size:13px}.private{color:var(--accent);font-weight:700;font-size:13px}
+main{max-width:1440px;margin:auto;padding:20px}.notice{border:1px solid var(--line);background:#fff;padding:12px 15px;margin-bottom:14px;border-radius:8px}
+.metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(132px,1fr));gap:10px;margin-bottom:18px}
+.metric{background:#fff;border:1px solid var(--line);padding:12px;border-radius:8px}.metric strong{display:block;font-size:24px;font-variant-numeric:tabular-nums}
+.layout{display:grid;grid-template-columns:minmax(260px, .9fr) minmax(0,1.3fr);gap:16px;align-items:start}
+.panel{background:#fff;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.panel-head,.detail{padding:16px}.panel-head{border-bottom:1px solid var(--line)}
+.controls{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:10px 0}
+label{font-size:13px;display:block;color:var(--muted)}
+input,select,button{font:inherit;color:inherit}input,select{border:1px solid var(--line);border-radius:6px;padding:9px;background:#fff;width:100%;min-width:0}
+button{cursor:pointer;background:#fff;border:1px solid var(--line);border-radius:6px;padding:8px 12px}button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.list{max-height:650px;overflow:auto}.item{display:block;text-align:start;border:0;border-radius:0;border-bottom:1px solid var(--line);width:100%;padding:12px 16px}.item:hover,.item[aria-selected=true]{background:#f5ecf0}.item strong{display:block}.tag{font-size:12px;color:var(--muted)}.pager{padding:10px 16px;display:flex;align-items:center;justify-content:space-between;gap:8px}
+.section{padding:14px 0;border-bottom:1px solid var(--line)}.section:last-child{border:0}.facts{display:flex;gap:9px;flex-wrap:wrap}.fact{padding:6px 10px;border:1px solid var(--line);border-radius:6px;background:#f8fafb}.evidence{padding:9px 0;border-bottom:1px solid var(--line);overflow-wrap:anywhere}.evidence:last-child{border:0}.hash{direction:ltr;text-align:left;overflow-wrap:anywhere;font:12px monospace;color:var(--muted)}
+svg{width:100%;height:190px;background:#f6f8f9;border:1px solid var(--line);border-radius:6px}.previews{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px}
+@media(max-width:780px){main{padding:12px}.layout{grid-template-columns:1fr}.list{max-height:360px}.controls{grid-template-columns:1fr}header{padding:12px}}
+</style>
+</head>
+<body>
+<header><div><h1>أطلس تونس</h1><p class="muted">مركز مراجعة الأدلة العقارية</p></div><span class="private">نسخة محلية خاصة — غير مخصصة للنشر</span></header>
+<main>
+<div class="notice">هذه الأدلة مرشحة للتحقق، وليست إثباتاً للملكية أو للحدود الرسمية. لا تتصل الصفحة بأي خدمة ولا تنشر أي سجل.</div>
+<div id="metrics" class="metrics"></div>
+<div class="layout">
+<section class="panel"><div class="panel-head"><h2>قائمة الوثائق</h2>
+<div class="controls"><div><label for="q">رقم الرسم أو المقسم (مطابقة كاملة)</label><input id="q" autocomplete="off" placeholder="مثلاً 00123"></div>
+<div><label for="f">حالة المراجعة</label><select id="f"><option value="all">جميع الوثائق</option><option value="title">تحتوي رقم رسم</option><option value="linked">لها روابط مرشحة</option><option value="outline">لها حدود صفحة</option><option value="missing">دون دليل رسم</option><option value="retry">تحتاج متابعة استخراج</option><option value="admin-conflict">تعارض إداري</option></select></div></div>
+<p id="matches" class="muted" aria-live="polite"></p></div><div id="list" class="list"></div><div class="pager"><button id="prev">السابق</button><span id="page" class="muted"></span><button id="next">التالي</button></div></section>
+<section class="panel detail" id="detail" aria-live="polite"><h2>ملف المراجعة</h2><p class="muted">اختر وثيقة من القائمة.</p></section>
+</div></main>
+<script type="application/json" id="data">__ATLAS_PRIVATE_PAYLOAD__</script>
+<script>
+"use strict";
+const D=JSON.parse(document.getElementById("data").textContent), rows=D.queue.rows, $=id=>document.getElementById(id);
+const names={documents:"الوثائق",with_title:"دليل رسم عقاري",with_parcel:"دليل مقسم",with_outlines:"حدود صفحات",with_candidate_links:"روابط مرشحة",with_admin_context:"سياق إداري",with_admin_conflicts:"تعارض إداري",without_scope:"نطاق غير مراجع",unhashed_resource_rows:"مراجع دون بصمة"};
+const tasks={VERIFY_AUTHORITY_AND_DOCUMENT_SHA:"تحقق من الجهة المصدرة وبصمة الوثيقة",VERIFY_TITLE_PARCEL_ASSOCIATION:"راجع علاقة الرسم بالمقسم",VERIFY_GROUND_GEOMETRY:"تحقق من الإسناد والحدود على الأرض",REVIEW_RIGHTS_AND_CONSENT:"تحقق من الحقوق والموافقة",REVIEW_REGISTRY_SCOPE:"راجع النطاق العقاري",TITLE_EVIDENCE_NOT_OBSERVED:"لم يظهر دليل رقم رسم",EXTRACTION_REVIEW_REQUIRED:"راجع الاستخراج غير المكتمل",INSPECT_PAGE_OUTLINES:"راجع حدود الصفحة بصرياً",RESOLVE_MULTIPLE_SOURCE_CANDIDATES:"حل تعارض الروابط المرشحة",REVIEW_ADMIN_PARENT_CONFLICT:"راجع تعارض التسلسل الإداري قبل أي إسناد"};
+const states={PRIVATE_REVIEW_REQUIRED:"بانتظار المراجعة",EXTRACTION_FAILED_RETAINED:"فشل الاستخراج محفوظ",BLOB_RECHECK_FAILED:"تحتاج تحقق الملف",NOT_ATTEMPTED_IN_PROVIDED_CHAIN:"لم تعالج في الدفعات المتاحة",COMPLETE_PAGE_ATTEMPTS:"اكتملت محاولات الصفحات",COMPLETE_WITH_OBSERVATION_FAILURES:"محاولات مع أخطاء",DOCUMENT_PAGE_CAP_RETAINED:"تجاوز حد الصفحات",DEEP_REVIEW_FAILED_RETAINED:"فشل القراءة المتعمقة محفوظ",PENDING:"بانتظار المعالجة",PARTIAL:"معالجة جزئية",NOT_OBSERVED_IN_SELECTED_ROOTS:"لم يظهر الملف ضمن المجلدات",UNKNOWN:"غير معروف"};
+const methods={CATALOGUE_INDEX:"الفهرس الأصلي",SHA_MATCHED_BATCH_OCR:"القراءة الأولى",DEEP_NATIVE_LAYOUT:"النص الأصلي V2",DEEP_RASTER_SPARSE_OCR:"OCR V2",OTHER:"مصدر قراءة آخر"};
+function el(tag,txt,cls){const e=document.createElement(tag);if(txt!==undefined)e.textContent=txt;if(cls)e.className=cls;return e}
+function metric(k){const a=el("div",undefined,"metric");a.append(el("span",names[k],"muted"),el("strong",D.queue.counts[k]??"—"));return a}
+Object.keys(names).forEach(k=>$("metrics").append(metric(k)));
+function refText(r){return r.number+(r.suffix?"/"+r.suffix:"")}
+function refs(r,k){return [...new Set(r.observations.flatMap(o=>o[k].map(refText)))]}
+function normalize(v){return v.normalize("NFKC").replace(/[٠-٩۰-۹]/g,c=>String(c.charCodeAt(0)-(c.charCodeAt(0)>=1776?1776:1632))).trim().toLowerCase()}
+let page=0,selected=null,shown=[];const size=30;
+function renderList(){const q=normalize($("q").value),f=$("f").value;shown=rows.filter(r=>{
+ const values=r.observations.flatMap(o=>[...o.titles,...o.parcels]);if(q&&!values.some(v=>normalize(v.number)===q||normalize(refText(v))===q))return false;
+ return f==="all"||f==="title"&&r.title_observations||f==="linked"&&r.candidate_links||f==="outline"&&r.outlines||f==="missing"&&!r.title_observations||f==="retry"&&r.tasks.includes("EXTRACTION_REVIEW_REQUIRED")||f==="admin-conflict"&&(r.admin_parent_conflicts||[]).length});
+ page=Math.max(0,Math.min(page,Math.ceil(shown.length/size)-1));$("list").replaceChildren();$("matches").textContent=shown.length+" من "+rows.length+" وثيقة";
+ for(const r of shown.slice(page*size,(page+1)*size)){const b=el("button",undefined,"item");b.setAttribute("aria-selected",String(selected===r.sha));
+ b.append(el("strong",refs(r,"titles").slice(0,3).join(" · ")||"وثيقة دون رقم رسم مستخرج"),el("span",states[r.deep]+" · روابط "+r.candidate_links+" · حدود "+(r.outlines??"—"),"tag"));b.addEventListener("click",()=>{selected=r.sha;renderList();detail(r)});$("list").append(b)}
+ $("page").textContent=shown.length?(page+1)+" / "+Math.ceil(shown.length/size):"0 / 0";$("prev").disabled=page===0;$("next").disabled=(page+1)*size>=shown.length;
+}
+function section(root,title){const s=el("section",undefined,"section");s.append(el("h3",title));root.append(s);return s}
+function detail(r){const root=$("detail");root.replaceChildren(el("h2","ملف الوثيقة"),el("p",r.sha,"hash"));
+ const facts=section(root,"ملخص الأدلة");const chips=el("div",undefined,"facts");for(const a of ["رسم: "+r.title_observations,"مقسم: "+r.parcel_observations,"روابط: "+r.candidate_links,"حدود صفحة: "+(r.outlines??"—"),r.scope_reviewed?"نطاق مسجل للمراجعة":"نطاق غير مراجع"])chips.append(el("span",a,"fact"));facts.append(chips,el("p",states[r.batch]+" / "+states[r.deep],"muted"));
+ const s=section(root,"أدلة كل صفحة وطريقة القراءة");if(!r.observations.length)s.append(el("p","لا توجد أدلة مستخرجة قابلة للعرض.","muted"));for(const o of r.observations){const a=el("div",undefined,"evidence");a.append(el("strong","صفحة "+(o.page??"غير معلومة")+" — "+methods[o.origin]));
+ if(o.titles.length)a.append(el("p","الرسم: "+o.titles.map(refText).join("، ")));if(o.parcels.length)a.append(el("p","المقسم: "+o.parcels.map(refText).join("، ")));if(o.areas.length)a.append(el("p","مساحة واردة: "+o.areas.map(v=>v.value+" "+v.unit).join("، ")));if(o.cadastral_hint)a.append(el("p","إشارة إلى المسح العقاري","muted"));if(o.invalid_reference_observations)a.append(el("p","مراجع تحتاج فحص الأصل: "+o.invalid_reference_observations,"muted"));s.append(a)}
+ const g=section(root,"الهندسة والموقع الإداري");g.append(el("p",r.admin_context.length?r.admin_context.join(" · "):"لا يوجد سياق إداري مرتبط في هذه النسخة.","muted"));
+ if((r.admin_parent_conflicts||[]).length)g.append(el("p","تعارض إداري يحتاج مراجعة: "+r.admin_parent_conflicts.join(" · "),"private"));g.append(el("p","هذه معرفات سياق مكاني من المرجع المستقل؛ لا تثبت الكود الإداري الرسمي أو حدود العقار.","muted"));
+ const pv=D.previews[r.sha]||[];if(pv.length){g.append(el("p","حدود مستخرجة من فضاء صفحة PDF — ليست حدوداً على الخريطة.","muted"));const wrap=el("div",undefined,"previews");for(const a of pv){const card=el("div");const svg=document.createElementNS("http://www.w3.org/2000/svg","svg");svg.setAttribute("viewBox","0 0 "+a.width+" "+a.height);const poly=document.createElementNS(svg.namespaceURI,"polygon");poly.setAttribute("points",a.ring.map(p=>p.join(",")).join(" "));poly.setAttribute("fill","#922f4820");poly.setAttribute("stroke","#922f48");poly.setAttribute("stroke-width","1.5");poly.setAttribute("vector-effect","non-scaling-stroke");svg.append(poly);card.append(svg,el("p","صفحة "+a.page+" · شكل "+a.ordinal+(a.possible_border?" · إطار محتمل":""),"muted"));wrap.append(card)}g.append(wrap)}else if(r.outlines)g.append(el("p","معاينة الأشكال متاحة عند تجهيز ملف المراجعة المحدد من الدفعة الأصلية.","muted"));
+ const todo=section(root,"خطوات التحقق قبل الاعتماد");const ul=el("ul");r.tasks.forEach(t=>ul.append(el("li",tasks[t])));todo.append(ul,el("p","لا اعتماد أو نشر من هذه الصفحة.","muted"));
+}
+$("q").addEventListener("input",()=>{page=0;renderList()});$("f").addEventListener("change",()=>{page=0;renderList()});$("prev").addEventListener("click",()=>{page--;renderList()});$("next").addEventListener("click",()=>{page++;renderList()});renderList();
+if(Object.keys(D.previews).length){const r=rows.find(r=>r.sha===Object.keys(D.previews)[0]);if(r){selected=r.sha;detail(r);renderList()}}
+</script></body></html>

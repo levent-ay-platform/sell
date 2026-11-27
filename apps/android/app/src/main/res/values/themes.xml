@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <style name="Theme.Amlak" parent="android:style/Theme.Material.Light.NoActionBar">
+        <!-- Compose supplies the complete light palette, including text and custom surfaces. -->
+        <item name="android:forceDarkAllowed" tools:targetApi="29">false</item>
+    </style>
+    <color name="amlak_window_pearl">#F9F7F4</color>
+    <style name="Theme.Amlak.Starting.Base" parent="Theme.Amlak">
+        <item name="android:windowBackground">@color/amlak_window_pearl</item>
+        <item name="android:statusBarColor">@color/amlak_window_pearl</item>
+        <item name="android:navigationBarColor">@color/amlak_window_pearl</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar">true</item>
+    </style>
+    <style name="Theme.Amlak.Starting" parent="Theme.Amlak.Starting.Base"/>
+</resources>

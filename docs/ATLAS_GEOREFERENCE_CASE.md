@@ -1,0 +1,10 @@
+# Private document-bound georeferencing case
+This is a reviewer-side companion to the workbench, not a new publication API. Run locally under the owner in an isolated processing environment, with explicitly authorized archive PDF. The prepare step checks the SHA against the private property index, stages verified bytes, extracts one actual page's vector outlines and creates a private case. Optionally renders the actual PDF cropbox and a numbered overlay proof sheet. Rendered pages may contain confidential data: never share them, upload them or move them into any served directory/APK.
+
+    python -m scripts.atlas_georeference_case prepare --index PRIVATE_INDEX --pdf APPROVED_PDF --sha256 DOCUMENT_SHA --page PAGE --output-directory NEW_PRIVATE_CASE --render-private-page
+
+Then create a 0600 controls JSON: kind PRIVATE_ATLAS_CONTROL_OBSERVATIONS, case_sha256 (SHA256 of case.json bytes), document_sha256, page, outline_ordinal, outline_sha256 (from case), maximum_holdout_error_m, control_points array. Each point requires control_id, source_evidence_sha256 (private reference to actual independent control evidence), page [x,y] in top-left PAGE_POINT, wgs84 [lon,lat], role FIT or CHECK. At least three distinct non-collinear FIT points and one independent CHECK point. Optional printed_area_m2 requires printed_area_evidence_sha256. A potential frame requires explicit border_reviewed_as_candidate. This is an operator annotation, not legal approval. Do not invent GCPs. Controls must be independently documented.
+
+    python -m scripts.atlas_georeference_case assess --case PRIVATE_CASE/case.json --controls PRIVATE_CONTROLS --output NEW_PRIVATE_QA
+
+The selected ring is derived from the SHA-verified PDF, not a free geometry field supplied by the controls. QA records residuals, area and possible transformed geometry; it never certifies authenticity, legal title, ground verification or redistribution. The proof sheet is not an interactive editor. Curves, nested vectors, scans, PDFs above the 64 MiB vector extraction cap or empty outline sets need separate manual/scan review. Existing Amlak/Atlas verified import gates are unchanged.

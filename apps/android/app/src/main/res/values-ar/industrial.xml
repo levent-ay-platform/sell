@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="afi_layer">المناطق الصناعية · AFI</string>
+    <string name="afi_layer_hint">المناطق الصناعية ومخططات التقسيم المنشورة.</string>
+    <string name="afi_browse">تصفّح مناطق AFI</string>
+    <string name="afi_search">ابحث عن منطقة أو ولاية</string>
+    <string name="afi_plans">المخططات والمقاسم</string>
+    <string name="afi_indicative">مخطط AFI · حدود المقاسم بحسب طبقة التخطيط</string>
+    <string name="afi_snapshot_date">نسخة AFI بتاريخ ‎%1$s</string>
+    <string name="afi_documents">وثائق AFI</string>
+    <string name="afi_original">افتح صفحة المصدر</string>
+    <string name="afi_no_documents">لا توجد وثيقة AFI مرتبطة بهذه المنطقة.</string>
+    <string name="afi_lot_count">%1$d مقسم مرسوم</string>
+    <string name="afi_lot_number">مقسم ‎%1$s</string>
+    <string name="afi_unnumbered_lot">مقسم دون رقم منشور</string>
+    <string name="afi_listed_only">على قائمة AFI</string>
+    <string name="afi_offer_date">قائمة AFI بتاريخ ‎%1$s</string>
+    <string name="afi_available_date">مدرج كمتاح لدى AFI بتاريخ ‎%1$s</string>
+    <string name="afi_no_lots">لا توجد مقاسم في هذا العرض.</string>
+    <string name="afi_source">الخريطة الأصلية للوكالة</string>
+    <string name="afi_load_failed">تعذّر فتح المخطط الصناعي.</string>
+    <string name="afi_estimated_area">مساحة محسوبة من مخطط AFI · ‎%1$s م²</string>
+    <string name="afi_no_shape">لا يوجد مضلع منشور لهذا المقسم.</string>
+    <string name="afi_lot_price">سعر المقسم المنشور · ‎%1$s د.ت/م²</string>
+    <string name="afi_zone_price">تعريفة المنطقة لدى AFI · ‎%1$s د.ت/م²</string>
+</resources>

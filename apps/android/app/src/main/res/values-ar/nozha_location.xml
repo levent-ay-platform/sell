@@ -1,0 +1,10 @@
+<resources>
+    <string name="nozha_project_approximate">النزهة · موقع المشروع على الخريطة</string>
+    <string name="nozha_open_plan">اعرض التقسيم على الخريطة</string>
+    <string name="nozha_plan_notice">حدود التقسيم من مخطط النزهة؛ تثبيت المطابقة الجغرافية يتم من مرجع المخطط.</string>
+    <string name="nozha_crm_individual_title">صيغة التملك في CRM: رسم عقاري فردي</string>
+    <string name="nozha_crm_title_recorded">مرجع الرسم العقاري مسجّل في CRM</string>
+    <string name="nozha_side_lengths">الأطوال حسب المخطط: %1$s</string>
+    <string name="nozha_show_measurements">اعرض القياسات على الخريطة</string>
+    <string name="nozha_measured_lot">القطعة %1$s · قياسات المخطط</string>
+</resources>

@@ -1,0 +1,96 @@
+name: Malak F1 isolated real ClamAV acceptance
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'services/verification/ci/clamd-live.integration.ts'
+      - 'services/verification/src/clamav-scanner.ts'
+      - 'services/verification/src/local-private-store.ts'
+      - '.github/workflows/verification-live-clamd.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  real-clamd-synthetic-only:
+    name: Actual clamd + private encrypted filesystem (synthetic, disposable)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Obtain official prebuilt ClamAV daemon (no APT or signature downloads)
+        run: |
+          set -euo pipefail
+          # Versioned official ClamAV image with no external signatures.
+          timeout 180s docker pull clamav/clamav:1.5.4_base-debian
+      - name: Start clamd with one local fabricated CI-only signature
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/malak-clamd-ci"
+          mkdir -p "$root/database"
+          chmod 0700 "$root"
+          # This synthetic marker is inert. A matching custom signature proves the
+          # real clamd protocol path, NOT coverage of real malware threats.
+          python3 - "$root/database" <<'PY'
+          import pathlib, sys
+          marker=b'MALAK_CI_SYNTHETIC_FLAGGED_PATTERN_20261110'
+          signature='Malak.CI.Synthetic-Demo:0:*:'+marker.hex()+'\n'
+          (pathlib.Path(sys.argv[1])/'malak-ci.ndb').write_text(signature)
+          PY
+          cat > "$root/clamd.conf" <<CONF
+          DatabaseDirectory /ci/database
+          TCPSocket 33177
+          TCPAddr 127.0.0.1
+          Foreground yes
+          MaxThreads 2
+          MaxQueue 4
+          ReadTimeout 15
+          CommandReadTimeout 15
+          MaxFileSize 16M
+          MaxScanSize 16M
+          StreamMaxLength 16M
+          CONF
+          # Real daemon runs without host privileges; test DB/config are read-only.
+          docker run --detach --rm --name malak-clamd-ci --network host \
+            --user "$(id -u):$(id -g)" \
+            --volume "$root/database:/ci/database:ro" \
+            --volume "$root/clamd.conf:/ci/clamd.conf:ro" \
+            --entrypoint clamd \
+            clamav/clamav:1.5.4_base-debian \
+            --config-file=/ci/clamd.conf
+          for i in $(seq 1 100); do
+            if python3 - <<'PY_READY'
+          import socket
+          with socket.socket() as s:
+              s.settimeout(0.1)
+              s.connect(('127.0.0.1',33177))
+          PY_READY
+            then
+              echo 'Clamd loopback TCP ready (isolated test-only)'
+              exit 0
+            fi
+            if [ "$(docker inspect -f '{{.State.Running}}' malak-clamd-ci 2>/dev/null || true)" != true ]; then
+              echo 'Official ClamAV CI container exited during startup'
+              exit 1
+            fi
+            sleep 0.2
+          done
+          echo 'Clamd readiness timed out'
+          exit 1
+      - name: Live local daemon + ciphertext object integration (synthetic only)
+        env:
+          MALAK_DISPOSABLE_CLAMD: 'yes'
+        run: |
+          set -euo pipefail
+          export MALAK_CLAMD_TEST_PORT=33177
+          node --experimental-strip-types --test services/verification/ci/clamd-live.integration.ts
+      - name: Remove isolated test daemon
+        if: always()
+        run: docker rm -f malak-clamd-ci 2>/dev/null || true

@@ -1,0 +1,10 @@
+<resources>
+    <string name="nozha_project_approximate">Nozha · Project location on the map</string>
+    <string name="nozha_open_plan">Show subdivision on the map</string>
+    <string name="nozha_plan_notice">Subdivision outline from the Nozha plan; geographic alignment needs plan-reference validation.</string>
+    <string name="nozha_crm_individual_title">CRM records: individual title</string>
+    <string name="nozha_crm_title_recorded">A title reference is recorded in the CRM</string>
+    <string name="nozha_side_lengths">Lengths from the plan: %1$s</string>
+    <string name="nozha_show_measurements">Show measurements on the map</string>
+    <string name="nozha_measured_lot">Lot %1$s · Plan measurements</string>
+</resources>

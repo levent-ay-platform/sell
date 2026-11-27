@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="atlas_lens_short">عدسة الأطلس</string>
+    <string name="atlas_lens_title">عدسة الأطلس · استكشف المنطقة</string>
+    <string name="atlas_lens_map_center">مركز الخريطة المحدد</string>
+    <string name="atlas_lens_radius_note">اكتشف مخططات AFI حول النقطة المختارة.</string>
+    <string name="atlas_lens_radius_chip">%1$d كم</string>
+    <string name="atlas_lens_nearby_zones">%1$d منطقة صناعية مرجعية قريبة</string>
+    <string name="atlas_lens_planned_lots">%1$d مقسم ضمن مخططات هذه المناطق بالكامل</string>
+    <string name="atlas_lens_disclaimer">المسافة محسوبة بخط مستقيم إلى مركز المنطقة. عدد المقاسم يشمل مخطط المنطقة كله، وليس فقط داخل الدائرة، ولا يعني أنها معروضة للبيع.</string>
+    <string name="atlas_lens_cadastre_unknown">بيانات AFI لا تثبت حدود الرسم العقاري أو الملكية.</string>
+    <string name="atlas_lens_empty">لا توجد مراكز مناطق مسجلة داخل هذا النطاق في النسخة المحلية. غياب البيانات لا يعني عدم وجود مناطق أخرى.</string>
+    <string name="atlas_lens_distance">خط مستقيم: %1$s كم</string>
+    <string name="atlas_lens_limited">عرض أول %1$d من أصل %2$d منطقة.</string>
+</resources>

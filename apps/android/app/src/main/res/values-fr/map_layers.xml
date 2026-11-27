@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="v2_villa">Villas</string>
+    <string name="v2_factory">Usines</string>
+    <string name="layer_sales">Biens à vendre</string>
+    <string name="layer_sales_hint">Afficher les annonces de vente et leurs prix sur la carte.</string>
+    <string name="layer_types">Type de bien</string>
+    <string name="layer_atlas">Limites parcellaires Atlas</string>
+    <string name="layer_atlas_hint">Afficher les limites approuvées du bien sélectionné.</string>
+    <string name="layer_purchase">Demandes d’achat</string>
+    <string name="layer_purchase_pending">Les demandes d’achat sont actuellement indisponibles.</string>
+    <string name="layer_atlas_admin">Limites administratives Atlas</string>
+    <string name="layer_atlas_admin_hint">24 gouvernorats et 279 délégations. Limites de référence.</string>
+    <string name="layer_atlas_parcels_unavailable">Les données parcellaires sont indisponibles dans cette version.</string>
+    <string name="v2_globe_view">Vue du globe</string>
+    <string name="v2_recenter_tunisia">Recentrer sur la Tunisie</string>
+    <string name="v2_map_data_unavailable">Les annonces sont indisponibles. Vous pouvez rechercher un lieu sur la carte.</string>
+</resources>

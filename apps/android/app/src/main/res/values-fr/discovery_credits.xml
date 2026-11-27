@@ -1,0 +1,4 @@
+<resources>
+    <string name="discover_map_sources">Sources de la carte</string>
+    <string name="discover_base_map_credit">© OpenStreetMap · © OpenMapTiles</string>
+</resources>

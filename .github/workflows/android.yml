@@ -2,13 +2,14 @@ name: Malak Android (hosted Ubuntu)
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, codex/malak-pilot-complete]
     paths:
       - 'apps/android/**'
       - '.github/workflows/android.yml'
       - 'scripts/check_malak_brand.py'
+      - 'scripts/check_amlak_ui_contrast.py'
   push:
-    branches: [main]
+    branches: [main, feat/amlak-unified-intake-20261124]
     paths:
       - 'apps/android/**'
       - '.github/workflows/android.yml'
@@ -25,15 +26,19 @@ concurrency:
 jobs:
   native-preview:
     name: Android debug APK — GitHub-hosted Ubuntu
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 40
     steps:
       - name: Checkout (no persisted credentials)
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
+      - name: Prepare pinned public administrative sectors
+        run: python3 scripts/prepare_amlak_admin_sectors.py
       - name: Check approved brand
-        run: python3 scripts/check_malak_brand.py
+        run: |
+          python3 scripts/check_malak_brand.py
+          python3 scripts/check_amlak_ui_contrast.py
       - name: Set up JDK 17
         uses: actions/setup-java@v5
         with:
@@ -50,12 +55,83 @@ jobs:
         with:
           gradle-version: '8.13'
           cache-provider: basic
-      - name: Assemble synthetic QA Android APK
-        run: gradle -p apps/android :app:assembleDebug --no-daemon --stacktrace
+      - name: Test Tunisian OCR name parser and assemble QA APK
+        run: gradle -p apps/android :app:testDebugUnitTest :app:assembleDebug --no-daemon --stacktrace
+      - name: Enforce strict 60MB APK and prohibit embedded OCR engines
+        run: |
+          set -euo pipefail
+          apk=apps/android/app/build/outputs/apk/debug/app-debug.apk
+          size="$(stat -c %s "$apk")"
+          echo "Malak APK bytes: $size; hard limit: 60000000"
+          test "$size" -le 60000000
+          if unzip -Z1 "$apk" | grep -Ei '(^|/)(inference\.onnx|.*\.traineddata|libonnxruntime.*\.so|libopencv.*\.so|libtesseract.*\.so)$'; then
+            echo 'HEAVY_OCR_ASSET_IN_APK' >&2
+            exit 1
+          fi
       - name: Upload QA APK (no signing keys, no personal data)
         uses: actions/upload-artifact@v4
         with:
           name: malak-PROTOTYPE-NOT-VISUALLY-APPROVED-${{ github.sha }}
+          path: apps/android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 3
+          if-no-files-found: error
+      - name: Build map-first QA APK
+        if: ${{ (github.head_ref == 'codex/malak-v2-map-parcel-foundation' || github.ref_name == 'feat/amlak-unified-intake-20261124') }}
+        run: gradle -p apps/android :app:assembleDebug -PmalakV2Discovery=true --no-daemon
+      - name: Upload map-first QA APK
+        if: ${{ (github.head_ref == 'codex/malak-v2-map-parcel-foundation' || github.ref_name == 'feat/amlak-unified-intake-20261124') }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: malak-v2-map-demo-${{ github.sha }}
+          path: apps/android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 3
+          if-no-files-found: error
+      # Bounded read-only QA for the already deployed public listing feed.
+      # Does NOT enable direct publishing, private OCR, shared PIN or production rollout.
+      - name: Build map-first public-feed read-only QA APK
+        if: ${{ github.event_name == 'pull_request' && (github.head_ref == 'codex/malak-v2-map-parcel-foundation' || github.ref_name == 'feat/amlak-unified-intake-20261124') }}
+        run: |
+          set -euo pipefail
+          gradle -p apps/android :app:assembleDebug -PmalakV2Discovery=true -PmalakPublicListingsBaseUrl=https://malak-api.ayasofia.shop --no-daemon
+          apk=apps/android/app/build/outputs/apk/debug/app-debug.apk
+          size="$(stat -c %s "$apk")"
+          echo "Public-feed read-only QA size: $size"
+          test "$size" -le 60000000
+          unzip -p "$apk" 'classes*.dex' | strings | grep -F 'malak-api.ayasofia.shop' >/dev/null || {
+            echo 'READ_ONLY_PUBLIC_ORIGIN_MISSING' >&2
+            exit 1
+          }
+      - name: Upload map-first public-feed read-only QA APK
+        if: ${{ github.event_name == 'pull_request' && (github.head_ref == 'codex/malak-v2-map-parcel-foundation' || github.ref_name == 'feat/amlak-unified-intake-20261124') }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: amlak-map-public-feed-readonly-${{ github.sha }}
+          path: apps/android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 3
+          if-no-files-found: error
+      - name: Build public HTTPS Malak OCR QA APK (Draft PR only)
+        if: ${{ github.event_name == 'pull_request' && github.head_ref == 'feat/individual-property-triage-20261110' }}
+        run: |
+          set -euo pipefail
+          url=https://malak-api.ayasofia.shop
+          gradle -p apps/android :app:assembleDebug "-PmalakPrivateBaseUrl=$url" --no-daemon
+          apk=apps/android/app/build/outputs/apk/debug/app-debug.apk
+          size="$(stat -c %s "$apk")"
+          echo "Connected Malak public HTTPS QA APK bytes: $size; hard limit 60000000"
+          test "$size" -le 60000000
+          unzip -p "$apk" 'classes*.dex' | strings | grep -F 'malak-api.ayasofia.shop' >/dev/null || {
+            echo "MISSING_REAL_QA_ENDPOINT_IN_APK" >&2
+            exit 1
+          }
+          if unzip -Z1 "$apk" | grep -Ei '(^|/)(inference\.onnx|.*\\.traineddata|libonnxruntime.*\\.so|libopencv.*\\.so|libtesseract.*\\.so)$'; then
+            echo 'HEAVY_OCR_ASSET_IN_APK' >&2
+            exit 1
+          fi
+      - name: Upload Malak public HTTPS OCR pilot QA APK
+        if: ${{ github.event_name == 'pull_request' && github.head_ref == 'feat/individual-property-triage-20261110' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: malak-PUBLIC-HTTPS-OCR-PILOT-QA-${{ github.sha }}
           path: apps/android/app/build/outputs/apk/debug/app-debug.apk
           retention-days: 3
           if-no-files-found: error

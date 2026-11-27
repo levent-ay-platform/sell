@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="v2_public_kind_unavailable">Property type not provided by source</string>
+    <string name="v2_public_type_filter_note">Some published listings have no property type from the source, so type filters may exclude them.</string>
+    <string name="v2_public_location_unknown_note">Some published listings have no valid public coordinates. View them in the list; their position is unknown.</string>
+</resources>

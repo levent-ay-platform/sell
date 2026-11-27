@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="smart_search_detected">فهمنا طلبك</string>
+    <string name="smart_search_apply">طبّق</string>
+    <string name="smart_search_grounded">رح نطبّق المعايير المفهومة فقط، بدون اختراع معلومات.</string>
+</resources>
