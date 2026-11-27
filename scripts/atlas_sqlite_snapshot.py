@@ -4,7 +4,9 @@
 Never falls back to immutable=1 for a live database. Refuses WAL-oriented
 sources with missing sidecars to avoid silently fabricating -shm/-wal on the
 source. Requires an authorized file-owner context and a source that can be
-opened in standard mode=ro. No checkpoint, journal-mode change, or migration.
+opened in standard mode=ro. The existing authorized catalogue producer may
+export through its own idle connection instead. No source checkpoint,
+journal-mode change, or migration.
 """
 from __future__ import annotations
 
@@ -16,6 +18,7 @@ import os
 from pathlib import Path
 import sqlite3
 import tempfile
+import time
 
 from scripts.atlas_cadastre_evidence_audit import write_private_json
 
@@ -52,8 +55,15 @@ def _counts(connection):
         for table in TABLES if table in tables}
 
 
-def backup_owner_authorized(source, target, manifest):
+def _backup_connection(read, source, target, manifest, *, wal_mode, mode, timeout_seconds=180):
+    """Create a consistent export using the caller's already-authorized connection.
+
+    The source connection is borrowed, not closed or committed. The caller
+    must serialize this invocation with its own connection operations.
+    """
     source, target, manifest = Path(source), Path(target), Path(manifest)
+    if read.in_transaction:
+        raise RuntimeError("SOURCE_TRANSACTION_ALREADY_ACTIVE")
     if source.resolve() in (target.resolve(),manifest.resolve()):
         raise ValueError("SOURCE_MUST_NOT_BE_OUTPUT")
     if target.resolve()==manifest.resolve() or target.exists() or target.is_symlink() or manifest.exists() or manifest.is_symlink():
@@ -62,23 +72,35 @@ def backup_owner_authorized(source, target, manifest):
         if parent.exists() and parent.is_symlink():
             raise ValueError("SYMLINK_OUTPUT_DIRECTORY")
         parent.mkdir(parents=True,exist_ok=True,mode=0o700)
-    wal_mode=_check_source(source)  # before any SQLite connection to source
-    old_umask=os.umask(0o077)
-    staging=None
+    if not 0 < timeout_seconds <= 3600:
+        raise ValueError("INVALID_BACKUP_TIMEOUT")
+    deadline = time.monotonic() + timeout_seconds
+    def progress(status, remaining, total):
+        if time.monotonic() >= deadline:
+            raise TimeoutError("SQLITE_BACKUP_DEADLINE")
+    staging = None
     try:
-        fd,staging=tempfile.mkstemp(prefix=".atlas-backup-",dir=str(target.parent))
+        fd, staging = tempfile.mkstemp(prefix=".atlas-backup-", dir=str(target.parent))
         os.close(fd)
-        os.chmod(staging,0o600)
-        source_uri=source.resolve().as_uri()+"?mode=ro"
-        # NO immutable=1: SQLite must see live committed state / WAL.
-        with closing(sqlite3.connect(source_uri,uri=True,timeout=2.0)) as read:
-            read.execute("PRAGMA query_only=ON")
-            source_counts=_counts(read)  # prove a normal RO SQL statement worked
-            with closing(sqlite3.connect(staging)) as write:
-                read.backup(write,pages=128,sleep=0.02)
+        # Hold the same read snapshot for counts and Backup API; otherwise
+        # a concurrent producer commit can invalidate the comparison.
+        read.execute("BEGIN")
+        try:
+            source_counts = _counts(read)
+            with closing(sqlite3.connect(staging, timeout=2.0)) as write:
+                read.backup(write, pages=128, sleep=0.02, progress=progress)
                 write.commit()
-        with closing(sqlite3.connect(Path(staging).resolve().as_uri()+"?mode=ro&immutable=1",
-                             uri=True)) as verify:
+                # Only the disposable destination is changed to a standalone
+                # rollback-journal format, never the live source.
+                if write.execute("PRAGMA journal_mode=DELETE").fetchone()[0].lower() != "delete":
+                    raise RuntimeError("DESTINATION_NOT_STANDALONE")
+        finally:
+            read.rollback()
+        for suffix in ("-wal","-shm","-journal"):
+            if Path(staging+suffix).exists():
+                raise RuntimeError("DESTINATION_SIDECAR_REMAINS")
+        with closing(sqlite3.connect(Path(staging).resolve().as_uri()+"?mode=ro", uri=True)) as verify:
+            verify.execute("PRAGMA query_only=ON")
             integrity=verify.execute("PRAGMA integrity_check").fetchone()[0]
             if integrity!="ok":
                 raise ValueError("SQLITE_BACKUP_INTEGRITY_FAILED")
@@ -88,27 +110,63 @@ def backup_owner_authorized(source, target, manifest):
         os.chmod(staging,0o600)
         with open(staging,"rb") as handle:
             os.fsync(handle.fileno())
-        backup_hash=_hash_file(Path(staging))
         record={
             "schema_version":1,
             "kind":"OWNER_AUTHORIZED_SQLITE_BACKUP",
             "source_mainfile_wal_header":wal_mode,
-            "standard_readonly_query_succeeded":True,
+            "standard_readonly_query_succeeded":mode=="external_readonly",
+            "source_connection_mode":mode,
+            "source_snapshot_counts_pinned":True,
             "backup_api_completed":True,
             "backup_integrity_check":"ok",
-            "backup_sha256":backup_hash,
+            "backup_sha256":_hash_file(Path(staging)),
             "verified_table_counts":verified_counts,
             "private_archive_only":True,
             "published":False,
         }
-        # Atomic no-overwrite output; manifest is private proof of this copy.
         os.link(staging,target)
         write_private_json(manifest,record)
         return record
     finally:
-        if staging and os.path.exists(staging):
-            os.unlink(staging)
-        os.umask(old_umask)
+        if staging:
+            for suffix in ("","-wal","-shm","-journal"):
+                item=Path(staging+suffix)
+                if item.exists():
+                    item.unlink()
+
+
+def backup_from_producer_connection(connection, target, manifest, *, timeout_seconds=180):
+    """Call inside the existing catalogue producer after its commit.
+
+    Does not discover/open a live database, change its permissions, or start
+    a second writer. An active producer transaction is never committed here.
+    """
+    if connection.in_transaction:
+        raise RuntimeError("SOURCE_TRANSACTION_ALREADY_ACTIVE")
+    main = next((row[2] for row in connection.execute("PRAGMA database_list")
+                 if row[1]=="main"), "")
+    if not main:
+        raise ValueError("FILE_BACKED_PRODUCER_REQUIRED")
+    source = Path(main)
+    if not source.is_file() or source.is_symlink():
+        raise ValueError("REGULAR_SOURCE_REQUIRED")
+    wal_mode = connection.execute("PRAGMA journal_mode").fetchone()[0].lower()=="wal"
+    return _backup_connection(connection,source,target,manifest,wal_mode=wal_mode,
+                              mode="existing_producer",timeout_seconds=timeout_seconds)
+
+
+def backup_owner_authorized(source, target, manifest):
+    source, target, manifest = Path(source), Path(target), Path(manifest)
+    if source.resolve() in (target.resolve(),manifest.resolve()):
+        raise ValueError("SOURCE_MUST_NOT_BE_OUTPUT")
+    # Retain the strict external read-only gate; the producer integration
+    # is a separate API and cannot be selected by the external CLI.
+    wal_mode=_check_source(source)
+    with closing(sqlite3.connect(source.resolve().as_uri()+"?mode=ro",
+                                 uri=True,timeout=2.0)) as read:
+        read.execute("PRAGMA query_only=ON")
+        return _backup_connection(read,source,target,manifest,wal_mode=wal_mode,
+                                  mode="external_readonly")
 
 
 def main():
