@@ -45,6 +45,19 @@ class OwnerSnapshotTest(unittest.TestCase):
         self.assertEqual(manifest.stat().st_mode & 0o777,0o600)
         self.assertEqual(json.loads(manifest.read_text())["published"],False)
 
+    def test_manifest_failure_does_not_leave_unpaired_backup(self):
+        from unittest.mock import patch
+        output=self.folder/"private"/"backup.sqlite"
+        manifest=self.folder/"private"/"manifest.json"
+        original_sha=hashlib.sha256(self.original.read_bytes()).hexdigest()
+        with patch("scripts.atlas_sqlite_snapshot.write_private_json",
+                   side_effect=OSError("synthetic manifest failure")):
+            with self.assertRaisesRegex(OSError,"synthetic manifest failure"):
+                backup_owner_authorized(self.original,output,manifest)
+        self.assertFalse(output.exists())
+        self.assertFalse(manifest.exists())
+        self.assertEqual(hashlib.sha256(self.original.read_bytes()).hexdigest(),original_sha)
+
     def test_never_overwrite_existing_snapshot(self):
         output=self.folder/"private"/"backup.sqlite"
         manifest=self.folder/"private"/"manifest.json"

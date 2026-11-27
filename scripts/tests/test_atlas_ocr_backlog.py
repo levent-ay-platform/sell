@@ -107,7 +107,7 @@ class AtlasOcrBacklogTest(unittest.TestCase):
     def test_duplicate_page_rows_never_inflate_coverage(self):
         with sqlite3.connect(self.db) as conn:
             conn.execute("UPDATE documents SET page_count=2 WHERE sha256='shaD'")
-            conn.execute("INSERT INTO pages VALUES('shaD',1,'same page')")
+            conn.execute("INSERT INTO pages VALUES('shaD',1,'Page text')")
         row=next(r for r in build_backlog(self.db,"mainfile_diagnostic")["backlog_private"]
                  if r["document_sha256_private"]=="shaD")
         self.assertEqual(row["indexed_pages"],1)
@@ -131,6 +131,32 @@ class AtlasOcrBacklogTest(unittest.TestCase):
         self.assertEqual(row["coverage_state"],"CONFLICT_REVIEW")
         self.assertEqual(row["conflicting_page_ids"],[1])
         self.assertEqual(row["required_action"],"REVIEW_PAGE_IDENTITY_CONFLICT")
+
+    def test_two_different_nonblank_texts_conflict(self):
+        with sqlite3.connect(self.db) as conn:
+            conn.execute("INSERT INTO pages VALUES('shaD',1,'Different text')")
+        report=build_backlog(self.db,"mainfile_diagnostic")
+        row=next(r for r in report["backlog_private"] if r["document_sha256_private"]=="shaD")
+        self.assertEqual(row["coverage_state"],"CONFLICT_REVIEW")
+        self.assertEqual(row["conflicting_page_ids"],[1])
+        self.assertNotIn("Different text",str(report))
+
+    def test_missing_ranges_are_sparse_and_never_authorize_extraction(self):
+        with sqlite3.connect(self.db) as conn:
+            conn.execute("UPDATE documents SET page_count=1000000000 WHERE sha256='shaD'")
+            conn.execute("INSERT INTO pages VALUES('shaD',4,'text')")
+        row=next(r for r in build_backlog(self.db,"mainfile_diagnostic")["backlog_private"]
+                 if r["document_sha256_private"]=="shaD")
+        self.assertEqual(row["missing_page_ranges_inclusive"],[[2,3],[5,1000000000]])
+        self.assertEqual(row["missing_page_count"],999999998)
+        self.assertFalse(row["absence_authorizes_extraction"])
+
+    def test_whitespace_only_page_has_no_text(self):
+        with sqlite3.connect(self.db) as conn:
+            conn.execute("UPDATE pages SET text=? WHERE sha256='shaD'",("\\n\\t".replace("\\n","\n").replace("\\t","\t"),))
+        row=next(r for r in build_backlog(self.db,"transactional_backup")["backlog_private"]
+                 if r["document_sha256_private"]=="shaD")
+        self.assertEqual(row["observed_no_text_page_ids"],[1])
 
     def test_out_of_range_page_identity_is_held(self):
         with sqlite3.connect(self.db) as conn:

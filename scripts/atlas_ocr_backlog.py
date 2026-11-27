@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 from collections import Counter, defaultdict
 from contextlib import closing
+import hashlib
 import json
 from pathlib import Path
 import re
@@ -42,6 +43,23 @@ def origin_of(url):
         return "OTHER"
 
 
+def missing_page_ranges(observed, expected):
+    """Inclusive gaps without allocating a list of every declared page."""
+    if expected is None:
+        return None
+    ranges = []
+    cursor = 1
+    for page in sorted(observed):
+        if page > expected:
+            break
+        if page > cursor:
+            ranges.append([cursor, page - 1])
+        cursor = page + 1
+    if cursor <= expected:
+        ranges.append([cursor, expected])
+    return ranges
+
+
 def build_backlog(db: Path, snapshot_kind: str):
     if snapshot_kind not in ("transactional_backup", "mainfile_diagnostic"):
         raise ValueError("EXPLICIT_SNAPSHOT_KIND_REQUIRED")
@@ -67,16 +85,24 @@ def build_backlog(db: Path, snapshot_kind: str):
             documents[key] = (state, expected if type(expected) is int and expected > 0 else None)
         page_status = defaultdict(dict)
         invalid_page_ids = Counter()
-        for sha, page, has_text in conn.execute(
-                "SELECT sha256,page,CASE WHEN text IS NOT NULL AND length(trim(text))>0 "
-                "THEN 1 ELSE 0 END FROM pages"):
+        for sha, page, raw_text in conn.execute(
+                "SELECT sha256,page,text FROM pages"):
             key = str(sha)
             if type(page) is not int or page < 1:
                 invalid_page_ids[key] += 1
                 continue
             # Preserve distinct identities. Conflicting duplicate rows are
             # deliberately held for review rather than silently selecting one.
-            page_status[key].setdefault(page, set()).add(bool(has_text))
+            # Exact nonblank text fingerprints distinguish competing content.
+            # Whitespace-only and NULL rows represent the same absence of text.
+            if raw_text is None or (isinstance(raw_text, str) and not raw_text.strip()):
+                fingerprint = None
+            elif isinstance(raw_text, str):
+                fingerprint = hashlib.sha256(raw_text.encode("utf-8")).digest()
+            else:
+                invalid_page_ids[key] += 1
+                continue
+            page_status[key].setdefault(page, set()).add(fingerprint)
         records = defaultdict(lambda: {
             "resource_rows":0,"resource_ids_private":[],
             "origins":set(),"locality_hint":False,"cadastre_hint":False,
@@ -108,8 +134,9 @@ def build_backlog(db: Path, snapshot_kind: str):
             state, expected_pages = documents.get(sha, (None, None))
             observed = page_status.get(sha, {})
             total_pages = len(observed)
-            text_ids = sorted(page for page, values in observed.items() if values == {True})
-            no_text_ids = sorted(page for page, values in observed.items() if values == {False})
+            text_ids = sorted(page for page, values in observed.items()
+                              if len(values) == 1 and None not in values)
+            no_text_ids = sorted(page for page, values in observed.items() if values == {None})
             conflicting_ids = sorted(page for page, values in observed.items() if len(values) > 1)
             out_of_range = sorted(page for page in observed
                                   if expected_pages is not None and page > expected_pages)
@@ -172,6 +199,8 @@ def build_backlog(db: Path, snapshot_kind: str):
                 "invalid_page_identity_rows":invalid_page_ids[sha],
                 "out_of_range_page_ids":out_of_range,
                 "missing_page_count":missing_pages,
+                "missing_page_ranges_inclusive":missing_page_ranges(observed, expected_pages),
+                "absence_authorizes_extraction":False,
                 "required_action":action,
                 "priority_score":score,
                 "blob_signature_verified":False,
@@ -212,6 +241,8 @@ def build_backlog(db: Path, snapshot_kind: str):
             "No PDF bytes or signatures were verified by this metadata-only report.",
             "Coverage uses declared document page_count and distinct stored page identities, not proof of extraction quality or current live completeness.",
             "A blank or missing page requires review; it is not by itself proof that OCR is necessary.",
+            "Inclusive missing ranges are snapshot observations only; no report authorizes extraction or infers absence in the live database.",
+            "Competing nonblank page content is a conflict; identical repeated text does not inflate coverage.",
             "Names and URL origins are triage hints, not official plan certification.",
             "OCR work must use owner-approved local copies, not mutate source archives.",
         ],

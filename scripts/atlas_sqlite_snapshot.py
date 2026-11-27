@@ -125,7 +125,14 @@ def _backup_connection(read, source, target, manifest, *, wal_mode, mode, timeou
             "published":False,
         }
         os.link(staging,target)
-        write_private_json(manifest,record)
+        try:
+            write_private_json(manifest,record)
+        except Exception:
+            # Never leave an apparently complete backup without its proof.
+            # Only remove our own hard link; never touch a replacement file.
+            if target.exists() and os.path.samestat(os.stat(staging),os.lstat(target)):
+                target.unlink()
+            raise
         return record
     finally:
         if staging:
