@@ -17,7 +17,7 @@ class AtlasOcrBacklogTest(unittest.TestCase):
         with sqlite3.connect(self.db) as conn:
             conn.executescript("""
                 CREATE TABLE resources (id TEXT, name TEXT, extension TEXT, sha256 TEXT, url TEXT);
-                CREATE TABLE documents (sha256 TEXT, state TEXT);
+                CREATE TABLE documents (sha256 TEXT, state TEXT, page_count INTEGER);
                 CREATE TABLE pages (sha256 TEXT, page INTEGER, text TEXT);
                 INSERT INTO resources VALUES
                     ('1','Plan cadastral Nabeul.pdf','.pdf','shaA','https://www.otc.nat.tn/a.pdf'),
@@ -29,10 +29,10 @@ class AtlasOcrBacklogTest(unittest.TestCase):
                     ('7','OCR ready.pdf','.pdf','shaD','https://www.otc.nat.tn/d.pdf'),
                     ('8','Broken.pdf','.pdf','shaE','https://geopau.gov.tn/e.pdf');
                 INSERT INTO documents VALUES
-                    ('shaA','ocr_pending'),
-                    ('shaB','mixed_ocr_pending'),
-                    ('shaD','native_text_unreviewed'),
-                    ('shaE','processing_failed');
+                    ('shaA','ocr_pending',1),
+                    ('shaB','mixed_ocr_pending',1),
+                    ('shaD','native_text_unreviewed',1),
+                    ('shaE','processing_failed',1);
                 INSERT INTO pages VALUES
                     ('shaA',1,NULL),('shaB',1,' '),('shaD',1,'Page text'),
                     ('shaE',1,'');
@@ -84,6 +84,61 @@ class AtlasOcrBacklogTest(unittest.TestCase):
         self.assertEqual(report["backlog_private"][0]["document_sha256_private"],"shaA")
         self.assertTrue(all(item["verified_official_plan"] is None for
                             item in report["backlog_private"]))
+
+
+    def test_one_indexed_page_does_not_complete_document(self):
+        with sqlite3.connect(self.db) as conn:
+            conn.execute("UPDATE documents SET page_count=4 WHERE sha256='shaD'")
+        report=build_backlog(self.db,"mainfile_diagnostic")
+        row=next(r for r in report["backlog_private"] if r["document_sha256_private"]=="shaD")
+        self.assertEqual(row["coverage_state"],"PARTIAL_PAGE_COVERAGE")
+        self.assertEqual(row["missing_page_count"],3)
+        self.assertEqual(row["observed_text_page_ids"],[1])
+        self.assertEqual(row["required_action"],"REVIEW_PARTIAL_OR_UNKNOWN_COVERAGE")
+
+    def test_unknown_count_is_not_complete(self):
+        with sqlite3.connect(self.db) as conn:
+            conn.execute("UPDATE documents SET page_count=NULL WHERE sha256='shaD'")
+        report=build_backlog(self.db,"mainfile_diagnostic")
+        row=next(r for r in report["backlog_private"] if r["document_sha256_private"]=="shaD")
+        self.assertEqual(row["coverage_state"],"EXPECTED_PAGE_COUNT_UNKNOWN")
+        self.assertIsNone(row["missing_page_count"])
+
+    def test_duplicate_page_rows_never_inflate_coverage(self):
+        with sqlite3.connect(self.db) as conn:
+            conn.execute("UPDATE documents SET page_count=2 WHERE sha256='shaD'")
+            conn.execute("INSERT INTO pages VALUES('shaD',1,'same page')")
+        row=next(r for r in build_backlog(self.db,"mainfile_diagnostic")["backlog_private"]
+                 if r["document_sha256_private"]=="shaD")
+        self.assertEqual(row["indexed_pages"],1)
+        self.assertEqual(row["missing_page_count"],1)
+
+    def test_blank_page_is_distinguished_from_absent_page(self):
+        with sqlite3.connect(self.db) as conn:
+            conn.execute("UPDATE documents SET page_count=2 WHERE sha256='shaD'")
+            conn.execute("INSERT INTO pages VALUES('shaD',2,'')")
+        row=next(r for r in build_backlog(self.db,"mainfile_diagnostic")["backlog_private"]
+                 if r["document_sha256_private"]=="shaD")
+        self.assertEqual(row["coverage_state"],"PAGES_PRESENT_TEXT_INCOMPLETE")
+        self.assertEqual(row["missing_page_count"],0)
+        self.assertEqual(row["observed_no_text_page_ids"],[2])
+
+    def test_conflicting_page_status_is_not_complete(self):
+        with sqlite3.connect(self.db) as conn:
+            conn.execute("INSERT INTO pages VALUES('shaD',1,NULL)")
+        row=next(r for r in build_backlog(self.db,"mainfile_diagnostic")["backlog_private"]
+                 if r["document_sha256_private"]=="shaD")
+        self.assertEqual(row["coverage_state"],"CONFLICT_REVIEW")
+        self.assertEqual(row["conflicting_page_ids"],[1])
+        self.assertEqual(row["required_action"],"REVIEW_PAGE_IDENTITY_CONFLICT")
+
+    def test_out_of_range_page_identity_is_held(self):
+        with sqlite3.connect(self.db) as conn:
+            conn.execute("INSERT INTO pages VALUES('shaD',2,'extra')")
+        row=next(r for r in build_backlog(self.db,"mainfile_diagnostic")["backlog_private"]
+                 if r["document_sha256_private"]=="shaD")
+        self.assertEqual(row["out_of_range_page_ids"],[2])
+        self.assertEqual(row["coverage_state"],"CONFLICT_REVIEW")
 
 
 if __name__=="__main__":
